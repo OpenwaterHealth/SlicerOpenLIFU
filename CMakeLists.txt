@@ -4,11 +4,11 @@ project(SlicerOpenLIFU)
 
 #-----------------------------------------------------------------------------
 # Extension meta-information
-set(EXTENSION_HOMEPAGE "https://www.slicer.org/wiki/Documentation/Nightly/Extensions/SlicerOpenLIFU")
+set(EXTENSION_HOMEPAGE "https://github.com/OpenwaterHealth/SlicerOpenLIFU")
 set(EXTENSION_CONTRIBUTORS "Ebrahim Ebrahim (Kitware), Sam Horvath (Kitware), Brad Moore (Kitware)")
 set(EXTENSION_DESCRIPTION "An extension for Openwater's Open-LIFU project")
-set(EXTENSION_ICONURL "https://www.example.com/Slicer/Extensions/SlicerOpenLIFU.png")
-set(EXTENSION_SCREENSHOTURLS "https://www.example.com/Slicer/Extensions/SlicerOpenLIFU/Screenshots/1.png")
+set(EXTENSION_ICONURL "https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/SlicerOpenLIFU.png")
+set(EXTENSION_SCREENSHOTURLS "https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/Screenshots/1.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
 
 #-----------------------------------------------------------------------------
