@@ -1,2 +1,3 @@
 # SlicerOpenLIFU
-3DSlicer Extensions for Openwater's Open-LIFU project
+
+3D Slicer Extension for Openwater's OpenLIFU project
