@@ -32,7 +32,7 @@ class OpenLIFUHome(ScriptedLoadableModule):
         self.parent.title = _("OpenLIFU Home")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU")]
         self.parent.dependencies = []  # add here list of module names that this module requires
-        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sam Horvath (Kitware), Brad Moore (Kitware)"]
+        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(

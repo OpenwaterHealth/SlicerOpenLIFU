@@ -5,7 +5,7 @@ project(SlicerOpenLIFU)
 #-----------------------------------------------------------------------------
 # Extension meta-information
 set(EXTENSION_HOMEPAGE "https://github.com/OpenwaterHealth/SlicerOpenLIFU")
-set(EXTENSION_CONTRIBUTORS "Ebrahim Ebrahim (Kitware), Sam Horvath (Kitware), Brad Moore (Kitware)")
+set(EXTENSION_CONTRIBUTORS "Ebrahim Ebrahim (Kitware), , Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)")
 set(EXTENSION_DESCRIPTION "An extension for Openwater's Open-LIFU project")
 set(EXTENSION_ICONURL "https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/SlicerOpenLIFU.png")
 set(EXTENSION_SCREENSHOTURLS "https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/Screenshots/1.png")
