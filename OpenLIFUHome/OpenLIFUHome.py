@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Annotated, Optional
+import importlib
 
 import vtk
 import qt
@@ -122,14 +123,8 @@ def install_python_requirements() -> None:
         slicer.util.pip_install(['-r', requirements_path])
 
 def python_requirements_exist() -> bool:
-    """Check whether python requirements are installed by attempting an import. Return
-    whether the check was successful."""
-    try:
-        with BusyCursor():
-            import openlifu
-    except ModuleNotFoundError:
-        return False
-    return True
+    """Check and return whether python requirements are installed."""
+    return importlib.util.find_spec('openlifu') is not None
 
 def check_and_install_python_requirements(prompt_if_found = False) -> None:
     """Check whether python requirements are installed and prompt to install them if not.
