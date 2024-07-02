@@ -226,6 +226,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Buttons
         self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
         self.ui.installPythonReqsButton.connect("clicked(bool)", self.onInstallPythonRequirements)
+        self.updateInstallButtonText()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -309,9 +310,17 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
                                    self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
 
+    def updateInstallButtonText(self) -> None:
+        """Update the text of the install button based on whether it's 'install' or 'reinstall'"""
+        if python_requirements_exist():
+            self.ui.installPythonReqsButton.text = 'Reinstall Python Requirements'
+        else:
+            self.ui.installPythonReqsButton.text = 'Install Python Requirements'
+
     def onInstallPythonRequirements(self) -> None:
         """Install python requirements button action"""
         check_and_install_python_requirements(prompt_if_found=True)
+        self.updateInstallButtonText()
 
 
 #
