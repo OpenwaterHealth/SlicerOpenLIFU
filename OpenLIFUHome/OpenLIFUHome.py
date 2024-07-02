@@ -1,8 +1,10 @@
 import logging
 import os
+from pathlib import Path
 from typing import Annotated, Optional
 
 import vtk
+import qt
 
 import slicer
 from slicer.i18n import tr as _
@@ -99,6 +101,65 @@ def registerSampleData():
         nodeNames="OpenLIFUHome2",
     )
 
+# TODO Move these functions to a place where they can be used by all modules
+class BusyCursor:
+    """
+    Context manager for showing a busy cursor.  Ensures that cursor reverts to normal in
+    case of an exception.
+    """
+
+    def __enter__(self):
+        qt.QApplication.setOverrideCursor(qt.Qt.BusyCursor)
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        qt.QApplication.restoreOverrideCursor()
+        return False
+
+def install_python_requirements() -> None:
+    """Install python requirements"""
+    requirements_path = Path(__file__).parent / 'Resources/python-requirements.txt'
+    with BusyCursor():
+        slicer.util.pip_install(['-r', requirements_path])
+
+def python_requirements_exist() -> bool:
+    """Check whether python requirements are installed by attempting an import. Return
+    whether the check was successful."""
+    try:
+        with BusyCursor():
+            import openlifu
+    except ModuleNotFoundError:
+        return False
+    return True
+
+def check_and_install_python_requirements(prompt_if_found = False) -> None:
+    """Check whether python requirements are installed and prompt to install them if not.
+
+    Args:
+        prompt_if_found: If this is enabled then in the event that python requirements are found,
+            there is a further prompt asking whether to run the install anyway.
+    """
+    want_install = False
+    if not python_requirements_exist():
+        want_install = slicer.util.confirmYesNoDisplay(
+            text = "Some OpenLIFU python dependencies were not found. Install them now?",
+            windowTitle = "Install python dependencies?",
+        )
+    elif prompt_if_found:
+        want_install = slicer.util.confirmYesNoDisplay(
+            text = "All OpenLIFU python dependencies were found. Re-run the install command?",
+            windowTitle = "Reinstall python dependencies?",
+        )
+    if want_install:
+        install_python_requirements()
+        if python_requirements_exist():
+            slicer.util.infoDisplay(text="Python requirements installed.", windowTitle="Success")
+        else:
+            slicer.util.errorDisplay(
+                text="OpenLIFU python dependencies are still not found. The install may have failed.",
+                windowTitle="Python dependencies still not found"
+            )
+
+
 
 #
 # OpenLIFUHomeParameterNode
@@ -169,6 +230,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Buttons
         self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
+        self.ui.installPythonReqsButton.connect("clicked(bool)", self.onInstallPythonRequirements)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -251,6 +313,10 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 # If additional output volume is selected then result with inverted threshold is written there
                 self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
                                    self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
+
+    def onInstallPythonRequirements(self) -> None:
+        """Install python requirements button action"""
+        check_and_install_python_requirements(prompt_if_found=True)
 
 
 #
