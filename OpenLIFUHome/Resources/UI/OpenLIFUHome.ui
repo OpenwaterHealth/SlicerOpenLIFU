@@ -16,7 +16,49 @@
      <property name="text" stdset="0">
       <string>Sessions</string>
      </property>
-     <layout class="QFormLayout" name="formLayout_2"/>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <item>
+       <widget class="QLabel" name="databaseDirectoryLabel">
+        <property name="text">
+         <string>Database directory:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit" native="true">
+        <property name="filters" stdset="0">
+         <string>ctkPathLineEdit::Dirs</string>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>databaseDirectory</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="databaseLoadButton">
+        <property name="text">
+         <string>Load Database</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="subjectSessionLabel">
+        <property name="text">
+         <string>Subject/session selector:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QTreeView" name="subjectSessionView"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="sessionLoadButton">
+        <property name="text">
+         <string>Load</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -61,6 +103,11 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkpathlineedit.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
