@@ -209,7 +209,20 @@ def get_xx2mm_scale_factor(length_unit:str) -> float:
     openlifu = import_openlifu_with_check()
     return openlifu.util.units.getsiscale(length_unit, 'distance') / openlifu.util.units.getsiscale('mm', 'distance')
 
-
+def linear_to_affine(matrix, translation=None):
+    """Convert linear 3x3 transform to an affine 4x4 with
+    the given translation vector (the default being no translation)"""
+    if translation is None:
+        translation = np.zeros(3)
+    if matrix.shape != (3, 3):
+        raise ValueError("The input numpy array must be of shape (3, 3).")
+    return np.concatenate(
+        [
+            np.concatenate([matrix,translation.reshape(-1,1)], axis=1),
+            np.array([[0,0,0,1]], dtype=float),
+        ],
+        axis=0,
+    )
 
 
 #
@@ -578,22 +591,9 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         self.transducer_transform_node.SetName(f"{self.current_session.transducer.id}-matrix")
         self.transducer_node.SetAndObserveTransformNodeID(self.transducer_transform_node.GetID())
 
-        def linear_to_affine(matrix, translation=None):
-            """Convert linear 3x3 transform to an affine 4x4 with
-            the given translation vector (the default being no translation)"""
-            if translation is None:
-                translation = np.zeros(3)
-            if matrix.shape != (3, 3):
-                raise ValueError("The input numpy array must be of shape (3, 3).")
-            return np.concatenate(
-                [
-                    np.concatenate([matrix,translation.reshape(-1,1)], axis=1),
-                    np.array([[0,0,0,1]], dtype=float),
-                ],
-                axis=0,
-            )
-
-        # Hardcoding LPS here is bad!
+        # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
+        # self.current_session.transducer.matrix. There is no such attribute yet but it should exist eventually once this is done:
+        # https://github.com/OpenwaterHealth/opw_neuromod_sw/issues/3
         openlifu2slicer_matrix = linear_to_affine(get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(self.current_session.transducer.units))
         slicer2openlifu_matrix = np.linalg.inv(openlifu2slicer_matrix)
         transform_matrix_numpy = openlifu2slicer_matrix @ self.current_session.transducer.matrix @ slicer2openlifu_matrix
@@ -603,6 +603,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         self.transducer_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
         # === Toggle slice visibility and center slices on first target ===
+
         slices_center_point = self.target_nodes[0].GetNthControlPointPosition(0)
         for slice_node_name in ["Red", "Green", "Yellow"]:
             sliceNode = slicer.util.getFirstNodeByClassByName("vtkMRMLSliceNode", slice_node_name)
