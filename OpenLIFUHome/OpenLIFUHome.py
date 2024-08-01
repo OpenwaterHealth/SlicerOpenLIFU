@@ -299,6 +299,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             lambda : self.on_item_double_clicked(self.ui.subjectSessionView.currentIndex())
         )
 
+        self.update_sessionLoadButton_enabled()
+        self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
+
         # ====================================
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -319,12 +322,31 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.updateSettingFromParameter('databaseDirectory')
 
+    def itemIsSession(self, index : qt.QModelIndex) -> bool:
+        """Whether an item from the subject/session tree view is a session.
+        Returns True if it's a session and False if it's a subject."""
+        # If this has a parent, then it is a session item rather than a subject item.
+        # Otherwise, it is a top-level item, so it must be a subject.
+        return index.parent().isValid()
+
+    def update_sessionLoadButton_enabled(self):
+        """Update whether the session loading button is enabled based on whether any subject or session is selected."""
+        if self.ui.subjectSessionView.currentIndex().isValid():
+            self.ui.sessionLoadButton.setEnabled(True)
+            if self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
+                self.ui.sessionLoadButton.toolTip = 'Load the currently selected session'
+            else:
+                self.ui.sessionLoadButton.toolTip = 'Query the list of sessions for the currently selected subject'
+        else:
+            self.ui.sessionLoadButton.setEnabled(False)
+            self.ui.sessionLoadButton.toolTip = 'Select a subject or session to load'
+
     def on_item_double_clicked(self, index : qt.QModelIndex):
-        if index.parent().isValid(): # If this has a parent, then it is a session item rather than a subject item
+        if self.itemIsSession(index):
             session_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
             subject_id = self.subjectSessionItemModel.itemFromIndex(index.parent().siblingAtColumn(1)).text()
             self.logic.load_session(subject_id, session_id)
-        else: # This was a top-level item, so it must be a subject
+        else: # If the item was a subject:
             subject_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
             subject_item : qt.QStandardItem = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0))
             if subject_item.rowCount() == 0: # If we have not already expanded this subject
