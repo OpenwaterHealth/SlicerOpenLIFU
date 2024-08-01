@@ -16,6 +16,7 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer import vtkMRMLScriptedModuleNode, vtkMRMLScalarVolumeNode
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
@@ -273,6 +274,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.subjectSessionItemModel.appendRow(subject_row)
 
+        self.updateSettingFromParameter('databaseDirectory')
+
     def on_item_double_clicked(self, index : qt.QModelIndex):
         if index.parent().isValid(): # If this has a parent, then it is a session item rather than a subject item
             session_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
@@ -324,6 +327,29 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # so that when the scene is saved and reloaded, these settings are restored.
 
         self.setParameterNode(self.logic.getParameterNode())
+        self.updateParametersFromSettings()
+
+    def updateParametersFromSettings(self):
+        parameterNode : vtkMRMLScriptedModuleNode = self._parameterNode.parameterNode
+        qsettings = qt.QSettings()
+        qsettings.beginGroup("OpenLIFU")
+        for parameter_name in [
+            # List here the parameters that we want to make persistent in the application settings
+            "databaseDirectory",
+        ]:
+            if qsettings.contains(parameter_name):
+                parameterNode.SetParameter(
+                    parameter_name,
+                    qsettings.value(parameter_name)
+                )
+        qsettings.endGroup()
+
+    def updateSettingFromParameter(self, parameter_name:str) -> None:
+        parameterNode : vtkMRMLScriptedModuleNode = self._parameterNode.parameterNode
+        qsettings = qt.QSettings()
+        qsettings.beginGroup("OpenLIFU")
+        qsettings.setValue(parameter_name,parameterNode.GetParameter(parameter_name))
+        qsettings.endGroup()
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFUHomeParameterNode]) -> None:
         """
@@ -474,7 +500,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
         volume_path = volume_files[0]
 
-        volume_node = slicer.util.loadVolume(volume_path)
+        volume_node : vtkMRMLScalarVolumeNode = slicer.util.loadVolume(volume_path)
         volume_node.SetName(volume_id)
 
         # === Loading targets ===
