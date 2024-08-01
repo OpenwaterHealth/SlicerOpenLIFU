@@ -16,7 +16,13 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLScriptedModuleNode, vtkMRMLScalarVolumeNode
+from slicer import (
+    vtkMRMLScriptedModuleNode,
+    vtkMRMLScalarVolumeNode,
+    vtkMRMLMarkupsFiducialNode,
+    vtkMRMLModelNode,
+    vtkMRMLTransformNode,
+)
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
@@ -51,7 +57,11 @@ class OpenLIFUHome(ScriptedLoadableModule):
             "and development."
         )
 
+#
+# General utilities that probably should go elsewhere?
 # TODO Move some of these functions to more suitable places, e.g. some need to be where all modules can access them.
+#
+
 class BusyCursor:
     """
     Context manager for showing a busy cursor.  Ensures that cursor reverts to normal in
@@ -180,6 +190,26 @@ def numpy_to_vtk_4x4(numpy_array_4x4 : NDArray[Any]) -> vtk.vtkMatrix4x4:
                 for j in range(4):
                     vtk_matrix.SetElement(i, j, numpy_array_4x4[i, j])
             return vtk_matrix
+
+directions_in_RAS_coords_dict = {
+    'R' : np.array([1,0,0]),
+    'A' : np.array([0,1,0]),
+    'S' : np.array([0,0,1]),
+    'L' : np.array([-1,0,0]),
+    'P' : np.array([0,-1,0]),
+    'I' : np.array([0,0,-1]),
+}
+
+def get_xxx2ras_matrix(dims:Sequence[str]) -> NDArray[Any]:
+    return np.array([
+        directions_in_RAS_coords_dict[dim] for dim in dims
+    ]).transpose()
+
+def get_xx2mm_scale_factor(length_unit:str) -> float:
+    openlifu = import_openlifu_with_check()
+    return openlifu.util.units.getsiscale(length_unit, 'distance') / openlifu.util.units.getsiscale('mm', 'distance')
+
+
 
 
 #
@@ -398,7 +428,13 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
         self.db : Optional[openlifu.Database] = None
+
         self.current_session : Optional[openlifu.db.session.Session] = None
+        self.volume_node: Optional[vtkMRMLScalarVolumeNode] = None
+        self.target_nodes: List[vtkMRMLMarkupsFiducialNode] = []
+        self.transducer_node: Optional[vtkMRMLModelNode] = None
+        self.transducer_transform_node: Optional[vtkMRMLTransformNode] = None
+
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
 
     def getParameterNode(self):
@@ -406,8 +442,14 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
     def clear_session(self) -> None:
         self.current_session = None
-        self._subjects = {}
-        # slicer.mrmlScene.Clear() # TODO: Re-introduce this once we figure out how to make the parameter node persist
+
+        for node in [self.volume_node, *self.target_nodes, self.transducer_node, self.transducer_transform_node]:
+            if node is not None:
+                slicer.mrmlScene.RemoveNode(node)
+        self.volume_node = None
+        self.target_nodes = []
+        self.transducer_node = None
+        self.transducer_transform_node = None
 
     @display_errors
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
@@ -425,6 +467,8 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         openlifu = import_openlifu_with_check()
 
         self.clear_session()
+        self._subjects = {}
+
         self.db = openlifu.Database(path)
         add_slicer_log_handler(self.db)
 
@@ -486,7 +530,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
             volume_filename_maybe.name.split('.')[0] + '.*'
         )
 
-        # === Loading volume ===
+        # === Load volume ===
 
         volume_files = [
             volume_path
@@ -500,35 +544,15 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
         volume_path = volume_files[0]
 
-        volume_node : vtkMRMLScalarVolumeNode = slicer.util.loadVolume(volume_path)
-        volume_node.SetName(volume_id)
+        self.volume_node = slicer.util.loadVolume(volume_path)
+        self.volume_node.SetName(volume_id)
 
-        # === Loading targets ===
-
-        directions_in_RAS_coords_dict = {
-            'R' : np.array([1,0,0]),
-            'A' : np.array([0,1,0]),
-            'S' : np.array([0,0,1]),
-            'L' : np.array([-1,0,0]),
-            'P' : np.array([0,-1,0]),
-            'I' : np.array([0,0,-1]),
-        }
-
-        def get_xxx2ras_matrix(dims:Sequence[str]) -> NDArray[Any]:
-            return np.array([
-                directions_in_RAS_coords_dict[dim] for dim in dims
-            ]).transpose()
-
-        def get_xx2mm_scale_factor(length_unit:str) -> float:
-            openlifu = import_openlifu_with_check()
-            return openlifu.util.units.getsiscale(length_unit, 'distance') / openlifu.util.units.getsiscale('mm', 'distance')
-
-        target_nodes = []
+        # === Load targets ===
 
         for target in self.current_session.targets:
 
-            target_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-            target_nodes.append(target_node)
+            target_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+            self.target_nodes.append(target_node)
             target_node.SetName(target.id)
 
                 # Get target position and convert it to Slicer coordinates
@@ -545,14 +569,14 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
                 position
             )
 
-        # === Loading transducer ===
+        # === Load transducer ===
 
-        transducer_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        transducer_node.SetName(self.current_session.transducer.id)
-        transducer_node.SetAndObservePolyData(self.current_session.transducer.get_polydata())
-        transducer_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_transform_node.SetName(f"{self.current_session.transducer.id}-matrix")
-        transducer_node.SetAndObserveTransformNodeID(transducer_transform_node.GetID())
+        self.transducer_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        self.transducer_node.SetName(self.current_session.transducer.id)
+        self.transducer_node.SetAndObservePolyData(self.current_session.transducer.get_polydata())
+        self.transducer_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        self.transducer_transform_node.SetName(f"{self.current_session.transducer.id}-matrix")
+        self.transducer_node.SetAndObserveTransformNodeID(self.transducer_transform_node.GetID())
 
         def linear_to_affine(matrix, translation=None):
             """Convert linear 3x3 transform to an affine 4x4 with
@@ -575,11 +599,11 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         transform_matrix_numpy = openlifu2slicer_matrix @ self.current_session.transducer.matrix @ slicer2openlifu_matrix
 
         transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
-        transducer_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
-        transducer_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+        self.transducer_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+        self.transducer_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
         # === Toggle slice visibility and center slices on first target ===
-        slices_center_point = target_nodes[0].GetNthControlPointPosition(0)
+        slices_center_point = self.target_nodes[0].GetNthControlPointPosition(0)
         for slice_node_name in ["Red", "Green", "Yellow"]:
             sliceNode = slicer.util.getFirstNodeByClassByName("vtkMRMLSliceNode", slice_node_name)
             sliceNode.JumpSliceByCentering(*slices_center_point)
