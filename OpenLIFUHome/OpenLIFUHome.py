@@ -356,6 +356,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         [session_name, session_id]
                     ))
                     subject_item.appendRow(session_row)
+                self.ui.subjectSessionView.expand(subject_item.index())
 
 
 
