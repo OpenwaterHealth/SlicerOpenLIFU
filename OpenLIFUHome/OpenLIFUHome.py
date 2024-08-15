@@ -5,6 +5,7 @@ from typing import Optional, Any, List, Tuple, Sequence, Dict, TYPE_CHECKING
 from numpy.typing import NDArray
 import importlib
 import logging
+from enum import Enum
 
 import vtk
 import qt
@@ -224,6 +225,7 @@ def linear_to_affine(matrix, translation=None):
         axis=0,
     )
 
+FocalPatternType = Enum('FocalPatternType', ['SINGLE_POINT', 'WHEEL'])
 
 #
 # OpenLIFUHomeParameterNode
@@ -302,9 +304,29 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.update_sessionLoadButton_enabled()
         self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
 
-        # ====================================
+        # === Connections and UI setup for Protocol Configuration =======
 
-        # Make sure parameter node is initialized (needed for module reload)
+        self.focalPattern_name_to_type : Dict[str,FocalPatternType] = {
+            'single point' : FocalPatternType.SINGLE_POINT,
+            'wheel' : FocalPatternType.WHEEL,
+        }
+        self.focalPattern_type_to_pageName : Dict[FocalPatternType,str] = {
+            FocalPatternType.SINGLE_POINT : "singlePointPage",
+            FocalPatternType.WHEEL : "wheelPage",
+        }
+
+        self.ui.focalPatternComboBox.currentIndexChanged.connect(
+            lambda : self.ui.focalPatternOptionsStackedWidget.setCurrentWidget(
+                self.ui.focalPatternOptionsStackedWidget.findChild(
+                    qt.QWidget,
+                    self.focalPattern_type_to_pageName[self.getCurrentlySelectedFocalPatternType()]
+                )
+            )
+        )
+        self.ui.focalPatternComboBox.addItems(list(self.focalPattern_name_to_type.keys()))
+
+        # === Make sure parameter node is initialized (needed for module reload) ===
+
         self.initializeParameterNode()
 
     def onLoadDatabaseClicked(self):
@@ -443,6 +465,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         check_and_install_python_requirements(prompt_if_found=True)
         self.updateInstallButtonText()
 
+    def getCurrentlySelectedFocalPatternType(self) -> FocalPatternType:
+        """Return the type of focal pattern that is currently selected in the protocol configuration."""
+        return self.focalPattern_name_to_type[self.ui.focalPatternComboBox.currentText]
 
 #
 # OpenLIFUHomeLogic
