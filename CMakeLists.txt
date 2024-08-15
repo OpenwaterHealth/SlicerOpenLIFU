@@ -19,6 +19,13 @@ include(${Slicer_USE_FILE})
 #-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(OpenLIFUHome)
+add_subdirectory(OpenLIFUData)
+add_subdirectory(OpenLIFUPrePlanning)
+add_subdirectory(OpenLIFUTransducerTracking)
+add_subdirectory(OpenLIFUSonicationPlanning)
+add_subdirectory(OpenLIFUSonicationControl)
+add_subdirectory(OpenLIFUProtocolConfiguratuin)
+add_subdirectory(OpenLIFUProtocolConfiguration)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
