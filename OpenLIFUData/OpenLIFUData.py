@@ -12,8 +12,6 @@ from slicer.util import VTKObservationMixin
 
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-# from slicer import vtkMRMLScalarVolumeNode
-
 
 #
 # OpenLIFUData
