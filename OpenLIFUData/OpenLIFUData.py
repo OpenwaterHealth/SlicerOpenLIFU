@@ -141,11 +141,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.setParameterNode(self.logic.getParameterNode())
 
-        # # Select default input nodes if nothing is selected yet to save a few clicks for the user
-        # if not self._parameterNode.inputVolume:
-        #     firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-        #     if firstVolumeNode:
-        #         self._parameterNode.inputVolume = firstVolumeNode
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFUDataParameterNode]) -> None:
         """
@@ -161,35 +156,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-            # self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
-            # self._checkCanApply()
-
-    # def _checkCanApply(self, caller=None, event=None) -> None:
-    #     if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.thresholdedVolume:
-    #         self.ui.applyButton.toolTip = _("Compute output volume")
-    #         self.ui.applyButton.enabled = True
-    #     else:
-    #         self.ui.applyButton.toolTip = _("Select input and output volume nodes")
-    #         self.ui.applyButton.enabled = False
-
-    # def onApplyButton(self) -> None:
-    #     """Run processing when user clicks "Apply" button."""
-    #     with slicer.util.tryWithErrorDisplay(_("Failed to compute results."), waitCursor=True):
-    #         # Compute output
-    #         self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-    #                            self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-    #         # Compute inverted output (if needed)
-    #         if self.ui.invertedOutputSelector.currentNode():
-    #             # If additional output volume is selected then result with inverted threshold is written there
-    #             self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-    #                                self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
-
-#
+            
 # OpenLIFUDataLogic
 #
-
 
 class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
@@ -207,45 +176,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
-
-    # def process(self,
-    #             inputVolume: vtkMRMLScalarVolumeNode,
-    #             outputVolume: vtkMRMLScalarVolumeNode,
-    #             imageThreshold: float,
-    #             invert: bool = False,
-    #             showResult: bool = True) -> None:
-    #     """
-    #     Run the processing algorithm.
-    #     Can be used without GUI widget.
-    #     :param inputVolume: volume to be thresholded
-    #     :param outputVolume: thresholding result
-    #     :param imageThreshold: values above/below this threshold will be set to 0
-    #     :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-    #     :param showResult: show output volume in slice viewers
-    #     """
-
-    #     if not inputVolume or not outputVolume:
-    #         raise ValueError("Input or output volume is invalid")
-
-    #     import time
-
-    #     startTime = time.time()
-    #     logging.info("Processing started")
-
-    #     # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-    #     cliParams = {
-    #         "InputVolume": inputVolume.GetID(),
-    #         "OutputVolume": outputVolume.GetID(),
-    #         "ThresholdValue": imageThreshold,
-    #         "ThresholdType": "Above" if invert else "Below",
-    #     }
-    #     cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-    #     # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    #     slicer.mrmlScene.RemoveNode(cliNode)
-
-    #     stopTime = time.time()
-    #     logging.info(f"Processing completed in {stopTime-startTime:.2f} seconds")
-
 
 #
 # OpenLIFUDataTest
@@ -266,51 +196,3 @@ class OpenLIFUDataTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
-    #     self.test_OpenLIFUData1()
-
-    # def test_OpenLIFUData1(self):
-    #     """Ideally you should have several levels of tests.  At the lowest level
-    #     tests should exercise the functionality of the logic with different inputs
-    #     (both valid and invalid).  At higher levels your tests should emulate the
-    #     way the user would interact with your code and confirm that it still works
-    #     the way you intended.
-    #     One of the most important features of the tests is that it should alert other
-    #     developers when their changes will have an impact on the behavior of your
-    #     module.  For example, if a developer removes a feature that you depend on,
-    #     your test should break so they know that the feature is needed.
-    #     """
-
-    #     self.delayDisplay("Starting the test")
-
-    #     # Get/create input data
-
-    #     import SampleData
-
-    #     registerSampleData()
-    #     inputVolume = SampleData.downloadSample("OpenLIFUData1")
-    #     self.delayDisplay("Loaded test data set")
-
-    #     inputScalarRange = inputVolume.GetImageData().GetScalarRange()
-    #     self.assertEqual(inputScalarRange[0], 0)
-    #     self.assertEqual(inputScalarRange[1], 695)
-
-    #     outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-    #     threshold = 100
-
-    #     # Test the module logic
-
-    #     logic = OpenLIFUDataLogic()
-
-    #     # Test algorithm with non-inverted threshold
-    #     logic.process(inputVolume, outputVolume, threshold, True)
-    #     outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    #     self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    #     self.assertEqual(outputScalarRange[1], threshold)
-
-    #     # Test algorithm with inverted threshold
-    #     logic.process(inputVolume, outputVolume, threshold, False)
-    #     outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    #     self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    #     self.assertEqual(outputScalarRange[1], inputScalarRange[1])
-
-    #     self.delayDisplay("Test passed")
