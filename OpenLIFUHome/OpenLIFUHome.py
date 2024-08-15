@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Optional, Any, List, Tuple, Sequence, Dict, TYPE_CHECKING
-import OpenLIFULib.OpenLIFULib
 
 import qt
 import numpy as np
@@ -28,7 +27,6 @@ if TYPE_CHECKING:
 #
 # OpenLIFUHome
 #
-
 
 class OpenLIFUHome(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
