@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME OpenLIFUSonicationPlanning)
+set(MODULE_NAME OpenLIFUTransducerTracker)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS

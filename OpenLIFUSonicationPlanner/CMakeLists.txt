@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME OpenLIFUProtocolConfiguration)
+set(MODULE_NAME OpenLIFUSonicationPlanner)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS

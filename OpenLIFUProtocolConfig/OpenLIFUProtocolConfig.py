@@ -11,26 +11,26 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-
 #
-# OpenLIFUTransducerTracking
+# OpenLIFUProtocolConfig
 #
 
-class OpenLIFUTransducerTracking(ScriptedLoadableModule):
+
+class OpenLIFUProtocolConfig(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Transducer Tracking")  # TODO: make this more human readable by adding spaces
+        self.parent.title = _("OpenLIFU Protocol Configuration")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU")]
         self.parent.dependencies = []  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
-            "This is the transducer tracking module of the OpenLIFU extension for focused ultrasound. "
+            "This is the protocol configuration module of the OpenLIFU extension for focused ultrasound. "
             "More information at <a href=\"https://github.com/OpenwaterHealth/SlicerOpenLIFU\">github.com/OpenwaterHealth/SlicerOpenLIFU</a>."
         )
         # organization, grant, and thanks
@@ -42,24 +42,22 @@ class OpenLIFUTransducerTracking(ScriptedLoadableModule):
 
 
 #
-# OpenLIFUTransducerTrackingParameterNode
+# OpenLIFUProtocolConfigParameterNode
 #
 
-
 @parameterNodeWrapper
-class OpenLIFUTransducerTrackingParameterNode:
+class OpenLIFUProtocolConfigParameterNode:
     """
     The parameters needed by module.
 
     """
 
-
 #
-# OpenLIFUTransducerTrackingWidget
+# OpenLIFUProtocolConfigWidget
 #
 
 
-class OpenLIFUTransducerTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -78,7 +76,7 @@ class OpenLIFUTransducerTrackingWidget(ScriptedLoadableModuleWidget, VTKObservat
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
-        uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUTransducerTracking.ui"))
+        uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUProtocolConfig.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
@@ -89,16 +87,13 @@ class OpenLIFUTransducerTrackingWidget(ScriptedLoadableModuleWidget, VTKObservat
 
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUTransducerTrackingLogic()
+        self.logic = OpenLIFUProtocolConfigLogic()
 
         # Connections
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-
-        # Buttons
-        self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -118,8 +113,7 @@ class OpenLIFUTransducerTrackingWidget(ScriptedLoadableModuleWidget, VTKObservat
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
-
+     
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
         # Parameter node will be reset, do not use it anymore
@@ -138,7 +132,7 @@ class OpenLIFUTransducerTrackingWidget(ScriptedLoadableModuleWidget, VTKObservat
 
         self.setParameterNode(self.logic.getParameterNode())
 
-    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUTransducerTrackingParameterNode]) -> None:
+    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUProtocolConfigParameterNode]) -> None:
         """
         Set and observe parameter node.
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
@@ -146,19 +140,20 @@ class OpenLIFUTransducerTrackingWidget(ScriptedLoadableModuleWidget, VTKObservat
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
+        
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
- 
+      
+
 #
-# OpenLIFUTransducerTrackingLogic
+# OpenLIFUProtocolConfigLogic
 #
 
 
-class OpenLIFUTransducerTrackingLogic(ScriptedLoadableModuleLogic):
+class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
     computation done by your module.  The interface
     should be such that other python code can import
@@ -173,14 +168,15 @@ class OpenLIFUTransducerTrackingLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
-        return OpenLIFUTransducerTrackingParameterNode(super().getParameterNode())
+        return OpenLIFUProtocolConfigParameterNode(super().getParameterNode())
+
 
 #
-# OpenLIFUTransducerTrackingTest
+# OpenLIFUProtocolConfigTest
 #
 
 
-class OpenLIFUTransducerTrackingTest(ScriptedLoadableModuleTest):
+class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
     """
     This is the test case for your scripted module.
     Uses ScriptedLoadableModuleTest base class, available at:
@@ -194,4 +190,4 @@ class OpenLIFUTransducerTrackingTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
- 
+

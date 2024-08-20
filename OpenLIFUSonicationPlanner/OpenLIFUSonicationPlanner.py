@@ -11,26 +11,27 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
+
 #
-# OpenLIFUProtocolConfiguration
+# OpenLIFUSonicationPlanner
 #
 
 
-class OpenLIFUProtocolConfiguration(ScriptedLoadableModule):
+class OpenLIFUSonicationPlanner(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Protocol Configuration")  # TODO: make this more human readable by adding spaces
+        self.parent.title = _("OpenLIFU Sonication Planning")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU")]
         self.parent.dependencies = []  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
-            "This is the protocol configuration module of the OpenLIFU extension for focused ultrasound. "
+            "This is the sonication module of the OpenLIFU extension for focused ultrasound. "
             "More information at <a href=\"https://github.com/OpenwaterHealth/SlicerOpenLIFU\">github.com/OpenwaterHealth/SlicerOpenLIFU</a>."
         )
         # organization, grant, and thanks
@@ -41,23 +42,26 @@ class OpenLIFUProtocolConfiguration(ScriptedLoadableModule):
         )
 
 
+
 #
-# OpenLIFUProtocolConfigurationParameterNode
+# OpenLIFUSonicationPlannerParameterNode
 #
 
+
 @parameterNodeWrapper
-class OpenLIFUProtocolConfigurationParameterNode:
+class OpenLIFUSonicationPlannerParameterNode:
     """
     The parameters needed by module.
 
     """
 
+
 #
-# OpenLIFUProtocolConfigurationWidget
+# OpenLIFUSonicationPlannerWidget
 #
 
 
-class OpenLIFUProtocolConfigurationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -76,7 +80,7 @@ class OpenLIFUProtocolConfigurationWidget(ScriptedLoadableModuleWidget, VTKObser
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
-        uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUProtocolConfiguration.ui"))
+        uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUSonicationPlanner.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
@@ -87,13 +91,15 @@ class OpenLIFUProtocolConfigurationWidget(ScriptedLoadableModuleWidget, VTKObser
 
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUProtocolConfigurationLogic()
+        self.logic = OpenLIFUSonicationPlannerLogic()
 
         # Connections
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+
+        # Buttons
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -113,7 +119,6 @@ class OpenLIFUProtocolConfigurationWidget(ScriptedLoadableModuleWidget, VTKObser
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
 
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
@@ -133,7 +138,7 @@ class OpenLIFUProtocolConfigurationWidget(ScriptedLoadableModuleWidget, VTKObser
 
         self.setParameterNode(self.logic.getParameterNode())
 
-    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUProtocolConfigurationParameterNode]) -> None:
+    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUSonicationPlannerParameterNode]) -> None:
         """
         Set and observe parameter node.
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
@@ -141,28 +146,19 @@ class OpenLIFUProtocolConfigurationWidget(ScriptedLoadableModuleWidget, VTKObser
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
+     
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
       
-
-    def _checkCanApply(self, caller=None, event=None) -> None:
-        if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.thresholdedVolume:
-            self.ui.applyButton.toolTip = _("Compute output volume")
-            self.ui.applyButton.enabled = True
-        else:
-            self.ui.applyButton.toolTip = _("Select input and output volume nodes")
-            self.ui.applyButton.enabled = False
-
 #
-# OpenLIFUProtocolConfigurationLogic
+# OpenLIFUSonicationPlannerLogic
 #
 
 
-class OpenLIFUProtocolConfigurationLogic(ScriptedLoadableModuleLogic):
+class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
     computation done by your module.  The interface
     should be such that other python code can import
@@ -177,15 +173,13 @@ class OpenLIFUProtocolConfigurationLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
-        return OpenLIFUProtocolConfigurationParameterNode(super().getParameterNode())
-
+        return OpenLIFUSonicationPlannerParameterNode(super().getParameterNode())
 
 #
-# OpenLIFUProtocolConfigurationTest
+# OpenLIFUSonicationPlannerTest
 #
 
-
-class OpenLIFUProtocolConfigurationTest(ScriptedLoadableModuleTest):
+class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
     """
     This is the test case for your scripted module.
     Uses ScriptedLoadableModuleTest base class, available at:
@@ -199,4 +193,4 @@ class OpenLIFUProtocolConfigurationTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
-
+      

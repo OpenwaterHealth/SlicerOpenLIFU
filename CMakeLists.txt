@@ -21,11 +21,11 @@ include(${Slicer_USE_FILE})
 add_subdirectory(OpenLIFUHome)
 add_subdirectory(OpenLIFUData)
 add_subdirectory(OpenLIFUPrePlanning)
-add_subdirectory(OpenLIFUTransducerTracking)
-add_subdirectory(OpenLIFUSonicationPlanning)
 add_subdirectory(OpenLIFUSonicationControl)
-add_subdirectory(OpenLIFUProtocolConfiguratuin)
-add_subdirectory(OpenLIFUProtocolConfiguration)
+add_subdirectory(OpenLIFUProtocolConfig)
+add_subdirectory(OpenLIFUSonicationPlanner)
+add_subdirectory(OpenLIFUTransducerTracker)
+add_subdirectory(OpenLIFULib)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
