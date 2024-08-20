@@ -1,12 +1,6 @@
-import logging
-import sys
 from pathlib import Path
 from typing import Optional, Any, List, Tuple, Sequence, Dict, TYPE_CHECKING
-from numpy.typing import NDArray
-import importlib
-import logging
 
-import vtk
 import qt
 import numpy as np
 
@@ -24,6 +18,8 @@ from slicer import (
     vtkMRMLTransformNode,
 )
 
+import OpenLIFULib
+
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
     import openlifu.db
@@ -31,7 +27,6 @@ if TYPE_CHECKING:
 #
 # OpenLIFUHome
 #
-
 
 class OpenLIFUHome(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -56,174 +51,6 @@ class OpenLIFUHome(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
-
-#
-# General utilities that probably should go elsewhere?
-# TODO Move some of these functions to more suitable places, e.g. some need to be where all modules can access them.
-#
-
-class BusyCursor:
-    """
-    Context manager for showing a busy cursor.  Ensures that cursor reverts to normal in
-    case of an exception.
-    """
-
-    def __enter__(self):
-        qt.QApplication.setOverrideCursor(qt.Qt.BusyCursor)
-
-    def __exit__(self, exception_type, exception_value, traceback):
-        qt.QApplication.restoreOverrideCursor()
-        return False
-
-def install_python_requirements() -> None:
-    """Install python requirements"""
-    requirements_path = Path(__file__).parent / 'Resources/python-requirements.txt'
-    with BusyCursor():
-        slicer.util.pip_install(['-r', requirements_path])
-
-def python_requirements_exist() -> bool:
-    """Check and return whether python requirements are installed."""
-    return importlib.util.find_spec('openlifu') is not None
-
-def check_and_install_python_requirements(prompt_if_found = False) -> None:
-    """Check whether python requirements are installed and prompt to install them if not.
-
-    Args:
-        prompt_if_found: If this is enabled then in the event that python requirements are found,
-            there is a further prompt asking whether to run the install anyway.
-    """
-    want_install = False
-    if not python_requirements_exist():
-        want_install = slicer.util.confirmYesNoDisplay(
-            text = "Some OpenLIFU python dependencies were not found. Install them now?",
-            windowTitle = "Install python dependencies?",
-        )
-    elif prompt_if_found:
-        want_install = slicer.util.confirmYesNoDisplay(
-            text = "All OpenLIFU python dependencies were found. Re-run the install command?",
-            windowTitle = "Reinstall python dependencies?",
-        )
-    if want_install:
-        install_python_requirements()
-        if python_requirements_exist():
-            slicer.util.infoDisplay(text="Python requirements installed.", windowTitle="Success")
-        else:
-            slicer.util.errorDisplay(
-                text="OpenLIFU python dependencies are still not found. The install may have failed.",
-                windowTitle="Python dependencies still not found"
-            )
-
-def import_openlifu_with_check() -> "openlifu":
-    """Import openlifu and return the module, checking that it is installed along the way."""
-    if "openlifu" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
-        with BusyCursor():
-            import openlifu
-    return sys.modules["openlifu"]
-
-def display_errors(f):
-    """Decorator to make functions forward their python exceptions along as slicer error displays"""
-    def f_with_forwarded_errors(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except Exception as e:
-            slicer.util.errorDisplay(f'Exception raised in {f.__name__}: {e}')
-            raise e
-    return f_with_forwarded_errors
-
-class SlicerLogHandler(logging.Handler):
-    def __init__(self, name_to_print, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name_to_print = name_to_print
-
-    def emit(self, record):
-        if record.levelno == logging.ERROR:
-            method_to_use = self.handle_error
-        elif record.levelno == logging.WARNING:
-            method_to_use = self.handle_warning
-        else: # info or any other unaccounted for log message level
-            method_to_use = self.handle_info
-        method_to_use(self.format(record))
-
-    def handle_error(self, msg):
-        slicer.util.errorDisplay(f"{self.name_to_print}: {msg}")
-
-    def handle_warning(self, msg):
-        slicer.util.warningDisplay(f"{self.name_to_print}: {msg}")
-
-    def handle_info(self, msg):
-        slicer.util.showStatusMessage(f"{self.name_to_print}: {msg}")
-
-def add_slicer_log_handler(openlifu_object: Any):
-    """Adds an appropriately named SlicerLogHandler to the logger of an openlifu object,
-    and only doing so if that logger doesn't already have a SlicerLogHandler"""
-    if not hasattr(openlifu_object, "logger"):
-        raise ValueError("This object does not have a logger attribute.")
-    if not hasattr(openlifu_object, "__class__"):
-        raise ValueError("This object is not an instance of an openlifu class.")
-    logger : logging.Logger = openlifu_object.logger
-    if not any(isinstance(h, SlicerLogHandler) for h in logger.handlers):
-        handler = SlicerLogHandler(openlifu_object.__class__.__name__)
-        logger.addHandler(handler)
-
-# TODO: Fix the matlab weirdness in openlifu so that we can get rid of ensure_list here.
-# The reason for ensure_list is to deal with the fact that matlab fails to distinguish
-# between a list with one element and the element itself, and so it doesn't write out
-# singleton lists properly
-def ensure_list(item: Any) -> List[Any]:
-    """ Ensure the input is a list. This is a no-op for lists, and returns a singleton list when given non-list input. """
-    if isinstance(item, list):
-        return item
-    else:
-        return [item]
-
-def create_noneditable_QStandardItem(text:str) -> qt.QStandardItem:
-            item = qt.QStandardItem(text)
-            item.setEditable(False)
-            return item
-
-def numpy_to_vtk_4x4(numpy_array_4x4 : NDArray[Any]) -> vtk.vtkMatrix4x4:
-            if numpy_array_4x4.shape != (4, 4):
-                raise ValueError("The input numpy array must be of shape (4, 4).")
-            vtk_matrix = vtk.vtkMatrix4x4()
-            for i in range(4):
-                for j in range(4):
-                    vtk_matrix.SetElement(i, j, numpy_array_4x4[i, j])
-            return vtk_matrix
-
-directions_in_RAS_coords_dict = {
-    'R' : np.array([1,0,0]),
-    'A' : np.array([0,1,0]),
-    'S' : np.array([0,0,1]),
-    'L' : np.array([-1,0,0]),
-    'P' : np.array([0,-1,0]),
-    'I' : np.array([0,0,-1]),
-}
-
-def get_xxx2ras_matrix(dims:Sequence[str]) -> NDArray[Any]:
-    return np.array([
-        directions_in_RAS_coords_dict[dim] for dim in dims
-    ]).transpose()
-
-def get_xx2mm_scale_factor(length_unit:str) -> float:
-    openlifu = import_openlifu_with_check()
-    return openlifu.util.units.getsiscale(length_unit, 'distance') / openlifu.util.units.getsiscale('mm', 'distance')
-
-def linear_to_affine(matrix, translation=None):
-    """Convert linear 3x3 transform to an affine 4x4 with
-    the given translation vector (the default being no translation)"""
-    if translation is None:
-        translation = np.zeros(3)
-    if matrix.shape != (3, 3):
-        raise ValueError("The input numpy array must be of shape (3, 3).")
-    return np.concatenate(
-        [
-            np.concatenate([matrix,translation.reshape(-1,1)], axis=1),
-            np.array([[0,0,0,1]], dtype=float),
-        ],
-        axis=0,
-    )
-
 
 #
 # OpenLIFUHomeParameterNode
@@ -315,7 +142,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         for subject_id, subject_name in subject_info:
             subject_row = list(map(
-                create_noneditable_QStandardItem,
+                OpenLIFULib.create_noneditable_QStandardItem,
                 [subject_name,subject_id]
             ))
             self.subjectSessionItemModel.appendRow(subject_row)
@@ -352,7 +179,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             if subject_item.rowCount() == 0: # If we have not already expanded this subject
                 for session_id, session_name in self.logic.get_session_info(subject_id):
                     session_row = list(map(
-                        create_noneditable_QStandardItem,
+                        OpenLIFULib.create_noneditable_QStandardItem,
                         [session_name, session_id]
                     ))
                     subject_item.appendRow(session_row)
@@ -433,14 +260,14 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def updateInstallButtonText(self) -> None:
         """Update the text of the install button based on whether it's 'install' or 'reinstall'"""
-        if python_requirements_exist():
+        if OpenLIFULib.python_requirements_exist():
             self.ui.installPythonReqsButton.text = 'Reinstall Python Requirements'
         else:
             self.ui.installPythonReqsButton.text = 'Install Python Requirements'
 
     def onInstallPythonRequirements(self) -> None:
         """Install python requirements button action"""
-        check_and_install_python_requirements(prompt_if_found=True)
+        OpenLIFULib.check_and_install_python_requirements(prompt_if_found=True)
         self.updateInstallButtonText()
 
 
@@ -487,7 +314,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         self.transducer_node = None
         self.transducer_transform_node = None
 
-    @display_errors
+    @OpenLIFULib.display_errors
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
         """Load an openlifu database from a local folder hierarchy.
 
@@ -500,15 +327,15 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         Returns: A sequence of pairs (subject_id, subject_name) running over all subjects
             in the database.
         """
-        openlifu = import_openlifu_with_check()
+        openlifu = OpenLIFULib.import_openlifu_with_check()
 
         self.clear_session()
         self._subjects = {}
 
         self.db = openlifu.Database(path)
-        add_slicer_log_handler(self.db)
+        OpenLIFULib.add_slicer_log_handler(self.db)
 
-        subject_ids : List[str] = ensure_list(self.db.get_subject_ids())
+        subject_ids : List[str] = OpenLIFULib.ensure_list(self.db.get_subject_ids())
         self._subjects = {
             subject_id : self.db.load_subject(subject_id)
             for subject_id in subject_ids
@@ -533,10 +360,10 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
                 self.get_subject(subject_id),
                 session_id
             )
-            for session_id in ensure_list(self.db.get_session_ids(subject_id))
+            for session_id in OpenLIFULib.ensure_list(self.db.get_session_ids(subject_id))
         ]
 
-    @display_errors
+    @OpenLIFULib.display_errors
     def get_session_info(self, subject_id:str) -> Sequence[Tuple[str,str]]:
         """Fetch the session names and IDs for a particular subject.
 
@@ -551,12 +378,12 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         sessions = self.get_sessions(subject_id)
         return [(session.id, session.name) for session in sessions]
 
-    @display_errors
+    @OpenLIFULib.display_errors
     def get_session(self, subject_id:str, session_id:str) -> "openlifu.db.session.Session":
         """Fetch the Session with the given ID"""
         return self.db.load_session(self.get_subject(subject_id), session_id)
 
-    @display_errors
+    @OpenLIFULib.display_errors
     def load_session(self, subject_id, session_id):
         self.clear_session()
         self.current_session = self.get_session(subject_id, session_id)
@@ -593,8 +420,8 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
                 # Get target position and convert it to Slicer coordinates
             position = np.array(target.position)
-            position = get_xxx2ras_matrix(target.dims) @ position
-            position = get_xx2mm_scale_factor(target.units) * position
+            position = OpenLIFULib.get_xxx2ras_matrix(target.dims) @ position
+            position = OpenLIFULib.get_xx2mm_scale_factor(target.units) * position
 
             target_node.SetControlPointLabelFormat(target.name)
             target_display_node = target_node.GetDisplayNode()
@@ -617,11 +444,11 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
         # self.current_session.transducer.matrix. There is no such attribute yet but it should exist eventually once this is done:
         # https://github.com/OpenwaterHealth/opw_neuromod_sw/issues/3
-        openlifu2slicer_matrix = linear_to_affine(get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(self.current_session.transducer.units))
+        openlifu2slicer_matrix = OpenLIFULib.linear_to_affine(OpenLIFULib.get_xxx2ras_matrix('LPS') * OpenLIFULib.get_xx2mm_scale_factor(self.current_session.transducer.units))
         slicer2openlifu_matrix = np.linalg.inv(openlifu2slicer_matrix)
         transform_matrix_numpy = openlifu2slicer_matrix @ self.current_session.transducer.matrix @ slicer2openlifu_matrix
 
-        transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
+        transform_matrix_vtk = OpenLIFULib.numpy_to_vtk_4x4(transform_matrix_numpy)
         self.transducer_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
         self.transducer_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
