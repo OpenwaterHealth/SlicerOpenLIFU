@@ -9,6 +9,10 @@ import importlib
 import sys
 import logging
 
+
+if TYPE_CHECKING:
+    import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
+
 class BusyCursor:
     """
     Context manager for showing a busy cursor.  Ensures that cursor reverts to normal in
