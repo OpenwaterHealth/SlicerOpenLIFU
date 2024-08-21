@@ -21,9 +21,10 @@ from slicer import (
 
 import OpenLIFULib
 
+from OpenLIFULib import import_openlifu_with_check, display_errors
+
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
-    import openlifu.db
 
 #
 # OpenLIFUData
@@ -197,7 +198,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "Protocols (*.json);;All Files (*)", # file type filter
         )
         if filepath:
-            print(filepath)
+            self.logic.load_protocol(filepath)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -464,6 +465,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         sliceNode = slicer.util.getFirstNodeByClassByName("vtkMRMLSliceNode", "Yellow")
         sliceNode.SetSliceVisible(True)
 
+
+    @display_errors
+    def load_protocol(self, filepath:str):
+        openlifu = import_openlifu_with_check()
+        protocol = openlifu.Protocol.from_file(filepath)
 
 #
 # OpenLIFUDataTest
