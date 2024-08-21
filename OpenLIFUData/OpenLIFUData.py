@@ -20,12 +20,10 @@ from slicer import (
 )
 
 import OpenLIFULib
-from OpenLIFULib import import_openlifu_with_check
+from OpenLIFULib import import_openlifu_with_check as openlifu_lz # "openlifu_lz" stands for "openlifu lazy import"
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
-else:
-    openlifu = import_openlifu_with_check()
 
 #
 # OpenLIFUData
@@ -59,6 +57,18 @@ class OpenLIFUData(ScriptedLoadableModule):
 # OpenLIFUDataParameterNode
 #
 
+# This very thin wrapper around openlifu.Protocol is needed to do our lazy importing of openlifu
+# while still providing type annotations that the parameter node wrapper can use.
+# If we tried to make openlifu.Protocol directly supported as a type by parameter nodes, we would
+# get errors from parameterNodeWrapper as it tries to use typing.get_type_hints. This fails because
+# get_type_hints tries to *evaluate* the type annotations like "openlifu.Protocol" possibly before
+# the user has installed openlifu, and possibly before the main window widgets exist that would allow
+# an install prompt to even show up.
+class SlicerOpenLIFUProtocol:
+    """Ultrathin wrapper of openlifu.Protocol. This exists so that protocols can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, protocol: "openlifu.Protocol"):
+        self.protocol = protocol
 
 @parameterNodeSerializer
 class OpenLIFUProtocolSerializer(Serializer):
@@ -67,7 +77,7 @@ class OpenLIFUProtocolSerializer(Serializer):
         """
         Whether the serializer can serialize the given type if it is properly instantiated.
         """
-        return type_ == openlifu.Protocol
+        return type_ == SlicerOpenLIFUProtocol
 
     @staticmethod
     def create(type_):
@@ -77,14 +87,14 @@ class OpenLIFUProtocolSerializer(Serializer):
         """
         if OpenLIFUProtocolSerializer.canSerialize(type_):
             # Add custom validators as we need them to the list here. For now just IsInstance.
-            return ValidatedSerializer(OpenLIFUProtocolSerializer(), [validators.IsInstance(openlifu.Protocol)])
+            return ValidatedSerializer(OpenLIFUProtocolSerializer(), [validators.IsInstance(SlicerOpenLIFUProtocol)])
         return None
 
     def default(self):
         """
         The default value to use if another default is not specified.
         """
-        return openlifu.Protocol()
+        return SlicerOpenLIFUProtocol(openlifu_lz().Protocol())
 
     def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
         """
@@ -93,21 +103,21 @@ class OpenLIFUProtocolSerializer(Serializer):
         """
         return parameterNode.HasParameter(name)
 
-    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: "openlifu.Protocol") -> None:
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUProtocol) -> None:
         """
         Writes the value to the parameterNode under the given name.
         """
         parameterNode.SetParameter(
             name,
-            value.to_json(compact=True)
+            value.protocol.to_json(compact=True)
         )
 
-    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> "openlifu.Protocol":
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUProtocol:
         """
         Reads and returns the value with the given name from the parameterNode.
         """
         json_string = parameterNode.GetParameter(name)
-        return openlifu.Protocol.from_json(json_string)
+        return SlicerOpenLIFUProtocol(openlifu_lz().Protocol.from_json(json_string))
 
     def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
         """
@@ -118,7 +128,7 @@ class OpenLIFUProtocolSerializer(Serializer):
 @parameterNodeWrapper
 class OpenLIFUDataParameterNode:
     databaseDirectory : Path
-    loaded_protocols : List[openlifu.Protocol]
+    loaded_protocols : "List[SlicerOpenLIFUProtocol]"
 
 #
 # OpenLIFUDataWidget
@@ -521,8 +531,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     @OpenLIFULib.display_errors
     def load_protocol(self, filepath:str):
-        protocol = openlifu.Protocol.from_file(filepath)
-        self.getParameterNode().loaded_protocols.append(protocol)
+        protocol = openlifu_lz().Protocol.from_file(filepath)
+        self.getParameterNode().loaded_protocols.append(SlicerOpenLIFUProtocol(protocol))
 
 #
 # OpenLIFUDataTest
