@@ -10,7 +10,7 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
-from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer.parameterNodeWrapper import parameterNodeWrapper, parameterNodeSerializer, Serializer, ValidatedSerializer, validators
 from slicer import (
     vtkMRMLScriptedModuleNode,
     vtkMRMLScalarVolumeNode,
@@ -20,11 +20,12 @@ from slicer import (
 )
 
 import OpenLIFULib
-
-from OpenLIFULib import import_openlifu_with_check, display_errors
+from OpenLIFULib import import_openlifu_with_check
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
+else:
+    openlifu = import_openlifu_with_check()
 
 #
 # OpenLIFUData
@@ -59,13 +60,65 @@ class OpenLIFUData(ScriptedLoadableModule):
 #
 
 
+@parameterNodeSerializer
+class OpenLIFUProtocolSerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == openlifu.Protocol
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if OpenLIFUProtocolSerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(OpenLIFUProtocolSerializer(), [validators.IsInstance(openlifu.Protocol)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return openlifu.Protocol()
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: "openlifu.Protocol") -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> "openlifu.Protocol":
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)
+        return openlifu.Protocol.from_json(json_string)
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
 @parameterNodeWrapper
 class OpenLIFUDataParameterNode:
-    """
-    The parameters needed by module.
-
-    """
     databaseDirectory : Path
+    loaded_protocols : List[openlifu.Protocol]
 
 #
 # OpenLIFUDataWidget
@@ -466,10 +519,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         sliceNode.SetSliceVisible(True)
 
 
-    @display_errors
+    @OpenLIFULib.display_errors
     def load_protocol(self, filepath:str):
-        openlifu = import_openlifu_with_check()
         protocol = openlifu.Protocol.from_file(filepath)
+        self.getParameterNode().loaded_protocols.append(protocol)
 
 #
 # OpenLIFUDataTest
