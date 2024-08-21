@@ -6,92 +6,29 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>325</width>
-    <height>311</height>
+    <width>220</width>
+    <height>315</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton" native="true">
-     <property name="text" stdset="0">
-      <string>Sessions</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
-      <item>
-       <widget class="QLabel" name="databaseDirectoryLabel">
-        <property name="text">
-         <string>Database directory:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit" native="true">
-        <property name="filters" stdset="0">
-         <string>ctkPathLineEdit::Dirs</string>
-        </property>
-        <property name="SlicerParameterName" stdset="0">
-         <string>databaseDirectory</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="databaseLoadButton">
-        <property name="text">
-         <string>Load Database</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="subjectSessionLabel">
-        <property name="text">
-         <string>Subject/session selector:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QTreeView" name="subjectSessionView">
-        <property name="expandsOnDoubleClick">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="sessionLoadButton">
-        <property name="text">
-         <string>Load</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton" native="true">
-     <property name="text" stdset="0">
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item alignment="Qt::AlignTop">
+    <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton">
+     <property name="text">
       <string>Advanced</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>true</bool>
      </property>
-     <layout class="QFormLayout" name="formLayout_3">
-      <item row="0" column="0">
-       <widget class="QPushButton" name="installPythonReqsButton"/>
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QPushButton" name="installPythonReqsButton">
+        <property name="text">
+         <string>Install Python Requirements</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>
@@ -107,11 +44,6 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ctkPathLineEdit</class>
-   <extends>QWidget</extends>
-   <header>ctkpathlineedit.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
