@@ -103,6 +103,26 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.installPythonReqsButton.connect("clicked()", self.onInstallPythonRequirements)
         self.updateInstallButtonText()
 
+        # Switch modules
+        self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
+        self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
+        self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))
+        self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
+        self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
+    
+
+    def switchModule(self, moduleButtonText: str) -> None:  
+        moduleButtonText = moduleButtonText.replace(" ", "")
+        moduleButtonText = moduleButtonText.replace("-", "")
+
+        # For certain modules, the module name in the GUI doesn't match the programmatic module name
+        # This is due to max path character limits on longer module names
+        if (moduleButtonText == "OpenLIFUTransducerTracking" or moduleButtonText == "OpenLIFUSonicationPlanning"):
+            moduleButtonText = moduleButtonText[:-3] + "er"
+        
+        slicer.util.selectModule(moduleButtonText)
+
+
     def updateInstallButtonText(self) -> None:
         """Update the text of the install button based on whether it's 'install' or 'reinstall'"""
         if OpenLIFULib.python_requirements_exist():

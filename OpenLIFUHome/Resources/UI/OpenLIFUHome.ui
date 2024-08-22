@@ -6,11 +6,55 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>220</width>
-    <height>315</height>
+    <width>298</width>
+    <height>347</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_2">
+  <layout class="QVBoxLayout" name="verticalLayout_4">
+   <item alignment="Qt::AlignTop">
+    <widget class="ctkCollapsibleButton" name="ModuleNavigatorButton">
+     <property name="text">
+      <string>OpenLIFU module navigator</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QPushButton" name="dataPushButton">
+        <property name="text">
+         <string>OpenLIFU Data</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="prePlanningPushButton">
+        <property name="text">
+         <string>OpenLIFU Pre-Planning</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="transducerTrackingPushButton">
+        <property name="text">
+         <string>OpenLIFU Transducer Tracking</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="sonicationPlanningPushButton">
+        <property name="text">
+         <string>OpenLIFU Sonication Planning</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="sonicationControlPushButton">
+        <property name="text">
+         <string>OpenLIFU Sonication Control</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item alignment="Qt::AlignTop">
     <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton">
      <property name="text">
@@ -29,6 +73,19 @@
       </item>
      </layout>
     </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>
