@@ -12,8 +12,8 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton">
-     <property name="text">
+    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton" native="true">
+     <property name="text" stdset="0">
       <string>Sessions</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -25,10 +25,7 @@
        </widget>
       </item>
       <item>
-       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
-        <property name="filters">
-         <set>ctkPathLineEdit::Dirs</set>
-        </property>
+       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit" native="true">
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
         </property>
@@ -58,9 +55,58 @@
       <item>
        <widget class="QPushButton" name="sessionLoadButton">
         <property name="text">
-         <string>Load</string>
+         <string>Load Subject/Session</string>
         </property>
        </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="widget" native="true">
+     <property name="text" stdset="0">
+      <string>OpenLIFU Objects</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QPushButton" name="loadProtocolButton">
+        <property name="toolTip">
+         <string>Load an openlifu protocol from json</string>
+        </property>
+        <property name="text">
+         <string>Load Protocol</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loadTransducerButton">
+        <property name="toolTip">
+         <string>Load an openlifu transducer from json</string>
+        </property>
+        <property name="text">
+         <string>Load Transducer</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="addDataButton">
+        <property name="toolTip">
+         <string>Add volumes or points</string>
+        </property>
+        <property name="text">
+         <string>Add Data</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="loadedObjectsLabel">
+        <property name="text">
+         <string>Loaded OpenLIFU objects:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QTreeView" name="loadedObjectsView"/>
       </item>
      </layout>
     </widget>
