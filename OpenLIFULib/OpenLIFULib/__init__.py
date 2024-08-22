@@ -1,6 +1,6 @@
 import qt
 import vtk
-from typing import Any, List, Sequence
+from typing import Any, List, Sequence, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 from pathlib import Path
