@@ -192,8 +192,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.update_sessionLoadButton_enabled()
         self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
 
+        self.loadedObjectsItemModel = qt.QStandardItemModel()
+        self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'ID', 'Type'])
+        self.ui.loadedObjectsView.setModel(self.loadedObjectsItemModel)
+        self.ui.loadedObjectsView.setColumnWidth(0, 200)
+        self.ui.loadedObjectsView.setColumnWidth(1, 200)
+        self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
+
         # ====================================
-       
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
@@ -262,6 +269,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
         if filepath:
             self.logic.load_protocol(filepath)
+        self.updateLoadedObjectsView()
+
+    def updateLoadedObjectsView(self):
+        self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
+        parameter_node = self.logic.getParameterNode()
+        for protocol in parameter_node.loaded_protocols:
+            row = list(map(
+                OpenLIFULib.create_noneditable_QStandardItem,
+                [protocol.protocol.name, protocol.protocol.id, "Protocol"]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -366,7 +384,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
-    
+
     def clear_session(self) -> None:
         self.current_session = None
 

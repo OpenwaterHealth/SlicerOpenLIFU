@@ -106,7 +106,11 @@
        </widget>
       </item>
       <item>
-       <widget class="QTreeView" name="loadedObjectsView"/>
+       <widget class="QTreeView" name="loadedObjectsView">
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SingleSelection</enum>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
