@@ -129,7 +129,7 @@ class OpenLIFUProtocolSerializer(Serializer):
 @parameterNodeWrapper
 class OpenLIFUDataParameterNode:
     databaseDirectory : Path
-    loaded_protocols : "List[SlicerOpenLIFUProtocol]"
+    loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
 
 #
 # OpenLIFUDataWidget
@@ -276,7 +276,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
         parameter_node = self.logic.getParameterNode()
-        for protocol in parameter_node.loaded_protocols:
+        for protocol in parameter_node.loaded_protocols.values():
             row = list(map(
                 OpenLIFULib.create_noneditable_QStandardItem,
                 [protocol.protocol.name, protocol.protocol.id, "Protocol"]
@@ -555,7 +555,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     @OpenLIFULib.display_errors
     def load_protocol(self, filepath:str):
         protocol = openlifu_lz().Protocol.from_file(filepath)
-        self.getParameterNode().loaded_protocols.append(SlicerOpenLIFUProtocol(protocol))
+        if protocol.id in self.getParameterNode().loaded_protocols:
+            if not slicer.util.confirmYesNoDisplay(
+                f"A protocol with ID {protocol.id} is already loaded. Reload it?",
+                "Protocol already loaded",
+            ):
+                return
+        self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
 
 #
 # OpenLIFUDataTest
