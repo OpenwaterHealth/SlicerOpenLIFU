@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
 
 import qt
+import vtk
 import numpy as np
 
 import slicer
@@ -192,12 +193,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.update_sessionLoadButton_enabled()
         self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
 
+        # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
         self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'ID', 'Type'])
         self.ui.loadedObjectsView.setModel(self.loadedObjectsItemModel)
         self.ui.loadedObjectsView.setColumnWidth(0, 200)
         self.ui.loadedObjectsView.setColumnWidth(1, 200)
         self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
+        self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
         # ====================================
 
@@ -269,7 +272,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
         if filepath:
             self.logic.load_protocol(filepath)
-        self.updateLoadedObjectsView()
 
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
@@ -280,6 +282,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [protocol.protocol.name, protocol.protocol.id, "Protocol"]
             ))
             self.loadedObjectsItemModel.appendRow(row)
+
+    def onParameterNodeModified(self, caller, event) -> None:
+        self.updateLoadedObjectsView()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
