@@ -25,7 +25,7 @@ class OpenLIFUSonicationPlanner(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Sonication Planning")  # TODO: make this more human readable by adding spaces
-        self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU")]
+        self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
