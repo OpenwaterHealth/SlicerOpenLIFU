@@ -10,6 +10,7 @@ from slicer.i18n import tr as _
 from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+from slicer import app
 
 from slicer.parameterNodeWrapper import parameterNodeWrapper, parameterNodeSerializer, Serializer, ValidatedSerializer, validators
 from slicer import (
@@ -200,6 +201,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loadedObjectsView.setColumnWidth(0, 200)
         self.ui.loadedObjectsView.setColumnWidth(1, 200)
         self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
+        self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
+        self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
         # ====================================
@@ -272,6 +275,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
         if filepath:
             self.logic.load_protocol(filepath)
+
+    def onLoadVolumePressed(self) -> None:
+        """ Call slicer dialog to load volumes into the scene"""
+        return slicer.util.openAddVolumeDialog()
+    
+    def onLoadFiducialsPressed(self) -> None:
+        """ Call slicer dialog to load fiducials into the scene"""
+        return slicer.util.openAddFiducialDialog()
 
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
