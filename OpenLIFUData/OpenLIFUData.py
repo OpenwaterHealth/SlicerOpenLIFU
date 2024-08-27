@@ -282,7 +282,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
-        return slicer.util.openAddFiducialDialog()
+        ioManager = slicer.app.ioManager()
+        return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
+
 
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
