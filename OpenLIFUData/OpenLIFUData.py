@@ -386,7 +386,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
         if filepath:
             self.logic.load_protocol(filepath)
-    
+
     def onLoadTransducerPressed(self) -> None:
         qsettings = qt.QSettings()
 
@@ -397,18 +397,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "Transducers (*.json);;All Files (*)", # file type filter
         )
         if filepath:
-            self.logic.load_transducer(filepath)
+            self.logic.load_transducer_from_file(filepath)
 
     def onLoadVolumePressed(self) -> None:
         """ Call slicer dialog to load volumes into the scene"""
         return slicer.util.openAddVolumeDialog()
-    
+
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
 
         # Should use "slicer.util.openAddFiducialsDialog()"" to load the Fiducials dialog. This doesn't work because
         # the ioManager functions are bugged - they have not been updated to use the new file type name for Markups.
-        # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups. 
+        # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups.
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
 
@@ -526,10 +526,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db : Optional[openlifu.Database] = None
 
+        # Stuff related to the currently loaded session. These may later get refactored into a SlicerOpenLIFUSession class.
         self.current_session : Optional[openlifu.db.session.Session] = None
         self.volume_node: Optional[vtkMRMLScalarVolumeNode] = None
         self.target_nodes: List[vtkMRMLMarkupsFiducialNode] = []
-        self.transducer: Optional[SlicerOpenLIFUTransducer] = None
+        self.session_transducer_id: Optional[str] = None
 
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
 
@@ -545,9 +546,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 slicer.mrmlScene.RemoveNode(node)
         self.volume_node = None
         self.target_nodes = []
-        if self.transducer is not None:
-            self.transducer.clear_nodes()
-        self.transducer = None
+        if self.session_transducer_id in self.getParameterNode().loaded_transducers:
+            self.remove_transducer(self.session_transducer_id)
+        self.session_transducer_id = None
 
     @OpenLIFULib.display_errors
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
@@ -619,9 +620,21 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         return self.db.load_session(self.get_subject(subject_id), session_id)
 
     @OpenLIFULib.display_errors
-    def load_session(self, subject_id, session_id):
+    def load_session(self, subject_id, session_id) -> None:
+        # === Ensure it's okay to load a session ===
+        session = self.get_session(subject_id, session_id)
+        if session.transducer.id in self.getParameterNode().loaded_transducers:
+            if not slicer.util.confirmYesNoDisplay(
+                f"Loading this session will replace the already loaded transducer with ID {session.transducer.id}. Proceed?",
+                "Confirm replace transducer"
+            ):
+                return
+
+        # === Proceed with loading session ===
+
         self.clear_session()
-        self.current_session = self.get_session(subject_id, session_id)
+
+        self.current_session = session
         volume_id = self.current_session.volume_id
         volume_filename_maybe = Path(self.db.get_volume_filename(subject_id, volume_id))
         volume_file_candidates = volume_filename_maybe.parent.glob(
@@ -669,7 +682,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        self.transducer = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(self.current_session.transducer)
+        self.load_transducer_from_openlifu(self.current_session.transducer, replace_confirmed=True)
+        self.session_transducer_id = self.current_session.transducer.id
 
         # === Toggle slice visibility and center slices on first target ===
 
@@ -694,18 +708,36 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
-    
+
     @OpenLIFULib.display_errors
-    def load_transducer(self, filepath:str) -> None:
+    def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
+        self.load_transducer_from_openlifu(transducer)
+
+    def load_transducer_from_openlifu(self, transducer: "openlifu.Transducer", replace_confirmed: bool = False) -> None:
+        if transducer.id == self.session_transducer_id:
+            slicer.util.errorDisplay(
+                f"A transducer with ID {transducer.id} is in use by the current session. Not loading it.",
+                "Transducer in use by session",
+            )
+            return
         if transducer.id in self.getParameterNode().loaded_transducers:
-            if not slicer.util.confirmYesNoDisplay(
-                f"A transducer with ID {transducer.id} is already loaded. Reload it?",
-                "Transducer already loaded",
-            ):
-                return
+            if not replace_confirmed:
+                if not slicer.util.confirmYesNoDisplay(
+                    f"A transducer with ID {transducer.id} is already loaded. Reload it?",
+                    "Transducer already loaded",
+                ):
+                    return
             self.getParameterNode().loaded_transducers[transducer.id].clear_nodes()
         self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
+
+    def remove_transducer(self, transducer_id:str):
+        """Remove a transducer from the list of loaded transducer, clearing away its data from the scene."""
+        loaded_transducers = self.getParameterNode().loaded_transducers
+        if not transducer_id in loaded_transducers:
+            raise IndexError(f"No transducer with ID {transducer_id} appears to be loaded; cannot remove it.")
+        transducer = loaded_transducers.pop(transducer_id)
+        transducer.clear_nodes()
 
 #
 # OpenLIFUDataTest
