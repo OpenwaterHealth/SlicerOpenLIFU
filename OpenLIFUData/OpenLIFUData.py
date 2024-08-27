@@ -11,7 +11,14 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
-from slicer.parameterNodeWrapper import parameterNodeWrapper, parameterNodeSerializer, Serializer, ValidatedSerializer, validators
+from slicer.parameterNodeWrapper import (
+    parameterNodeWrapper,
+    parameterNodeSerializer,
+    parameterPack,
+    Serializer,
+    ValidatedSerializer,
+    validators,
+)
 from slicer import (
     vtkMRMLScriptedModuleNode,
     vtkMRMLScalarVolumeNode,
@@ -71,6 +78,13 @@ class SlicerOpenLIFUProtocol:
     def __init__(self, protocol: "openlifu.Protocol"):
         self.protocol = protocol
 
+# For the same reason we have a then wrapper around openlifu.Transducer. But the name SlicerOpenLIFUTransducer
+# is reserved for the upcoming parameter pack.
+class SlicerOpenLIFUTransducerWrapper:
+    """Ultrathin wrapper of openlifu.Transducer. This exists so that transducers can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, transducer: "openlifu.Transducer"):
+        self.transducer = transducer
 @parameterNodeSerializer
 class OpenLIFUProtocolSerializer(Serializer):
     @staticmethod
@@ -126,10 +140,107 @@ class OpenLIFUProtocolSerializer(Serializer):
         """
         parameterNode.UnsetParameter(name)
 
+@parameterNodeSerializer
+class OpenLIFUTransducerSerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == SlicerOpenLIFUTransducerWrapper
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if OpenLIFUTransducerSerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(OpenLIFUTransducerSerializer(), [validators.IsInstance(SlicerOpenLIFUTransducerWrapper)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer())
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUTransducerWrapper) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.transducer.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUTransducerWrapper:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer.from_json(json_string))
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
+@parameterPack
+class SlicerOpenLIFUTransducer:
+    """An openlifu Trasducer that has been loaded into Slicer (has a model node and transform node)"""
+    transducer : SlicerOpenLIFUTransducerWrapper
+    model_node : vtkMRMLModelNode
+    transform_node : vtkMRMLTransformNode
+
+    @staticmethod
+    def initialize_from_openlifu_transducer(transducer : "openlifu.Transducer") -> "SlicerOpenLIFUTransducer":
+        """Initialize object with needed scene nodes from just the openlifu object."""
+
+        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        model_node.SetName(transducer.id)
+        model_node.SetAndObservePolyData(transducer.get_polydata())
+        transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        transform_node.SetName(f"{transducer.id}-matrix")
+        model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+
+        # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
+        # self.current_session.transducer.matrix. There is no such attribute yet but it should exist eventually once this is done:
+        # https://github.com/OpenwaterHealth/opw_neuromod_sw/issues/3
+        openlifu2slicer_matrix = OpenLIFULib.linear_to_affine(
+            OpenLIFULib.get_xxx2ras_matrix('LPS') * OpenLIFULib.get_xx2mm_scale_factor(transducer.units)
+        )
+        slicer2openlifu_matrix = np.linalg.inv(openlifu2slicer_matrix)
+        transform_matrix_numpy = openlifu2slicer_matrix @ transducer.matrix @ slicer2openlifu_matrix
+
+        transform_matrix_vtk = OpenLIFULib.numpy_to_vtk_4x4(transform_matrix_numpy)
+        transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+        model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+
+        return SlicerOpenLIFUTransducer(
+            SlicerOpenLIFUTransducerWrapper(transducer), model_node, transform_node
+        )
+
+    def clear_nodes(self) -> None:
+        """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
+        slicer.mrmlScene.RemoveNode(self.model_node)
+        slicer.mrmlScene.RemoveNode(self.transform_node)
+
+
 @parameterNodeWrapper
 class OpenLIFUDataParameterNode:
     databaseDirectory : Path
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
+    loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
 
 #
 # OpenLIFUDataWidget
@@ -202,6 +313,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
+        self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
         self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
         # ====================================
@@ -274,6 +386,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
         if filepath:
             self.logic.load_protocol(filepath)
+    
+    def onLoadTransducerPressed(self) -> None:
+        qsettings = qt.QSettings()
+
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(), # parent
+            'Load protocol', # title of dialog
+            qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
+            "Transducers (*.json);;All Files (*)", # file type filter
+        )
+        if filepath:
+            self.logic.load_transducer(filepath)
 
     def onLoadVolumePressed(self) -> None:
         """ Call slicer dialog to load volumes into the scene"""
@@ -397,8 +521,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.current_session : Optional[openlifu.db.session.Session] = None
         self.volume_node: Optional[vtkMRMLScalarVolumeNode] = None
         self.target_nodes: List[vtkMRMLMarkupsFiducialNode] = []
-        self.transducer_node: Optional[vtkMRMLModelNode] = None
-        self.transducer_transform_node: Optional[vtkMRMLTransformNode] = None
+        self.transducer: Optional[SlicerOpenLIFUTransducer] = None
 
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
 
@@ -409,13 +532,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def clear_session(self) -> None:
         self.current_session = None
 
-        for node in [self.volume_node, *self.target_nodes, self.transducer_node, self.transducer_transform_node]:
+        for node in [self.volume_node, *self.target_nodes]:
             if node is not None:
                 slicer.mrmlScene.RemoveNode(node)
         self.volume_node = None
         self.target_nodes = []
-        self.transducer_node = None
-        self.transducer_transform_node = None
+        if self.transducer is not None:
+            self.transducer.clear_nodes()
+        self.transducer = None
 
     @OpenLIFULib.display_errors
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
@@ -537,23 +661,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        self.transducer_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        self.transducer_node.SetName(self.current_session.transducer.id)
-        self.transducer_node.SetAndObservePolyData(self.current_session.transducer.get_polydata())
-        self.transducer_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        self.transducer_transform_node.SetName(f"{self.current_session.transducer.id}-matrix")
-        self.transducer_node.SetAndObserveTransformNodeID(self.transducer_transform_node.GetID())
-
-        # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
-        # self.current_session.transducer.matrix. There is no such attribute yet but it should exist eventually once this is done:
-        # https://github.com/OpenwaterHealth/opw_neuromod_sw/issues/3
-        openlifu2slicer_matrix = OpenLIFULib.linear_to_affine(OpenLIFULib.get_xxx2ras_matrix('LPS') * OpenLIFULib.get_xx2mm_scale_factor(self.current_session.transducer.units))
-        slicer2openlifu_matrix = np.linalg.inv(openlifu2slicer_matrix)
-        transform_matrix_numpy = openlifu2slicer_matrix @ self.current_session.transducer.matrix @ slicer2openlifu_matrix
-
-        transform_matrix_vtk = OpenLIFULib.numpy_to_vtk_4x4(transform_matrix_numpy)
-        self.transducer_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
-        self.transducer_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+        self.transducer = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(self.current_session.transducer)
 
         # === Toggle slice visibility and center slices on first target ===
 
@@ -569,7 +677,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
 
     @OpenLIFULib.display_errors
-    def load_protocol(self, filepath:str):
+    def load_protocol(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
         if protocol.id in self.getParameterNode().loaded_protocols:
             if not slicer.util.confirmYesNoDisplay(
@@ -578,6 +686,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
+    
+    @OpenLIFULib.display_errors
+    def load_transducer(self, filepath:str) -> None:
+        transducer = openlifu_lz().Transducer.from_file(filepath)
+        if transducer.id in self.getParameterNode().loaded_transducers:
+            if not slicer.util.confirmYesNoDisplay(
+                f"A transducer with ID {transducer.id} is already loaded. Reload it?",
+                "Transducer already loaded",
+            ):
+                return
+            self.getParameterNode().loaded_transducers[transducer.id].clear_nodes()
+        self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
 
 #
 # OpenLIFUDataTest
