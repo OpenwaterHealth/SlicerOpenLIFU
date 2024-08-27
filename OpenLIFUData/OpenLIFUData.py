@@ -422,6 +422,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [protocol.protocol.name, protocol.protocol.id, "Protocol"]
             ))
             self.loadedObjectsItemModel.appendRow(row)
+        for transducer_slicer in parameter_node.loaded_transducers.values():
+            transducer_slicer : SlicerOpenLIFUTransducer
+            transducer_openlifu : "openlifu.Transducer" = transducer_slicer.transducer.transducer
+            row = list(map(
+                OpenLIFULib.create_noneditable_QStandardItem,
+                [transducer_openlifu.name, transducer_openlifu.id, "Transducer"]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
 
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
