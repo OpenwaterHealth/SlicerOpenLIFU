@@ -10,7 +10,6 @@ from slicer.i18n import tr as _
 from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-from slicer import app
 
 from slicer.parameterNodeWrapper import parameterNodeWrapper, parameterNodeSerializer, Serializer, ValidatedSerializer, validators
 from slicer import (
@@ -282,6 +281,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
+
+        # Should use "slicer.util.openAddFiducialsDialog()"" to load the Fiducials dialog. This doesn't work because
+        # the ioManager functions are bugged - they have not been updated to use the new file type name for Markups.
+        # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups. 
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
 
