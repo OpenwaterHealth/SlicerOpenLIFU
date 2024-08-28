@@ -5,13 +5,24 @@ import numpy as np
 from numpy.typing import NDArray
 from pathlib import Path
 import slicer
+from slicer import (
+    vtkMRMLModelNode,
+    vtkMRMLTransformNode,
+)
+from slicer.parameterNodeWrapper import (
+    parameterNodeSerializer,
+    parameterPack,
+    Serializer,
+    ValidatedSerializer,
+    validators,
+)
 import importlib
 import sys
 import logging
 
 
 if TYPE_CHECKING:
-    import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
+    import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
 
 class BusyCursor:
     """
@@ -71,6 +82,7 @@ def import_openlifu_with_check() -> "openlifu":
         with BusyCursor():
             import openlifu
     return sys.modules["openlifu"]
+openlifu_lz = import_openlifu_with_check # A handy alternative short name. Stands for "openlifu lazy import"
 
 def display_errors(f):
     """Decorator to make functions forward their python exceptions along as slicer error displays"""
@@ -175,3 +187,172 @@ def linear_to_affine(matrix, translation=None):
         axis=0,
     )
 
+# This very thin wrapper around openlifu.Protocol is needed to do our lazy importing of openlifu
+# while still providing type annotations that the parameter node wrapper can use.
+# If we tried to make openlifu.Protocol directly supported as a type by parameter nodes, we would
+# get errors from parameterNodeWrapper as it tries to use typing.get_type_hints. This fails because
+# get_type_hints tries to *evaluate* the type annotations like "openlifu.Protocol" possibly before
+# the user has installed openlifu, and possibly before the main window widgets exist that would allow
+# an install prompt to even show up.
+class SlicerOpenLIFUProtocol:
+    """Ultrathin wrapper of openlifu.Protocol. This exists so that protocols can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, protocol: "openlifu.Protocol"):
+        self.protocol = protocol
+
+# For the same reason we have a then wrapper around openlifu.Transducer. But the name SlicerOpenLIFUTransducer
+# is reserved for the upcoming parameter pack.
+class SlicerOpenLIFUTransducerWrapper:
+    """Ultrathin wrapper of openlifu.Transducer. This exists so that transducers can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, transducer: "openlifu.Transducer"):
+        self.transducer = transducer
+
+@parameterNodeSerializer
+class OpenLIFUProtocolSerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == SlicerOpenLIFUProtocol
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if OpenLIFUProtocolSerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(OpenLIFUProtocolSerializer(), [validators.IsInstance(SlicerOpenLIFUProtocol)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return SlicerOpenLIFUProtocol(openlifu_lz().Protocol())
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUProtocol) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.protocol.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUProtocol:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUProtocol(openlifu_lz().Protocol.from_json(json_string))
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
+@parameterNodeSerializer
+class OpenLIFUTransducerSerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == SlicerOpenLIFUTransducerWrapper
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if OpenLIFUTransducerSerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(OpenLIFUTransducerSerializer(), [validators.IsInstance(SlicerOpenLIFUTransducerWrapper)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer())
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUTransducerWrapper) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.transducer.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUTransducerWrapper:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer.from_json(json_string))
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
+@parameterPack
+class SlicerOpenLIFUTransducer:
+    """An openlifu Trasducer that has been loaded into Slicer (has a model node and transform node)"""
+    transducer : SlicerOpenLIFUTransducerWrapper
+    model_node : vtkMRMLModelNode
+    transform_node : vtkMRMLTransformNode
+
+    @staticmethod
+    def initialize_from_openlifu_transducer(transducer : "openlifu.Transducer") -> "SlicerOpenLIFUTransducer":
+        """Initialize object with needed scene nodes from just the openlifu object."""
+
+        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        model_node.SetName(transducer.id)
+        model_node.SetAndObservePolyData(transducer.get_polydata())
+        transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        transform_node.SetName(f"{transducer.id}-matrix")
+        model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+
+        # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
+        # self.current_session.transducer.matrix. There is no such attribute yet but it should exist eventually once this is done:
+        # https://github.com/OpenwaterHealth/opw_neuromod_sw/issues/3
+        openlifu2slicer_matrix = linear_to_affine(
+            get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(transducer.units)
+        )
+        transform_matrix_numpy = openlifu2slicer_matrix @ transducer.matrix
+
+        transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
+        transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+        model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+
+        return SlicerOpenLIFUTransducer(
+            SlicerOpenLIFUTransducerWrapper(transducer), model_node, transform_node
+        )
+
+    def clear_nodes(self) -> None:
+        """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
+        slicer.mrmlScene.RemoveNode(self.model_node)
+        slicer.mrmlScene.RemoveNode(self.transform_node)
