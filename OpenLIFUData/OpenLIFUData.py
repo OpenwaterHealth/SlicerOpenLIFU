@@ -285,6 +285,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+        # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAboutToBeRemovedEvent, self.onNodeAboutToBeRemoved)
+
         # Buttons
         self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
         self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect("returnPressed()", self.onLoadDatabaseClicked)
@@ -460,6 +463,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeAboutToBeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+
+        # If any SlicerOpenLIFUTransducer objects relied on this transform node, then we need to remove them
+        # as they are now invalid.
+        if node.IsA('vtkMRMLTransformNode'):
+            self.logic.on_transducer_affiliated_node_removed(node.GetID(),'transform_node')
+        if node.IsA('vtkMRMLModelNode'):
+            self.logic.on_transducer_affiliated_node_removed(node.GetID(),'model_node')
+
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -728,16 +742,53 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     "Transducer already loaded",
                 ):
                     return
-            self.getParameterNode().loaded_transducers[transducer.id].clear_nodes()
+            self.remove_transducer(transducer.id)
         self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
 
-    def remove_transducer(self, transducer_id:str):
-        """Remove a transducer from the list of loaded transducer, clearing away its data from the scene."""
+    def remove_transducer(self, transducer_id:str, clean_up_scene:bool = True) -> None:
+        """Remove a transducer from the list of loaded transducer, clearing away its data from the scene.
+
+        Args:
+            transducer_id: The openlifu ID of the transducer to remove
+            clean_up_scene: Whether to remove the SlicerOpenLIFUTransducer's affiliated nodes from the scene.
+        """
         loaded_transducers = self.getParameterNode().loaded_transducers
         if not transducer_id in loaded_transducers:
             raise IndexError(f"No transducer with ID {transducer_id} appears to be loaded; cannot remove it.")
+        # Clean-up order matters here: we should pop the transducer out of the loaded objects dict and *then* clear out its
+        # affiliated nodes. This is because clearing the nodes triggers the check on_transducer_affiliated_node_removed. 
         transducer = loaded_transducers.pop(transducer_id)
-        transducer.clear_nodes()
+        if clean_up_scene:
+            transducer.clear_nodes()
+
+    def on_transducer_affiliated_node_removed(self, node_mrml_id:str, affiliated_node_attribute_name:str) -> None:
+        """Handle cleanup on SlicerOpenLIFUTransducer objects when the mrml nodes they depend on get removed from the scene.
+
+        Args:
+            node_mrml_id: The mrml scene ID of the node that was (or is about to be) removed
+            affiliated_node_attribute_name: The name of the affected vtkMRMLNode-valued SlicerOpenLIFUTransducerNode attribute
+                (so "transform_node" or "model_node")
+        """
+        matching_transducer_openlifu_ids = [
+            transducer_openlifu_id
+            for transducer_openlifu_id, transducer in self.getParameterNode().loaded_transducers.items()
+            if getattr(transducer,affiliated_node_attribute_name).GetID() == node_mrml_id
+        ]
+
+        # If this fails, then a single mrml node was shared across multiple loaded SlicerOpenLIFUTransducers, which
+        # should not be possible in the application logic.
+        assert(len(matching_transducer_openlifu_ids) <= 1)
+
+        if matching_transducer_openlifu_ids:
+            # Remove the transducer, but keep any other nodes under it. This transducer was removed
+            # by manual mrml scene manipulation, so we don't want to pull other nodes out from
+            # under the user.
+            transducer_openlifu_id = matching_transducer_openlifu_ids[0]
+            slicer.util.infoDisplay(
+                f"The transducer with id {transducer_openlifu_id} has been unloaded because an affiliated node was removed from the scene.",
+                "Transducer removed"
+            )
+            self.remove_transducer(transducer_openlifu_id, clean_up_scene=False)
 
 #
 # OpenLIFUDataTest
