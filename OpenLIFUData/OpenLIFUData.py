@@ -28,7 +28,10 @@ from slicer import (
 )
 
 import OpenLIFULib
-from OpenLIFULib import import_openlifu_with_check as openlifu_lz # "openlifu_lz" stands for "openlifu lazy import"
+from OpenLIFULib import (
+    import_openlifu_with_check as openlifu_lz, # "openlifu_lz" stands for "openlifu lazy import"
+    display_errors,
+)
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
@@ -325,7 +328,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-    def onLoadDatabaseClicked(self):
+    @display_errors
+    def onLoadDatabaseClicked(self, checked:bool):
         # Clear any items that are already there
         self.subjectSessionItemModel.removeRows(0,self.subjectSessionItemModel.rowCount())
 
@@ -359,6 +363,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionLoadButton.setEnabled(False)
             self.ui.sessionLoadButton.toolTip = 'Select a subject or session to load'
 
+    @display_errors
     def on_item_double_clicked(self, index : qt.QModelIndex):
         if self.itemIsSession(index):
             session_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
@@ -379,7 +384,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-    def onLoadProtocolPressed(self) -> None:
+    @display_errors
+    def onLoadProtocolPressed(self, checked:bool) -> None:
         qsettings = qt.QSettings()
 
         filepath: str = qt.QFileDialog.getOpenFileName(
@@ -391,7 +397,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if filepath:
             self.logic.load_protocol(filepath)
 
-    def onLoadTransducerPressed(self) -> None:
+    @display_errors
+    def onLoadTransducerPressed(self, checked:bool) -> None:
         qsettings = qt.QSettings()
 
         filepath: str = qt.QFileDialog.getOpenFileName(
@@ -613,7 +620,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         return True
 
-    @OpenLIFULib.display_errors
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
         """Load an openlifu database from a local folder hierarchy.
 
@@ -662,7 +668,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             for session_id in OpenLIFULib.ensure_list(self.db.get_session_ids(subject_id))
         ]
 
-    @OpenLIFULib.display_errors
     def get_session_info(self, subject_id:str) -> Sequence[Tuple[str,str]]:
         """Fetch the session names and IDs for a particular subject.
 
@@ -677,12 +682,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         sessions = self.get_sessions(subject_id)
         return [(session.id, session.name) for session in sessions]
 
-    @OpenLIFULib.display_errors
     def get_session(self, subject_id:str, session_id:str) -> "openlifu.db.session.Session":
         """Fetch the Session with the given ID"""
         return self.db.load_session(self.get_subject(subject_id), session_id)
 
-    @OpenLIFULib.display_errors
     def load_session(self, subject_id, session_id) -> None:
         # === Ensure it's okay to load a session ===
         session = self.get_session(subject_id, session_id)
@@ -761,7 +764,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         sliceNode.SetSliceVisible(True)
 
 
-    @OpenLIFULib.display_errors
     def load_protocol(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
         if protocol.id in self.getParameterNode().loaded_protocols:
@@ -772,7 +774,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 return
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
 
-    @OpenLIFULib.display_errors
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
         self.load_transducer_from_openlifu(transducer)
