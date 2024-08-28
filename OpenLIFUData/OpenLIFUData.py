@@ -287,6 +287,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAboutToBeRemovedEvent, self.onNodeAboutToBeRemoved)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
         # Buttons
         self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
@@ -470,9 +471,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If any SlicerOpenLIFUTransducer objects relied on this transform node, then we need to remove them
         # as they are now invalid.
         if node.IsA('vtkMRMLTransformNode'):
-            self.logic.on_transducer_affiliated_node_removed(node.GetID(),'transform_node')
+            self.logic.on_transducer_affiliated_node_about_to_be_removed(node.GetID(),'transform_node')
         if node.IsA('vtkMRMLModelNode'):
-            self.logic.on_transducer_affiliated_node_removed(node.GetID(),'model_node')
+            self.logic.on_transducer_affiliated_node_about_to_be_removed(node.GetID(),'model_node')
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+
+        # If the volume of the active session was removed, the session becomes invalid.
+        if node.IsA('vtkMRMLVolumeNode'):
+            self.logic.validate_session()
 
 
     def initializeParameterNode(self) -> None:
@@ -552,17 +560,58 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
 
-    def clear_session(self) -> None:
+    def clear_session(self, clean_up_scene:bool = True) -> None:
+        """Unload the current session if there is one loaded.
+
+        Args:
+            clean_up_scene: Whether to remove the existing session's affiliated scene content.
+                If False then the scene content is orphaned from its session, as though
+                it was manually loaded without the context of a session. If True then the scene
+                content is removed.
+        """
         self.current_session = None
 
-        for node in [self.volume_node, *self.target_nodes]:
-            if node is not None:
-                slicer.mrmlScene.RemoveNode(node)
+        if clean_up_scene:
+            for node in [self.volume_node, *self.target_nodes]:
+                if node is not None:
+                    slicer.mrmlScene.RemoveNode(node)
+            if self.session_transducer_id in self.getParameterNode().loaded_transducers:
+                self.remove_transducer(self.session_transducer_id)
+
         self.volume_node = None
         self.target_nodes = []
-        if self.session_transducer_id in self.getParameterNode().loaded_transducers:
-            self.remove_transducer(self.session_transducer_id)
         self.session_transducer_id = None
+
+    def validate_session(self) -> bool:
+        """Check to ensure that the currently active session is in a valid state, clearing out the session
+        if it is not and returning whether there is an active valid session.
+
+        In guided mode we want this function to never ever return False -- it should not be
+        possible to invalidate a session. Outside of guided mode, users can do all kinds of things like deleting
+        data nodes that are in use by a session."""
+
+        if self.current_session is None:
+            return False # There is no active session
+
+        # Check transducer is present
+        if self.session_transducer_id not in self.getParameterNode().loaded_transducers:
+            slicer.util.warningDisplay(
+                f"The transducer that was in use by the active session is now missing. The session will be unloaded.",
+                "Session invalidated"
+            )
+            self.clear_session(clean_up_scene=False)
+            return False
+
+        # Check volume is present
+        if self.volume_node is None or slicer.mrmlScene.GetNodeByID(self.volume_node.GetID()) is None:
+            slicer.util.warningDisplay(
+                f"The volume that was in use by the active session is now missing. The session will be unloaded.",
+                "Session invalidated"
+            )
+            self.clear_session(clean_up_scene=False)
+            return False
+
+        return True
 
     @OpenLIFULib.display_errors
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
@@ -756,12 +805,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if not transducer_id in loaded_transducers:
             raise IndexError(f"No transducer with ID {transducer_id} appears to be loaded; cannot remove it.")
         # Clean-up order matters here: we should pop the transducer out of the loaded objects dict and *then* clear out its
-        # affiliated nodes. This is because clearing the nodes triggers the check on_transducer_affiliated_node_removed. 
+        # affiliated nodes. This is because clearing the nodes triggers the check on_transducer_affiliated_node_removed.
         transducer = loaded_transducers.pop(transducer_id)
         if clean_up_scene:
             transducer.clear_nodes()
 
-    def on_transducer_affiliated_node_removed(self, node_mrml_id:str, affiliated_node_attribute_name:str) -> None:
+    def on_transducer_affiliated_node_about_to_be_removed(self, node_mrml_id:str, affiliated_node_attribute_name:str) -> None:
         """Handle cleanup on SlicerOpenLIFUTransducer objects when the mrml nodes they depend on get removed from the scene.
 
         Args:
@@ -784,11 +833,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # by manual mrml scene manipulation, so we don't want to pull other nodes out from
             # under the user.
             transducer_openlifu_id = matching_transducer_openlifu_ids[0]
-            slicer.util.infoDisplay(
-                f"The transducer with id {transducer_openlifu_id} has been unloaded because an affiliated node was removed from the scene.",
+            slicer.util.warningDisplay(
+                f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
                 "Transducer removed"
             )
             self.remove_transducer(transducer_openlifu_id, clean_up_scene=False)
+
+            # If the transducer that was just removed was in use by an active session, invalidate that session
+            self.validate_session()
 
 #
 # OpenLIFUDataTest
