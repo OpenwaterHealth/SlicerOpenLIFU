@@ -222,8 +222,7 @@ class SlicerOpenLIFUTransducer:
         openlifu2slicer_matrix = OpenLIFULib.linear_to_affine(
             OpenLIFULib.get_xxx2ras_matrix('LPS') * OpenLIFULib.get_xx2mm_scale_factor(transducer.units)
         )
-        slicer2openlifu_matrix = np.linalg.inv(openlifu2slicer_matrix)
-        transform_matrix_numpy = openlifu2slicer_matrix @ transducer.matrix @ slicer2openlifu_matrix
+        transform_matrix_numpy = openlifu2slicer_matrix @ transducer.matrix
 
         transform_matrix_vtk = OpenLIFULib.numpy_to_vtk_4x4(transform_matrix_numpy)
         transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
