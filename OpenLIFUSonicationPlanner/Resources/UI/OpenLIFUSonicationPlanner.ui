@@ -6,20 +6,100 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>325</width>
-    <height>311</height>
+    <width>362</width>
+    <height>381</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QLabel" name="label">
+  <layout class="QFormLayout" name="formLayout">
+   <item row="0" column="0">
+    <widget class="QLabel" name="labelProtocol">
      <property name="text">
-      <string>Module under construction</string>
+      <string>Protocol:</string>
      </property>
     </widget>
    </item>
-   <item>
-    <spacer name="verticalSpacer">
+   <item row="0" column="1">
+    <widget class="QComboBox" name="ProtocolComboBox">
+     <property name="currentText">
+      <string/>
+     </property>
+     <property name="currentIndex">
+      <number>-1</number>
+     </property>
+     <property name="placeholderText">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="labelTransducer">
+     <property name="text">
+      <string>Transducer:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QComboBox" name="TransducerComboBox">
+     <property name="currentText">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="labelVolume">
+     <property name="text">
+      <string>Volume:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="qMRMLSubjectHierarchyComboBox" name="VolumeSubjectHierarchyComboBox">
+     <property name="includeItemAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+     <property name="includeNodeAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+     <property name="excludeItemAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+     <property name="excludeNodeAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="labelTarget">
+     <property name="text">
+      <string>Target:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="qMRMLSubjectHierarchyComboBox" name="TargetSubjectHierarchyComboBox">
+     <property name="includeItemAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+     <property name="includeNodeAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+     <property name="excludeItemAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+     <property name="excludeNodeAttributeNamesFilter">
+      <stringlist notr="true"/>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QPushButton" name="PlanPushButton">
+     <property name="text">
+      <string>Plan</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0" colspan="2">
+    <spacer name="verticalSpacer_2">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
      </property>
@@ -39,6 +119,16 @@
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLSubjectHierarchyComboBox</class>
+   <extends>ctkComboBox</extends>
+   <header>qMRMLSubjectHierarchyComboBox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkComboBox</class>
+   <extends>QComboBox</extends>
+   <header>ctkComboBox.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

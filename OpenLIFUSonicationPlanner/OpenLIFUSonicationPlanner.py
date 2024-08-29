@@ -99,6 +99,14 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+        #Update the planning Combox boxes based on data loaded into the scene
+        self.OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+        self.updateLoadedProtocols()
+
+        # Add an observer on the Data module's parameter node
+        self.addObserver(self.OpenLIFUDataLogic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+
+
         # Buttons
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -152,6 +160,18 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+    
+    def updateLoadedProtocols(self):
+
+        self.ui.ProtocolComboBox.clear() 
+        loaded_protocols = self.OpenLIFUDataLogic.getParameterNode().loaded_protocols
+        for protocol in loaded_protocols.values():
+            # Better to use ID or name here? Showing both for now
+            self.ui.ProtocolComboBox.addItems(["{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id)]) 
+        self.ui.ProtocolComboBox.setToolTip("Select Protocol")
+
+    def onDataParameterNodeModified(self,caller, event) -> None:
+        self.updateLoadedProtocols()
       
 #
 # OpenLIFUSonicationPlannerLogic
