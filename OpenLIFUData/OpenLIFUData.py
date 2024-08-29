@@ -116,6 +116,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAboutToBeRemovedEvent, self.onNodeAboutToBeRemoved)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
         # Buttons
@@ -314,7 +315,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If the volume of the active session was removed, the session becomes invalid.
         if node.IsA('vtkMRMLVolumeNode'):
             self.logic.validate_session()
+        
+        self.updateLoadedObjectsView()
 
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        self.updateLoadedObjectsView()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
