@@ -174,6 +174,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
+
         # Buttons
         self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
         self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect("returnPressed()", self.onLoadDatabaseClicked)
@@ -278,13 +281,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onLoadVolumePressed(self) -> None:
         """ Call slicer dialog to load volumes into the scene"""
         return slicer.util.openAddVolumeDialog()
-    
+
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
 
         # Should use "slicer.util.openAddFiducialsDialog()"" to load the Fiducials dialog. This doesn't work because
         # the ioManager functions are bugged - they have not been updated to use the new file type name for Markups.
-        # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups. 
+        # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups.
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
 
@@ -328,6 +331,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        self.updateLoadedObjectsView()
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        self.updateLoadedObjectsView()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
