@@ -268,6 +268,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [transducer_openlifu.name, transducer_openlifu.id, "Transducer"]
             ))
             self.loadedObjectsItemModel.appendRow(row)
+        for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
+            row = list(map(
+                create_noneditable_QStandardItem,
+                [volume_node.GetName(), volume_node.GetID(), "Volume"]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
+        for fiducial_node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode'):
+            row = list(map(
+                create_noneditable_QStandardItem,
+                [fiducial_node.GetName(), fiducial_node.GetID(), "Points"]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
 
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
