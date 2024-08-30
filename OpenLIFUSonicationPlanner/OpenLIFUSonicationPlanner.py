@@ -184,21 +184,19 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if len(dataLogicParameterNode.loaded_protocols) == 0:
             self.ui.ProtocolComboBox.addItems(["Select a Protocol"])
         else:
-            for protocol in dataLogicParameterNode.loaded_protocols.keys():
+            for protocol in dataLogicParameterNode.loaded_protocols.values():
                 # Better to use ID or name here? Showing both for now
-                self.ui.ProtocolComboBox.addItems([protocol])
-                # self.ui.ProtocolComboBox.addItems(["{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id)]) 
+                self.ui.ProtocolComboBox.addItems(["{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id)]) 
     
         # Update transducer combo box
         self.ui.TransducerComboBox.clear()
         if len(dataLogicParameterNode.loaded_transducers) == 0:
             self.ui.TransducerComboBox.addItems(["Select a Transducer"]) 
         else:
-            for transducer in dataLogicParameterNode.loaded_transducers.keys():
-                # transducer_openlifu = transducer.transducer.transducer
+            for transducer in dataLogicParameterNode.loaded_transducers.values():
+                transducer_openlifu = transducer.transducer.transducer
                 # Better to use ID or name here? Showing both for now
-                self.ui.TransducerComboBox.addItems([transducer])
-                # self.ui.TransducerComboBox.addItems(["{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id)]) 
+                self.ui.TransducerComboBox.addItems(["{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id)]) 
         
 
     def onDataParameterNodeModified(self,caller, event) -> None:
@@ -208,8 +206,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         print("Run sonication planning")
 
         dataLogicParameterNode = self.OpenLIFUDataLogic.getParameterNode()
-        activeTransducer = dataLogicParameterNode.loaded_transducers[self.ui.TransducerComboBox.currentText]
-        activeProtocol = dataLogicParameterNode.loaded_protocols[self.ui.ProtocolComboBox.currentText]
+        activeTransducer = list(dataLogicParameterNode.loaded_transducers.values())[self.ui.TransducerComboBox.currentIndex]
+        activeProtocol = list(dataLogicParameterNode.loaded_protocols.values())[self.ui.ProtocolComboBox.currentIndex]
 
         # Call runPlanning
         self.logic.runPlanning(self._parameterNode.activeVolume, self._parameterNode.activeTarget, activeTransducer, activeProtocol)
