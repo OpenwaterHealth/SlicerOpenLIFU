@@ -10,6 +10,10 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer import vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode
+
+from OpenLIFULib import (SlicerOpenLIFUProtocol,
+                         SlicerOpenLIFUTransducer)
 
 
 #
@@ -55,6 +59,9 @@ class OpenLIFUSonicationPlannerParameterNode:
 
     """
 
+    activeVolume: vtkMRMLScalarVolumeNode
+    activeTarget: vtkMRMLMarkupsFiducialNode
+
 
 #
 # OpenLIFUSonicationPlannerWidget
@@ -99,15 +106,19 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        #Update the planning Combox boxes based on data loaded into the scene
+        # Update the volume and fiducial combo boxes based on data loaded into the scene
+        self.ui.VolumeMRMLNodeComboBox.setMRMLScene(slicer.mrmlScene)
+        self.ui.TargetMRMLNodeComboBox.setMRMLScene(slicer.mrmlScene)
+
+        # Initialize protocol and transducer combo boxes
         self.OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
-        self.updateLoadedProtocols()
+        self.updateComboBoxOptions()
 
         # Add an observer on the Data module's parameter node
         self.addObserver(self.OpenLIFUDataLogic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
-
         # Buttons
+        self.ui.PlanPushButton.clicked.connect(self.onPlanClicked)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -161,17 +172,47 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
     
-    def updateLoadedProtocols(self):
 
+    def updateComboBoxOptions(self):
+        """" Update protocol and transducer combo boxes based on the openLIFU objects
+        loaded into the scene. This information is stored in the openLIFUDataModule's parameter node."""
+
+        dataLogicParameterNode = self.OpenLIFUDataLogic.getParameterNode()
+
+        # Update parameter combo box
         self.ui.ProtocolComboBox.clear() 
-        loaded_protocols = self.OpenLIFUDataLogic.getParameterNode().loaded_protocols
-        for protocol in loaded_protocols.values():
-            # Better to use ID or name here? Showing both for now
-            self.ui.ProtocolComboBox.addItems(["{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id)]) 
-        self.ui.ProtocolComboBox.setToolTip("Select Protocol")
+        if len(dataLogicParameterNode.loaded_protocols) == 0:
+            self.ui.ProtocolComboBox.addItems(["Select a Protocol"])
+        else:
+            for protocol in dataLogicParameterNode.loaded_protocols.keys():
+                # Better to use ID or name here? Showing both for now
+                self.ui.ProtocolComboBox.addItems([protocol])
+                # self.ui.ProtocolComboBox.addItems(["{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id)]) 
+    
+        # Update transducer combo box
+        self.ui.TransducerComboBox.clear()
+        if len(dataLogicParameterNode.loaded_transducers) == 0:
+            self.ui.TransducerComboBox.addItems(["Select a Transducer"]) 
+        else:
+            for transducer in dataLogicParameterNode.loaded_transducers.keys():
+                # transducer_openlifu = transducer.transducer.transducer
+                # Better to use ID or name here? Showing both for now
+                self.ui.TransducerComboBox.addItems([transducer])
+                # self.ui.TransducerComboBox.addItems(["{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id)]) 
+        
 
     def onDataParameterNodeModified(self,caller, event) -> None:
-        self.updateLoadedProtocols()
+        self.updateComboBoxOptions()
+
+    def onPlanClicked(self):
+        print("Run sonication planning")
+
+        dataLogicParameterNode = self.OpenLIFUDataLogic.getParameterNode()
+        activeTransducer = dataLogicParameterNode.loaded_transducers[self.ui.TransducerComboBox.currentText]
+        activeProtocol = dataLogicParameterNode.loaded_protocols[self.ui.ProtocolComboBox.currentText]
+
+        # Call runPlanning
+        self.logic.runPlanning(self._parameterNode.activeVolume, self._parameterNode.activeTarget, activeTransducer, activeProtocol)
       
 #
 # OpenLIFUSonicationPlannerLogic
@@ -194,6 +235,13 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUSonicationPlannerParameterNode(super().getParameterNode())
+
+    def runPlanning(self, inputVolume: vtkMRMLScalarVolumeNode, inputTarget: vtkMRMLMarkupsFiducialNode, inputTransducer : SlicerOpenLIFUTransducer , inputProtocol: SlicerOpenLIFUProtocol ):
+        print("Volume:", inputVolume)
+        print("Target:", inputTarget)
+        print("Protocol:", inputProtocol)
+        print("Transducer:", inputTransducer)
+
 
 #
 # OpenLIFUSonicationPlannerTest

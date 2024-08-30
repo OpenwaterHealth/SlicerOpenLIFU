@@ -20,6 +20,9 @@
    </item>
    <item row="0" column="1">
     <widget class="QComboBox" name="ProtocolComboBox">
+     <property name="contextMenuPolicy">
+      <enum>Qt::NoContextMenu</enum>
+     </property>
      <property name="currentText">
       <string/>
      </property>
@@ -43,6 +46,17 @@
      <property name="currentText">
       <string/>
      </property>
+     <property name="currentIndex">
+      <number>-1</number>
+     </property>
+     <property name="placeholderText">
+      <string notr="true"/>
+     </property>
+     <item>
+      <property name="text">
+       <string>Select a Transducer</string>
+      </property>
+     </item>
     </widget>
    </item>
    <item row="2" column="0">
@@ -53,18 +67,32 @@
     </widget>
    </item>
    <item row="2" column="1">
-    <widget class="qMRMLSubjectHierarchyComboBox" name="VolumeSubjectHierarchyComboBox">
-     <property name="includeItemAttributeNamesFilter">
+    <widget class="qMRMLNodeComboBox" name="VolumeMRMLNodeComboBox">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="contextMenuPolicy">
+      <enum>Qt::CustomContextMenu</enum>
+     </property>
+     <property name="nodeTypes">
+      <stringlist notr="true">
+       <string>vtkMRMLScalarVolumeNode</string>
+      </stringlist>
+     </property>
+     <property name="hideChildNodeTypes">
       <stringlist notr="true"/>
      </property>
-     <property name="includeNodeAttributeNamesFilter">
-      <stringlist notr="true"/>
+     <property name="addEnabled">
+      <bool>false</bool>
      </property>
-     <property name="excludeItemAttributeNamesFilter">
-      <stringlist notr="true"/>
+     <property name="removeEnabled">
+      <bool>false</bool>
      </property>
-     <property name="excludeNodeAttributeNamesFilter">
-      <stringlist notr="true"/>
+     <property name="interactionNodeSingletonTag">
+      <string notr="true"/>
+     </property>
+     <property name="SlicerParameterName" stdset="0">
+      <string>activeVolume</string>
      </property>
     </widget>
    </item>
@@ -76,25 +104,26 @@
     </widget>
    </item>
    <item row="3" column="1">
-    <widget class="qMRMLSubjectHierarchyComboBox" name="TargetSubjectHierarchyComboBox">
-     <property name="includeItemAttributeNamesFilter">
+    <widget class="qMRMLNodeComboBox" name="TargetMRMLNodeComboBox">
+     <property name="nodeTypes">
+      <stringlist notr="true">
+       <string>vtkMRMLMarkupsFiducialNode</string>
+      </stringlist>
+     </property>
+     <property name="hideChildNodeTypes">
       <stringlist notr="true"/>
      </property>
-     <property name="includeNodeAttributeNamesFilter">
-      <stringlist notr="true"/>
+     <property name="addEnabled">
+      <bool>false</bool>
      </property>
-     <property name="excludeItemAttributeNamesFilter">
-      <stringlist notr="true"/>
+     <property name="removeEnabled">
+      <bool>false</bool>
      </property>
-     <property name="excludeNodeAttributeNamesFilter">
-      <stringlist notr="true"/>
+     <property name="interactionNodeSingletonTag">
+      <string notr="true"/>
      </property>
-    </widget>
-   </item>
-   <item row="5" column="0" colspan="2">
-    <widget class="QPushButton" name="PlanPushButton">
-     <property name="text">
-      <string>Plan</string>
+     <property name="SlicerParameterName" stdset="0">
+      <string>activeTarget</string>
      </property>
     </widget>
    </item>
@@ -111,24 +140,26 @@
      </property>
     </spacer>
    </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QPushButton" name="PlanPushButton">
+     <property name="text">
+      <string>Plan</string>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+  </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLSubjectHierarchyComboBox</class>
-   <extends>ctkComboBox</extends>
-   <header>qMRMLSubjectHierarchyComboBox.h</header>
-  </customwidget>
-  <customwidget>
-   <class>ctkComboBox</class>
-   <extends>QComboBox</extends>
-   <header>ctkComboBox.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
