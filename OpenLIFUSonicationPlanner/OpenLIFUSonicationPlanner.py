@@ -171,7 +171,17 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.checkCanPlan)
+        self.checkCanPlan()
     
+
+    def checkCanPlan(self, caller = None, event = None) -> None:
+
+        # Check if a protocol or transducer has been selected
+        if self._parameterNode and self._parameterNode.activeVolume and self._parameterNode.activeTarget:
+            self.ui.PlanPushButton.enabled = True
+        else:
+            self.ui.PlanPushButton.enabled = False
 
     def updateComboBoxOptions(self):
         """" Update protocol and transducer combo boxes based on the openLIFU objects
@@ -198,6 +208,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 # Better to use ID or name here? Showing both for now
                 self.ui.TransducerComboBox.addItems(["{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id)]) 
         
+        #TODO: Use QCombo box to show volumes/fiducials the way we want (Name (ID)) Can this be done using QMRMLNodeComboBox?
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateComboBoxOptions()
