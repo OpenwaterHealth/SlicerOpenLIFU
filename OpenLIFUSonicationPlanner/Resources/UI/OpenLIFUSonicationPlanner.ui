@@ -66,64 +66,10 @@
      </property>
     </widget>
    </item>
-   <item row="2" column="1">
-    <widget class="qMRMLNodeComboBox" name="VolumeMRMLNodeComboBox">
-     <property name="focusPolicy">
-      <enum>Qt::NoFocus</enum>
-     </property>
-     <property name="contextMenuPolicy">
-      <enum>Qt::CustomContextMenu</enum>
-     </property>
-     <property name="nodeTypes">
-      <stringlist notr="true">
-       <string>vtkMRMLScalarVolumeNode</string>
-      </stringlist>
-     </property>
-     <property name="hideChildNodeTypes">
-      <stringlist notr="true"/>
-     </property>
-     <property name="addEnabled">
-      <bool>false</bool>
-     </property>
-     <property name="removeEnabled">
-      <bool>false</bool>
-     </property>
-     <property name="interactionNodeSingletonTag">
-      <string notr="true"/>
-     </property>
-     <property name="SlicerParameterName" stdset="0">
-      <string>activeVolume</string>
-     </property>
-    </widget>
-   </item>
    <item row="3" column="0">
     <widget class="QLabel" name="labelTarget">
      <property name="text">
       <string>Target:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="1">
-    <widget class="qMRMLNodeComboBox" name="TargetMRMLNodeComboBox">
-     <property name="nodeTypes">
-      <stringlist notr="true">
-       <string>vtkMRMLMarkupsFiducialNode</string>
-      </stringlist>
-     </property>
-     <property name="hideChildNodeTypes">
-      <stringlist notr="true"/>
-     </property>
-     <property name="addEnabled">
-      <bool>false</bool>
-     </property>
-     <property name="removeEnabled">
-      <bool>false</bool>
-     </property>
-     <property name="interactionNodeSingletonTag">
-      <string notr="true"/>
-     </property>
-     <property name="SlicerParameterName" stdset="0">
-      <string>activeTarget</string>
      </property>
     </widget>
    </item>
@@ -147,14 +93,15 @@
      </property>
     </widget>
    </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="VolumeComboBox"/>
+   </item>
+   <item row="3" column="1">
+    <widget class="QComboBox" name="TargetComboBox"/>
+   </item>
   </layout>
  </widget>
  <customwidgets>
-  <customwidget>
-   <class>qMRMLNodeComboBox</class>
-   <extends>QWidget</extends>
-   <header>qMRMLNodeComboBox.h</header>
-  </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
