@@ -97,6 +97,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
+        # Disable the Abort button. Can only be clicked once the user hits 'Run'
+        self.ui.abortPushButton.setDisabled(True)
+        self.ui.runPushButton.clicked.connect(self.onRunClicked)
+    
     
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -150,6 +154,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+
+    def onRunClicked(self):
+        print("Run sonication control")
+
+        # Enable Abort button
+        self.ui.abortPushButton.setEnabled(True)
+        
+        #TODO: Once sonication control has been implemented,
+        # disbale 'Run' button during run and then disable 'Abort' again once completed. 
         
 # OpenLIFUSonicationControlLogic
 #
