@@ -140,10 +140,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
-        self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'ID', 'Type'])
+        self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'Type', 'ID'])
         self.ui.loadedObjectsView.setModel(self.loadedObjectsItemModel)
-        self.ui.loadedObjectsView.setColumnWidth(0, 200)
-        self.ui.loadedObjectsView.setColumnWidth(1, 200)
+        self.ui.loadedObjectsView.setColumnWidth(0, 150)
+        self.ui.loadedObjectsView.setColumnWidth(1, 150)
         self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
@@ -257,7 +257,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         for protocol in parameter_node.loaded_protocols.values():
             row = list(map(
                 create_noneditable_QStandardItem,
-                [protocol.protocol.name, protocol.protocol.id, "Protocol"]
+                [protocol.protocol.name,  "Protocol", protocol.protocol.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for transducer_slicer in parameter_node.loaded_transducers.values():
@@ -265,19 +265,19 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             transducer_openlifu : "openlifu.Transducer" = transducer_slicer.transducer.transducer
             row = list(map(
                 create_noneditable_QStandardItem,
-                [transducer_openlifu.name, transducer_openlifu.id, "Transducer"]
+                [transducer_openlifu.name, "Transducer", transducer_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
             row = list(map(
                 create_noneditable_QStandardItem,
-                [volume_node.GetName(), volume_node.GetID(), "Volume"]
+                [volume_node.GetName(), "Volume", volume_node.GetID()]
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for fiducial_node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode'):
             row = list(map(
                 create_noneditable_QStandardItem,
-                [fiducial_node.GetName(), fiducial_node.GetID(), "Points"]
+                [fiducial_node.GetName(), "Points", fiducial_node.GetID()]
             ))
             self.loadedObjectsItemModel.appendRow(row)
 
