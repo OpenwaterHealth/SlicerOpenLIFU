@@ -59,10 +59,6 @@ class OpenLIFUSonicationPlannerParameterNode:
 
     """
 
-    activeVolume: vtkMRMLScalarVolumeNode
-    activeTarget: vtkMRMLMarkupsFiducialNode
-
-
 #
 # OpenLIFUSonicationPlannerWidget
 #
@@ -119,9 +115,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Buttons
         self.ui.PlanPushButton.clicked.connect(self.onPlanClicked)
+        self.checkCanPlan()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -171,15 +169,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.checkCanPlan)
-        self.checkCanPlan()
     
-
     def checkCanPlan(self, caller = None, event = None) -> None:
 
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will be enabled
         # This means that the plan button can be enabled
-        if self.ui.TargetComboBox.enabled and self.ui.ProtocolComboBox.enabled and self.ui.VolumeComboBox.enabled and self.ui.TargetComboBox.enabled:
+        if self.ui.TargetComboBox.enabled and self.ui.ProtocolComboBox.enabled and self.ui.VolumeComboBox.enabled and self.ui.TransducerComboBox.enabled:
             self.ui.PlanPushButton.enabled = True
             self.ui.PlanPushButton.setToolTip("Execute planning")
         else:
@@ -212,8 +207,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.ProtocolComboBox.setEnabled(True)
             for protocol in dataLogicParameterNode.loaded_protocols.values():
-                # Better to use ID or name here? Showing both for now
-                self.ui.ProtocolComboBox.addItems(["{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id)]) 
+                self.ui.ProtocolComboBox.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol) 
     
         # Update transducer combo box
         self.ui.TransducerComboBox.clear()
@@ -224,8 +218,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.TransducerComboBox.setEnabled(True)
             for transducer in dataLogicParameterNode.loaded_transducers.values():
                 transducer_openlifu = transducer.transducer.transducer
-                # Better to use ID or name here? Showing both for now
-                self.ui.TransducerComboBox.addItems(["{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id)]) 
+                self.ui.TransducerComboBox.addItem("{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id), transducer) 
 
         # Update volume combo box 
         self.ui.VolumeComboBox.clear()  
@@ -235,29 +228,31 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.VolumeComboBox.setEnabled(True)
             for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
-                self.ui.VolumeComboBox.addItems(["{} (ID: {})".format(volume_node.GetName(),volume_node.GetID())])
+                self.ui.VolumeComboBox.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
           
         # Update target combo box 
         self.ui.TargetComboBox.clear()  
         if len(slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode')) == 0:
-            self.ui.TargetComboBox.addItems(["Select a Target"])
+            self.ui.TargetComboBox.addItem(["Select a Target"])
             self.ui.TargetComboBox.setDisabled(True)
         else:
             self.ui.TargetComboBox.setEnabled(True)
             for target_node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode'):
-                self.ui.TargetComboBox.addItems(["{} (ID: {})".format(target_node.GetName(),target_node.GetID())])
+                self.ui.TargetComboBox.addItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()), target_node)
+
+        # Determine whether planning can be execuuted based on the status of combo boxes
+        self.checkCanPlan()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateComboBoxOptions()
 
     def onPlanClicked(self):
-        print("Run sonication planning")
+        print("Placeholder text: Running sonication planning")
 
-        dataLogicParameterNode = self.OpenLIFUDataLogic.getParameterNode()
-        activeTransducer = list(dataLogicParameterNode.loaded_transducers.values())[self.ui.TransducerComboBox.currentIndex]
-        activeProtocol = list(dataLogicParameterNode.loaded_protocols.values())[self.ui.ProtocolComboBox.currentIndex]
-        activeVolume = list(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'))[self.ui.VolumeComboBox.currentIndex]
-        activeTarget = list(slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode'))[self.ui.TargetComboBox.currentIndex]
+        activeTransducer = self.ui.TransducerComboBox.currentData
+        activeProtocol = self.ui.ProtocolComboBox.currentData
+        activeVolume = self.ui.VolumeComboBox.currentData
+        activeTarget = self.ui.TargetComboBox.currentData
 
         # Call runPlanning
         self.logic.runPlanning(activeVolume, activeTarget, activeTransducer, activeProtocol)

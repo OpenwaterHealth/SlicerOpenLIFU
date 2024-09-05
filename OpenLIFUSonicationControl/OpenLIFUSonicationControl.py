@@ -156,7 +156,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onRunClicked(self):
-        print("Run sonication control")
+        print("Placeholder text: Running sonication")
 
         # Enable Abort button
         self.ui.abortPushButton.setEnabled(True)
