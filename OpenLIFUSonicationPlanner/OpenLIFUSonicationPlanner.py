@@ -181,8 +181,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # This means that the plan button can be enabled
         if self.ui.TargetComboBox.enabled and self.ui.ProtocolComboBox.enabled and self.ui.VolumeComboBox.enabled and self.ui.TargetComboBox.enabled:
             self.ui.PlanPushButton.enabled = True
+            self.ui.PlanPushButton.setToolTip("Execute planning")
         else:
             self.ui.PlanPushButton.enabled = False
+            self.ui.PlanPushButton.setToolTip("Please specify the required inputs")
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
