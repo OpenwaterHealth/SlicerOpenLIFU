@@ -202,7 +202,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update parameter combo box
         self.ui.ProtocolComboBox.clear() 
         if len(dataLogicParameterNode.loaded_protocols) == 0:
-            self.ui.ProtocolComboBox.addItems(["Select a Protocol"])
+            self.ui.ProtocolComboBox.addItem("Select a Protocol")
             self.ui.ProtocolComboBox.setDisabled(True)
         else:
             self.ui.ProtocolComboBox.setEnabled(True)
@@ -212,7 +212,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update transducer combo box
         self.ui.TransducerComboBox.clear()
         if len(dataLogicParameterNode.loaded_transducers) == 0:
-            self.ui.TransducerComboBox.addItems(["Select a Transducer"]) 
+            self.ui.TransducerComboBox.addItem("Select a Transducer") 
             self.ui.TransducerComboBox.setDisabled(True)
         else:
             self.ui.TransducerComboBox.setEnabled(True)
@@ -223,7 +223,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update volume combo box 
         self.ui.VolumeComboBox.clear()  
         if len(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')) == 0:
-            self.ui.VolumeComboBox.addItems(["Select a Volume"])
+            self.ui.VolumeComboBox.addItem("Select a Volume")
             self.ui.VolumeComboBox.setDisabled(True)
         else:
             self.ui.VolumeComboBox.setEnabled(True)
@@ -233,7 +233,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update target combo box 
         self.ui.TargetComboBox.clear()  
         if len(slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode')) == 0:
-            self.ui.TargetComboBox.addItem(["Select a Target"])
+            self.ui.TargetComboBox.addItem("Select a Target")
             self.ui.TargetComboBox.setDisabled(True)
         else:
             self.ui.TargetComboBox.setEnabled(True)
