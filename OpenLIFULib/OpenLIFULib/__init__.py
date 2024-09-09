@@ -547,6 +547,14 @@ class SlicerOpenLIFUTransducer:
         transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
         model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
+        # Transducers should not have a transform matrix; it can mess up simulation down the line;
+        # openlifu functions can try to be clever and use the transform matrix inside the transducer,
+        # while here we put the transform into a slicer transform node and use that.
+        # See https://github.com/OpenwaterHealth/OpenLIFU-python/issues/97
+        # Once that issue is resolved we should no longer need this line.
+        # And we will have to pass the transform into this initialization function as a separate parameter.
+        transducer.matrix=np.eye(4)
+
         return SlicerOpenLIFUTransducer(
             SlicerOpenLIFUTransducerWrapper(transducer), model_node, transform_node
         )

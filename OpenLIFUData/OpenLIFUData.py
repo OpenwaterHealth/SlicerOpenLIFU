@@ -643,6 +643,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 ):
                     return
             self.remove_transducer(transducer.id)
+
         self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
 
     def remove_transducer(self, transducer_id:str, clean_up_scene:bool = True) -> None:
