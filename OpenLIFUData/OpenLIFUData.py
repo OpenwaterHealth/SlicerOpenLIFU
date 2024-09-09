@@ -22,6 +22,7 @@ from OpenLIFULib import (
     openlifu_lz,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
+    SlicerOpenLIFUPlan,
     display_errors,
     create_noneditable_QStandardItem,
     ensure_list,
@@ -70,6 +71,7 @@ class OpenLIFUDataParameterNode:
     databaseDirectory : Path
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
+    loaded_plan : "Optional[SlicerOpenLIFUPlan]"
 
 #
 # OpenLIFUDataWidget
@@ -278,6 +280,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             row = list(map(
                 create_noneditable_QStandardItem,
                 [fiducial_node.GetName(), "Points", fiducial_node.GetID()]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
+        if parameter_node.loaded_plan is not None:
+            row = list(map(
+                create_noneditable_QStandardItem,
+                ["Treatment Plan", "Plan", '']
             ))
             self.loadedObjectsItemModel.appendRow(row)
 

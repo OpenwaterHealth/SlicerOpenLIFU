@@ -1,6 +1,6 @@
 import qt
 import vtk
-from typing import Any, List, Sequence, TYPE_CHECKING
+from typing import Any, List, Tuple, Sequence, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 from pathlib import Path
@@ -8,6 +8,7 @@ import slicer
 from slicer import (
     vtkMRMLModelNode,
     vtkMRMLTransformNode,
+    vtkMRMLScalarVolumeNode,
 )
 from slicer.parameterNodeWrapper import (
     parameterNodeSerializer,
@@ -19,10 +20,14 @@ from slicer.parameterNodeWrapper import (
 import importlib
 import sys
 import logging
+import zlib
+import io
+import base64
 
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
+    import xarray
 
 class BusyCursor:
     """
@@ -83,6 +88,14 @@ def import_openlifu_with_check() -> "openlifu":
             import openlifu
     return sys.modules["openlifu"]
 openlifu_lz = import_openlifu_with_check # A handy alternative short name. Stands for "openlifu lazy import"
+
+def import_xarray_with_check() -> "xarray":
+    """Import xarray and return the module, checking that openlifu is installed along the way."""
+    if "openlifu" not in sys.modules:
+        check_and_install_python_requirements(prompt_if_found=False)
+        import xarray
+    return sys.modules["xarray"]
+xarray_lz = import_xarray_with_check # A handy alternative short name. Stands for "openlifu lazy import"
 
 def display_errors(f):
     """Decorator to make functions forward their python exceptions along as slicer error displays"""
@@ -200,13 +213,27 @@ class SlicerOpenLIFUProtocol:
     def __init__(self, protocol: "openlifu.Protocol"):
         self.protocol = protocol
 
-# For the same reason we have a then wrapper around openlifu.Transducer. But the name SlicerOpenLIFUTransducer
+# For the same reason we have a thin wrapper around openlifu.Transducer. But the name SlicerOpenLIFUTransducer
 # is reserved for the upcoming parameter pack.
 class SlicerOpenLIFUTransducerWrapper:
     """Ultrathin wrapper of openlifu.Transducer. This exists so that transducers can have parameter node
     support while we still do lazy-loading of openlifu."""
     def __init__(self, transducer: "openlifu.Transducer"):
         self.transducer = transducer
+
+# For the same reason we have a thin wrapper around openlifu.Point
+class SlicerOpenLIFUPoint:
+    """Ultrathin wrapper of openlifu.Point. This exists so that points can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, point: "openlifu.Point"):
+        self.point = point
+
+# For the same reason we have a thin wrapper around xarray.Dataset
+class SlicerOpenLIFUXADataset:
+    """Ultrathin wrapper of xarray.Dataset, so that it can have parameter node
+    support while we still do lazy-loading of xarray (a dependency that is installed alongside openlifu)."""
+    def __init__(self, dataset: "xarray.Dataset"):
+        self.dataset = dataset
 
 @parameterNodeSerializer
 class OpenLIFUProtocolSerializer(Serializer):
@@ -318,6 +345,178 @@ class OpenLIFUTransducerSerializer(Serializer):
         """
         parameterNode.UnsetParameter(name)
 
+@parameterNodeSerializer
+class OpenLIFUPointSerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == SlicerOpenLIFUPoint
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if OpenLIFUPointSerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(OpenLIFUPointSerializer(), [validators.IsInstance(SlicerOpenLIFUPoint)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return SlicerOpenLIFUPoint(openlifu_lz().Point())
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUPoint) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.point.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUPoint:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUPoint(openlifu_lz().Point.from_json(json_string))
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
+@parameterNodeSerializer
+class XarraydatasetSerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == SlicerOpenLIFUXADataset
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if XarraydatasetSerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(XarraydatasetSerializer(), [validators.IsInstance(SlicerOpenLIFUXADataset)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return SlicerOpenLIFUXADataset(xarray_lz().Dataset())
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUXADataset) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        ds = value.dataset
+        ds_serialized = base64.b64encode(ds.to_netcdf()).decode('utf-8')
+        parameterNode.SetParameter(
+            name,
+            ds_serialized,
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUXADataset:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        ds_serialized = parameterNode.GetParameter(name)
+        ds_deserialized = xarray_lz().open_dataset(base64.b64decode(ds_serialized.encode('utf-8')))
+        return SlicerOpenLIFUXADataset(ds_deserialized)
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
+@parameterNodeSerializer
+class NumpyArraySerializer(Serializer):
+    @staticmethod
+    def canSerialize(type_) -> bool:
+        """
+        Whether the serializer can serialize the given type if it is properly instantiated.
+        """
+        return type_ == np.ndarray
+
+    @staticmethod
+    def create(type_):
+        """
+        Creates a new serializer object based on the given type. If this class does not support the given type,
+        None is returned.
+        """
+        if NumpyArraySerializer.canSerialize(type_):
+            # Add custom validators as we need them to the list here. For now just IsInstance.
+            return ValidatedSerializer(NumpyArraySerializer(), [validators.IsInstance(np.ndarray)])
+        return None
+
+    def default(self):
+        """
+        The default value to use if another default is not specified.
+        """
+        return np.array([])
+
+    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+        """
+        Whether the parameterNode contains a parameter of the given name.
+        Note that most implementations can just use parameterNode.HasParameter(name).
+        """
+        return parameterNode.HasParameter(name)
+
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: np.ndarray) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        buffer = io.BytesIO()
+        np.save(buffer, value)
+        array_serialized = base64.b64encode(zlib.compress(buffer.getvalue())).decode('utf-8')
+        parameterNode.SetParameter(
+            name,
+            array_serialized,
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> np.ndarray:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        array_serialized = parameterNode.GetParameter(name)
+        array_deserialized = np.load(io.BytesIO(zlib.decompress(base64.b64decode(array_serialized.encode('utf-8')))))
+        return array_deserialized
+
+    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+        """
+        Removes the value of the given name from the parameterNode.
+        """
+        parameterNode.UnsetParameter(name)
+
 @parameterPack
 class SlicerOpenLIFUTransducer:
     """An openlifu Trasducer that has been loaded into Slicer (has a model node and transform node)"""
@@ -356,3 +555,36 @@ class SlicerOpenLIFUTransducer:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.transform_node)
+
+from typing import NamedTuple
+class PlanFocus(NamedTuple):
+    """Information that is generated by the SlicerOpenLIFU planning module for a particular focus point"""
+
+    point : SlicerOpenLIFUPoint
+    """Focus location"""
+
+    delays : np.ndarray
+    """Delays to steer the beam"""
+
+    apodization : np.ndarray
+    """Apodization to steer the beam"""
+
+    simulation_output : SlicerOpenLIFUXADataset
+    """Output of the k-wave simulation for this configuration"""
+
+@parameterPack
+class SlicerOpenLIFUPlan:
+    """Information that is generated by running the SlicerOpenLIFU planning module"""
+
+    # We list the type here as "List[Tuple[...]]" to help the parameter node wrapper do the right thing,
+    # but really the type is "List[PlanFocus]"
+    # The clean solution would have been to make PlanFocus a parameterPack, but it seems
+    # that a List of parameterPack is not supported by slicer right now.
+    plan_info : List[Tuple[SlicerOpenLIFUPoint,np.ndarray,np.ndarray,SlicerOpenLIFUXADataset]]
+    """List of points for the beam to focus on, each with inforation that was generated to steer the beam"""
+
+    pnp : vtkMRMLScalarVolumeNode
+    """Peak negative pressure volume, aggregated over the results from each focus point"""
+
+    intensity : vtkMRMLScalarVolumeNode
+    """Average intensity volume, aggregated over the results from each focus point"""
