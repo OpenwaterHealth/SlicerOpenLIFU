@@ -1,6 +1,8 @@
 import qt
 import vtk
 from typing import Any, List, Tuple, Sequence, TYPE_CHECKING
+from scipy.ndimage import affine_transform
+from vtk.util import numpy_support
 import numpy as np
 from numpy.typing import NDArray
 from pathlib import Path
@@ -9,6 +11,7 @@ from slicer import (
     vtkMRMLModelNode,
     vtkMRMLTransformNode,
     vtkMRMLScalarVolumeNode,
+    vtkMRMLMarkupsFiducialNode,
 )
 from slicer.parameterNodeWrapper import (
     parameterNodeSerializer,
@@ -199,6 +202,96 @@ def linear_to_affine(matrix, translation=None):
         ],
         axis=0,
     )
+
+def get_RAS2IJK(volume_node: vtkMRMLScalarVolumeNode):
+    """Get the _world_ RAS to volume IJK affine matrix for a given volume node.
+    
+    This takes into account any transforms that the volume node may be subject to.
+
+    Returns a numpy array of shape (4,4).
+    """
+    IJK_to_volumeRAS_vtk = vtk.vtkMatrix4x4()
+    volume_node.GetRASToIJKMatrix(IJK_to_volumeRAS_vtk)
+    IJK_to_volumeRAS = slicer.util.arrayFromVTKMatrix(IJK_to_volumeRAS_vtk)
+    if volume_node.GetParentTransformNode():
+        volumeRAS_to_worldRAS_vtk = vtk.vtkMatrix4x4()
+        volume_node.GetParentTransformNode().GetMatrixTransformToWorld(volumeRAS_to_worldRAS_vtk)
+        volumeRAS_to_worldRAS = slicer.util.arrayFromVTKMatrix(volumeRAS_to_worldRAS_vtk)
+        IJK_to_worldRAS = volumeRAS_to_worldRAS @ IJK_to_volumeRAS
+    else:
+        IJK_to_worldRAS = IJK_to_volumeRAS
+    return IJK_to_worldRAS
+
+def fiducial_to_openlifu_point_in_transducer_coords(fiducial_node:vtkMRMLMarkupsFiducialNode, transducer:"SlicerOpenLIFUTransducer", name:str = '') -> "openlifu.Point":
+    """Given a fiducial node with at least one point, return an openlifu Point in the local coordinates of the given transducer."""
+    if fiducial_node.GetNumberOfControlPoints() < 1:
+        raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
+    position = (np.linalg.inv(slicer.util.arrayFromTransformMatrix(transducer.transform_node)) @ np.array([*fiducial_node.GetNthControlPointPosition(0),1]))[:3] # TODO handle 4th coord here actually, would need to unprojectivize
+    return openlifu_lz().Point(position=position, name = name, dims=('x','y','z'), units = transducer.transducer.transducer.units) # Here x,y,z means transducer coordinates.
+
+def make_volume_from_xarray_in_transducer_coords(data_array: "xarray.DataArray", transducer: "SlicerOpenLIFUTransducer") -> vtkMRMLScalarVolumeNode:
+    """Convert a DataArray in the coordinates of a given transducer into a volume node. It is assumed that the DataArray coords form a regular grid.
+    See also `make_xarray_in_transducer_coords_from_volume`.
+    """
+    array = data_array.data
+    coords = data_array.coords
+
+    nodeName = data_array.name
+    imageSize = list(array.shape)
+    voxelType=vtk.VTK_DOUBLE
+
+    imageData = vtk.vtkImageData()
+    imageData.SetDimensions(imageSize)
+    imageData.AllocateScalars(voxelType, 1)
+
+    vtk_array = numpy_support.numpy_to_vtk(array.transpose((2,1,0)).ravel(), deep=True, array_type=voxelType)
+    imageData.GetPointData().SetScalars(vtk_array)
+
+    # Create volume node
+    volumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", nodeName)
+    volumeNode.SetOrigin([float(coords[x][0]) for x in coords])
+    volumeNode.SetSpacing([np.diff(coords[x][:2]).item() for x in coords])
+    volumeNode.SetAndObserveImageData(imageData)
+    volumeNode.CreateDefaultDisplayNodes()
+    volumeNode.CreateDefaultStorageNode()
+
+    volumeNode.SetAndObserveTransformNodeID(transducer.transform_node.GetID())
+    
+    return volumeNode
+
+def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolumeNode, transducer:"SlicerOpenLIFUTransducer", protocol:"openlifu.Protocol") -> "xarray.DataArray":
+    """Convert a volume node into a DataArray in the coordinates of a given transducer.
+    See also `make_volume_from_xarray_in_transducer_coords`.
+    """
+    coords = protocol.sim_setup.get_coords()
+    origin = np.array([coord_array[0].item() for coord_array in coords.values()])
+    spacing = np.array([np.diff(coord_array)[0].item() for coord_array in coords.values()])
+    coords_shape = tuple(coords.sizes.values())
+
+    # Here are the coordinate systems involved:
+    # ijk : DataArray indices. When running openlifu simulations, this would typically be the "simulation grid" 
+    # xyz : Transducer coordinates. x=lateral, y=elevation, z=axial. When the transducer is on the patient forehead, this roughly relates
+    # to patient coordinates as follows: x=right, y=superior, z=posterior. (When I say x=right I mean x increases as you go right)
+    # ras : The slicer world RAS coordinate system
+    # IJK : the volume node's underlying data array indices
+    ijk2xyz = np.concatenate([np.concatenate([np.diag(spacing),origin.reshape(3,1)], axis=1), np.array([0,0,0,1],dtype=origin.dtype).reshape(1,4)])
+    xyz2ras = slicer.util.arrayFromTransformMatrix(transducer.transform_node)
+    ras2IJK = get_RAS2IJK(volume_node)
+    ijk2IJK = ras2IJK @ xyz2ras @ ijk2xyz
+    volume_resampled_array = affine_transform(
+        slicer.util.arrayFromVolume(volume_node).transpose((2,1,0)), # the array indices come in KJI rather than IJK so we permute them
+        ijk2IJK,
+        order = 1, # equivalent to trilinear interpolation, I think
+        mode = 'nearest', # method of sampling beyond input array boundary
+        output_shape = coords_shape,
+    )
+    volume_resampled_dataarray = xarray_lz().DataArray(
+        volume_resampled_array,
+        coords=coords,
+        name=volume_node.GetName(),
+        attrs={'vtkMRMLNodeID':volume_node.GetID(),}
+    )
+    return volume_resampled_dataarray
 
 # This very thin wrapper around openlifu.Protocol is needed to do our lazy importing of openlifu
 # while still providing type annotations that the parameter node wrapper can use.

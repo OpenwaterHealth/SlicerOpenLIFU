@@ -693,6 +693,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             # If the transducer that was just removed was in use by an active session, invalidate that session
             self.validate_session()
+    
+    def set_plan(self, plan:SlicerOpenLIFUPlan):
+        self.getParameterNode().loaded_plan = plan
 
 #
 # OpenLIFUDataTest

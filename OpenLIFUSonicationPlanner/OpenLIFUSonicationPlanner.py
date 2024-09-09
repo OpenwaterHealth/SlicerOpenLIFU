@@ -1,8 +1,8 @@
-import logging
-import os
-from typing import Annotated, Optional
+from typing import Optional
+from typing import Optional, List, Tuple, TYPE_CHECKING
 
 import vtk
+import numpy as np
 
 import slicer
 from slicer.i18n import tr as _
@@ -12,9 +12,23 @@ from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode
 
-from OpenLIFULib import (SlicerOpenLIFUProtocol,
-                         SlicerOpenLIFUTransducer)
+from OpenLIFULib import (
+    SlicerOpenLIFUProtocol,
+    SlicerOpenLIFUTransducer,
+    PlanFocus,
+    SlicerOpenLIFUPoint,
+    SlicerOpenLIFUXADataset,
+    SlicerOpenLIFUPlan,
+    xarray_lz,
+    openlifu_lz,
+    fiducial_to_openlifu_point_in_transducer_coords,
+    make_volume_from_xarray_in_transducer_coords,
+    make_xarray_in_transducer_coords_from_volume,
+)
 
+if TYPE_CHECKING:
+    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import xarray
 
 #
 # OpenLIFUSonicationPlanner
@@ -247,8 +261,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateComboBoxOptions()
 
     def onPlanClicked(self):
-        print("Placeholder text: Running sonication planning")
-
         activeTransducer = self.ui.TransducerComboBox.currentData
         activeProtocol = self.ui.ProtocolComboBox.currentData
         activeVolume = self.ui.VolumeComboBox.currentData
@@ -256,7 +268,75 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Call runPlanning
         self.logic.runPlanning(activeVolume, activeTarget, activeTransducer, activeProtocol)
-      
+
+#
+# Utilities
+#
+
+def generate_plan_openlifu(
+        protocol: "openlifu.Protocol",
+        transducer:SlicerOpenLIFUTransducer,
+        target_node:vtkMRMLMarkupsFiducialNode,
+        volume_node:vtkMRMLScalarVolumeNode
+    ) -> Tuple[List[PlanFocus], "xarray.DataArray", "xarray.DataArray"]:
+    """Run openlifu beamforming and k-wave simulation.
+    
+    Returns:
+        plan_info: The list of focus points along with their beamforming information and k-wave simulation results
+        pnp_aggregated: Peak negative pressure volume, a simulation output. This is max-aggregated over all focus points.
+        intensity_aggregated: Time-averaged intensity, a simulation output. This is mean-aggregated over all focus points.
+            Note: It should be weighted by the number of times each focus point is focused on, but this functionality is not yet represented by openlifu.
+
+    """
+    target_point = fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target')
+    
+    # TODO: The low-level openlifu details here of obtaining the delays, apodization, and simulation output should be relegated to openlifu
+    # They are done here as a temporary measure.
+    # Here we just hit each focus point once, but there is supposed to be some way of specifying the sequence of focal points
+    # and possibly hitting them multiple times and even different numbers of times.
+
+    params = protocol.seg_method.seg_params(
+        make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol)
+    )
+    pulse = protocol.pulse
+
+    transducer_openlifu = transducer.transducer.transducer
+    
+    plan_info : List[PlanFocus] = []
+    target_pattern_points = protocol.focal_pattern.get_targets(target_point)
+    for focus_point in target_pattern_points:
+        delays, apodization = protocol.beamform(arr=transducer_openlifu, target=focus_point, params=params)
+
+        simulation_output_xarray, simulation_output_kwave = openlifu_lz().sim.run_simulation(
+            arr=transducer_openlifu,
+            params=params,
+            delays=delays,
+            apod= apodization,
+            freq = pulse.frequency,
+            cycles = np.max([np.round(pulse.duration * pulse.frequency), 20]),
+            dt=protocol.sim_setup.dt,
+            t_end=protocol.sim_setup.t_end,
+            amplitude = 1,
+            gpu = False
+        )
+        
+        plan_info.append(PlanFocus(
+            SlicerOpenLIFUPoint(focus_point),
+            delays,
+            apodization,
+            SlicerOpenLIFUXADataset(simulation_output_xarray),
+        ))
+        
+    # max-aggregate the PNP over the focus points
+    pnp_aggregated = xarray_lz().concat([plan_focus.simulation_output.dataset['p_min'] for plan_focus in plan_info], "stack").max(dim="stack")
+    
+    # mean-aggregate the intensity over the focus points
+    # TODO: Ensure this mean is weighted by the number of times each point is focused on, once openlifu supports hitting points different numbers of times
+    intensity_aggregated = xarray_lz().concat([plan_focus.simulation_output.dataset['ita'] for plan_focus in plan_info], "stack").mean(dim="stack")
+    
+    return plan_info, pnp_aggregated, intensity_aggregated
+
+
 #
 # OpenLIFUSonicationPlannerLogic
 #
@@ -280,10 +360,17 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         return OpenLIFUSonicationPlannerParameterNode(super().getParameterNode())
 
     def runPlanning(self, inputVolume: vtkMRMLScalarVolumeNode, inputTarget: vtkMRMLMarkupsFiducialNode, inputTransducer : SlicerOpenLIFUTransducer , inputProtocol: SlicerOpenLIFUProtocol ):
-        print("Volume:", inputVolume)
-        print("Target:", inputTarget)
-        print("Protocol:", inputProtocol)
-        print("Transducer:", inputTransducer)
+        plan_info, pnp_aggregated, intensity_aggregated = generate_plan_openlifu(
+            inputProtocol.protocol,
+            inputTransducer,
+            inputTarget,
+            inputVolume,
+        )
+        pnp_volume_node = make_volume_from_xarray_in_transducer_coords(pnp_aggregated, inputTransducer)
+        intensity_volume_node = make_volume_from_xarray_in_transducer_coords(intensity_aggregated, inputTransducer)
+        plan = SlicerOpenLIFUPlan(plan_info,pnp_volume_node,intensity_volume_node)
+        slicer.util.getModuleLogic('OpenLIFUData').set_plan(plan)
+        
 
 
 #
