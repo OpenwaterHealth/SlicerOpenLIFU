@@ -253,7 +253,6 @@ def make_volume_from_xarray_in_transducer_coords(data_array: "xarray.DataArray",
     volumeNode.SetSpacing([np.diff(coords[x][:2]).item() for x in coords])
     volumeNode.SetAndObserveImageData(imageData)
     volumeNode.CreateDefaultDisplayNodes()
-    volumeNode.CreateDefaultStorageNode()
 
     volumeNode.SetAndObserveTransformNodeID(transducer.transform_node.GetID())
     
