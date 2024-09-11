@@ -117,9 +117,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # Initialize combo boxes
+        # Initialize UI
         self.OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
         self.updateComboBoxOptions()
+        self.updatePlanProgressBar()
+        self.updateRenderPNPCheckBox()
 
         # Add an observer on the Data module's parameter node
         self.addObserver(self.OpenLIFUDataLogic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
@@ -131,6 +133,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Buttons
         self.ui.PlanPushButton.clicked.connect(self.onPlanClicked)
         self.checkCanPlan()
+        self.ui.renderPNPCheckBox.clicked.connect(self.onrenderPNPCheckBoxClicked)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -267,10 +270,20 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.planProgressBar.value = 1
 
+    def updateRenderPNPCheckBox(self):
+        if self.OpenLIFUDataLogic.getParameterNode().loaded_plan is None:
+            self.ui.renderPNPCheckBox.enabled = False
+            self.ui.renderPNPCheckBox.checked = False
+            self.ui.renderPNPCheckBox.setToolTip("Run planning first to generate a PNP volume that can be visualized")
+        else:
+            self.ui.renderPNPCheckBox.enabled = True
+            self.ui.renderPNPCheckBox.setToolTip("Show the PNP volume in the 3D view with maximum intensity projection")
+
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateComboBoxOptions()
         self.updatePlanProgressBar()
+        self.updateRenderPNPCheckBox()
 
     def onPlanClicked(self):
         activeTransducer = self.ui.TransducerComboBox.currentData
@@ -285,6 +298,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.logic.runPlanning(activeVolume, activeTarget, activeTransducer, activeProtocol)
             finally:
                 self.updatePlanProgressBar()
+
+    def onrenderPNPCheckBoxClicked(self, checked:bool):
+        if checked:
+            self.logic.render_pnp()
+        else:
+            self.logic.hide_pnp()
 
 #
 # Utilities
@@ -385,9 +404,44 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         )
         pnp_volume_node = make_volume_from_xarray_in_transducer_coords(pnp_aggregated, inputTransducer)
         intensity_volume_node = make_volume_from_xarray_in_transducer_coords(intensity_aggregated, inputTransducer)
+
+        pnp_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
+        intensity_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
+
         plan = SlicerOpenLIFUPlan(plan_info,pnp_volume_node,intensity_volume_node)
         slicer.util.getModuleLogic('OpenLIFUData').set_plan(plan)
-        
+
+    def get_pnp(self) -> vtkMRMLScalarVolumeNode:
+        """Get the PNP volume of the active plan, if there is an active plan. Raise exception if there isn't."""
+        plan : SlicerOpenLIFUPlan = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode().loaded_plan
+        if plan is None:
+            raise RuntimeError("Cannot render PNP as there is no active plan.")
+        return plan.pnp
+
+    def render_pnp(self) -> None:
+        pnp = self.get_pnp()
+        pnp.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
+        volRenLogic = slicer.modules.volumerendering.logic()
+        displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
+        if not displayNode:
+            displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
+        volRenLogic.CopyDisplayToVolumeRenderingDisplayNode(displayNode)
+        for view_node in slicer.util.getNodesByClass("vtkMRMLViewNode"):
+            view_node.SetRaycastTechnique(slicer.vtkMRMLViewNode.MaximumIntensityProjection)
+        displayNode.SetVisibility(True)
+        scalar_opacity_mapping = displayNode.GetVolumePropertyNode().GetVolumeProperty().GetScalarOpacity()
+        scalar_opacity_mapping.RemoveAllPoints()
+        vmin, vmax = pnp.GetImageData().GetScalarRange()
+        scalar_opacity_mapping.AddPoint(vmin,0.0)
+        scalar_opacity_mapping.AddPoint(vmax,1.0)
+
+    def hide_pnp(self) -> None:
+        pnp = self.get_pnp()
+        volRenLogic = slicer.modules.volumerendering.logic()
+        displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
+        if not displayNode:
+            displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
+        displayNode.SetVisibility(False)
 
 
 #
