@@ -572,7 +572,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         volume_path = volume_files[0]
 
         self.volume_node = slicer.util.loadVolume(volume_path)
-        self.volume_node.SetName(volume_id)
+        self.volume_node.SetName(slicer.mrmlScene.GenerateUniqueName(volume_id))
 
         # === Load targets ===
 
@@ -580,7 +580,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             target_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
             self.target_nodes.append(target_node)
-            target_node.SetName(target.id)
+            target_node.SetName(slicer.mrmlScene.GenerateUniqueName(target.id))
 
                 # Get target position and convert it to Slicer coordinates
             position = np.array(target.position)

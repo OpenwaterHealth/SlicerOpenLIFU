@@ -252,10 +252,10 @@ class SlicerOpenLIFUTransducer:
         """Initialize object with needed scene nodes from just the openlifu object."""
 
         model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        model_node.SetName(transducer.id)
+        model_node.SetName(slicer.mrmlScene.GenerateUniqueName(transducer.id))
         model_node.SetAndObservePolyData(transducer.get_polydata())
         transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transform_node.SetName(f"{transducer.id}-matrix")
+        transform_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{transducer.id}-matrix"))
         model_node.SetAndObserveTransformNodeID(transform_node.GetID())
 
         # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
