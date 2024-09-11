@@ -24,6 +24,7 @@ from OpenLIFULib import (
     fiducial_to_openlifu_point_in_transducer_coords,
     make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
+    BusyCursor,
 )
 
 if TYPE_CHECKING:
@@ -257,8 +258,19 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Determine whether planning can be execuuted based on the status of combo boxes
         self.checkCanPlan()
 
+    def updatePlanProgressBar(self):
+        """Update the plan progress bar. 0% if there is no existing plan, 100% if there is an existing plan."""
+        self.ui.planProgressBar.maximum = 1 # (during planning we set maxmimum=0 to put it into an infinite loading animation)
+
+        if self.OpenLIFUDataLogic.getParameterNode().loaded_plan is None:
+            self.ui.planProgressBar.value = 0
+        else:
+            self.ui.planProgressBar.value = 1
+
+
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateComboBoxOptions()
+        self.updatePlanProgressBar()
 
     def onPlanClicked(self):
         activeTransducer = self.ui.TransducerComboBox.currentData
@@ -266,8 +278,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeVolume = self.ui.VolumeComboBox.currentData
         activeTarget = self.ui.TargetComboBox.currentData
 
-        # Call runPlanning
-        self.logic.runPlanning(activeVolume, activeTarget, activeTransducer, activeProtocol)
+        with BusyCursor():
+            try:
+                self.ui.planProgressBar.maximum = 0
+                slicer.app.processEvents()
+                self.logic.runPlanning(activeVolume, activeTarget, activeTransducer, activeProtocol)
+            finally:
+                self.updatePlanProgressBar()
 
 #
 # Utilities

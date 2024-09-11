@@ -10,70 +10,80 @@
     <height>381</height>
    </rect>
   </property>
-  <layout class="QFormLayout" name="formLayout">
-   <item row="0" column="0">
-    <widget class="QLabel" name="labelProtocol">
-     <property name="text">
-      <string>Protocol:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="0" column="1">
-    <widget class="QComboBox" name="ProtocolComboBox">
-     <property name="contextMenuPolicy">
-      <enum>Qt::NoContextMenu</enum>
-     </property>
-     <property name="currentText">
-      <string/>
-     </property>
-     <property name="currentIndex">
-      <number>-1</number>
-     </property>
-     <property name="placeholderText">
-      <string/>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="0">
-    <widget class="QLabel" name="labelTransducer">
-     <property name="text">
-      <string>Transducer:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="1">
-    <widget class="QComboBox" name="TransducerComboBox">
-     <property name="currentText">
-      <string/>
-     </property>
-     <property name="currentIndex">
-      <number>-1</number>
-     </property>
-     <property name="placeholderText">
-      <string notr="true"/>
-     </property>
-     <item>
-      <property name="text">
-       <string>Select a Transducer</string>
-      </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item>
+    <layout class="QFormLayout" name="formLayout_2">
+     <item row="0" column="0">
+      <widget class="QLabel" name="labelProtocol">
+       <property name="text">
+        <string>Protocol:</string>
+       </property>
+      </widget>
      </item>
-    </widget>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="ProtocolComboBox">
+       <property name="contextMenuPolicy">
+        <enum>Qt::NoContextMenu</enum>
+       </property>
+       <property name="currentText">
+        <string/>
+       </property>
+       <property name="currentIndex">
+        <number>-1</number>
+       </property>
+       <property name="placeholderText">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="labelTransducer">
+       <property name="text">
+        <string>Transducer:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QComboBox" name="TransducerComboBox">
+       <property name="currentText">
+        <string/>
+       </property>
+       <property name="currentIndex">
+        <number>-1</number>
+       </property>
+       <property name="placeholderText">
+        <string notr="true"/>
+       </property>
+       <item>
+        <property name="text">
+         <string>Select a Transducer</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="labelVolume">
+       <property name="text">
+        <string>Volume:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QComboBox" name="VolumeComboBox"/>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="labelTarget">
+       <property name="text">
+        <string>Target:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <widget class="QComboBox" name="TargetComboBox"/>
+     </item>
+    </layout>
    </item>
-   <item row="2" column="0">
-    <widget class="QLabel" name="labelVolume">
-     <property name="text">
-      <string>Volume:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="0">
-    <widget class="QLabel" name="labelTarget">
-     <property name="text">
-      <string>Target:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="0" colspan="2">
+   <item>
     <spacer name="verticalSpacer_2">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -86,18 +96,25 @@
      </property>
     </spacer>
    </item>
-   <item row="5" column="0" colspan="2">
+   <item>
     <widget class="QPushButton" name="PlanPushButton">
      <property name="text">
       <string>Plan</string>
      </property>
     </widget>
    </item>
-   <item row="2" column="1">
-    <widget class="QComboBox" name="VolumeComboBox"/>
-   </item>
-   <item row="3" column="1">
-    <widget class="QComboBox" name="TargetComboBox"/>
+   <item>
+    <widget class="QProgressBar" name="planProgressBar">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
+     <property name="maximum">
+      <number>1</number>
+     </property>
+     <property name="value">
+      <number>0</number>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>
