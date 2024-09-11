@@ -318,3 +318,8 @@ class SlicerOpenLIFUPlan:
 
     intensity : vtkMRMLScalarVolumeNode
     """Average intensity volume, aggregated over the results from each focus point"""
+
+    def clear_nodes(self) -> None:
+        """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
+        slicer.mrmlScene.RemoveNode(self.pnp)
+        slicer.mrmlScene.RemoveNode(self.intensity)

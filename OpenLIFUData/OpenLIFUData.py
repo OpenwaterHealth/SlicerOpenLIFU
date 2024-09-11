@@ -335,6 +335,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If the volume of the active session was removed, the session becomes invalid.
         if node.IsA('vtkMRMLVolumeNode'):
             self.logic.validate_session()
+            self.logic.validate_plan()
         
         self.updateLoadedObjectsView()
 
@@ -469,6 +470,27 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             )
             self.clear_session(clean_up_scene=False)
             return False
+
+        return True
+
+    def validate_plan(self) -> bool:
+        """Check to ensure that the currently active plan is in a valid state, clearing out the plan
+        if it is not and returning whether there is an active valid plan."""
+
+        plan = self.getParameterNode().loaded_plan
+
+        if plan is None:
+            return False # There is no active plan, no problem
+
+        # Check volumes are present
+        for volume_node in [plan.intensity, plan.pnp]:
+            if volume_node is None or slicer.mrmlScene.GetNodeByID(volume_node.GetID()) is None:
+                slicer.util.warningDisplay(
+                    f"A volume that was in use by the active plan is now missing. The plan will be unloaded.",
+                    "Plan invalidated"
+                )
+                self.clear_plan(clean_up_scene=False)
+                return False
 
         return True
 
@@ -696,6 +718,22 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     
     def set_plan(self, plan:SlicerOpenLIFUPlan):
         self.getParameterNode().loaded_plan = plan
+
+    def clear_plan(self,  clean_up_scene:bool = True) -> None:
+        """Unload the current plan if there is one loaded.
+
+        Args:
+            clean_up_scene: Whether to remove the plan's affiliated scene content.
+                If False then the scene content is orphaned from its session.
+                If True then the scene content is removed.
+        """
+        plan = self.getParameterNode().loaded_plan
+        if plan is None:
+            return
+        if clean_up_scene:
+            plan.clear_nodes()
+        self.getParameterNode().loaded_plan = None
+
 
 #
 # OpenLIFUDataTest
