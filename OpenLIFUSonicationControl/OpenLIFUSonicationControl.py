@@ -100,7 +100,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Disable the Abort button. Can only be clicked once the user hits 'Run'
         self.ui.abortPushButton.setDisabled(True)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
+        self.updateRunEnabled()
     
+        self.addObserver(
+            slicer.util.getModuleLogic('OpenLIFUData').getParameterNode().parameterNode,
+            vtk.vtkCommand.ModifiedEvent,
+            self.onDataParameterNodeModified
+        )
     
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -154,6 +160,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+
+    def onDataParameterNodeModified(self,caller, event) -> None:
+        self.updateRunEnabled()
+
+    def updateRunEnabled(self):
+        if slicer.util.getModuleLogic('OpenLIFUData').validate_plan():
+            self.ui.runPushButton.enabled = True
+            self.ui.runPushButton.setToolTip("Run sonication")
+        else:
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("To run a sonication, first generate a plan in the sonication planning module.")
 
     def onRunClicked(self):
         print("Placeholder text: Running sonication")
