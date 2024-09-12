@@ -8,7 +8,10 @@ from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
 
-import OpenLIFULib
+from OpenLIFULib.lazyimport import (
+    python_requirements_exist,
+    check_and_install_python_requirements,
+)
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
@@ -125,14 +128,14 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def updateInstallButtonText(self) -> None:
         """Update the text of the install button based on whether it's 'install' or 'reinstall'"""
-        if OpenLIFULib.python_requirements_exist():
+        if python_requirements_exist():
             self.ui.installPythonReqsButton.text = 'Reinstall Python Requirements'
         else:
             self.ui.installPythonReqsButton.text = 'Install Python Requirements'
 
     def onInstallPythonRequirements(self) -> None:
         """Install python requirements button action"""
-        OpenLIFULib.check_and_install_python_requirements(prompt_if_found=True)
+        check_and_install_python_requirements(prompt_if_found=True)
         self.updateInstallButtonText()
 
 
