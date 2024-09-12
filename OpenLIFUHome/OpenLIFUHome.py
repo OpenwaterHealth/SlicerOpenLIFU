@@ -13,10 +13,6 @@ from OpenLIFULib.lazyimport import (
     check_and_install_python_requirements,
 )
 
-if TYPE_CHECKING:
-    import openlifu # This import is deferred to later runtime, but it is done here for IDE and static analysis purposes
-    import openlifu.db
-
 #
 # OpenLIFUHome
 #
