@@ -1,6 +1,6 @@
 """Some of the underlying parameter node infrastructure"""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 import numpy as np
 import slicer
 from slicer.parameterNodeWrapper import (
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 class SlicerOpenLIFUProtocol:
     """Ultrathin wrapper of openlifu.Protocol. This exists so that protocols can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, protocol: "openlifu.Protocol"):
+    def __init__(self, protocol: "Optional[openlifu.Protocol]" = None):
         self.protocol = protocol
 
 # For the same reason we have a thin wrapper around openlifu.Transducer. But the name SlicerOpenLIFUTransducer
@@ -38,21 +38,21 @@ class SlicerOpenLIFUProtocol:
 class SlicerOpenLIFUTransducerWrapper:
     """Ultrathin wrapper of openlifu.Transducer. This exists so that transducers can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, transducer: "openlifu.Transducer"):
+    def __init__(self, transducer: "Optional[openlifu.Transducer]" = None):
         self.transducer = transducer
 
 # For the same reason we have a thin wrapper around openlifu.Point
 class SlicerOpenLIFUPoint:
     """Ultrathin wrapper of openlifu.Point. This exists so that points can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, point: "openlifu.Point"):
+    def __init__(self, point: "Optional[openlifu.Point]" = None):
         self.point = point
 
 # For the same reason we have a thin wrapper around xarray.Dataset
 class SlicerOpenLIFUXADataset:
     """Ultrathin wrapper of xarray.Dataset, so that it can have parameter node
     support while we still do lazy-loading of xarray (a dependency that is installed alongside openlifu)."""
-    def __init__(self, dataset: "xarray.Dataset"):
+    def __init__(self, dataset: "Optional[xarray.Dataset]" = None):
         self.dataset = dataset
 
 @parameterNodeSerializer
@@ -79,7 +79,7 @@ class OpenLIFUProtocolSerializer(Serializer):
         """
         The default value to use if another default is not specified.
         """
-        return SlicerOpenLIFUProtocol(openlifu_lz().Protocol())
+        return SlicerOpenLIFUProtocol()
 
     def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
         """
@@ -134,7 +134,7 @@ class OpenLIFUTransducerSerializer(Serializer):
         """
         The default value to use if another default is not specified.
         """
-        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer())
+        return SlicerOpenLIFUTransducerWrapper()
 
     def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
         """
@@ -189,7 +189,7 @@ class OpenLIFUPointSerializer(Serializer):
         """
         The default value to use if another default is not specified.
         """
-        return SlicerOpenLIFUPoint(openlifu_lz().Point())
+        return SlicerOpenLIFUPoint()
 
     def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
         """
@@ -244,7 +244,7 @@ class XarraydatasetSerializer(Serializer):
         """
         The default value to use if another default is not specified.
         """
-        return SlicerOpenLIFUXADataset(xarray_lz().Dataset())
+        return SlicerOpenLIFUXADataset()
 
     def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
         """
