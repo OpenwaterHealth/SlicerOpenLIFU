@@ -29,6 +29,9 @@
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
         </property>
+        <property name="filters">
+         <string>ctkPathLineEdit::Dirs</string>
+        </property>
        </widget>
       </item>
       <item>
