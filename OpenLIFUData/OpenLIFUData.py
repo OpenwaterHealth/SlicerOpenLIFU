@@ -123,7 +123,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Buttons
         self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
-        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect("returnPressed()", self.onLoadDatabaseClicked)
+        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect(
+            "returnPressed()",
+            lambda : self.onLoadDatabaseClicked(checked=True)
+        )
 
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
