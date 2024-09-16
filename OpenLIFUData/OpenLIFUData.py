@@ -623,8 +623,24 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        self.load_transducer_from_openlifu(self.current_session.transducer, replace_confirmed=True)
-        self.session_transducer_id = self.current_session.transducer.id
+        if self.current_session.transducer_id == self.session_transducer_id:
+            slicer.util.errorDisplay(
+                f"A transducer with ID {self.current_session.transducer_id} is in use by the current session. Not loading it.",
+                "Transducer in use by session",
+            )
+            return
+        if self.current_session.transducer_id in self.getParameterNode().loaded_transducers:
+            self.remove_transducer(self.current_session.transducer_id)
+
+        # Load transducer from database
+        transducer = openlifu_lz().Database.load_transducer(self.current_session.transducer_id)
+        # Set array_transform
+        transducer.matrix = self.current_session.array_transform
+
+        self.getParameterNode().loaded_transducers[self.current_session.transducer_id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
+
+        self.load_transducer_from_openlifu(self.current_session.transducer_id, self.current_session.array_transform, replace_confirmed=True)
+        self.session_transducer_id = self.current_session.transducer_id
 
         # === Toggle slice visibility and center slices on first target ===
 
