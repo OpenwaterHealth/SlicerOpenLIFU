@@ -196,7 +196,7 @@ def make_volume_from_xarray_in_transducer_coords(data_array: "xarray.DataArray",
     imageData.GetPointData().SetScalars(vtk_array)
 
     # Create volume node
-    volumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", nodeName)
+    volumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", slicer.mrmlScene.GenerateUniqueName(nodeName))
     volumeNode.SetOrigin([float(coords[x][0]) for x in coords])
     volumeNode.SetSpacing([np.diff(coords[x][:2]).item() for x in coords])
     volumeNode.SetAndObserveImageData(imageData)
