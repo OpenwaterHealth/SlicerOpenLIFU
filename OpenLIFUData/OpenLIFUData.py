@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
 
 import qt
+
 import vtk
 import numpy as np
 
@@ -128,6 +129,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             lambda : self.onLoadDatabaseClicked(checked=True)
         )
 
+        # Add new subject
+        self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
+
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
         self.ui.subjectSessionView.setModel(self.subjectSessionItemModel)
@@ -216,6 +220,56 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
+    def addNewSubjectToDatabase(self):
+        print("adding subject to database")
+
+
+    @display_errors
+    def onAddNewSubjectClicked(self, checked:bool) -> None:
+
+        addNewSubjectDialog = qt.QDialog()
+        addNewSubjectDialog.setWindowTitle("Add new subject")
+        # layout = qt.QVBoxLayout()
+        # messagePopup.setLayout(layout)
+
+        formLayout = qt.QFormLayout()
+        addNewSubjectDialog.setLayout(formLayout)
+
+        subjectName = qt.QLineEdit()
+        formLayout.addRow(_("Subject Name:"), subjectName)
+
+        subjectID = qt.QLineEdit()
+        formLayout.addRow(_("Subject ID:"), subjectID)
+
+        TextValidator = qt.QRegExpValidator(
+            qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+        subjectName.setValidator(TextValidator)
+
+        subjectID.setValidator(TextValidator)
+
+        # vLayout = qt.QVBoxLayout()
+        # vLayout.addLayout(formLayout)
+        # vLayout.addStretch(1)
+
+        buttonBox = qt.QDialogButtonBox()
+        buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(buttonBox)
+
+        # messagePopup = qt.QDialog()
+        # layout = qt.QVBoxLayout()
+        # messagePopup.setLayout(layout)
+        # label = qt.QLabel(message,messagePopup)
+
+        # openLIFUDataWidget = slicer.util.getModuleWidget('OpenLIFUData')
+        # uiNewSubjectDialog = slicer.util.loadUI(openLIFUDataWidget.resourcePath("UI/AddNewSubject.ui"))
+        # layout.addWidget(uiNewSubjectDialog)
+
+        buttonBox.rejected.connect(addNewSubjectDialog.close)
+        buttonBox.accepted.connect(self.addNewSubjectToDatabase)
+
+        addNewSubjectDialog.exec_()
+        
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
         qsettings = qt.QSettings()

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>460</height>
+    <height>489</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -26,11 +26,11 @@
       </item>
       <item>
        <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
+        <property name="filters">
+         <set>ctkPathLineEdit::Dirs</set>
+        </property>
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
-        </property>
-        <property name="filters">
-         <string>ctkPathLineEdit::Dirs</string>
         </property>
        </widget>
       </item>
@@ -38,6 +38,13 @@
        <widget class="QPushButton" name="databaseLoadButton">
         <property name="text">
          <string>Load Database</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="newSubjectButton">
+        <property name="text">
+         <string>Add New Subject</string>
         </property>
        </widget>
       </item>
