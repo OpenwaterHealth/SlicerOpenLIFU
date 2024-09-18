@@ -564,9 +564,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def load_session(self, subject_id, session_id) -> None:
         # === Ensure it's okay to load a session ===
         session = self.get_session(subject_id, session_id)
-        if session.transducer.id in self.getParameterNode().loaded_transducers:
+        if session.transducer_id in self.getParameterNode().loaded_transducers:
             if not slicer.util.confirmYesNoDisplay(
-                f"Loading this session will replace the already loaded transducer with ID {session.transducer.id}. Proceed?",
+                f"Loading this session will replace the already loaded transducer with ID {session.transducer_id}. Proceed?",
                 "Confirm replace transducer"
             ):
                 return
@@ -623,24 +623,22 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        if self.current_session.transducer_id == self.session_transducer_id:
-            slicer.util.errorDisplay(
-                f"A transducer with ID {self.current_session.transducer_id} is in use by the current session. Not loading it.",
-                "Transducer in use by session",
-            )
-            return
-        if self.current_session.transducer_id in self.getParameterNode().loaded_transducers:
-            self.remove_transducer(self.current_session.transducer_id)
+        # Get transducer data from session
+        transducer_id = self.current_session.transducer_id
+        transducer_matrix = self.current_session.array_transform.matrix
+        transducer_matrix_units = self.current_session.array_transform.units
 
-        # Load transducer from database
-        transducer = openlifu_lz().Database.load_transducer(self.current_session.transducer_id)
-        # Set array_transform
-        transducer.matrix = self.current_session.array_transform
+        # Load transducer
+        transducer = self.db.load_transducer(transducer_id)
+        self.load_transducer_from_openlifu(
+            transducer,
+            transducer_matrix=transducer_matrix,
+            transducer_matrix_units=transducer_matrix_units,
+            replace_confirmed=True
+        )
 
-        self.getParameterNode().loaded_transducers[self.current_session.transducer_id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
-
-        self.load_transducer_from_openlifu(self.current_session.transducer_id, self.current_session.array_transform, replace_confirmed=True)
-        self.session_transducer_id = self.current_session.transducer_id
+        # Set that as the current transducer of the active session
+        self.session_transducer_id = transducer_id
 
         # === Toggle slice visibility and center slices on first target ===
 
@@ -669,7 +667,25 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         transducer = openlifu_lz().Transducer.from_file(filepath)
         self.load_transducer_from_openlifu(transducer)
 
-    def load_transducer_from_openlifu(self, transducer: "openlifu.Transducer", replace_confirmed: bool = False) -> None:
+    def load_transducer_from_openlifu(
+            self,
+            transducer: "openlifu.Transducer",
+            transducer_matrix: Optional[np.ndarray]=None,
+            transducer_matrix_units: Optional[str]=None,
+            replace_confirmed: bool = False,
+        ) -> None:
+        """Load an openlifu transducer object into the scene as a SlicerOpenLIFUTransducer,
+        adding it to the list of loaded openlifu objects.
+
+        Args:
+            transducer: The openlifu Transducer object
+            transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
+            transducer_matrix_units: The units in which to interpret the transform matrix.
+                The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
+                these units. If left as None then the transducer's native units (Transducer.units) will be assumed.
+            replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Transducer.
+                This could be used for example if we already know the user is okay with re-loading the transducer.
+        """
         if transducer.id == self.session_transducer_id:
             slicer.util.errorDisplay(
                 f"A transducer with ID {transducer.id} is in use by the current session. Not loading it.",
@@ -685,7 +701,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     return
             self.remove_transducer(transducer.id)
 
-        self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(transducer)
+        self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(
+            transducer,
+            transducer_matrix=transducer_matrix,
+            transducer_matrix_units=transducer_matrix_units,
+        )
 
     def remove_transducer(self, transducer_id:str, clean_up_scene:bool = True) -> None:
         """Remove a transducer from the list of loaded transducer, clearing away its data from the scene.
