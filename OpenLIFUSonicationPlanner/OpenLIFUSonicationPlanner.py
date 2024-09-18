@@ -291,6 +291,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeVolume = self.ui.VolumeComboBox.currentData
         activeTarget = self.ui.TargetComboBox.currentData
 
+        # In case a PNP was previously being displayed, hide it since it is about to no longer belong to the active solution.
+        self.ui.renderPNPCheckBox.checked = False
+        self.logic.hide_pnp()
+
         with BusyCursor():
             try:
                 self.ui.planProgressBar.maximum = 0
@@ -411,15 +415,17 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         plan = SlicerOpenLIFUPlan(plan_info,pnp_volume_node,intensity_volume_node)
         slicer.util.getModuleLogic('OpenLIFUData').set_plan(plan)
 
-    def get_pnp(self) -> vtkMRMLScalarVolumeNode:
-        """Get the PNP volume of the active plan, if there is an active plan. Raise exception if there isn't."""
+    def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:
+        """Get the PNP volume of the active plan, if there is an active plan. Return None if there isn't."""
         plan : SlicerOpenLIFUPlan = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode().loaded_plan
         if plan is None:
-            raise RuntimeError("Cannot render PNP as there is no active plan.")
+            return None
         return plan.pnp
 
     def render_pnp(self) -> None:
         pnp = self.get_pnp()
+        if pnp is None:
+            raise RuntimeError("Cannot render PNP as there is no active plan.")
         pnp.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
         volRenLogic = slicer.modules.volumerendering.logic()
         displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
@@ -436,7 +442,10 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         scalar_opacity_mapping.AddPoint(vmax,1.0)
 
     def hide_pnp(self) -> None:
+        """Hide the PNP volume from the 3D view, if it is displayed. If there is no PNP volume then just do nothing."""
         pnp = self.get_pnp()
+        if pnp is None:
+            return
         volRenLogic = slicer.modules.volumerendering.logic()
         displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
         if not displayNode:
