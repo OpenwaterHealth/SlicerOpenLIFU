@@ -78,12 +78,12 @@ class OpenLIFUDataParameterNode:
 class AddNewSubjectDialog(qt.QDialog):
     """ Add new subject dialog """
 
-    def __init__(self, parent="mainWindow"):
+    def __init__(self, database, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Add New Subject")
         self.setWindowModality(1)
         self.setup()
-
+        self.db = database
 
     def setup(self):
         
@@ -114,17 +114,20 @@ class AddNewSubjectDialog(qt.QDialog):
 
     def addNewSubjectToDatabase(self):
 
-        subjectName = self.subjectName.text
-        subjectID = self.subjectID.text
+        openlifu = openlifu_lz()
+        newOpenLIFUSubject = openlifu.db.subject.Subject
+        newOpenLIFUSubject.name = self.subjectName.text
+        newOpenLIFUSubject.id = self.subjectID.text
 
         # Check that both name and ID have been entered
-        if not len(subjectName) or not len(subjectID):
-            slicer.util.errorDisplay(_("Subject name and ID may not be empty"),
-                                     windowTitle=_("Cannot create subject"), parent=self)
+        if not len(newOpenLIFUSubject.name) or not len(newOpenLIFUSubject.id):
+            slicer.util.errorDisplay("Subject name and ID may not be empty")
             return
         else:
-            print('Name:',subjectName)
-            print('ID:',subjectID)
+            print('Name:',newOpenLIFUSubject.name)
+            print('ID:',newOpenLIFUSubject.id)
+            # self.db.write_subject(newOpenLIFUSubject)
+
 
         return
 
@@ -277,9 +280,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     @display_errors
     def onAddNewSubjectClicked(self, checked:bool) -> None:
 
-        subjectdlg = AddNewSubjectDialog()
-
-        return subjectdlg.exec_()
+        if not self.logic.db:
+            slicer.util.errorDisplay("Database needs to be loaded first")
+            return
+        else:
+            subjectdlg = AddNewSubjectDialog(self.logic.db)
+            return subjectdlg.exec_()
         
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
