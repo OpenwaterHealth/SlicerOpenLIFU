@@ -74,6 +74,60 @@ class OpenLIFUDataParameterNode:
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
     loaded_plan : "Optional[SlicerOpenLIFUPlan]"
 
+
+class AddNewSubjectDialog(qt.QDialog):
+    """ Add new subject dialog """
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Add New Subject")
+        self.setWindowModality(1)
+        self.setup()
+
+
+    def setup(self):
+        
+        self.setMinimumWidth(200)
+
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
+
+        self.subjectName = qt.QLineEdit()
+        formLayout.addRow(_("Subject Name:"), self.subjectName)
+
+        self.subjectID = qt.QLineEdit()
+        formLayout.addRow(_("Subject ID:"), self.subjectID)
+
+        TextValidator = qt.QRegExpValidator(
+            qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+        self.subjectName.setValidator(TextValidator)
+
+        self.subjectID.setValidator(TextValidator)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.close)
+        self.buttonBox.accepted.connect(self.addNewSubjectToDatabase)
+
+    def addNewSubjectToDatabase(self):
+
+        subjectName = self.subjectName.text
+        subjectID = self.subjectID.text
+
+        # Check that both name and ID have been entered
+        if not len(subjectName) or not len(subjectID):
+            slicer.util.errorDisplay(_("Subject name and ID may not be empty"),
+                                     windowTitle=_("Cannot create subject"), parent=self)
+            return
+        else:
+            print('Name:',subjectName)
+            print('ID:',subjectID)
+
+        return
+
 #
 # OpenLIFUDataWidget
 #
@@ -220,55 +274,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-    def addNewSubjectToDatabase(self):
-        print("adding subject to database")
-
-
     @display_errors
     def onAddNewSubjectClicked(self, checked:bool) -> None:
 
-        addNewSubjectDialog = qt.QDialog()
-        addNewSubjectDialog.setWindowTitle("Add new subject")
-        # layout = qt.QVBoxLayout()
-        # messagePopup.setLayout(layout)
+        subjectdlg = AddNewSubjectDialog()
 
-        formLayout = qt.QFormLayout()
-        addNewSubjectDialog.setLayout(formLayout)
-
-        subjectName = qt.QLineEdit()
-        formLayout.addRow(_("Subject Name:"), subjectName)
-
-        subjectID = qt.QLineEdit()
-        formLayout.addRow(_("Subject ID:"), subjectID)
-
-        TextValidator = qt.QRegExpValidator(
-            qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
-        subjectName.setValidator(TextValidator)
-
-        subjectID.setValidator(TextValidator)
-
-        # vLayout = qt.QVBoxLayout()
-        # vLayout.addLayout(formLayout)
-        # vLayout.addStretch(1)
-
-        buttonBox = qt.QDialogButtonBox()
-        buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
-                                          qt.QDialogButtonBox.Cancel)
-        formLayout.addWidget(buttonBox)
-
-        # messagePopup = qt.QDialog()
-        # layout = qt.QVBoxLayout()
-        # messagePopup.setLayout(layout)
-        # label = qt.QLabel(message,messagePopup)
-
-        # openLIFUDataWidget = slicer.util.getModuleWidget('OpenLIFUData')
-        # uiNewSubjectDialog = slicer.util.loadUI(openLIFUDataWidget.resourcePath("UI/AddNewSubject.ui"))
-        # layout.addWidget(uiNewSubjectDialog)
-
-        buttonBox.rejected.connect(addNewSubjectDialog.close)
-        buttonBox.accepted.connect(self.addNewSubjectToDatabase)
-
-        addNewSubjectDialog.exec_()
+        return subjectdlg.exec_()
         
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
