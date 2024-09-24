@@ -98,38 +98,28 @@ class AddNewSubjectDialog(qt.QDialog):
         self.subjectID = qt.QLineEdit()
         formLayout.addRow(_("Subject ID:"), self.subjectID)
 
-        TextValidator = qt.QRegExpValidator(
-            qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
-        self.subjectName.setValidator(TextValidator)
+        # TextValidator = qt.QRegExpValidator(
+        #     qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+        # self.subjectName.setValidator(TextValidator)
 
-        self.subjectID.setValidator(TextValidator)
+        # self.subjectID.setValidator(TextValidator)
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
                                           qt.QDialogButtonBox.Cancel)
         formLayout.addWidget(self.buttonBox)
 
-        self.buttonBox.rejected.connect(self.close)
-        self.buttonBox.accepted.connect(self.addNewSubjectToDatabase)
-
-    def addNewSubjectToDatabase(self):
-
-        openlifu = openlifu_lz()
-        newOpenLIFUSubject = openlifu.db.subject.Subject
-        newOpenLIFUSubject.name = self.subjectName.text
-        newOpenLIFUSubject.id = self.subjectID.text
-
-        # Check that both name and ID have been entered
-        if not len(newOpenLIFUSubject.name) or not len(newOpenLIFUSubject.id):
-            slicer.util.errorDisplay("Subject name and ID may not be empty")
-            return
-        else:
-            print('Name:',newOpenLIFUSubject.name)
-            print('ID:',newOpenLIFUSubject.id)
-            # self.db.write_subject(newOpenLIFUSubject)
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.accept)
 
 
-        return
+    def customexec_(self):
+
+        returncode = self.exec_()
+        subject_name = self.subjectName.text
+        subject_id = self.subjectID.text
+
+        return (returncode, subject_name, subject_id)
 
 #
 # OpenLIFUDataWidget
@@ -223,6 +213,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
+
+        self.updateSubjectSessionSelector()
+
+        self.updateSettingFromParameter('databaseDirectory')
+
+    def updateSubjectSessionSelector(self):
         # Clear any items that are already there
         self.subjectSessionItemModel.removeRows(0,self.subjectSessionItemModel.rowCount())
 
@@ -234,8 +230,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [subject_name,subject_id]
             ))
             self.subjectSessionItemModel.appendRow(subject_row)
-
-        self.updateSettingFromParameter('databaseDirectory')
 
     def itemIsSession(self, index : qt.QModelIndex) -> bool:
         """Whether an item from the subject/session tree view is a session.
@@ -285,7 +279,19 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return
         else:
             subjectdlg = AddNewSubjectDialog(self.logic.db)
-            return subjectdlg.exec_()
+            returncode, subject_name, subject_id = subjectdlg.customexec_()
+
+            if returncode:
+                if not len(subject_name) or not len(subject_id):
+                    slicer.util.errorDisplay("Subject name and ID may not be empty")
+                    return
+                else:
+                    # Add subject to database
+                    self.logic.add_subject_to_database(subject_name,subject_id)
+
+                    #Update loaded subjects view
+                    self.updateSubjectSessionSelector()
+
         
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -843,6 +849,24 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if clean_up_scene:
             plan.clear_nodes()
         self.getParameterNode().loaded_plan = None
+    
+    @display_errors
+    def add_subject_to_database(self, subject_name, subject_id): 
+
+        newOpenLIFUSubject = openlifu_lz().db.subject.Subject()
+        newOpenLIFUSubject.name = subject_name
+        newOpenLIFUSubject.id = subject_id
+
+        subject_ids = self.db.get_subject_ids()
+
+        if newOpenLIFUSubject.id in subject_ids:
+            if not slicer.util.confirmYesNoDisplay(
+                f"Subject with ID {newOpenLIFUSubject.id} already exists in the database. Overwrite subject?",
+                "Subject already exists"
+            ):
+                return
+
+        self.db.write_subject(newOpenLIFUSubject, on_conflict = 'overwrite')
 
 
 #
