@@ -852,6 +852,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     
     @display_errors
     def add_subject_to_database(self, subject_name, subject_id): 
+        """ Adds new subject to loaded openlifu database.
+
+        Args:
+            subject_name: name of subject to be added (str)
+            subject_id: id of subject to be added (str)
+        """
 
         newOpenLIFUSubject = openlifu_lz().db.subject.Subject()
         newOpenLIFUSubject.name = subject_name
