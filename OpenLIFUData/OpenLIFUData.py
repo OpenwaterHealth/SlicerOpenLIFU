@@ -211,6 +211,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
+        self.updateLoadedObjectsView()
+
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
 
