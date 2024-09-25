@@ -1,6 +1,6 @@
 """Some of the underlying parameter node infrastructure"""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Any
 import numpy as np
 import slicer
 from slicer.parameterNodeWrapper import (
@@ -55,39 +55,71 @@ class SlicerOpenLIFUXADataset:
     def __init__(self, dataset: "Optional[xarray.Dataset]" = None):
         self.dataset = dataset
 
+def SlicerOpenLIFUSerializerBaseMaker(
+        serialized_type:type,
+        default_args:Optional[list[Any]] = None,
+        default_kwargs:Optional[dict[Any,Any]] = None,
+    ) -> type[Serializer]:
+    """Factory for parameter node serializer base class to handle boilerplate aspects of
+    the implementation of a serializer.
+
+    Args:
+        serialized_type: The type that is being serialized. To check whether an object can be
+            serialized with this serializer, the object's type is compared with this type.
+        default_args: args list to pass into the constructor of the serialized type to construct
+            a default object. If None then no args are passed.
+        default_kwargs: kwargs dict to pass into the constructor of the serialized type to construct
+            a default object. If None then no kwargs are passed.
+
+    Returns: An abstract base class deriving from Serializer which has implementations of boilerplate
+        methods in place. Only read and write methods need to be implemented from here.
+
+    """
+    if default_args is None:
+        default_args = []
+    if default_kwargs is None:
+        default_kwargs = {}
+    class SlicerOpenLIFUSerializerBase(Serializer):
+        @staticmethod
+        def canSerialize(type_) -> bool:
+            """
+            Whether the serializer can serialize the given type if it is properly instantiated.
+            """
+            return type_ == serialized_type
+
+        @classmethod
+        def create(cls, type_):
+            """
+            Creates a new serializer object based on the given type. If this class does not support the given type,
+            None is returned.
+            """
+            if SlicerOpenLIFUSerializerBase.canSerialize(type_):
+                # Add custom validators as we need them to the list here. For now just IsInstance.
+                return ValidatedSerializer(cls(), [validators.IsInstance(serialized_type)])
+            return None
+
+        def default(self):
+            """
+            The default value to use if another default is not specified.
+            """
+            return serialized_type(*default_args, **default_kwargs)
+
+        def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
+            """
+            Whether the parameterNode contains a parameter of the given name.
+            Note that most implementations can just use parameterNode.HasParameter(name).
+            """
+            return parameterNode.HasParameter(name)
+
+        def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
+            """
+            Removes the value of the given name from the parameterNode.
+            """
+            parameterNode.UnsetParameter(name)
+    return SlicerOpenLIFUSerializerBase
+
 @parameterNodeSerializer
-class OpenLIFUProtocolSerializer(Serializer):
-    @staticmethod
-    def canSerialize(type_) -> bool:
-        """
-        Whether the serializer can serialize the given type if it is properly instantiated.
-        """
-        return type_ == SlicerOpenLIFUProtocol
-
-    @staticmethod
-    def create(type_):
-        """
-        Creates a new serializer object based on the given type. If this class does not support the given type,
-        None is returned.
-        """
-        if OpenLIFUProtocolSerializer.canSerialize(type_):
-            # Add custom validators as we need them to the list here. For now just IsInstance.
-            return ValidatedSerializer(OpenLIFUProtocolSerializer(), [validators.IsInstance(SlicerOpenLIFUProtocol)])
-        return None
-
-    def default(self):
-        """
-        The default value to use if another default is not specified.
-        """
-        return SlicerOpenLIFUProtocol()
-
-    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
-        """
-        Whether the parameterNode contains a parameter of the given name.
-        Note that most implementations can just use parameterNode.HasParameter(name).
-        """
-        return parameterNode.HasParameter(name)
-
+class OpenLIFUProtocolSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUProtocol)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUProtocol) -> None:
         """
         Writes the value to the parameterNode under the given name.
@@ -104,45 +136,8 @@ class OpenLIFUProtocolSerializer(Serializer):
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUProtocol(openlifu_lz().Protocol.from_json(json_string))
 
-    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
-        """
-        Removes the value of the given name from the parameterNode.
-        """
-        parameterNode.UnsetParameter(name)
-
 @parameterNodeSerializer
-class OpenLIFUTransducerSerializer(Serializer):
-    @staticmethod
-    def canSerialize(type_) -> bool:
-        """
-        Whether the serializer can serialize the given type if it is properly instantiated.
-        """
-        return type_ == SlicerOpenLIFUTransducerWrapper
-
-    @staticmethod
-    def create(type_):
-        """
-        Creates a new serializer object based on the given type. If this class does not support the given type,
-        None is returned.
-        """
-        if OpenLIFUTransducerSerializer.canSerialize(type_):
-            # Add custom validators as we need them to the list here. For now just IsInstance.
-            return ValidatedSerializer(OpenLIFUTransducerSerializer(), [validators.IsInstance(SlicerOpenLIFUTransducerWrapper)])
-        return None
-
-    def default(self):
-        """
-        The default value to use if another default is not specified.
-        """
-        return SlicerOpenLIFUTransducerWrapper()
-
-    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
-        """
-        Whether the parameterNode contains a parameter of the given name.
-        Note that most implementations can just use parameterNode.HasParameter(name).
-        """
-        return parameterNode.HasParameter(name)
-
+class OpenLIFUTransducerSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUTransducerWrapper)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUTransducerWrapper) -> None:
         """
         Writes the value to the parameterNode under the given name.
@@ -159,45 +154,8 @@ class OpenLIFUTransducerSerializer(Serializer):
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer.from_json(json_string))
 
-    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
-        """
-        Removes the value of the given name from the parameterNode.
-        """
-        parameterNode.UnsetParameter(name)
-
 @parameterNodeSerializer
-class OpenLIFUPointSerializer(Serializer):
-    @staticmethod
-    def canSerialize(type_) -> bool:
-        """
-        Whether the serializer can serialize the given type if it is properly instantiated.
-        """
-        return type_ == SlicerOpenLIFUPoint
-
-    @staticmethod
-    def create(type_):
-        """
-        Creates a new serializer object based on the given type. If this class does not support the given type,
-        None is returned.
-        """
-        if OpenLIFUPointSerializer.canSerialize(type_):
-            # Add custom validators as we need them to the list here. For now just IsInstance.
-            return ValidatedSerializer(OpenLIFUPointSerializer(), [validators.IsInstance(SlicerOpenLIFUPoint)])
-        return None
-
-    def default(self):
-        """
-        The default value to use if another default is not specified.
-        """
-        return SlicerOpenLIFUPoint()
-
-    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
-        """
-        Whether the parameterNode contains a parameter of the given name.
-        Note that most implementations can just use parameterNode.HasParameter(name).
-        """
-        return parameterNode.HasParameter(name)
-
+class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPoint)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUPoint) -> None:
         """
         Writes the value to the parameterNode under the given name.
@@ -214,45 +172,8 @@ class OpenLIFUPointSerializer(Serializer):
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUPoint(openlifu_lz().Point.from_json(json_string))
 
-    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
-        """
-        Removes the value of the given name from the parameterNode.
-        """
-        parameterNode.UnsetParameter(name)
-
 @parameterNodeSerializer
-class XarraydatasetSerializer(Serializer):
-    @staticmethod
-    def canSerialize(type_) -> bool:
-        """
-        Whether the serializer can serialize the given type if it is properly instantiated.
-        """
-        return type_ == SlicerOpenLIFUXADataset
-
-    @staticmethod
-    def create(type_):
-        """
-        Creates a new serializer object based on the given type. If this class does not support the given type,
-        None is returned.
-        """
-        if XarraydatasetSerializer.canSerialize(type_):
-            # Add custom validators as we need them to the list here. For now just IsInstance.
-            return ValidatedSerializer(XarraydatasetSerializer(), [validators.IsInstance(SlicerOpenLIFUXADataset)])
-        return None
-
-    def default(self):
-        """
-        The default value to use if another default is not specified.
-        """
-        return SlicerOpenLIFUXADataset()
-
-    def isIn(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> bool:
-        """
-        Whether the parameterNode contains a parameter of the given name.
-        Note that most implementations can just use parameterNode.HasParameter(name).
-        """
-        return parameterNode.HasParameter(name)
-
+class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUXADataset) -> None:
         """
         Writes the value to the parameterNode under the given name.
@@ -271,12 +192,6 @@ class XarraydatasetSerializer(Serializer):
         ds_serialized = parameterNode.GetParameter(name)
         ds_deserialized = xarray_lz().open_dataset(base64.b64decode(ds_serialized.encode('utf-8')))
         return SlicerOpenLIFUXADataset(ds_deserialized)
-
-    def remove(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> None:
-        """
-        Removes the value of the given name from the parameterNode.
-        """
-        parameterNode.UnsetParameter(name)
 
 @parameterNodeSerializer
 class NumpyArraySerializer(Serializer):
