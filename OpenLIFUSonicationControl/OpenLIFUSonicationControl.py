@@ -11,6 +11,8 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
+from OpenLIFULib import get_openlifu_data_parameter_node
+
 #
 # OpenLIFUSonicationControl
 #
@@ -103,7 +105,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
     
         self.addObserver(
-            slicer.util.getModuleLogic('OpenLIFUData').getParameterNode().parameterNode,
+            get_openlifu_data_parameter_node().parameterNode,
             vtk.vtkCommand.ModifiedEvent,
             self.onDataParameterNodeModified
         )

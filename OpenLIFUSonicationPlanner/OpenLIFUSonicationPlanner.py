@@ -24,6 +24,7 @@ from OpenLIFULib import (
     fiducial_to_openlifu_point_in_transducer_coords,
     make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
+    get_openlifu_data_parameter_node,
     BusyCursor,
 )
 
@@ -118,13 +119,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Initialize UI
-        self.OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
         self.updateComboBoxOptions()
         self.updatePlanProgressBar()
         self.updateRenderPNPCheckBox()
 
         # Add an observer on the Data module's parameter node
-        self.addObserver(self.OpenLIFUDataLogic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # This ensures we update the drop down options in the volume and fiducial combo boxes when nodes are added/removed
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
@@ -215,7 +215,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         The volumes and fiducials are tracked as vtkMRML nodes. 
         The dropdowns are disabled if the relevant OpenLIFU objects/nodes aren't found"""
 
-        dataLogicParameterNode = self.OpenLIFUDataLogic.getParameterNode()
+        dataLogicParameterNode = get_openlifu_data_parameter_node()
 
         # Update parameter combo box
         self.ui.ProtocolComboBox.clear() 
@@ -265,13 +265,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Update the plan progress bar. 0% if there is no existing plan, 100% if there is an existing plan."""
         self.ui.planProgressBar.maximum = 1 # (during planning we set maxmimum=0 to put it into an infinite loading animation)
 
-        if self.OpenLIFUDataLogic.getParameterNode().loaded_plan is None:
+        if get_openlifu_data_parameter_node().loaded_plan is None:
             self.ui.planProgressBar.value = 0
         else:
             self.ui.planProgressBar.value = 1
 
     def updateRenderPNPCheckBox(self):
-        if self.OpenLIFUDataLogic.getParameterNode().loaded_plan is None:
+        if get_openlifu_data_parameter_node().loaded_plan is None:
             self.ui.renderPNPCheckBox.enabled = False
             self.ui.renderPNPCheckBox.checked = False
             self.ui.renderPNPCheckBox.setToolTip("Run planning first to generate a PNP volume that can be visualized")
@@ -417,7 +417,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
 
     def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:
         """Get the PNP volume of the active plan, if there is an active plan. Return None if there isn't."""
-        plan : SlicerOpenLIFUPlan = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode().loaded_plan
+        plan : SlicerOpenLIFUPlan = get_openlifu_data_parameter_node().loaded_plan
         if plan is None:
             return None
         return plan.pnp

@@ -26,6 +26,7 @@ from OpenLIFULib.busycursor import BusyCursor
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
     import xarray
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataParameterNode
 
 __all__ = [
     "openlifu_lz",
@@ -47,6 +48,10 @@ __all__ = [
     "make_xarray_in_transducer_coords_from_volume",
     "BusyCursor",
 ]
+
+def get_openlifu_data_parameter_node() -> "OpenLIFUDataParameterNode":
+    """Get the parameter node of the OpenLIFU Data module"""
+    return slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
 
 def display_errors(f):
     """Decorator to make functions forward their python exceptions along as slicer error displays"""
