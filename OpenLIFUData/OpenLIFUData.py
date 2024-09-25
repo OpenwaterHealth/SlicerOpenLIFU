@@ -614,6 +614,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def get_subject(self, subject_id:str) -> "openlifu.db.subject.Subject":
         """Get the Subject with a given ID"""
+        if self.db is None:
+            raise RuntimeError("Unable to fetch subject info because there is no loaded database.")
         try:
             return self._subjects[subject_id] # use the in-memory Subject if it is in memory
         except KeyError:
@@ -622,6 +624,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def get_sessions(self, subject_id:str) -> "List[openlifu.db.session.Session]":
         """Get the collection of Sessions associated with a given subject ID"""
+        if self.db is None:
+            raise RuntimeError("Unable to fetch session info because there is no loaded database.")
         return [
             self.db.load_session(
                 self.get_subject(subject_id),
@@ -646,12 +650,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def get_session(self, subject_id:str, session_id:str) -> "openlifu.db.session.Session":
         """Fetch the Session with the given ID"""
+        if self.db is None:
+            raise RuntimeError("Unable to fetch session info because there is no loaded database.")
         return self.db.load_session(self.get_subject(subject_id), session_id)
 
     def load_session(self, subject_id, session_id) -> None:
         # === Ensure it's okay to load a session ===
         session = self.get_session(subject_id, session_id)
-        if session.transducer_id in self.getParameterNode().loaded_transducers:
+        if session.transducer_id in self.getParameterNode().loaded_transducers and session.transducer_id != self.session_transducer_id:
             if not slicer.util.confirmYesNoDisplay(
                 f"Loading this session will replace the already loaded transducer with ID {session.transducer_id}. Proceed?",
                 "Confirm replace transducer"
