@@ -17,6 +17,7 @@ from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
+    import openlifu.db
     import xarray
 
 
@@ -47,6 +48,13 @@ class SlicerOpenLIFUPoint:
     support while we still do lazy-loading of openlifu."""
     def __init__(self, point: "Optional[openlifu.Point]" = None):
         self.point = point
+
+# For the same reason we have a thin wrapper around openlifu.Session
+class SlicerOpenLIFUSessionWrapper:
+    """Ultrathin wrapper of openlifu.Session. This exists so that sessions can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, session: "Optional[openlifu.db.Session]" = None):
+        self.session = session
 
 # For the same reason we have a thin wrapper around xarray.Dataset
 class SlicerOpenLIFUXADataset:
@@ -153,6 +161,18 @@ class OpenLIFUTransducerSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenL
         """
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer.from_json(json_string))
+
+@parameterNodeSerializer
+class OpenLIFUSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSessionWrapper)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUSessionWrapper) -> None:
+        parameterNode.SetParameter(
+            name,
+            value.session.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSessionWrapper:
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUSessionWrapper(openlifu_lz().db.Session.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPoint)):

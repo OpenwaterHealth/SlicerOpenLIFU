@@ -1,10 +1,11 @@
 import qt
 import vtk
-from typing import Any, List, Sequence, TYPE_CHECKING, NamedTuple, Optional
+from typing import Any, List, Sequence, TYPE_CHECKING, NamedTuple, Optional, Tuple
 from scipy.ndimage import affine_transform
 from vtk.util import numpy_support
 import numpy as np
 from numpy.typing import NDArray
+from pathlib import Path
 import slicer
 from slicer import (
     vtkMRMLModelNode,
@@ -18,6 +19,7 @@ import logging
 from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUTransducerWrapper,
+    SlicerOpenLIFUSessionWrapper,
     SlicerOpenLIFUPoint,
     SlicerOpenLIFUXADataset,
     SlicerOpenLIFUProtocol,
@@ -25,6 +27,7 @@ from OpenLIFULib.parameter_node_utils import (
 from OpenLIFULib.busycursor import BusyCursor
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
+    import openlifu.db
     import xarray
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataParameterNode
 
@@ -158,7 +161,7 @@ def linear_to_affine(matrix, translation=None):
 
 def get_RAS2IJK(volume_node: vtkMRMLScalarVolumeNode):
     """Get the _world_ RAS to volume IJK affine matrix for a given volume node.
-    
+
     This takes into account any transforms that the volume node may be subject to.
 
     Returns a numpy array of shape (4,4).
@@ -208,7 +211,7 @@ def make_volume_from_xarray_in_transducer_coords(data_array: "xarray.DataArray",
     volumeNode.CreateDefaultDisplayNodes()
 
     volumeNode.SetAndObserveTransformNodeID(transducer.transform_node.GetID())
-    
+
     return volumeNode
 
 def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolumeNode, transducer:"SlicerOpenLIFUTransducer", protocol:"openlifu.Protocol") -> "xarray.DataArray":
@@ -221,7 +224,7 @@ def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolume
     coords_shape = tuple(coords.sizes.values())
 
     # Here are the coordinate systems involved:
-    # ijk : DataArray indices. When running openlifu simulations, this would typically be the "simulation grid" 
+    # ijk : DataArray indices. When running openlifu simulations, this would typically be the "simulation grid"
     # xyz : Transducer coordinates. x=lateral, y=elevation, z=axial. When the transducer is on the patient forehead, this roughly relates
     # to patient coordinates as follows: x=right, y=superior, z=posterior. (When I say x=right I mean x increases as you go right)
     # ras : The slicer world RAS coordinate system
@@ -259,14 +262,14 @@ class SlicerOpenLIFUTransducer:
             transducer_matrix_units: Optional[str]=None,
         ) -> "SlicerOpenLIFUTransducer":
         """Initialize object with needed scene nodes from just the openlifu object.
-        
+
         Args:
             transducer: The openlifu Transducer object
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
                 these units. If left as None then the transducer's native units (Transducer.units) will be assumed.
-        
+
         Returns: the newly constructed SlicerOpenLIFUTransducer object
         """
 
@@ -302,6 +305,80 @@ class SlicerOpenLIFUTransducer:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.transform_node)
+
+@parameterPack
+class SlicerOpenLIFUSession:
+    """An openlifu Session that has been loaded into Slicer (i.e. has associated scene data)"""
+    session : SlicerOpenLIFUSessionWrapper
+    volume_node : vtkMRMLScalarVolumeNode
+    target_nodes : List[vtkMRMLMarkupsFiducialNode]
+
+    def get_transducer_id(self) -> Optional[str]:
+        """Get the ID of the openlifu transducer associated with this session"""
+        return self.session.session.transducer_id
+
+    def transducer_is_valid(self) -> bool:
+        """Return whether this session's transducer is present in the list of loaded objects."""
+        return self.get_transducer_id() in get_openlifu_data_parameter_node().loaded_transducers
+
+    def volume_is_valid(self) -> bool:
+        """Return whether this session's volume is present in the scene."""
+        return (
+            self.volume_node is not None
+            and slicer.mrmlScene.GetNodeByID(self.volume_node.GetID()) is not None
+        )
+
+    def clear_volume_and_target_nodes(self) -> None:
+        """Clear the session's affiliated volume and target nodes from the scene."""
+        for node in [self.volume_node, *self.target_nodes]:
+            if node is not None:
+                slicer.mrmlScene.RemoveNode(node)
+
+    def get_initial_center_point(self) -> Tuple[float]:
+        """Get a point in slicer RAS space that would be reasonable to start slices centered on when first loading this session.
+        Returns the coordintes of the first target if there is one, or the middle of the volume otherwise."""
+        if self.target_nodes:
+            return self.target_nodes[0].GetNthControlPointPosition(0)
+        bounds = [0]*6
+        self.volume_node.GetRASBounds(bounds)
+        return tuple(np.array(bounds).reshape((3,2)).sum(axis=1) / 2) # midpoints derived from bounds
+
+    @staticmethod
+    def initialize_from_openlifu_session(
+        session : "openlifu.db.Session",
+        volume_path : Path,
+    ) -> "SlicerOpenLIFUSession":
+        """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene."""
+
+        # === Load volume ===
+
+        volume_node = slicer.util.loadVolume(volume_path)
+        volume_node.SetName(slicer.mrmlScene.GenerateUniqueName(session.volume_id))
+
+         # === Load targets ===
+
+        target_nodes = []
+        for target in session.targets:
+
+            target_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+            target_nodes.append(target_node)
+            target_node.SetName(slicer.mrmlScene.GenerateUniqueName(target.id))
+
+            # Get target position and convert it to Slicer coordinates
+            position = np.array(target.position)
+            position = get_xxx2ras_matrix(target.dims) @ position
+            position = get_xx2mm_scale_factor(target.units) * position
+
+            target_node.SetControlPointLabelFormat(target.name)
+            target_display_node = target_node.GetDisplayNode()
+            target_display_node.SetSelectedColor(target.color)
+            target_node.SetLocked(True)
+
+            target_node.AddControlPoint(
+                position
+            )
+
+        return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
 
 class PlanFocus(NamedTuple):
     """Information that is generated by the SlicerOpenLIFU planning module for a particular focus point"""

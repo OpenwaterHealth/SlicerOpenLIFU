@@ -24,6 +24,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUPlan,
+    SlicerOpenLIFUSession,
     display_errors,
     create_noneditable_QStandardItem,
     ensure_list,
@@ -34,6 +35,7 @@ from OpenLIFULib import (
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu.db
 
 #
 # OpenLIFUData
@@ -73,6 +75,7 @@ class OpenLIFUDataParameterNode:
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
     loaded_plan : "Optional[SlicerOpenLIFUPlan]"
+    loaded_session : "Optional[SlicerOpenLIFUSession]"
 
 
 class AddNewSubjectDialog(qt.QDialog):
@@ -346,6 +349,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
         parameter_node = self.logic.getParameterNode()
+        if parameter_node.loaded_session is not None:
+            session : SlicerOpenLIFUSession = parameter_node.loaded_session
+            session_openlifu : "openlifu.db.Session" = session.session.session
+            row = list(map(
+                create_noneditable_QStandardItem,
+                [session_openlifu.name, "Session", session_openlifu.id]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
         for protocol in parameter_node.loaded_protocols.values():
             row = list(map(
                 create_noneditable_QStandardItem,
@@ -426,7 +437,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if node.IsA('vtkMRMLVolumeNode'):
             self.logic.validate_session()
             self.logic.validate_plan()
-        
+
         self.updateLoadedObjectsView()
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
@@ -498,12 +509,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db : Optional[openlifu.Database] = None
 
-        # Stuff related to the currently loaded session. These may later get refactored into a SlicerOpenLIFUSession class.
-        self.current_session : Optional[openlifu.db.session.Session] = None
-        self.volume_node: Optional[vtkMRMLScalarVolumeNode] = None
-        self.target_nodes: List[vtkMRMLMarkupsFiducialNode] = []
-        self.session_transducer_id: Optional[str] = None
-
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
 
 
@@ -519,18 +524,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 it was manually loaded without the context of a session. If True then the scene
                 content is removed.
         """
-        self.current_session = None
-
+        loaded_session = self.getParameterNode().loaded_session
+        if loaded_session is None:
+            return # There is no active session to clear
+        self.getParameterNode().loaded_session = None
         if clean_up_scene:
-            for node in [self.volume_node, *self.target_nodes]:
-                if node is not None:
-                    slicer.mrmlScene.RemoveNode(node)
-            if self.session_transducer_id in self.getParameterNode().loaded_transducers:
-                self.remove_transducer(self.session_transducer_id)
-
-        self.volume_node = None
-        self.target_nodes = []
-        self.session_transducer_id = None
+            loaded_session.clear_volume_and_target_nodes()
+            if loaded_session.get_transducer_id() in self.getParameterNode().loaded_transducers:
+                self.remove_transducer(loaded_session.get_transducer_id())
 
     def validate_session(self) -> bool:
         """Check to ensure that the currently active session is in a valid state, clearing out the session
@@ -540,11 +541,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         possible to invalidate a session. Outside of guided mode, users can do all kinds of things like deleting
         data nodes that are in use by a session."""
 
-        if self.current_session is None:
+        loaded_session = self.getParameterNode().loaded_session
+
+        if loaded_session is None:
             return False # There is no active session
 
         # Check transducer is present
-        if self.session_transducer_id not in self.getParameterNode().loaded_transducers:
+        if not loaded_session.transducer_is_valid():
             slicer.util.warningDisplay(
                 f"The transducer that was in use by the active session is now missing. The session will be unloaded.",
                 "Session invalidated"
@@ -553,7 +556,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             return False
 
         # Check volume is present
-        if self.volume_node is None or slicer.mrmlScene.GetNodeByID(self.volume_node.GetID()) is None:
+        if not loaded_session.volume_is_valid():
             slicer.util.warningDisplay(
                 f"The volume that was in use by the active session is now missing. The session will be unloaded.",
                 "Session invalidated"
@@ -654,12 +657,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Unable to fetch session info because there is no loaded database.")
         return self.db.load_session(self.get_subject(subject_id), session_id)
 
+    def get_current_session_transducer_id(self) -> Optional[str]:
+        """Get the transducer ID of the current session, if there is a current session. Returns None
+        if there isn't a current session."""
+        if self.getParameterNode().loaded_session is None:
+            return None
+        return self.getParameterNode().loaded_session.get_transducer_id()
+
     def load_session(self, subject_id, session_id) -> None:
         # === Ensure it's okay to load a session ===
-        session = self.get_session(subject_id, session_id)
-        if session.transducer_id in self.getParameterNode().loaded_transducers and session.transducer_id != self.session_transducer_id:
+        session_openlifu = self.get_session(subject_id, session_id)
+        loaded_session = self.getParameterNode().loaded_session
+        if (
+            session_openlifu.transducer_id in self.getParameterNode().loaded_transducers
+            and (
+                loaded_session is None
+                or session_openlifu.transducer_id != loaded_session.get_transducer_id()
+            )
+        ):
             if not slicer.util.confirmYesNoDisplay(
-                f"Loading this session will replace the already loaded transducer with ID {session.transducer_id}. Proceed?",
+                f"Loading this session will replace the already loaded transducer with ID {session_openlifu.transducer_id}. Proceed?",
                 "Confirm replace transducer"
             ):
                 return
@@ -668,15 +685,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.clear_session()
 
-        self.current_session = session
-        volume_id = self.current_session.volume_id
-        volume_filename_maybe = Path(self.db.get_volume_filename(subject_id, volume_id))
+        # Identify volume path. This will be simply db.get_volume_filepath after https://github.com/OpenwaterHealth/OpenLIFU-python/pull/123
+        volume_filename_maybe = Path(self.db.get_volume_filename(subject_id, session_openlifu.volume_id))
         volume_file_candidates = volume_filename_maybe.parent.glob(
             volume_filename_maybe.name.split('.')[0] + '.*'
         )
-
-        # === Load volume ===
-
         volume_files = [
             volume_path
             for volume_path in volume_file_candidates
@@ -686,56 +699,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             raise FileNotFoundError(f"Could not find a volume file for subject {subject_id}, session {session_id}.")
         if len(volume_files) > 1:
             raise FileNotFoundError(f"Found multiple candidate volume files for subject {subject_id}, session {session_id}.")
-
         volume_path = volume_files[0]
 
-        self.volume_node = slicer.util.loadVolume(volume_path)
-        self.volume_node.SetName(slicer.mrmlScene.GenerateUniqueName(volume_id))
-
-        # === Load targets ===
-
-        for target in self.current_session.targets:
-
-            target_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-            self.target_nodes.append(target_node)
-            target_node.SetName(slicer.mrmlScene.GenerateUniqueName(target.id))
-
-                # Get target position and convert it to Slicer coordinates
-            position = np.array(target.position)
-            position = get_xxx2ras_matrix(target.dims) @ position
-            position = get_xx2mm_scale_factor(target.units) * position
-
-            target_node.SetControlPointLabelFormat(target.name)
-            target_display_node = target_node.GetDisplayNode()
-            target_display_node.SetSelectedColor(target.color)
-            target_node.SetLocked(True)
-
-            target_node.AddControlPoint(
-                position
-            )
+        # Create the SlicerOpenLIFU session object; this handles loading volume and targets
+        new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(
+            session_openlifu,
+            volume_path,
+        )
 
         # === Load transducer ===
 
-        # Get transducer data from session
-        transducer_id = self.current_session.transducer_id
-        transducer_matrix = self.current_session.array_transform.matrix
-        transducer_matrix_units = self.current_session.array_transform.units
-
-        # Load transducer
-        transducer = self.db.load_transducer(transducer_id)
         self.load_transducer_from_openlifu(
-            transducer,
-            transducer_matrix=transducer_matrix,
-            transducer_matrix_units=transducer_matrix_units,
-            replace_confirmed=True
+            transducer = self.db.load_transducer(session_openlifu.transducer_id),
+            transducer_matrix = session_openlifu.array_transform.matrix,
+            transducer_matrix_units = session_openlifu.array_transform.units,
+            replace_confirmed = True
         )
-
-        # Set that as the current transducer of the active session
-        self.session_transducer_id = transducer_id
 
         # === Toggle slice visibility and center slices on first target ===
 
-        slices_center_point = self.target_nodes[0].GetNthControlPointPosition(0)
+        slices_center_point = new_session.get_initial_center_point()
         for slice_node_name in ["Red", "Green", "Yellow"]:
             sliceNode = slicer.util.getFirstNodeByClassByName("vtkMRMLSliceNode", slice_node_name)
             sliceNode.JumpSliceByCentering(*slices_center_point)
@@ -744,6 +727,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         sliceNode.SetSliceVisible(True)
         sliceNode = slicer.util.getFirstNodeByClassByName("vtkMRMLSliceNode", "Yellow")
         sliceNode.SetSliceVisible(True)
+
+        # === Set the newly created session as the currently active session ===
+
+        self.getParameterNode().loaded_session = new_session
 
 
     def load_protocol(self, filepath:str) -> None:
@@ -779,7 +766,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Transducer.
                 This could be used for example if we already know the user is okay with re-loading the transducer.
         """
-        if transducer.id == self.session_transducer_id:
+        if transducer.id == self.get_current_session_transducer_id():
             slicer.util.errorDisplay(
                 f"A transducer with ID {transducer.id} is in use by the current session. Not loading it.",
                 "Transducer in use by session",
@@ -847,7 +834,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             # If the transducer that was just removed was in use by an active session, invalidate that session
             self.validate_session()
-    
+
     def set_plan(self, plan:SlicerOpenLIFUPlan):
         self.getParameterNode().loaded_plan = plan
 
