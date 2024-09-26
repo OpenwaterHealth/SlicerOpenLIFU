@@ -41,7 +41,10 @@ def check_and_install_python_requirements(prompt_if_found = False) -> None:
     if want_install:
         install_python_requirements()
         if python_requirements_exist():
-            slicer.util.infoDisplay(text="Python requirements installed.", windowTitle="Success")
+            slicer.util.infoDisplay(
+                text="Python requirements installed. Please restart the application to ensure it takes effect.",
+                windowTitle="Success"
+            )
         else:
             slicer.util.errorDisplay(
                 text="OpenLIFU python dependencies are still not found. The install may have failed.",
