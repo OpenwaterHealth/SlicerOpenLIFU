@@ -704,26 +704,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.clear_session()
 
-        # Identify volume path. This will be simply db.get_volume_filepath after https://github.com/OpenwaterHealth/OpenLIFU-python/pull/123
-        volume_filename_maybe = Path(self.db.get_volume_filename(subject_id, session_openlifu.volume_id))
-        volume_file_candidates = volume_filename_maybe.parent.glob(
-            volume_filename_maybe.name.split('.')[0] + '.*'
-        )
-        volume_files = [
-            volume_path
-            for volume_path in volume_file_candidates
-            if slicer.app.coreIOManager().fileType(volume_path) == 'VolumeFile'
-        ]
-        if len(volume_files) < 1:
-            raise FileNotFoundError(f"Could not find a volume file for subject {subject_id}, session {session_id}.")
-        if len(volume_files) > 1:
-            raise FileNotFoundError(f"Found multiple candidate volume files for subject {subject_id}, session {session_id}.")
-        volume_path = volume_files[0]
+        volume_info = self.db.get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
         # Create the SlicerOpenLIFU session object; this handles loading volume and targets
         new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(
             session_openlifu,
-            volume_path,
+            volume_path = volume_info["data_abspath"],
         )
 
         # === Load transducer ===
