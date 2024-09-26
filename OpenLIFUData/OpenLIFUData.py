@@ -317,7 +317,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "Protocols (*.json);;All Files (*)", # file type filter
         )
         if filepath:
-            self.logic.load_protocol(filepath)
+            self.logic.load_protocol_from_file(filepath)
 
     @display_errors
     def onLoadTransducerPressed(self, checked:bool) -> None:
@@ -532,6 +532,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             loaded_session.clear_volume_and_target_nodes()
             if loaded_session.get_transducer_id() in self.getParameterNode().loaded_transducers:
                 self.remove_transducer(loaded_session.get_transducer_id())
+            if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
+                self.remove_protocol(loaded_session.get_protocol_id())
 
     def validate_session(self) -> bool:
         """Check to ensure that the currently active session is in a valid state, clearing out the session
@@ -665,7 +667,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         return self.getParameterNode().loaded_session.get_transducer_id()
 
     def load_session(self, subject_id, session_id) -> None:
+
         # === Ensure it's okay to load a session ===
+
         session_openlifu = self.get_session(subject_id, session_id)
         loaded_session = self.getParameterNode().loaded_session
         if (
@@ -673,11 +677,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             and (
                 loaded_session is None
                 or session_openlifu.transducer_id != loaded_session.get_transducer_id()
+                # (we are okay reloading the transducer if it's just the one affiliated with the session, since user already decided to replace the session)
             )
         ):
             if not slicer.util.confirmYesNoDisplay(
                 f"Loading this session will replace the already loaded transducer with ID {session_openlifu.transducer_id}. Proceed?",
                 "Confirm replace transducer"
+            ):
+                return
+
+        if (
+            session_openlifu.protocol_id in self.getParameterNode().loaded_protocols
+            and (
+                loaded_session is None
+                or session_openlifu.protocol_id != loaded_session.get_protocol_id()
+                # (we are okay reloading the protocol if it's just the one affiliated with the session, since user already decided to replace the session)
+            )
+        ):
+            if not slicer.util.confirmYesNoDisplay(
+                f"Loading this session will replace the already loaded protocol with ID {session_openlifu.protocol_id}. Proceed?",
+                "Confirm replace protocol"
             ):
                 return
 
@@ -713,7 +732,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer = self.db.load_transducer(session_openlifu.transducer_id),
             transducer_matrix = session_openlifu.array_transform.matrix,
             transducer_matrix_units = session_openlifu.array_transform.units,
-            replace_confirmed = True
+            replace_confirmed = True,
+        )
+
+        # === Load protocol ===
+
+        self.load_protocol_from_openlifu(
+            self.db.load_protocol(session_openlifu.protocol_id),
+            replace_confirmed = True,
         )
 
         # === Toggle slice visibility and center slices on first target ===
@@ -733,15 +759,34 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.getParameterNode().loaded_session = new_session
 
 
-    def load_protocol(self, filepath:str) -> None:
+    def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
-        if protocol.id in self.getParameterNode().loaded_protocols:
+        self.load_protocol_from_openlifu(protocol)
+
+    def load_protocol_from_openlifu(self, protocol:"openlifu.Protocol", replace_confirmed: bool = False) -> None:
+        """Load an openlifu protocol object into the scene as a SlicerOpenLIFUProtocol,
+        adding it to the list of loaded openlifu objects.
+
+        Args:
+            protocol: The openlifu Protocol object
+            replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Protocol.
+                This could be used for example if we already know the user is okay with re-loading the protocol.
+        """
+        loaded_protocols = self.getParameterNode().loaded_protocols
+        if protocol.id in loaded_protocols and not replace_confirmed:
             if not slicer.util.confirmYesNoDisplay(
                 f"A protocol with ID {protocol.id} is already loaded. Reload it?",
                 "Protocol already loaded",
             ):
                 return
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
+
+    def remove_protocol(self, protocol_id:str) -> None:
+        """Remove a protocol from the list of loaded protocols."""
+        loaded_protocols = self.getParameterNode().loaded_protocols
+        if not protocol_id in loaded_protocols:
+            raise IndexError(f"No protocol with ID {protocol_id} appears to be loaded; cannot remove it.")
+        loaded_protocols.pop(protocol_id)
 
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
