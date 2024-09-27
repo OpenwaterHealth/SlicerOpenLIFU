@@ -872,7 +872,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        self.db.write_subject(newOpenLIFUSubject, on_conflict = 'overwrite')
+        self.db.write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
 
 #
