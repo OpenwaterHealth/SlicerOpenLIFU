@@ -177,6 +177,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Add new subject
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
+        self.update_newSubjectButton_enabled()
 
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
@@ -217,6 +218,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.updateSettingFromParameter('databaseDirectory')
 
+        self.update_newSubjectButton_enabled()
+
     def updateSubjectSessionSelector(self):
         # Clear any items that are already there
         self.subjectSessionItemModel.removeRows(0,self.subjectSessionItemModel.rowCount())
@@ -236,6 +239,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this has a parent, then it is a session item rather than a subject item.
         # Otherwise, it is a top-level item, so it must be a subject.
         return index.parent().isValid()
+
+    def update_newSubjectButton_enabled(self):
+        """ Update whether the add new subject button is enabled based on whether a database has been loaded"""
+        if self.logic.db:
+            self.ui.newSubjectButton.setEnabled(True)
+            self.ui.newSubjectButton.toolTip = 'Add new subject to loaded database'
+        else:
+            self.ui.newSubjectButton.setDisabled(True)
+            self.ui.newSubjectButton.toolTip = 'Load a database to add new subject to first'
+
 
     def update_sessionLoadButton_enabled(self):
         """Update whether the session loading button is enabled based on whether any subject or session is selected."""
@@ -273,23 +286,19 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     @display_errors
     def onAddNewSubjectClicked(self, checked:bool) -> None:
 
-        if not self.logic.db:
-            slicer.util.errorDisplay("Database needs to be loaded first")
-            return
-        else:
-            subjectdlg = AddNewSubjectDialog()
-            returncode, subject_name, subject_id = subjectdlg.customexec_()
+        subjectdlg = AddNewSubjectDialog()
+        returncode, subject_name, subject_id = subjectdlg.customexec_()
 
-            if returncode:
-                if not len(subject_name) or not len(subject_id):
-                    slicer.util.errorDisplay("Subject name and ID may not be empty")
-                    return
-                else:
-                    # Add subject to database
-                    self.logic.add_subject_to_database(subject_name,subject_id)
+        if returncode:
+            if not len(subject_name) or not len(subject_id):
+                slicer.util.errorDisplay("Subject name and ID may not be empty")
+                return
+            else:
+                # Add subject to database
+                self.logic.add_subject_to_database(subject_name,subject_id)
 
-                    #Update loaded subjects view
-                    self.updateSubjectSessionSelector()
+                #Update loaded subjects view
+                self.updateSubjectSessionSelector()
 
         
     @display_errors
