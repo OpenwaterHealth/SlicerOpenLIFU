@@ -78,12 +78,11 @@ class OpenLIFUDataParameterNode:
 class AddNewSubjectDialog(qt.QDialog):
     """ Add new subject dialog """
 
-    def __init__(self, database, parent="mainWindow"):
+    def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Add New Subject")
         self.setWindowModality(1)
         self.setup()
-        self.db = database
 
     def setup(self):
         
@@ -278,7 +277,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.util.errorDisplay("Database needs to be loaded first")
             return
         else:
-            subjectdlg = AddNewSubjectDialog(self.logic.db)
+            subjectdlg = AddNewSubjectDialog()
             returncode, subject_name, subject_id = subjectdlg.customexec_()
 
             if returncode:
@@ -859,9 +858,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             subject_id: id of subject to be added (str)
         """
 
-        newOpenLIFUSubject = openlifu_lz().db.subject.Subject()
-        newOpenLIFUSubject.name = subject_name
-        newOpenLIFUSubject.id = subject_id
+        newOpenLIFUSubject = openlifu_lz().db.subject.Subject(
+            name = subject_name,
+            id = subject_id,
+        )
 
         subject_ids = self.db.get_subject_ids()
 

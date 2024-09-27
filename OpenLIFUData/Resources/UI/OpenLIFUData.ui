@@ -27,7 +27,7 @@
       <item>
        <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
         <property name="filters">
-         <set>ctkPathLineEdit::Dirs</set>
+         <string>ctkPathLineEdit::Dirs</string>
         </property>
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
