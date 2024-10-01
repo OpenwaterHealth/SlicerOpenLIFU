@@ -310,8 +310,14 @@ class SlicerOpenLIFUTransducer:
 class SlicerOpenLIFUSession:
     """An openlifu Session that has been loaded into Slicer (i.e. has associated scene data)"""
     session : SlicerOpenLIFUSessionWrapper
+
     volume_node : vtkMRMLScalarVolumeNode
+    """The volume of the session. This is meant to be owned by the session."""
+
     target_nodes : List[vtkMRMLMarkupsFiducialNode]
+    """The list of targets that were loaded by loading the session. We remember these here just
+    in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
+    fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
     def get_transducer_id(self) -> Optional[str]:
         """Get the ID of the openlifu transducer associated with this session"""
