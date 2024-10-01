@@ -234,6 +234,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.update_sessionLoadButton_enabled()
         self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
 
+        # Session management buttons
+        self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
+
         # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
         self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'Type', 'ID'])
@@ -343,6 +346,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 #Update loaded subjects view
                 self.updateSubjectSessionSelector()
 
+    def onUnloadSessionClicked(self, checked:bool) -> None:
+        self.logic.clear_session(clean_up_scene=True)
 
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -429,9 +434,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.loadedObjectsItemModel.appendRow(row)
 
     def updateSessionStatus(self):
+        """Update the active session status view and related buttons"""
         loaded_session = self.logic.getParameterNode().loaded_session
         if loaded_session is None:
             self.ui.sessionStatusStackedWidget.setCurrentIndex(0)
+            self.ui.unloadSessionButton.setEnabled(False)
+            self.ui.unloadSessionButton.setToolTip("There is no active session")
         else:
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             self.ui.sessionStatusNameValueLabel.setText(session_openlifu.name)
@@ -440,6 +448,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionStatusTransducerValueLabel.setText(session_openlifu.transducer_id)
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
+            self.ui.unloadSessionButton.setEnabled(True)
+            self.ui.unloadSessionButton.setToolTip("Unload the active session, cleaning up session-affiliated nodes in the scene")
 
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
