@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>489</height>
+    <height>687</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -73,8 +73,101 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="widget">
-     <property name="text">
+    <widget class="ctkCollapsibleButton" name="activeSessionCollapsibleButton" native="true">
+     <property name="text" stdset="0">
+      <string>Active session</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_4">
+      <item>
+       <widget class="QGroupBox" name="sessionStatusGroupBox">
+        <property name="title">
+         <string>Active session status</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_5">
+         <item>
+          <widget class="QStackedWidget" name="sessionStatusStackedWidget">
+           <property name="currentIndex">
+            <number>1</number>
+           </property>
+           <widget class="QWidget" name="noSession">
+            <layout class="QVBoxLayout" name="verticalLayout_6">
+             <item>
+              <widget class="QLabel" name="noSessionLabel">
+               <property name="text">
+                <string>No active session.</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="activeSession">
+            <layout class="QFormLayout" name="formLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="sessionStatusNameLabel">
+               <property name="text">
+                <string>Name:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="sessionStatusIdLabel">
+               <property name="text">
+                <string>ID:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="sessionStatusProtocolLabel">
+               <property name="text">
+                <string>Protocol:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="sessionStatusTransducerLabel">
+               <property name="text">
+                <string>Transducer:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="sessionStatusVolumeLabel">
+               <property name="text">
+                <string>Volume:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLabel" name="sessionStatusNameValueLabel"/>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLabel" name="sessionStatusIdValueLabel"/>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>
+             </item>
+             <item row="3" column="1">
+              <widget class="QLabel" name="sessionStatusTransducerValueLabel"/>
+             </item>
+             <item row="4" column="1">
+              <widget class="QLabel" name="sessionStatusVolumeValueLabel"/>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="objectsCollapsibleButton" native="true">
+     <property name="text" stdset="0">
       <string>OpenLIFU Objects</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">

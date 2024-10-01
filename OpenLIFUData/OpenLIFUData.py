@@ -252,6 +252,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
 
         self.updateLoadedObjectsView()
+        self.updateSessionStatus()
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
@@ -427,8 +428,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.loadedObjectsItemModel.appendRow(row)
 
+    def updateSessionStatus(self):
+        loaded_session = self.logic.getParameterNode().loaded_session
+        if loaded_session is None:
+            self.ui.sessionStatusStackedWidget.setCurrentIndex(0)
+        else:
+            session_openlifu : "openlifu.db.Session" = loaded_session.session.session
+            self.ui.sessionStatusNameValueLabel.setText(session_openlifu.name)
+            self.ui.sessionStatusIdValueLabel.setText(session_openlifu.id)
+            self.ui.sessionStatusProtocolValueLabel.setText(session_openlifu.protocol_id)
+            self.ui.sessionStatusTransducerValueLabel.setText(session_openlifu.transducer_id)
+            self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
+            self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
+
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
+        self.updateSessionStatus()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
