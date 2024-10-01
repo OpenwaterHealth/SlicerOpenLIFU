@@ -88,7 +88,7 @@ class AddNewSubjectDialog(qt.QDialog):
         self.setup()
 
     def setup(self):
-        
+
         self.setMinimumWidth(200)
 
         formLayout = qt.QFormLayout()
@@ -122,6 +122,43 @@ class AddNewSubjectDialog(qt.QDialog):
         subject_id = self.subjectID.text
 
         return (returncode, subject_name, subject_id)
+
+class ObjectBeingUnloadedMessageBox(qt.QMessageBox):
+    """Warning box for when an object is about to be or has been unloaded"""
+
+    def __init__(self, message:str, title:Optional[str] = None, parent="mainWindow", checkbox_tooltip:Optional[str] = None):
+        """Args:
+            message: The message to display
+            title: Dialog window title
+            parent: Parent QWidget, or just mainWindow to just use the Slicer main window as parent.
+            checkbox_tooltip: Optional tooltip to elaborate on what "clear affiliated data" would do
+        """
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle(title if title is not None else "Object removed")
+        self.setIcon(qt.QMessageBox.Warning)
+        self.setText(message)
+        self.checkbox = qt.QCheckBox("Clear affiliated data from the scene")
+        self.checkbox.setChecked(False) # By default we leave session-affiliated data in the scene
+        if checkbox_tooltip is not None:
+            self.checkbox.setToolTip(checkbox_tooltip)
+        self.setCheckBox(self.checkbox)
+        self.addButton(qt.QMessageBox.Ok)
+
+    def customexec_(self) -> bool:
+        """Show the dialog (blocking) and once it's closed return whether the checkbox was checked
+        (i.e. whether the user has opted to clear session-affiliated data from the scene)"""
+        self.exec_()
+        checkbox_checked = self.checkbox.isChecked()
+        return checkbox_checked
+
+def sessionInvalidatedDialogDisplay(message:str) -> bool:
+    """Display a warning dialog for when the active session has been invalidate, showing the specified message"""
+    return ObjectBeingUnloadedMessageBox(
+        message = message,
+        title = "Session invalidated",
+        checkbox_tooltip = "Unloads the volume and transducer affiliated with this session."
+    ).customexec_()
+
 
 #
 # OpenLIFUDataWidget
@@ -305,7 +342,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 #Update loaded subjects view
                 self.updateSubjectSessionSelector()
 
-        
+
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
         qsettings = qt.QSettings()
@@ -550,20 +587,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # Check transducer is present
         if not loaded_session.transducer_is_valid():
-            slicer.util.warningDisplay(
-                f"The transducer that was in use by the active session is now missing. The session will be unloaded.",
-                "Session invalidated"
+            clean_up_scene = sessionInvalidatedDialogDisplay(
+                "The transducer that was in use by the active session is now missing. The session will be unloaded.",
             )
-            self.clear_session(clean_up_scene=False)
+            self.clear_session(clean_up_scene=clean_up_scene)
             return False
 
         # Check volume is present
         if not loaded_session.volume_is_valid():
-            slicer.util.warningDisplay(
-                f"The volume that was in use by the active session is now missing. The session will be unloaded.",
-                "Session invalidated"
+            clean_up_scene = sessionInvalidatedDialogDisplay(
+                "The volume that was in use by the active session is now missing. The session will be unloaded.",
             )
-            self.clear_session(clean_up_scene=False)
+            self.clear_session(clean_up_scene=clean_up_scene)
             return False
 
         return True
@@ -580,11 +615,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # Check volumes are present
         for volume_node in [plan.intensity, plan.pnp]:
             if volume_node is None or slicer.mrmlScene.GetNodeByID(volume_node.GetID()) is None:
-                slicer.util.warningDisplay(
-                    f"A volume that was in use by the active plan is now missing. The plan will be unloaded.",
-                    "Plan invalidated"
-                )
-                self.clear_plan(clean_up_scene=False)
+                clean_up_scene = ObjectBeingUnloadedMessageBox(
+                    message="A volume that was in use by the active plan is now missing. The plan will be unloaded.",
+                    title="Plan invalidated",
+                ).customexec_()
+                self.clear_plan(clean_up_scene=clean_up_scene)
                 return False
 
         return True
@@ -857,11 +892,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # by manual mrml scene manipulation, so we don't want to pull other nodes out from
             # under the user.
             transducer_openlifu_id = matching_transducer_openlifu_ids[0]
-            slicer.util.warningDisplay(
-                f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
-                "Transducer removed"
-            )
-            self.remove_transducer(transducer_openlifu_id, clean_up_scene=False)
+            clean_up_scene = ObjectBeingUnloadedMessageBox(
+                message = f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
+                title="Transducer removed",
+                checkbox_tooltip = "Ensures cleanup of the model node and transform node affiliated with the transducer",
+            ).customexec_()
+            self.remove_transducer(transducer_openlifu_id, clean_up_scene=clean_up_scene)
 
             # If the transducer that was just removed was in use by an active session, invalidate that session
             self.validate_session()
@@ -878,11 +914,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 If True then the scene content is removed.
         """
         plan = self.getParameterNode().loaded_plan
+        self.getParameterNode().loaded_plan = None
         if plan is None:
             return
         if clean_up_scene:
             plan.clear_nodes()
-        self.getParameterNode().loaded_plan = None
     
     @display_errors
     def add_subject_to_database(self, subject_name, subject_id): 
