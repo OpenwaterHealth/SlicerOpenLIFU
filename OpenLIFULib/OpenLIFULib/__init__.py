@@ -178,12 +178,47 @@ def get_RAS2IJK(volume_node: vtkMRMLScalarVolumeNode):
         IJK_to_worldRAS = IJK_to_volumeRAS
     return IJK_to_worldRAS
 
+def openlifu_point_to_fiducial(point : "openlifu.Point") -> vtkMRMLMarkupsFiducialNode:
+    """Create a fiducial node out of an openlifu Point."""
+    fiducial_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+    fiducial_node.SetName(slicer.mrmlScene.GenerateUniqueName(point.id))
+
+    # Get point position and convert it to Slicer coordinates
+    position = np.array(point.position)
+    position = get_xxx2ras_matrix(point.dims) @ position
+    position = get_xx2mm_scale_factor(point.units) * position
+
+    target_display_node = fiducial_node.GetDisplayNode()
+    target_display_node.SetSelectedColor(point.color)
+    fiducial_node.SetLocked(True)
+
+    fiducial_node.AddControlPoint(
+        position
+    )
+    fiducial_node.SetNthControlPointLabel(0,point.name)
+
+    return fiducial_node
+
 def fiducial_to_openlifu_point_in_transducer_coords(fiducial_node:vtkMRMLMarkupsFiducialNode, transducer:"SlicerOpenLIFUTransducer", name:str = '') -> "openlifu.Point":
     """Given a fiducial node with at least one point, return an openlifu Point in the local coordinates of the given transducer."""
     if fiducial_node.GetNumberOfControlPoints() < 1:
         raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
     position = (np.linalg.inv(slicer.util.arrayFromTransformMatrix(transducer.transform_node)) @ np.array([*fiducial_node.GetNthControlPointPosition(0),1]))[:3] # TODO handle 4th coord here actually, would need to unprojectivize
     return openlifu_lz().Point(position=position, name = name, dims=('x','y','z'), units = transducer.transducer.transducer.units) # Here x,y,z means transducer coordinates.
+
+def fiducial_to_openlifu_point(fiducial_node:vtkMRMLMarkupsFiducialNode) -> "openlifu.Point":
+    """Given a fiducial node with at least one point, return an openlifu Point in RAS coordinates.
+    This tries to be roughly an inverse operation of `openlifu_point_to_fiducial`, but isn't an inverse when it comes to
+    for example the name, id, coordinates, and units."""
+    if fiducial_node.GetNumberOfControlPoints() < 1:
+        raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
+    return openlifu_lz().Point(
+        position = np.array(fiducial_node.GetNthControlPointPosition(0)),
+        name = fiducial_node.GetNthControlPointLabel(0),
+        id = fiducial_node.GetName(),
+        dims=('R','A','S'),
+        units = "mm",
+    )
 
 def make_volume_from_xarray_in_transducer_coords(data_array: "xarray.DataArray", transducer: "SlicerOpenLIFUTransducer") -> vtkMRMLScalarVolumeNode:
     """Convert a DataArray in the coordinates of a given transducer into a volume node. It is assumed that the DataArray coords form a regular grid.
@@ -247,6 +282,22 @@ def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolume
         attrs={'vtkMRMLNodeID':volume_node.GetID(),}
     )
     return volume_resampled_dataarray
+
+def get_target_candidates() -> List[vtkMRMLMarkupsFiducialNode]:
+    """Get all fiducial nodes that could be considered openlifu targets, i.e. sonication targets.
+
+    Right now the criterion is just that it be a fiducial markup with a single point in its point list.
+    However in the future we will probably also avoid certain attributes to exclude
+    for example a registration marker or a sonication focus point.
+    (Remember, sonication focus points are part of a focal pattern centered around a sonication target,
+    which is a concept we are distinguishing from sonication *target*)
+    """
+    return [
+        fiducial_node
+        for fiducial_node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode')
+        if fiducial_node.GetNumberOfControlPoints() == 1
+    ]
+
 
 @parameterPack
 class SlicerOpenLIFUTransducer:
@@ -360,35 +411,47 @@ class SlicerOpenLIFUSession:
     ) -> "SlicerOpenLIFUSession":
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene."""
 
-        # === Load volume ===
-
+        # Load volume
         volume_node = slicer.util.loadVolume(volume_path)
         volume_node.SetName(slicer.mrmlScene.GenerateUniqueName(session.volume_id))
 
-         # === Load targets ===
-
-        target_nodes = []
-        for target in session.targets:
-
-            target_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-            target_nodes.append(target_node)
-            target_node.SetName(slicer.mrmlScene.GenerateUniqueName(target.id))
-
-            # Get target position and convert it to Slicer coordinates
-            position = np.array(target.position)
-            position = get_xxx2ras_matrix(target.dims) @ position
-            position = get_xx2mm_scale_factor(target.units) * position
-
-            target_node.SetControlPointLabelFormat(target.name)
-            target_display_node = target_node.GetDisplayNode()
-            target_display_node.SetSelectedColor(target.color)
-            target_node.SetLocked(True)
-
-            target_node.AddControlPoint(
-                position
-            )
+        # Load targets
+        target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
 
         return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
+
+    def update_underlying_openlifu_session(self, targets : List[vtkMRMLMarkupsFiducialNode]) -> "openlifu.db.Session":
+        """Update the underlying openlifu session and the list of target nodes that are considered to be affiliated with this session.
+
+        Args:
+            targets: new list of targets
+
+        Returns: the now updated underlying openlifu Session
+        """
+
+        # Update target fiducial nodes in this object
+        self.target_nodes = targets
+
+        if self.session.session is None:
+            raise RuntimeError("No underlying openlifu session")
+
+        # Update target Points in the underlying Session
+        self.session.session.targets = list(map(fiducial_to_openlifu_point,targets))
+
+        # Update transducer transform in the underlying Session
+        transducer = get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]
+        transducer_openlifu = transducer.transducer.transducer
+        transducer_transform_node : vtkMRMLTransformNode = transducer.transform_node
+        transducer_transform_array = slicer.util.arrayFromTransformMatrix(transducer_transform_node, toWorld=True)
+        openlifu2slicer_matrix = linear_to_affine(
+            get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(transducer_openlifu.units)
+        )
+        self.session.session.array_transform = openlifu_lz().db.session.ArrayTransform(
+            matrix = np.linalg.inv(openlifu2slicer_matrix) @ transducer_transform_array,
+            units = transducer_openlifu.units,
+        )
+
+        return self.session.session
 
 class PlanFocus(NamedTuple):
     """Information that is generated by the SlicerOpenLIFU planning module for a particular focus point"""

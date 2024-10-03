@@ -15,8 +15,6 @@ from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import (
     vtkMRMLScriptedModuleNode,
-    vtkMRMLScalarVolumeNode,
-    vtkMRMLMarkupsFiducialNode,
 )
 
 from OpenLIFULib import (
@@ -29,8 +27,7 @@ from OpenLIFULib import (
     create_noneditable_QStandardItem,
     ensure_list,
     add_slicer_log_handler,
-    get_xxx2ras_matrix,
-    get_xx2mm_scale_factor,
+    get_target_candidates,
 )
 
 if TYPE_CHECKING:
@@ -236,6 +233,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Session management buttons
         self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
+        self.ui.saveSessionButton.clicked.connect(self.onSaveSessionClicked)
 
         # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
@@ -346,8 +344,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 #Update loaded subjects view
                 self.updateSubjectSessionSelector()
 
+    @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
         self.logic.clear_session(clean_up_scene=True)
+
+    @display_errors
+    def onSaveSessionClicked(self, checked:bool) -> None:
+        self.logic.save_session()
 
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -438,8 +441,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         loaded_session = self.logic.getParameterNode().loaded_session
         if loaded_session is None:
             self.ui.sessionStatusStackedWidget.setCurrentIndex(0)
-            self.ui.unloadSessionButton.setEnabled(False)
-            self.ui.unloadSessionButton.setToolTip("There is no active session")
+            for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
+                button.setEnabled(False)
+                button.setToolTip("There is no active session")
         else:
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             self.ui.sessionStatusNameValueLabel.setText(session_openlifu.name)
@@ -448,8 +452,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionStatusTransducerValueLabel.setText(session_openlifu.transducer_id)
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
-            self.ui.unloadSessionButton.setEnabled(True)
+            for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
+                button.setEnabled(True)
             self.ui.unloadSessionButton.setToolTip("Unload the active session, cleaning up session-affiliated nodes in the scene")
+            self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
 
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
@@ -596,6 +602,27 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.remove_transducer(loaded_session.get_transducer_id())
             if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
                 self.remove_protocol(loaded_session.get_protocol_id())
+
+    def save_session(self) -> None:
+        """Save the current session to the openlifu database.
+        This first writes the transducer and target information into the in-memory openlifu Session object,
+        and then it writes that Session object to the database.
+        """
+
+        if self.db is None:
+            raise RuntimeError("Cannot save session because there is no database connection")
+
+        if not self.validate_session():
+            raise RuntimeError("Cannot save session because there is no active session, or the active session was invalid.")
+
+        loaded_session : SlicerOpenLIFUSession = self.getParameterNode().loaded_session
+        targets = get_target_candidates() # future TODO: ask the user which targets they want to include in the session
+        session_openlifu = loaded_session.update_underlying_openlifu_session(targets)
+
+        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+        self.db.write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
+
+
 
     def validate_session(self) -> bool:
         """Check to ensure that the currently active session is in a valid state, clearing out the session
@@ -944,9 +971,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             return
         if clean_up_scene:
             plan.clear_nodes()
-    
+
     @display_errors
-    def add_subject_to_database(self, subject_name, subject_id): 
+    def add_subject_to_database(self, subject_name, subject_id):
         """ Adds new subject to loaded openlifu database.
 
         Args:
