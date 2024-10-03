@@ -191,6 +191,7 @@ def openlifu_point_to_fiducial(point : "openlifu.Point") -> vtkMRMLMarkupsFiduci
     target_display_node = fiducial_node.GetDisplayNode()
     target_display_node.SetSelectedColor(point.color)
     fiducial_node.SetLocked(True)
+    fiducial_node.SetMaximumNumberOfControlPoints(1)
 
     fiducial_node.AddControlPoint(
         position

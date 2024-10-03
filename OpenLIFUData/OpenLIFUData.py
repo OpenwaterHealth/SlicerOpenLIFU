@@ -424,9 +424,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for fiducial_node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode'):
+            points_type = "Point" if fiducial_node.GetMaximumNumberOfControlPoints() == 1 else "Points"
             row = list(map(
                 create_noneditable_QStandardItem,
-                [fiducial_node.GetName(), "Points", fiducial_node.GetID()]
+                [fiducial_node.GetName(), points_type, fiducial_node.GetID()]
             ))
             self.loadedObjectsItemModel.appendRow(row)
         if parameter_node.loaded_plan is not None:
