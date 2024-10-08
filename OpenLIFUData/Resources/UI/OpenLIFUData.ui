@@ -7,14 +7,17 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>749</height>
+    <height>648</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton">
-     <property name="text">
+    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton" native="true">
+     <property name="text" stdset="0">
       <string>Sessions</string>
+     </property>
+     <property name="collapsed" stdset="0">
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
@@ -25,8 +28,8 @@
        </widget>
       </item>
       <item>
-       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
-        <property name="filters">
+       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit" native="true">
+        <property name="filters" stdset="0">
          <string>ctkPathLineEdit::Dirs</string>
         </property>
         <property name="SlicerParameterName" stdset="0">
@@ -77,89 +80,126 @@
      <property name="text" stdset="0">
       <string>Active session</string>
      </property>
+     <property name="collapsed" stdset="0">
+      <bool>true</bool>
+     </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
-       <widget class="QGroupBox" name="sessionStatusGroupBox">
-        <property name="title">
-         <string>Active session status</string>
+       <widget class="QScrollArea" name="scrollArea">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayout_5">
-         <item>
-          <widget class="QStackedWidget" name="sessionStatusStackedWidget">
-           <property name="currentIndex">
-            <number>1</number>
-           </property>
-           <widget class="QWidget" name="noSession">
-            <layout class="QVBoxLayout" name="verticalLayout_6">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>200</height>
+         </size>
+        </property>
+        <property name="verticalScrollBarPolicy">
+         <enum>Qt::ScrollBarAsNeeded</enum>
+        </property>
+        <property name="widgetResizable">
+         <bool>true</bool>
+        </property>
+        <widget class="QWidget" name="scrollAreaWidgetContents">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>0</y>
+           <width>299</width>
+           <height>198</height>
+          </rect>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_7">
+          <item>
+           <widget class="QGroupBox" name="sessionStatusGroupBox">
+            <property name="title">
+             <string>Active session status</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_5">
              <item>
-              <widget class="QLabel" name="noSessionLabel">
-               <property name="text">
-                <string>No active session.</string>
+              <widget class="QStackedWidget" name="sessionStatusStackedWidget">
+               <property name="currentIndex">
+                <number>1</number>
                </property>
-               <property name="alignment">
-                <set>Qt::AlignCenter</set>
-               </property>
+               <widget class="QWidget" name="noSession">
+                <layout class="QVBoxLayout" name="verticalLayout_6">
+                 <item>
+                  <widget class="QLabel" name="noSessionLabel">
+                   <property name="text">
+                    <string>No active session.</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+               <widget class="QWidget" name="activeSession">
+                <layout class="QFormLayout" name="formLayout">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="sessionStatusSubjectNameIdLabel">
+                   <property name="text">
+                    <string>Subject Name (ID):</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="sessionStatusSessionNameIdLabel">
+                   <property name="text">
+                    <string>Session Name (ID):</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="0">
+                  <widget class="QLabel" name="sessionStatusProtocolLabel">
+                   <property name="text">
+                    <string>Protocol:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="3" column="0">
+                  <widget class="QLabel" name="sessionStatusTransducerLabel">
+                   <property name="text">
+                    <string>Transducer:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="4" column="0">
+                  <widget class="QLabel" name="sessionStatusVolumeLabel">
+                   <property name="text">
+                    <string>Volume:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel"/>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel"/>
+                 </item>
+                 <item row="2" column="1">
+                  <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>
+                 </item>
+                 <item row="3" column="1">
+                  <widget class="QLabel" name="sessionStatusTransducerValueLabel"/>
+                 </item>
+                 <item row="4" column="1">
+                  <widget class="QLabel" name="sessionStatusVolumeValueLabel"/>
+                 </item>
+                </layout>
+               </widget>
               </widget>
              </item>
             </layout>
            </widget>
-           <widget class="QWidget" name="activeSession">
-            <layout class="QFormLayout" name="formLayout">
-             <item row="0" column="0">
-              <widget class="QLabel" name="sessionStatusSubjectNameIdLabel">
-               <property name="text">
-                <string>Subject Name (ID):</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="sessionStatusSessionNameIdLabel">
-               <property name="text">
-                <string>Session Name (ID):</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="0">
-              <widget class="QLabel" name="sessionStatusProtocolLabel">
-               <property name="text">
-                <string>Protocol:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="0">
-              <widget class="QLabel" name="sessionStatusTransducerLabel">
-               <property name="text">
-                <string>Transducer:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="4" column="0">
-              <widget class="QLabel" name="sessionStatusVolumeLabel">
-               <property name="text">
-                <string>Volume:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel"/>
-             </item>
-             <item row="1" column="1">
-              <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel"/>
-             </item>
-             <item row="2" column="1">
-              <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>
-             </item>
-             <item row="3" column="1">
-              <widget class="QLabel" name="sessionStatusTransducerValueLabel"/>
-             </item>
-             <item row="4" column="1">
-              <widget class="QLabel" name="sessionStatusVolumeValueLabel"/>
-             </item>
-            </layout>
-           </widget>
-          </widget>
-         </item>
-        </layout>
+          </item>
+         </layout>
+        </widget>
        </widget>
       </item>
       <item>
@@ -183,6 +223,9 @@
     <widget class="ctkCollapsibleButton" name="objectsCollapsibleButton" native="true">
      <property name="text" stdset="0">
       <string>OpenLIFU Objects</string>
+     </property>
+     <property name="collapsed" stdset="0">
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
@@ -238,6 +281,19 @@
       </item>
      </layout>
     </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>

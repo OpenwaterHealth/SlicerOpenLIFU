@@ -247,6 +247,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
         self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
+        self.session_status_field_widgets = [
+            self.ui.sessionStatusSubjectNameIdValueLabel,
+            self.ui.sessionStatusSessionNameIdValueLabel,
+            self.ui.sessionStatusProtocolValueLabel,
+            self.ui.sessionStatusTransducerValueLabel,
+            self.ui.sessionStatusVolumeValueLabel,
+        ]
+
         # ====================================
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -441,6 +449,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Update the active session status view and related buttons"""
         loaded_session = self.logic.getParameterNode().loaded_session
         if loaded_session is None:
+            for label in self.session_status_field_widgets:
+                label.setText("") # Doing this before setCurrentIndex(0) results in the desired scrolling behavior
+                # (Doing it after makes Qt maintain the possibly larger size of page 1 of the stacked widget, providing unnecessary scroll bars)
             self.ui.sessionStatusStackedWidget.setCurrentIndex(0)
             for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
                 button.setEnabled(False)
