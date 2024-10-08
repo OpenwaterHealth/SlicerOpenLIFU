@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>718</height>
+    <height>749</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -106,16 +106,16 @@
            <widget class="QWidget" name="activeSession">
             <layout class="QFormLayout" name="formLayout">
              <item row="0" column="0">
-              <widget class="QLabel" name="sessionStatusNameLabel">
+              <widget class="QLabel" name="sessionStatusSubjectNameIdLabel">
                <property name="text">
-                <string>Name:</string>
+                <string>Subject Name (ID):</string>
                </property>
               </widget>
              </item>
              <item row="1" column="0">
-              <widget class="QLabel" name="sessionStatusIdLabel">
+              <widget class="QLabel" name="sessionStatusSessionNameIdLabel">
                <property name="text">
-                <string>ID:</string>
+                <string>Session Name (ID):</string>
                </property>
               </widget>
              </item>
@@ -141,10 +141,10 @@
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="QLabel" name="sessionStatusNameValueLabel"/>
+              <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel"/>
              </item>
              <item row="1" column="1">
-              <widget class="QLabel" name="sessionStatusIdValueLabel"/>
+              <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel"/>
              </item>
              <item row="2" column="1">
               <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>

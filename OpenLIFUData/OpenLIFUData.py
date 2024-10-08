@@ -447,8 +447,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 button.setToolTip("There is no active session")
         else:
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
-            self.ui.sessionStatusNameValueLabel.setText(session_openlifu.name)
-            self.ui.sessionStatusIdValueLabel.setText(session_openlifu.id)
+            subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
+            self.ui.sessionStatusSubjectNameIdValueLabel.setText(
+                f"{subject_openlifu.name} ({session_openlifu.subject_id})"
+            )
+            self.ui.sessionStatusSessionNameIdValueLabel.setText(
+                f"{session_openlifu.name} ({session_openlifu.id})"
+            )
             self.ui.sessionStatusProtocolValueLabel.setText(session_openlifu.protocol_id)
             self.ui.sessionStatusTransducerValueLabel.setText(session_openlifu.transducer_id)
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
