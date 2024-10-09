@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
 
 import qt
+import ctk
 
 import vtk
 import numpy as np
@@ -75,6 +76,50 @@ class OpenLIFUDataParameterNode:
     loaded_session : "Optional[SlicerOpenLIFUSession]"
 
 
+class AddNewVolumeDialog(qt.QDialog):
+    """ Add new volume dialog """
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Add New Volume")
+        self.setWindowModality(1)
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
+
+        self.volumeFilePath = ctk.ctkPathLineEdit()
+        self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files
+        formLayout.addRow(_("Filepath:"), self.volumeFilePath)
+        # TODO: Autopopulate volume name and ID
+
+        self.volumeName = qt.QLineEdit()
+        formLayout.addRow(_("Volume Name:"), self.volumeName)
+
+        self.volumeID = qt.QLineEdit()
+        formLayout.addRow(_("Volume ID:"), self.volumeID)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.accept)
+
+    def customexec_(self):
+
+        returncode = self.exec_()
+        volume_name = self.volumeName.text
+        volume_id = self.volumeID.text
+        volume_filepath = self.volumeFilePath.currentPath
+
+        return (returncode, volume_filepath,volume_name, volume_id)
+    
 class AddNewSubjectDialog(qt.QDialog):
     """ Add new subject dialog """
 
@@ -96,12 +141,6 @@ class AddNewSubjectDialog(qt.QDialog):
 
         self.subjectID = qt.QLineEdit()
         formLayout.addRow(_("Subject ID:"), self.subjectID)
-
-        # TextValidator = qt.QRegExpValidator(
-        #     qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
-        # self.subjectName.setValidator(TextValidator)
-
-        # self.subjectID.setValidator(TextValidator)
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
@@ -335,13 +374,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     @display_errors
     def on_item_clicked(self, index : qt.QModelIndex):
         if self.itemIsSession(index):
-
             # Disable adding volume to subject
             self.update_addVolumeToSubjectButton_enabled(subject_selected = False)
 
         else: # If the item was a subject:
-            subject_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-            print(subject_id)
+            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
+            
             # Enable adding volume to subject
             self.update_addVolumeToSubjectButton_enabled(subject_selected = True)
 
@@ -368,6 +406,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.ui.subjectSessionView.expand(subject_item.index())
             
             # Enable adding volume to subject
+            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
             self.update_addVolumeToSubjectButton_enabled(subject_selected = True)
 
 
@@ -382,7 +421,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if returncode:
             if not len(subject_name) or not len(subject_id):
-                slicer.util.errorDisplay("Subject name and ID may not be empty")
+                slicer.util.errorDisplay("Required fields are missing")
                 return
             else:
                 # Add subject to database
@@ -392,7 +431,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     @display_errors
     def onAddVolumeToSubjectClicked(self, checked:bool) -> None:
-        print("Adding volume in progress")
+
+        volumedlg = AddNewVolumeDialog()
+        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
+
+        if returncode:
+            if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
+                slicer.util.errorDisplay("Required fields are missing")
+                return
+            else:
+                # Load volume and add it to the loaded database
+                if slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
+                    slicer.util.loadVolume(volume_filepath)
+                    self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
+                else:
+                    slicer.util.errorDisplay("Invalid volume filetype specified")
+                    return
 
 
     @display_errors
@@ -431,7 +485,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onLoadVolumePressed(self) -> None:
         """ Call slicer dialog to load volumes into the scene"""
-        return slicer.util.openAddVolumeDialog()
+        return slicer.util.openAddVolumeDialog() # TODO: Should be able to load volume based on json if available. If volume, look for json file else make up info.
 
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
@@ -1065,7 +1119,24 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
+    @display_errors
+    def add_volume_to_database(self, subject_id, volume_id, volume_name, volume_filepath):
+        """ Adds volume to selected subject in loaded openlifu database.
 
+        Args:
+            subject_name: name of subject associated with the volume (str)
+            volume: volume to be added  (Node or name?)
+        """
+
+        # if newOpenLIFUSubject.id in subject_ids:
+        #     if not slicer.util.confirmYesNoDisplay(
+        #         f"Subject with ID {newOpenLIFUSubject.id} already exists in the database. Overwrite subject?",
+        #         "Subject already exists"
+        #     ):
+        #         return
+
+        self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.ERROR)
+  
 #
 # OpenLIFUDataTest
 #
