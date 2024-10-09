@@ -6,15 +6,54 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>325</width>
-    <height>311</height>
+    <width>476</width>
+    <height>666</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Module under construction</string>
+    <widget class="ctkCollapsibleButton" name="targetsCollapsible" native="true">
+     <property name="text" stdset="0">
+      <string>Targets</string>
+     </property>
+     <property name="collapsed" stdset="0">
+      <bool>false</bool>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <item>
+       <widget class="QListWidget" name="targetListWidget"/>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="positionGroupBox">
+        <property name="title">
+         <string>Target position</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="newTargetButton">
+        <property name="text">
+         <string>Place new target...</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="removeTargetButton">
+        <property name="text">
+         <string>Remove target</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible" native="true">
+     <property name="text" stdset="0">
+      <string>Virtual Fitting</string>
+     </property>
+     <property name="collapsed" stdset="0">
+      <bool>false</bool>
      </property>
     </widget>
    </item>
@@ -38,6 +77,12 @@
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkcollapsiblebutton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
