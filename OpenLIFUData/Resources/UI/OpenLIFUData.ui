@@ -12,11 +12,11 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton">
+     <property name="text">
       <string>Sessions</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -28,9 +28,9 @@
        </widget>
       </item>
       <item>
-       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit" native="true">
-        <property name="filters" stdset="0">
-         <string>ctkPathLineEdit::Dirs</string>
+       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
+        <property name="filters">
+         <set>ctkPathLineEdit::Dirs</set>
         </property>
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
@@ -48,6 +48,13 @@
        <widget class="QPushButton" name="newSubjectButton">
         <property name="text">
          <string>Add New Subject</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="addVolumeToSubjectButton">
+        <property name="text">
+         <string>Add Volume to Subject</string>
         </property>
        </widget>
       </item>
@@ -76,11 +83,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="activeSessionCollapsibleButton" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="activeSessionCollapsibleButton">
+     <property name="text">
       <string>Active session</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -220,11 +227,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="objectsCollapsibleButton" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="objectsCollapsibleButton">
+     <property name="text">
       <string>OpenLIFU Objects</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
