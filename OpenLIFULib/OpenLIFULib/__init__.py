@@ -383,12 +383,32 @@ class SlicerOpenLIFUSession:
         """Return whether this session's transducer is present in the list of loaded objects."""
         return self.get_transducer_id() in get_openlifu_data_parameter_node().loaded_transducers
 
+    def protocol_is_valid(self) -> bool:
+        """Return whether this session's protocol is present in the list of loaded objects."""
+        return self.get_protocol_id() in get_openlifu_data_parameter_node().loaded_protocols
+
     def volume_is_valid(self) -> bool:
         """Return whether this session's volume is present in the scene."""
         return (
             self.volume_node is not None
             and slicer.mrmlScene.GetNodeByID(self.volume_node.GetID()) is not None
         )
+
+    def get_transducer(self) -> SlicerOpenLIFUTransducer:
+        """Return the transducer associated with this session, from the  list of loaded transducers in the scene.
+
+        Does not check that the session is still valid and everything it needs is there in the scene; make sure to
+        check before using this.
+        """
+        return get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]
+
+    def get_protocol(self) -> SlicerOpenLIFUProtocol:
+        """Return the protocol associated with this session, from the  list of loaded protocols in the scene.
+
+        Does not check that the session is still valid and everything it needs is there in the scene; make sure to
+        check before using this.
+        """
+        return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
 
     def clear_volume_and_target_nodes(self) -> None:
         """Clear the session's affiliated volume and target nodes from the scene."""

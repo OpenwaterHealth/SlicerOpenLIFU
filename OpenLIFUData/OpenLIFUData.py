@@ -670,6 +670,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             self.clear_session(clean_up_scene=clean_up_scene)
             return False
 
+        # Check protocol is present
+        if not loaded_session.protocol_is_valid():
+            clean_up_scene = sessionInvalidatedDialogDisplay(
+                "The protocol that was in use by the active session is now missing. The session will be unloaded.",
+            )
+            self.clear_session(clean_up_scene=clean_up_scene)
+            return False
+
         return True
 
     def validate_plan(self) -> bool:
