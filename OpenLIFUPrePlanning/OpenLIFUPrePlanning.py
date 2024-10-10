@@ -1,8 +1,6 @@
-import logging
-import os
-from typing import Annotated, Optional
+from typing import Optional
 
-import vtk
+import qt
 
 import slicer
 from slicer.i18n import tr as _
@@ -24,7 +22,7 @@ class OpenLIFUPrePlanning(ScriptedLoadableModule):
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Pre-Planning")  # TODO: make this more human readable by adding spaces
+        self.parent.title = _("OpenLIFU Pre-Planning")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
@@ -93,16 +91,18 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUPrePlanningLogic()
 
-        # Connections
-
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-
-        # Buttons
         
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        position_coordinate_validator = qt.QDoubleValidator(slicer.util.mainWindow())
+        position_coordinate_validator.setNotation(qt.QDoubleValidator.StandardNotation)
+        self.ui.positionRLineEdit.setValidator(position_coordinate_validator)
+        self.ui.positionALineEdit.setValidator(position_coordinate_validator)
+        self.ui.positionSLineEdit.setValidator(position_coordinate_validator)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
