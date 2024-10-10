@@ -1,6 +1,8 @@
 from typing import Optional
+import warnings
 
 import qt
+import vtk
 
 import slicer
 from slicer.i18n import tr as _
@@ -8,11 +10,9 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer import vtkMRMLMarkupsFiducialNode
 
-
-#
-# OpenLIFUPrePlanning
-#
+from OpenLIFULib import get_target_candidates
 
 
 class OpenLIFUPrePlanning(ScriptedLoadableModule):
@@ -94,15 +94,22 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-        
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
+
+        self.ui.targetListWidget.currentItemChanged.connect(self.onTargetListWidgetCurrentItemChanged)
 
         position_coordinate_validator = qt.QDoubleValidator(slicer.util.mainWindow())
         position_coordinate_validator.setNotation(qt.QDoubleValidator.StandardNotation)
         self.ui.positionRLineEdit.setValidator(position_coordinate_validator)
         self.ui.positionALineEdit.setValidator(position_coordinate_validator)
         self.ui.positionSLineEdit.setValidator(position_coordinate_validator)
+
+        self.updateTargetsListView()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -119,7 +126,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-       
+
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
         # Parameter node will be reset, do not use it anymore
@@ -152,6 +159,53 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            self.watch_fiducial_node(node)
+
+        self.updateTargetsListView()
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
+                self.unwatch_fiducial_node(node)
+        self.updateTargetsListView()
+
+    def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Add observers so that point-list changes in this fiducial node are tracked by the module."""
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+
+    def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Un-does watch_fiducial_node; see watch_fiducial_node."""
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+
+    def onPointAddedOrRemoved(self, caller, event):
+        self.updateTargetsListView()
+
+    def updateTargetsListView(self):
+        """Update the list of targets in the target management UI"""
+        self.ui.targetListWidget.clear()
+        for target_node in get_target_candidates():
+            item = qt.QListWidgetItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()))
+            item.setData(qt.Qt.UserRole, target_node)
+            self.ui.targetListWidget.addItem(item)
+
+    def getTargetsListViewCurrentSelection(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
+        """Get the fiducial node associated to the currently selected target in the list view;
+        returns None if nothing is selected."""
+        item = self.ui.targetListWidget.currentItem()
+        if item is None:
+            return None
+        return item.data(qt.Qt.UserRole)
+
+    def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
+        pass # This is a stub that will be filled in soon
 
 #
 # OpenLIFUPrePlanningLogic
@@ -193,4 +247,3 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
-   
