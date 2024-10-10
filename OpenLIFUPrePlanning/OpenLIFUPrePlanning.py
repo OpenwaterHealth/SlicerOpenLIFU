@@ -10,11 +10,12 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLMarkupsFiducialNode
+from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
 
 from OpenLIFULib import (
     get_target_candidates,
     get_openlifu_data_parameter_node,
+    SlicerOpenLIFUTransducer
 )
 
 
@@ -115,6 +116,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.updateTargetsListView()
         self.updateApproveButtonEnabled()
+        self.updateComboBoxOptions()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -171,6 +173,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.watch_fiducial_node(node)
 
         self.updateTargetsListView()
+        self.updateComboBoxOptions()
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -179,6 +182,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
                 self.unwatch_fiducial_node(node)
         self.updateTargetsListView()
+        self.updateComboBoxOptions()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -192,6 +196,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onPointAddedOrRemoved(self, caller, event):
         self.updateTargetsListView()
+        self.updateComboBoxOptions()
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
@@ -214,6 +219,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateApproveButtonEnabled()
+        self.updateComboBoxOptions()
 
     def updateApproveButtonEnabled(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -222,6 +228,90 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         else:
             self.ui.approveButton.setEnabled(True)
             self.ui.approveButton.setToolTip("Approve the current transducer position as a virtual fit for the selected target")
+
+    def add_transducer_to_combobox(self, transducer : SlicerOpenLIFUTransducer) -> None:
+        transducer_openlifu = transducer.transducer.transducer
+        self.ui.transducerComboBox.addItem("{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id), transducer)
+
+    def add_volume_to_combobox(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
+        self.ui.volumeComboBox.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
+
+    def set_session_related_combobox_tooltip(self, text:str):
+        """Set tooltip on the transducer and volume comboboxes."""
+        self.ui.transducerComboBox.setToolTip(text)
+        self.ui.volumeComboBox.setToolTip(text)
+
+    def populateComboBoxOptionsFromLoadedObjects(self):
+        """" Update transducer and volume comboboxes based on the OpenLIFU objects loaded into the scene."""
+
+        dataParameterNode = get_openlifu_data_parameter_node()
+
+        # Update transducer combo box
+        self.ui.transducerComboBox.clear()
+        if len(dataParameterNode.loaded_transducers) == 0:
+            self.ui.transducerComboBox.addItem("Select a Transducer")
+            self.ui.transducerComboBox.setDisabled(True)
+        else:
+            self.ui.transducerComboBox.setEnabled(True)
+            for transducer in dataParameterNode.loaded_transducers.values():
+                self.add_transducer_to_combobox(transducer)
+
+        # Update volume combo box
+        self.ui.volumeComboBox.clear()
+        if len(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')) == 0:
+            self.ui.volumeComboBox.addItem("Select a Volume")
+            self.ui.volumeComboBox.setDisabled(True)
+        else:
+            self.ui.volumeComboBox.setEnabled(True)
+            for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
+                self.add_volume_to_combobox(volume_node)
+
+        self.set_session_related_combobox_tooltip("")
+
+    def populateComboBoxOptionsFromSession(self):
+        """Update transducer and volume comboboxes based on the active session, and lock them.
+
+        Does not check that the session is still valid and everything it needs is there in the scene; make sure to
+        check before using this.
+        """
+        dataLogicParameterNode = get_openlifu_data_parameter_node()
+        session = dataLogicParameterNode.loaded_session
+
+        # These are the transducer and volume that will be used
+        transducer : SlicerOpenLIFUTransducer = session.get_transducer()
+        volume_node : vtkMRMLScalarVolumeNode = session.volume_node
+
+        # Update transducer combo box
+        self.ui.transducerComboBox.clear()
+        self.ui.transducerComboBox.setDisabled(True)
+        self.add_transducer_to_combobox(transducer)
+
+        # Update volume combo box
+        self.ui.volumeComboBox.clear()
+        self.ui.volumeComboBox.setDisabled(True)
+        self.add_volume_to_combobox(volume_node)
+
+        self.set_session_related_combobox_tooltip("This choice is fixed by the active session")
+
+    def updateComboBoxOptions(self):
+        """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
+
+        # Update transducer and volume comboboxes
+        if slicer.util.getModuleLogic('OpenLIFUData').validate_session():
+            self.populateComboBoxOptionsFromSession()
+        else:
+            self.populateComboBoxOptionsFromLoadedObjects()
+
+        # Update target combo box
+        self.ui.targetComboBox.clear()
+        target_nodes = get_target_candidates()
+        if len(target_nodes) == 0:
+            self.ui.targetComboBox.addItem("Select a Target")
+            self.ui.targetComboBox.setDisabled(True)
+        else:
+            self.ui.targetComboBox.setEnabled(True)
+            for target_node in target_nodes:
+                self.ui.targetComboBox.addItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()), target_node)
 
 #
 # OpenLIFUPrePlanningLogic
