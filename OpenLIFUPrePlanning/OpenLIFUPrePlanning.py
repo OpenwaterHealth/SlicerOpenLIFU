@@ -313,6 +313,24 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             for target_node in target_nodes:
                 self.ui.targetComboBox.addItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()), target_node)
 
+        self.updateVirtualfitButtonEnabled()
+
+    def updateVirtualfitButtonEnabled(self):
+        """Update the enabled status of the virtual fit button based on whether all comboboxes have valid selections"""
+        if all(
+            comboBox.currentData is not None
+            for comboBox in [
+                self.ui.transducerComboBox,
+                self.ui.volumeComboBox,
+                self.ui.targetComboBox,
+            ]
+        ):
+            self.ui.virtualfitButton.enabled = True
+            self.ui.virtualfitButton.setToolTip("Run virtual fit algorithm to automatically suggest a transducer positioning")
+        else:
+            self.ui.virtualfitButton.enabled = False
+            self.ui.virtualfitButton.setToolTip("Specify all required inputs to enable virtual fitting")
+
 #
 # OpenLIFUPrePlanningLogic
 #
