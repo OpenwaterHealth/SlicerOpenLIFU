@@ -12,7 +12,10 @@ from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import vtkMRMLMarkupsFiducialNode
 
-from OpenLIFULib import get_target_candidates
+from OpenLIFULib import (
+    get_target_candidates,
+    get_openlifu_data_parameter_node,
+)
 
 
 class OpenLIFUPrePlanning(ScriptedLoadableModule):
@@ -100,6 +103,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
+        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         self.ui.targetListWidget.currentItemChanged.connect(self.onTargetListWidgetCurrentItemChanged)
 
@@ -110,6 +114,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.positionSLineEdit.setValidator(position_coordinate_validator)
 
         self.updateTargetsListView()
+        self.updateApproveButtonEnabled()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -206,6 +211,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
         pass # This is a stub that will be filled in soon
+
+    def onDataParameterNodeModified(self,caller, event) -> None:
+        self.updateApproveButtonEnabled()
+
+    def updateApproveButtonEnabled(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setToolTip("There is no active session to write the approval")
+        else:
+            self.ui.approveButton.setEnabled(True)
+            self.ui.approveButton.setToolTip("Approve the current transducer position as a virtual fit for the selected target")
 
 #
 # OpenLIFUPrePlanningLogic
