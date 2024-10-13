@@ -96,6 +96,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUPrePlanningLogic()
 
+        # Prevents possible creation of two OpenLIFUData widgets
+        # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
+        slicer.util.getModule("OpenLIFUData").widgetRepresentation()
+
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
