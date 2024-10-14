@@ -10,14 +10,14 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
+from slicer import vtkMRMLMarkupsFiducialNode
 
 from OpenLIFULib import (
     get_target_candidates,
     get_openlifu_data_parameter_node,
-    replace_widget,
     OpenLIFUAlgorithmInputWidget,
 )
+from OpenLIFULib.util import replace_widget
 
 
 class OpenLIFUPrePlanning(ScriptedLoadableModule):

@@ -25,12 +25,14 @@ from OpenLIFULib import (
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUPlan,
     SlicerOpenLIFUSession,
+    get_target_candidates,
+    assign_openlifu_metadata_to_volume_node,
+)
+from OpenLIFULib.util import (
     display_errors,
     create_noneditable_QStandardItem,
     ensure_list,
     add_slicer_log_handler,
-    get_target_candidates,
-    assign_openlifu_metadata_to_volume_node,
 )
 
 if TYPE_CHECKING:
