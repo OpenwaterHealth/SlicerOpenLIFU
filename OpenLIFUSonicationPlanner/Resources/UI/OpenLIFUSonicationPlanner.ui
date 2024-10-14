@@ -6,82 +6,24 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>362</width>
-    <height>381</height>
+    <width>258</width>
+    <height>167</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
-    <layout class="QFormLayout" name="formLayout_2">
-     <item row="0" column="0">
-      <widget class="QLabel" name="labelProtocol">
-       <property name="text">
-        <string>Protocol:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QComboBox" name="ProtocolComboBox">
-       <property name="contextMenuPolicy">
-        <enum>Qt::NoContextMenu</enum>
-       </property>
-       <property name="currentText">
-        <string/>
-       </property>
-       <property name="currentIndex">
-        <number>-1</number>
-       </property>
-       <property name="placeholderText">
-        <string/>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="labelTransducer">
-       <property name="text">
-        <string>Transducer:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QComboBox" name="TransducerComboBox">
-       <property name="currentText">
-        <string/>
-       </property>
-       <property name="currentIndex">
-        <number>-1</number>
-       </property>
-       <property name="placeholderText">
-        <string notr="true"/>
-       </property>
-       <item>
+    <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QLabel" name="label">
         <property name="text">
-         <string>Select a Transducer</string>
+         <string>Placeholder for an
+OpenLIFUAlgorithmInputWidget</string>
         </property>
-       </item>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="labelVolume">
-       <property name="text">
-        <string>Volume:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QComboBox" name="VolumeComboBox"/>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="labelTarget">
-       <property name="text">
-        <string>Target:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="1">
-      <widget class="QComboBox" name="TargetComboBox"/>
-     </item>
-    </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item>
     <spacer name="verticalSpacer_2">

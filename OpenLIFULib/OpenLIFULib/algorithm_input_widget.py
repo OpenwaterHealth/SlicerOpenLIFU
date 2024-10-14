@@ -141,4 +141,4 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
 
     def get_current_data(self) -> Tuple[SlicerOpenLIFUProtocol,SlicerOpenLIFUTransducer,vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode]:
         """Get the current selections as a tuple"""
-        return tuple(combo_box.currentData() for combo_box in self.combo_boxes)
+        return tuple(combo_box.currentData for combo_box in self.combo_boxes)
