@@ -1,4 +1,5 @@
-from typing import Tuple
+from typing import Tuple, Any, List
+from dataclasses import dataclass
 import qt
 import slicer
 from slicer import vtkMRMLScalarVolumeNode, vtkMRMLMarkupsFiducialNode
@@ -7,6 +8,17 @@ from OpenLIFULib.util import get_openlifu_data_parameter_node
 from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
 from OpenLIFULib.targets import get_target_candidates
 
+@dataclass
+class AlgorithmInput:
+    name : str
+    combo_box : qt.QComboBox
+    most_recent_selection : Any = None
+
+    def indicate_no_options(self):
+        """Disable and set a message indicating that there are no objects"""
+        self.combo_box.addItem(f"No {self.name} objects")
+        self.combo_box.setDisabled(True)
+
 class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -14,71 +26,82 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         layout = qt.QFormLayout(self)
         self.setLayout(layout)
 
-        self.protocolComboBox = qt.QComboBox(self)
-        self.transducerComboBox = qt.QComboBox(self)
-        self.volumeComboBox = qt.QComboBox(self)
-        self.targetComboBox = qt.QComboBox(self)
+        self.protocol_input = AlgorithmInput("Protocol", qt.QComboBox(self))
+        self.transducer_input = AlgorithmInput("Transducer", qt.QComboBox(self))
+        self.volume_input = AlgorithmInput("Volume", qt.QComboBox(self))
+        self.target_input = AlgorithmInput("Target", qt.QComboBox(self))
 
-        self.combo_boxes = [
-            self.protocolComboBox,
-            self.transducerComboBox,
-            self.volumeComboBox,
-            self.targetComboBox,
+        self.inputs : List[AlgorithmInput] = [
+            self.protocol_input,
+            self.transducer_input,
+            self.volume_input,
+            self.target_input,
         ]
 
-        layout.addRow("Protocol:", self.protocolComboBox)
-        layout.addRow("Transducer:", self.transducerComboBox)
-        layout.addRow("Volume:", self.volumeComboBox)
-        layout.addRow("Target:", self.targetComboBox)
+        for input in self.inputs:
+            layout.addRow(f"{input.name}:", input.combo_box)
 
     def add_protocol_to_combobox(self, protocol : SlicerOpenLIFUProtocol) -> None:
-        self.protocolComboBox.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
+        self.protocol_input.combo_box.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
 
     def add_transducer_to_combobox(self, transducer : SlicerOpenLIFUTransducer) -> None:
         transducer_openlifu = transducer.transducer.transducer
-        self.transducerComboBox.addItem("{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id), transducer)
+        self.transducer_input.combo_box.addItem("{} (ID: {})".format(transducer_openlifu.name,transducer_openlifu.id), transducer)
 
     def add_volume_to_combobox(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
-        self.volumeComboBox.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
+        self.volume_input.combo_box.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
 
     def set_session_related_combobox_tooltip(self, text:str):
         """Set tooltip on the transducer and volume comboboxes."""
-        self.protocolComboBox.setToolTip(text)
-        self.transducerComboBox.setToolTip(text)
-        self.volumeComboBox.setToolTip(text)
+        for input in [
+            self.protocol_input,
+            self.transducer_input,
+            self.volume_input,
+        ]:
+            input.combo_box.setToolTip(text)
+
+    def _clear_input_options(self):
+        """Clear out input options, remembering what was most recently selected in order to be able to set that again later"""
+        for input in self.inputs:
+            input.most_recent_selection = input.combo_box.currentData
+            input.combo_box.clear()
+
+    def _set_most_recent_selections(self):
+        """Set input options to their most recent selections when possible."""
+        for input in self.inputs:
+            if input.most_recent_selection is not None:
+                most_recent_selection_index = input.combo_box.findData(input.most_recent_selection)
+                if most_recent_selection_index != -1:
+                    input.combo_box.setCurrentIndex(most_recent_selection_index)
+
 
     def _populate_from_loaded_objects(self) -> None:
-        """" Update protocol, transducer, and volume comboboxes based on the OpenLIFU objects loaded into the scene."""
+        """" Update protocol, transducer, and volume comboboxes based on the OpenLIFU objects loaded into the scene.
+        Adds the items only; does not clear the ComboBoxes."""
 
         dataParameterNode = get_openlifu_data_parameter_node()
 
         # Update protocol combo box
-        self.protocolComboBox.clear()
         if len(dataParameterNode.loaded_protocols) == 0:
-            self.protocolComboBox.addItem("Select a Protocol")
-            self.protocolComboBox.setDisabled(True)
+            self.protocol_input.indicate_no_options()
         else:
-            self.protocolComboBox.setEnabled(True)
+            self.protocol_input.combo_box.setEnabled(True)
             for protocol in dataParameterNode.loaded_protocols.values():
                 self.add_protocol_to_combobox(protocol)
 
         # Update transducer combo box
-        self.transducerComboBox.clear()
         if len(dataParameterNode.loaded_transducers) == 0:
-            self.transducerComboBox.addItem("Select a Transducer")
-            self.transducerComboBox.setDisabled(True)
+            self.transducer_input.indicate_no_options()
         else:
-            self.transducerComboBox.setEnabled(True)
+            self.transducer_input.combo_box.setEnabled(True)
             for transducer in dataParameterNode.loaded_transducers.values():
                 self.add_transducer_to_combobox(transducer)
 
         # Update volume combo box
-        self.volumeComboBox.clear()
         if len(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')) == 0:
-            self.volumeComboBox.addItem("Select a Volume")
-            self.volumeComboBox.setDisabled(True)
+            self.volume_input.indicate_no_options()
         else:
-            self.volumeComboBox.setEnabled(True)
+            self.volume_input.combo_box.setEnabled(True)
             for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
                 self.add_volume_to_combobox(volume_node)
 
@@ -89,6 +112,8 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
 
         Does not check that the session is still valid and everything it needs is there in the scene; make sure to
         check before using this.
+
+        Adds the items only; does not clear the ComboBoxes.
         """
         session = get_openlifu_data_parameter_node().loaded_session
 
@@ -98,24 +123,23 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         volume_node : vtkMRMLScalarVolumeNode = session.volume_node
 
         # Update protocol combo box
-        self.protocolComboBox.clear()
-        self.protocolComboBox.setDisabled(True)
+        self.protocol_input.combo_box.setDisabled(True)
         self.add_protocol_to_combobox(protocol)
 
         # Update transducer combo box
-        self.transducerComboBox.clear()
-        self.transducerComboBox.setDisabled(True)
+        self.transducer_input.combo_box.setDisabled(True)
         self.add_transducer_to_combobox(transducer)
 
         # Update volume combo box
-        self.volumeComboBox.clear()
-        self.volumeComboBox.setDisabled(True)
+        self.volume_input.combo_box.setDisabled(True)
         self.add_volume_to_combobox(volume_node)
 
         self.set_session_related_combobox_tooltip("This choice is fixed by the active session")
 
     def update(self):
         """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
+
+        self._clear_input_options()
 
         # Update protocol, transducer, and volume comboboxes
         if slicer.util.getModuleLogic('OpenLIFUData').validate_session():
@@ -124,21 +148,22 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             self._populate_from_loaded_objects()
 
         # Update target combo box
-        self.targetComboBox.clear()
         target_nodes = get_target_candidates()
         if len(target_nodes) == 0:
-            self.targetComboBox.addItem("Select a Target")
-            self.targetComboBox.setDisabled(True)
+            self.target_input.indicate_no_options()
         else:
-            self.targetComboBox.setEnabled(True)
+            self.target_input.combo_box.setEnabled(True)
             for target_node in target_nodes:
-                self.targetComboBox.addItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()), target_node)
+                self.target_input.combo_box.addItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()), target_node)
+
+        # Set selections to the previous ones when they exist
+        self._set_most_recent_selections()
 
     def has_valid_selections(self) -> bool:
         """Whether all options have been selected, so that get_current_data would return
         a complete set of data with no `None`s."""
-        return all(combo_box.currentData is not None for combo_box in self.combo_boxes)
+        return all(input.combo_box.currentData is not None for input in self.inputs)
 
     def get_current_data(self) -> Tuple[SlicerOpenLIFUProtocol,SlicerOpenLIFUTransducer,vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode]:
         """Get the current selections as a tuple"""
-        return tuple(combo_box.currentData for combo_box in self.combo_boxes)
+        return tuple(input.combo_box.currentData for input in self.inputs)
