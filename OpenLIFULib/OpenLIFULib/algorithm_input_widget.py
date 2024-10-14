@@ -11,7 +11,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        layout = qt.QVBoxLayout(self)
+        layout = qt.QFormLayout(self)
         self.setLayout(layout)
 
         self.protocolComboBox = qt.QComboBox(self)
@@ -26,8 +26,10 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             self.targetComboBox,
         ]
 
-        for combo_box in self.combo_boxes:
-            layout.addWidget(combo_box)
+        layout.addRow("Protocol:", self.protocolComboBox)
+        layout.addRow("Transducer:", self.transducerComboBox)
+        layout.addRow("Volume:", self.volumeComboBox)
+        layout.addRow("Target:", self.targetComboBox)
 
     def add_protocol_to_combobox(self, protocol : SlicerOpenLIFUProtocol) -> None:
         self.protocolComboBox.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
