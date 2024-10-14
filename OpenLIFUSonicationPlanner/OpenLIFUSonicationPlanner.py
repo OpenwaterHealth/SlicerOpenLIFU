@@ -1,5 +1,6 @@
 from typing import Optional
 from typing import Optional, List, Tuple, TYPE_CHECKING
+import warnings
 
 import vtk
 import numpy as np
@@ -208,11 +209,17 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         """ Update volume and target combo boxes when nodes are added to the scene"""
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
+                self.unwatch_fiducial_node(node)
         self.updateInputOptions()
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         """ Update volume and target combo boxes when nodes are removed from the scene"""
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            self.watch_fiducial_node(node)
         self.updateInputOptions()
 
     def updateInputOptions(self):
@@ -245,6 +252,19 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.updatePlanProgressBar()
         self.updateRenderPNPCheckBox()
+
+    def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Add observers so that point-list changes in this fiducial node are tracked by the module."""
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+
+    def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Un-does watch_fiducial_node; see watch_fiducial_node."""
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+
+    def onPointAddedOrRemoved(self, caller, event):
+        self.updateInputOptions()
 
     def onPlanClicked(self):
         activeProtocol, activeTransducer, activeVolume, activeTarget = self.algorithm_input_widget.get_current_data()
