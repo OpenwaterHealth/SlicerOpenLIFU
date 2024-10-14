@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>294</width>
-    <height>447</height>
+    <height>387</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -140,48 +140,18 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <layout class="QFormLayout" name="virtualfitFormLayout">
-        <item row="1" column="0">
-         <widget class="QLabel" name="transducerLabel">
-          <property name="text">
-           <string>Transducer:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="volumeLabel">
-          <property name="text">
-           <string>Volume:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="0">
-         <widget class="QLabel" name="targetLabel">
-          <property name="text">
-           <string>Target:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="1">
-         <widget class="QComboBox" name="transducerComboBox"/>
-        </item>
-        <item row="2" column="1">
-         <widget class="QComboBox" name="volumeComboBox"/>
-        </item>
-        <item row="3" column="1">
-         <widget class="QComboBox" name="targetComboBox"/>
-        </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="protocolLabel">
-          <property name="text">
-           <string>Protocol:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QComboBox" name="protocolComboBox"/>
-        </item>
-       </layout>
+       <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <widget class="QLabel" name="placeholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUAlgorithmInputWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="virtualfitButton">
