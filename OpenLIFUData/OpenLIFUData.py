@@ -1173,18 +1173,21 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """ Adds volume to selected subject in loaded openlifu database.
 
         Args:
-            subject_name: name of subject associated with the volume (str)
-            volume: volume to be added  (Node or name?)
+            subject_id: ID of subject associated with the volume (str)
+            volume_id: ID of volume to be added (str)
+            volume_name: Name of volume to be added (str)
+            volume_filepath: filepath of volume to be added (str)
         """
 
-        # if newOpenLIFUSubject.id in subject_ids:
-        #     if not slicer.util.confirmYesNoDisplay(
-        #         f"Subject with ID {newOpenLIFUSubject.id} already exists in the database. Overwrite subject?",
-        #         "Subject already exists"
-        #     ):
-        #         return
+        volume_ids = self.db.get_volume_ids(subject_id)
+        if volume_id in volume_ids:
+            if not slicer.util.confirmYesNoDisplay(
+                f"Volume ID {volume_id} already exists in the database for subject {subject_id}. Overwrite volume?",
+                "Volume already exists"
+            ):
+                return
 
-        self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.ERROR)
+        self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
   
 #
 # OpenLIFUDataTest
