@@ -276,7 +276,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.subjectSessionView.doubleClicked.connect(self.on_item_double_clicked)
 
         # If a subject is clicked or double clicked, the add volume to subject button should be enabled
-        self.ui.subjectSessionView.clicked.connect(self.on_item_clicked) # self.ui.subjectSessionView.currentIndex()
+        self.ui.subjectSessionView.clicked.connect(self.on_item_clicked)
+
+        # Create custom context menu on right-click
+        self.ui.subjectSessionView.setContextMenuPolicy(qt.Qt.CustomContextMenu)
+        self.ui.subjectSessionView.customContextMenuRequested.connect(self.openSubjectSessionContextMenu)
 
         # Selecting an item and clicking sessionLoadButton is equivalent to doubleclicking the item:
         self.ui.sessionLoadButton.clicked.connect(
@@ -318,6 +322,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
 
+
+    def openSubjectSessionContextMenu(self, point):
+        index = self.ui.subjectSessionView.indexAt(point)
+        if not self.itemIsSession(index):
+            menu = qt.QMenu()
+            addNewSubjectAction = menu.addAction("Add volume to subject")
+            action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
+
+            if action == addNewSubjectAction:
+                self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
+                self.onAddVolumeToSubjectClicked(checked=True)
+            
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
 
