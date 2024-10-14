@@ -95,6 +95,13 @@ class AddNewVolumeDialog(qt.QDialog):
 
         self.volumeFilePath = ctk.ctkPathLineEdit()
         self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files
+        
+        # Allowable volume filetypes
+        self.volume_extensions = ("Volume" + " (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
+        "Dicom" + " (*.dcm *.ima);;" + 
+        "All Files" + " (*)")
+
+        self.volumeFilePath.nameFilters = [self.volume_extensions]
         formLayout.addRow(_("Filepath:"), self.volumeFilePath)
         # TODO: Autopopulate volume name and ID
 
@@ -488,53 +495,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """ Call slicer dialog to load volumes into the scene"""
         qsettings = qt.QSettings()
 
+        # Allowable volume filetypes includes *.json
+        volume_extensions = ("Volume" + " (*.json *.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
+        "Dicom" + " (*.dcm *.ima);;" + 
+        "All Files" + " (*)")
+
         filepath: str = qt.QFileDialog.getOpenFileName(
             slicer.util.mainWindow(), # parent
             'Load volume', # title of dialog
             qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
-            "Volumes (*.json);;All Files (*)", # file type filter
+            volume_extensions, # file type filter
         )
 
-        # all_ext = slicer.app.coreIOManager().allReadableFileExtensions()
-        # print(all_ext)
-        # volume_ext = [f for f in all_ext if slicer.app.coreIOManager().fileType(f) == 'VolumeFile']
-        # print(volume_ext)
         if filepath:
-            parent_dir = Path(filepath).parent
-            volume_id = parent_dir.name # assuming the user selected a volume within the database
-            if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
-
-                # If a corresponding json file exists in the volume's parent directory,
-                # then use volume_metadata included in the json file
-                volume_json_filepath = Path(parent_dir, volume_id + '.json')
-                if Path.exists(volume_json_filepath):
-                    # Open and read the JSON file
-                    with open(volume_json_filepath, 'r') as volume_json:
-                        volume_metadata = json.load(volume_json)
-                        slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
-                        # TODO: Need to save id info somehwere to name the node in openlifu objects. Name refers to the volume_name. Or can I set it as a node attribute?
-
-                # Otherwise, use default volume name and id based on filepath
-                else:
-                    slicer.util.loadVolume(filepath)
-                        
-            # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
-            # TODO: Add checks incase a non-volume different json file selected?
-            elif Path(filepath).suffix == '.json':
-
-                    # Check for a volume filetype 
-                    # Open and read the JSON file
-                    with open(filepath, 'r') as volume_json:
-                        volume_metadata = json.load(volume_json)
-                        volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
-                        if Path.exists(volume_filepath):
-                            slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
-
-                        else:
-                            slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
-            else:
-                slicer.util.errorDisplay("Invalid volume filetype specified")
-
+            self.logic.load_volume_from_file(filepath)
+            
 
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
@@ -1167,6 +1142,46 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 return
 
         self.db.write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+
+    def load_volume_from_file(self, filepath: str) -> None:
+
+        parent_dir = Path(filepath).parent
+        volume_id = parent_dir.name # assuming the user selected a volume within the database
+        if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
+
+            # If a corresponding json file exists in the volume's parent directory,
+            # then use volume_metadata included in the json file
+            volume_json_filepath = Path(parent_dir, volume_id + '.json')
+            if Path.exists(volume_json_filepath):
+                # Open and read the JSON file
+                with open(volume_json_filepath, 'r') as volume_json:
+                    volume_metadata = json.load(volume_json)
+                    slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
+                    # TODO: Need to save id info somehwere to name the node in openlifu objects. Name refers to the volume_name. Or can I set it as a node attribute?
+
+            # Otherwise, use default volume name and id based on filepath
+            else:
+                slicer.util.loadVolume(filepath)
+                    
+        # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
+        elif Path(filepath).suffix == '.json':
+ 
+                # Check for corresponding volume file
+                with open(filepath, 'r') as volume_json:
+                    volume_metadata = json.load(volume_json)
+
+                    # Check that it is a volume json. Using volume_name since session files include volume_id
+                    if 'volume_name' in volume_metadata: 
+                        volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
+                        if Path.exists(volume_filepath):
+                            slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
+                        else:
+                            slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
+                    else:
+                        slicer.util.errorDisplay("Invalid volume filetype specified")
+        else:
+            slicer.util.errorDisplay("Invalid volume filetype specified")
+
 
     @display_errors
     def add_volume_to_database(self, subject_id, volume_id, volume_name, volume_filepath):
