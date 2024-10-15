@@ -154,3 +154,11 @@ class SlicerOpenLIFUSession:
         )
 
         return self.session.session
+    def approve_virtual_fit_for_target(self, target : Optional[vtkMRMLMarkupsFiducialNode] = None):
+        """Apply approval for the virtual fit of the given target. If no target is provided, then
+        any existing approval is revoked."""
+        target_id = None
+        if target is not None:
+            point : "openlifu.Point" = fiducial_to_openlifu_point(target)
+            target_id = point.id
+        self.session.session.virtual_fit_approval_for_target_id = target_id # apply the approval or lack thereof

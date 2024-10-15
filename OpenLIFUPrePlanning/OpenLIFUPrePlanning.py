@@ -19,7 +19,6 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.util import replace_widget
 
-
 class OpenLIFUPrePlanning(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
@@ -125,6 +124,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateTargetsListView()
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
+
+        self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -251,6 +252,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.virtualfitButton.enabled = False
             self.ui.virtualfitButton.setToolTip("Specify all required inputs to enable virtual fitting")
 
+    def onApproveClicked(self):
+        _,_,_,currently_selected_target = self.algorithm_input_widget.get_current_data()
+        self.logic.approve_virtual_fit_for_target(currently_selected_target)
+
+
 #
 # OpenLIFUPrePlanningLogic
 #
@@ -272,6 +278,14 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUPrePlanningParameterNode(super().getParameterNode())
+
+    def approve_virtual_fit_for_target(self, target : Optional[vtkMRMLMarkupsFiducialNode] = None):
+        """Apply approval for the virtual fit of the given target. If no target is provided, then
+        any existing approval is revoked."""
+        data_parameter_node = get_openlifu_data_parameter_node()
+        session = data_parameter_node.loaded_session
+        session.approve_virtual_fit_for_target(target) # apply the approval or lack thereof
+        data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
 
 #
 # OpenLIFUPrePlanningTest
