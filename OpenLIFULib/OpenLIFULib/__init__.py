@@ -428,13 +428,13 @@ class SlicerOpenLIFUSession:
     @staticmethod
     def initialize_from_openlifu_session(
         session : "openlifu.db.Session",
-        volume_path : Path,
+        volume_info : dict
     ) -> "SlicerOpenLIFUSession":
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene."""
 
         # Load volume
-        volume_node = slicer.util.loadVolume(volume_path)
-        volume_node.SetName(slicer.mrmlScene.GenerateUniqueName(session.volume_id))
+        volume_node = slicer.util.loadVolume(volume_info['data_abspath'], properties = {'name': volume_info['name']})
+        volume_node.SetAttribute('OpenLIFUData.volume_id', volume_info['id'])
 
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
