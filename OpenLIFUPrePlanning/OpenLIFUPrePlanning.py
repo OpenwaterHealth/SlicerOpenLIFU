@@ -122,15 +122,21 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         position_coordinate_validator = qt.QDoubleValidator(slicer.util.mainWindow())
         position_coordinate_validator.setNotation(qt.QDoubleValidator.StandardNotation)
-        self.ui.positionRLineEdit.setValidator(position_coordinate_validator)
-        self.ui.positionALineEdit.setValidator(position_coordinate_validator)
-        self.ui.positionSLineEdit.setValidator(position_coordinate_validator)
+        self.targetPositionInputs = [
+            self.ui.positionRLineEdit,
+            self.ui.positionALineEdit,
+            self.ui.positionSLineEdit,
+        ]
+        for positionLineEdit in self.targetPositionInputs:
+            positionLineEdit.setValidator(position_coordinate_validator)
+            positionLineEdit.editingFinished.connect(self.onTargetPositionEditingFinished)
 
         self.updateTargetsListView()
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
-        self.updateRemoveTargetEnabled()
+        self.updateEditTargetEnabled()
+        self.updateTargetPositionInputs()
 
         self.ui.removeTargetButton.clicked.connect(self.onremoveTargetClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
@@ -206,15 +212,20 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointModifiedEvent,self.onPointModified)
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointModifiedEvent,self.onPointModified)
 
     def onPointAddedOrRemoved(self, caller, event):
         self.updateTargetsListView()
         self.updateInputOptions()
+
+    def onPointModified(self, caller, event):
+        self.updateTargetPositionInputs()
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
@@ -233,21 +244,50 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         return item.data(qt.Qt.UserRole)
 
     def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
-        self.updateRemoveTargetEnabled()
+        self.updateEditTargetEnabled()
+        self.updateTargetPositionInputs()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
 
-    def updateRemoveTargetEnabled(self):
-        self.ui.removeTargetButton.setEnabled(self.getTargetsListViewCurrentSelection() is not None)
+    def updateEditTargetEnabled(self):
+        """Update whether the controls that edit targets are enabled, based on whether a target is selected"""
+        enabled = self.getTargetsListViewCurrentSelection() is not None
+        for widget in [self.ui.removeTargetButton, *self.targetPositionInputs, self.ui.moveButton]:
+            widget.setEnabled(enabled)
 
     def onremoveTargetClicked(self):
         node = self.getTargetsListViewCurrentSelection()
         if node is None:
             raise RuntimeError("It should not be possible to click Remove target while there is not a valid target selected.")
         slicer.mrmlScene.RemoveNode(node)
+
+    def updateTargetPositionInputs(self):
+        node = self.getTargetsListViewCurrentSelection()
+
+        if node is None:
+            for positionLineEdit in self.targetPositionInputs:
+                positionLineEdit.text = ""
+            return
+
+        position_ras = node.GetNthControlPointPosition(0)
+        for coord_value, positionLineEdit in zip(position_ras,self.targetPositionInputs):
+            if not positionLineEdit.hasFocus():
+                # If the RAS coordinates are not being input by the user, round what is displayed for easier reading.
+                # Note that this only affects what is displayed and isn't actually rounding the position of the point.
+                coord_value = f"{coord_value:0.2f}"
+
+            positionLineEdit.text = coord_value
+
+    def onTargetPositionEditingFinished(self):
+        try:
+            new_ras_position = [float(positionLineEdit.text) for positionLineEdit in self.targetPositionInputs]
+        except ValueError: # The text was not convertible float (e.g blank input)
+            return
+        node = self.getTargetsListViewCurrentSelection()
+        node.SetNthControlPointPosition(0,*new_ras_position)
 
     def updateApproveButtonEnabled(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
