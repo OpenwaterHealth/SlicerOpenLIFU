@@ -139,9 +139,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApprovalStatusLabel()
         self.updateEditTargetEnabled()
         self.updateTargetPositionInputs()
+        self.updateLockButtonIcon()
 
         self.ui.newTargetButton.clicked.connect(self.onNewTargetClicked)
         self.ui.removeTargetButton.clicked.connect(self.onremoveTargetClicked)
+        self.ui.lockButton.clicked.connect(self.onLockClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onvirtualfitClicked)
 
@@ -216,12 +218,14 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointModifiedEvent,self.onPointModified)
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified)
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointModifiedEvent,self.onPointModified)
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified)
 
     def onPointAddedOrRemoved(self, caller, event):
         self.updateTargetsListView()
@@ -229,6 +233,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onPointModified(self, caller, event):
         self.updateTargetPositionInputs()
+
+    def onLockModified(self, caller, event):
+        self.updateLockButtonIcon()
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
@@ -258,6 +265,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
         self.updateEditTargetEnabled()
         self.updateTargetPositionInputs()
+        self.updateLockButtonIcon()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateApproveButtonEnabled()
@@ -267,7 +275,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def updateEditTargetEnabled(self):
         """Update whether the controls that edit targets are enabled, based on whether a target is selected"""
         enabled = self.getTargetsListViewCurrentSelection() is not None
-        for widget in [self.ui.removeTargetButton, *self.targetPositionInputs, self.ui.moveButton]:
+        for widget in [self.ui.removeTargetButton, *self.targetPositionInputs, self.ui.lockButton]:
             widget.setEnabled(enabled)
 
     def onNewTargetClicked(self):
@@ -314,6 +322,25 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             return
         node = self.getTargetsListViewCurrentSelection()
         node.SetNthControlPointPosition(0,*new_ras_position)
+
+    def updateLockButtonIcon(self):
+        node = self.getTargetsListViewCurrentSelection()
+        if node is None:
+            self.ui.lockButton.setIcon(qt.QIcon())
+            self.ui.lockButton.setToolTip("")
+            return
+        if node.GetLocked():
+            self.ui.lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerLock.png"))
+            self.ui.lockButton.setToolTip("Target locked. Click to unlock to move target using the mouse.")
+        else:
+            self.ui.lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerUnlock.png"))
+            self.ui.lockButton.setToolTip("Target unlocked. Click to lock from moving target using the mouse.")
+
+    def onLockClicked(self):
+        node = self.getTargetsListViewCurrentSelection()
+        if node is None:
+            raise RuntimeError("It should not be possible to click the lock button with no target selected.")
+        node.SetLocked(not node.GetLocked())
 
     def updateApproveButtonEnabled(self):
         if get_openlifu_data_parameter_node().loaded_session is None:

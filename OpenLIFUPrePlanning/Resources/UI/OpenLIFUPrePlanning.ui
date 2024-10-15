@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>294</width>
-    <height>387</height>
+    <width>291</width>
+    <height>410</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -91,9 +91,9 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="moveButton">
+          <widget class="QToolButton" name="lockButton">
            <property name="text">
-            <string>✥</string>
+            <string/>
            </property>
           </widget>
          </item>
