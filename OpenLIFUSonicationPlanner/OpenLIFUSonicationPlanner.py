@@ -34,6 +34,7 @@ from OpenLIFULib.util import replace_widget
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import xarray
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 #
 # OpenLIFUSonicationPlanner
@@ -128,6 +129,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.updatePlanProgressBar()
         self.updateRenderPNPCheckBox()
+        self.updateVirtualFitApprovalStatus()
 
         # Add an observer on the Data module's parameter node
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
@@ -252,6 +254,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.updatePlanProgressBar()
         self.updateRenderPNPCheckBox()
+        self.updateVirtualFitApprovalStatus()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -286,6 +289,17 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.render_pnp()
         else:
             self.logic.hide_pnp()
+
+    def updateVirtualFitApprovalStatus(self) -> None:
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        if data_logic.validate_session():
+            target_id = data_logic.get_virtual_fit_approval_state()
+            if target_id is None:
+                self.ui.virtualFitApprovalStatusLabel.text = ""
+            else:
+                self.ui.virtualFitApprovalStatusLabel.text = f"(Virtual fit was approved for target \"{target_id}\")"
+        else:
+            self.ui.virtualFitApprovalStatusLabel.text = ""
 
 #
 # Utilities

@@ -167,6 +167,13 @@ OpenLIFUAlgorithmInputWidget</string>
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QLabel" name="approvalStatusLabel">
+        <property name="text">
+         <string>(approval status displayed here)</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

@@ -1177,6 +1177,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
+    def get_virtual_fit_approval_state(self) -> Optional[str]:
+        """Get the virtual fit approval state in the current session, i.e. the value of virtual_fit_approval_for_target_id.
+        This does not first check whether there is an active session; make sure that one exists before using this.
+        """
+        session = self.getParameterNode().loaded_session
+        if session is None:
+            raise RuntimeError("No active session.")
+        return session.session.session.virtual_fit_approval_for_target_id
 
     def load_volume_from_file(self, filepath: str) -> None:
 

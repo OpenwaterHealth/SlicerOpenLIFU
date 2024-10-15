@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import warnings
 
 import qt
@@ -18,6 +18,9 @@ from OpenLIFULib import (
     OpenLIFUAlgorithmInputWidget,
 )
 from OpenLIFULib.util import replace_widget
+
+if TYPE_CHECKING:
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 class OpenLIFUPrePlanning(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -124,6 +127,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateTargetsListView()
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
+        self.updateApprovalStatusLabel()
 
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
@@ -229,6 +233,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
+        self.updateApprovalStatusLabel()
 
     def updateApproveButtonEnabled(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -255,6 +260,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onApproveClicked(self):
         _,_,_,currently_selected_target = self.algorithm_input_widget.get_current_data()
         self.logic.approve_virtual_fit_for_target(currently_selected_target)
+
+    def updateApprovalStatusLabel(self):
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        if data_logic.validate_session():
+            target_id = data_logic.get_virtual_fit_approval_state()
+            if target_id is None:
+                self.ui.approvalStatusLabel.text = "No virtual fit approval in the session."
+            else:
+                self.ui.approvalStatusLabel.text = f"Virtual fit approved for \"{target_id}\""
+        else:
+            self.ui.approvalStatusLabel.text = ""
 
 
 #
