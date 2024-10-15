@@ -1,4 +1,5 @@
 from pathlib import Path
+from os import path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
 import json
 
@@ -100,10 +101,11 @@ class AddNewVolumeDialog(qt.QDialog):
         self.volume_extensions = ("Volume" + " (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
         "Dicom" + " (*.dcm *.ima);;" + 
         "All Files" + " (*)")
-
         self.volumeFilePath.nameFilters = [self.volume_extensions]
+
+        self.volumeFilePath.currentPathChanged.connect(self.updateVolumeDetails)
+
         formLayout.addRow(_("Filepath:"), self.volumeFilePath)
-        # TODO: Autopopulate volume name and ID
 
         self.volumeName = qt.QLineEdit()
         formLayout.addRow(_("Volume Name:"), self.volumeName)
@@ -118,8 +120,16 @@ class AddNewVolumeDialog(qt.QDialog):
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.accept)
-        print("current path:", self.volumeFilePath.currentPath)
 
+    def updateVolumeDetails(self):
+        current_filepath = self.volumeFilePath.currentPath
+        volume_name = path.basename(current_filepath).split('.')[0]
+        if not len(self.volumeName.text):
+            self.volumeName.setText(volume_name)
+        if not len(self.volumeID.text): 
+            self.volumeID.setText(volume_name)
+
+                                 
     def customexec_(self):
 
         returncode = self.exec_()
@@ -1172,13 +1182,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         parent_dir = Path(filepath).parent
         volume_id = parent_dir.name # assuming the user selected a volume within the database
+       
         if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
 
             # If a corresponding json file exists in the volume's parent directory,
             # then use volume_metadata included in the json file
             volume_json_filepath = Path(parent_dir, volume_id + '.json')
             if Path.exists(volume_json_filepath):
-                # Open and read the JSON file
+              
                 with open(volume_json_filepath, 'r') as volume_json:
                     volume_metadata = json.load(volume_json)
                     loadedVolumeNode = slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
