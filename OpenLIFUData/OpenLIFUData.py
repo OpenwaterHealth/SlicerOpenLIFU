@@ -614,6 +614,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionStatusProtocolValueLabel.setText(session_openlifu.protocol_id)
             self.ui.sessionStatusTransducerValueLabel.setText(session_openlifu.transducer_id)
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
+
+            # Build the additional info message here; this is status text that conditionally displays.
+            additional_info = ""
+            if session_openlifu.virtual_fit_approval_for_target_id is not None:
+                additional_info += f"Virtual fit approved for \"{session_openlifu.virtual_fit_approval_for_target_id}\""
+            self.ui.sessionStatusAdditionalInfoLabel.setText(additional_info)
+
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
             for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
                 button.setEnabled(True)

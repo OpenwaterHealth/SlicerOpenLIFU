@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>648</height>
+    <height>784</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -116,8 +116,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>299</width>
-           <height>198</height>
+           <width>285</width>
+           <height>218</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -147,56 +147,94 @@
                 </layout>
                </widget>
                <widget class="QWidget" name="activeSession">
-                <layout class="QFormLayout" name="formLayout">
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="sessionStatusSubjectNameIdLabel">
+                <layout class="QVBoxLayout" name="verticalLayout_8">
+                 <item>
+                  <widget class="QWidget" name="sessionStatusFormWidget" native="true">
+                   <layout class="QFormLayout" name="formLayout_3">
+                    <property name="leftMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="rightMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="bottomMargin">
+                     <number>0</number>
+                    </property>
+                    <item row="0" column="1">
+                     <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel"/>
+                    </item>
+                    <item row="1" column="0">
+                     <widget class="QLabel" name="sessionStatusSessionNameIdLabel">
+                      <property name="text">
+                       <string>Session Name (ID):</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="1">
+                     <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel"/>
+                    </item>
+                    <item row="2" column="0">
+                     <widget class="QLabel" name="sessionStatusProtocolLabel">
+                      <property name="text">
+                       <string>Protocol:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="2" column="1">
+                     <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>
+                    </item>
+                    <item row="3" column="0">
+                     <widget class="QLabel" name="sessionStatusTransducerLabel">
+                      <property name="text">
+                       <string>Transducer:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="3" column="1">
+                     <widget class="QLabel" name="sessionStatusTransducerValueLabel"/>
+                    </item>
+                    <item row="4" column="0">
+                     <widget class="QLabel" name="sessionStatusVolumeLabel">
+                      <property name="text">
+                       <string>Volume:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="4" column="1">
+                     <widget class="QLabel" name="sessionStatusVolumeValueLabel"/>
+                    </item>
+                    <item row="0" column="0">
+                     <widget class="QLabel" name="sessionStatusSubjectNameIdLabel">
+                      <property name="text">
+                       <string>Subject Name (ID):</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="sessionStatusAdditionalInfoLabel">
                    <property name="text">
-                    <string>Subject Name (ID):</string>
+                    <string>(additional info goes here)</string>
                    </property>
                   </widget>
                  </item>
-                 <item row="1" column="0">
-                  <widget class="QLabel" name="sessionStatusSessionNameIdLabel">
-                   <property name="text">
-                    <string>Session Name (ID):</string>
+                 <item>
+                  <spacer name="verticalSpacer_2">
+                   <property name="orientation">
+                    <enum>Qt::Vertical</enum>
                    </property>
-                  </widget>
-                 </item>
-                 <item row="2" column="0">
-                  <widget class="QLabel" name="sessionStatusProtocolLabel">
-                   <property name="text">
-                    <string>Protocol:</string>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>20</width>
+                     <height>40</height>
+                    </size>
                    </property>
-                  </widget>
-                 </item>
-                 <item row="3" column="0">
-                  <widget class="QLabel" name="sessionStatusTransducerLabel">
-                   <property name="text">
-                    <string>Transducer:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="4" column="0">
-                  <widget class="QLabel" name="sessionStatusVolumeLabel">
-                   <property name="text">
-                    <string>Volume:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="1">
-                  <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel"/>
-                 </item>
-                 <item row="1" column="1">
-                  <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel"/>
-                 </item>
-                 <item row="2" column="1">
-                  <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>
-                 </item>
-                 <item row="3" column="1">
-                  <widget class="QLabel" name="sessionStatusTransducerValueLabel"/>
-                 </item>
-                 <item row="4" column="1">
-                  <widget class="QLabel" name="sessionStatusVolumeValueLabel"/>
+                  </spacer>
                  </item>
                 </layout>
                </widget>
