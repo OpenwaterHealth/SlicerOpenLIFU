@@ -24,6 +24,8 @@ from OpenLIFULib.util import replace_widget
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
+PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
+
 class OpenLIFUPrePlanning(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
@@ -138,6 +140,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateEditTargetEnabled()
         self.updateTargetPositionInputs()
 
+        self.ui.newTargetButton.clicked.connect(self.onNewTargetClicked)
         self.ui.removeTargetButton.clicked.connect(self.onremoveTargetClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onvirtualfitClicked)
@@ -243,6 +246,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             return None
         return item.data(qt.Qt.UserRole)
 
+    def selectTargetByID(self, fiducial_node_mrml_id:str):
+        """Set the currently selected target in the targets list widget to the one with the given ID, if it is there.
+        If it is not there then then the selection is unaffected."""
+        for i in range(self.ui.targetListWidget.count):
+            item = self.ui.targetListWidget.item(i)
+            if item.data(qt.Qt.UserRole).GetID() == fiducial_node_mrml_id:
+                self.ui.targetListWidget.setCurrentItem(item)
+                break
+
     def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
         self.updateEditTargetEnabled()
         self.updateTargetPositionInputs()
@@ -257,6 +269,20 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         enabled = self.getTargetsListViewCurrentSelection() is not None
         for widget in [self.ui.removeTargetButton, *self.targetPositionInputs, self.ui.moveButton]:
             widget.setEnabled(enabled)
+
+    def onNewTargetClicked(self):
+        # If we are already in point placement mode then do nothing
+        if slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton").GetCurrentInteractionMode() == PLACE_INTERACTION_MODE_ENUM_VALUE:
+            return
+
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+        node.SetMaximumNumberOfControlPoints(1)
+        node.SetName(slicer.mrmlScene.GenerateUniqueName("Target"))
+        node.SetMarkupLabelFormat("%N")
+
+        slicer.modules.markups.logic().StartPlaceMode(
+            False # "place mode persistence" set to False means we want to place one target and then stop
+        )
 
     def onremoveTargetClicked(self):
         node = self.getTargetsListViewCurrentSelection()
