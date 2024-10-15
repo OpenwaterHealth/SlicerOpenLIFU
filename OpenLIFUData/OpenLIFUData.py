@@ -118,6 +118,7 @@ class AddNewVolumeDialog(qt.QDialog):
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.accept)
+        print("current path:", self.volumeFilePath.currentPath)
 
     def customexec_(self):
 
@@ -525,6 +526,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if filepath:
             self.logic.load_volume_from_file(filepath)
+            self.updateLoadedObjectsView() # Call function here to update view based on node attributes
             
 
     def onLoadFiducialsPressed(self) -> None:
@@ -563,10 +565,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
-            row = list(map(
-                create_noneditable_QStandardItem,
-                [volume_node.GetName(), "Volume", volume_node.GetID()]
-            ))
+            if volume_node.GetAttribute('OpenLIFUData.volume_id'):
+                row = list(map(
+                    create_noneditable_QStandardItem,
+                    [volume_node.GetName(), "Volume", volume_node.GetAttribute('OpenLIFUData.volume_id')]
+                ))
+            else:
+                row = list(map(
+                    create_noneditable_QStandardItem,
+                    [volume_node.GetName(), "Volume", volume_node.GetID()]
+                ))
+
             self.loadedObjectsItemModel.appendRow(row)
         for fiducial_node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode'):
             points_type = "Point" if fiducial_node.GetMaximumNumberOfControlPoints() == 1 else "Points"
@@ -1172,25 +1181,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 # Open and read the JSON file
                 with open(volume_json_filepath, 'r') as volume_json:
                     volume_metadata = json.load(volume_json)
-                    slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
-                    # TODO: Need to save id info somehwere to name the node in openlifu objects. Name refers to the volume_name. Or can I set it as a node attribute?
-
+                    loadedVolumeNode = slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
+                    # OnNodeAdded/updateLoadedObjectsView is called before attribute is set.
+                    loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
+                
             # Otherwise, use default volume name and id based on filepath
             else:
                 slicer.util.loadVolume(filepath)
-                    
+
         # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
         elif Path(filepath).suffix == '.json':
  
-                # Check for corresponding volume file
-                with open(filepath, 'r') as volume_json:
+            # Check for corresponding volume file
+            with open(filepath, 'r') as volume_json:
                     volume_metadata = json.load(volume_json)
 
-                    # Check that it is a volume json. Using volume_name since session files include volume_id
-                    if 'volume_name' in volume_metadata: 
+                    if 'data_filename' in volume_metadata: 
                         volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
                         if Path.exists(volume_filepath):
-                            slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
+                            loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
+                            loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
                         else:
                             slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
                     else:
