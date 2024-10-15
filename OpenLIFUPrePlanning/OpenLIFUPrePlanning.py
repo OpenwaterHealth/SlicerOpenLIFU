@@ -130,7 +130,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
+        self.updateRemoveTargetEnabled()
 
+        self.ui.removeTargetButton.clicked.connect(self.onremoveTargetClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onvirtualfitClicked)
 
@@ -231,12 +233,21 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         return item.data(qt.Qt.UserRole)
 
     def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
-        pass # This is a stub that will be filled in soon
+        self.updateRemoveTargetEnabled()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateApproveButtonEnabled()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
+
+    def updateRemoveTargetEnabled(self):
+        self.ui.removeTargetButton.setEnabled(self.getTargetsListViewCurrentSelection() is not None)
+
+    def onremoveTargetClicked(self):
+        node = self.getTargetsListViewCurrentSelection()
+        if node is None:
+            raise RuntimeError("It should not be possible to click Remove target while there is not a valid target selected.")
+        slicer.mrmlScene.RemoveNode(node)
 
     def updateApproveButtonEnabled(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
