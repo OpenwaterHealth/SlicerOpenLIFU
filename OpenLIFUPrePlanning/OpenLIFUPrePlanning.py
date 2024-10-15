@@ -10,12 +10,14 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLMarkupsFiducialNode
+from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
 
 from OpenLIFULib import (
     get_target_candidates,
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
+    SlicerOpenLIFUProtocol,
+    SlicerOpenLIFUTransducer,
 )
 from OpenLIFULib.util import replace_widget
 
@@ -130,6 +132,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApprovalStatusLabel()
 
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
+        self.ui.virtualfitButton.clicked.connect(self.onvirtualfitClicked)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -272,6 +275,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         else:
             self.ui.approvalStatusLabel.text = ""
 
+    def onvirtualfitClicked(self):
+        self.logic.virtual_fit(*(self.algorithm_input_widget.get_current_data()))
 
 #
 # OpenLIFUPrePlanningLogic
@@ -302,6 +307,18 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session = data_parameter_node.loaded_session
         session.approve_virtual_fit_for_target(target) # apply the approval or lack thereof
         data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
+
+    def virtual_fit(
+            self,
+            protocol: SlicerOpenLIFUProtocol,
+            transducer : SlicerOpenLIFUTransducer,
+            volume: vtkMRMLScalarVolumeNode,
+            target: vtkMRMLMarkupsFiducialNode,
+        ):
+        slicer.util.infoDisplay(
+            text="The virtual fit button is a placeholder. Virtual fit algorithm not yet implemented.",
+            windowTitle="Not implemented"
+        )
 
 #
 # OpenLIFUPrePlanningTest
