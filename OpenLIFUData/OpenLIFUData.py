@@ -778,9 +778,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if not self.validate_session():
             raise RuntimeError("Cannot save session because there is no active session, or the active session was invalid.")
 
-        loaded_session : SlicerOpenLIFUSession = self.getParameterNode().loaded_session
+        parameter_node = self.getParameterNode()
+        session : SlicerOpenLIFUSession = parameter_node.loaded_session
         targets = get_target_candidates() # future TODO: ask the user which targets they want to include in the session
-        session_openlifu = loaded_session.update_underlying_openlifu_session(targets)
+        session_openlifu = session.update_underlying_openlifu_session(targets)
+        parameter_node.loaded_session = session # remember to write the updated session to the parameter node
 
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         self.db.write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
