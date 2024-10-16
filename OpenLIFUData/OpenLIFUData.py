@@ -119,17 +119,30 @@ class AddNewVolumeDialog(qt.QDialog):
         formLayout.addWidget(self.buttonBox)
 
         self.buttonBox.rejected.connect(self.reject)
-        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.accepted.connect(self.validateInputs)
 
     def updateVolumeDetails(self):
         current_filepath = self.volumeFilePath.currentPath
-        volume_name = path.basename(current_filepath).split('.')[0]
-        if not len(self.volumeName.text):
-            self.volumeName.setText(volume_name)
-        if not len(self.volumeID.text): 
-            self.volumeID.setText(volume_name)
+        if Path(current_filepath).is_file():
+            volume_name = path.basename(current_filepath).split('.')[0]
+            if not len(self.volumeName.text):
+                self.volumeName.setText(volume_name)
+            if not len(self.volumeID.text): 
+                self.volumeID.setText(volume_name)
 
-                                 
+    def validateInputs(self):
+
+        volume_name = self.volumeName.text
+        volume_id = self.volumeID.text
+        volume_filepath = self.volumeFilePath.currentPath
+
+        if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
+            slicer.util.errorDisplay("Required fields are missing", parent = self)
+        elif not slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
+            slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
+        else:
+            self.accept()
+                               
     def customexec_(self):
 
         returncode = self.exec_()
@@ -473,20 +486,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not returncode:
             return False
         
-        if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
-            slicer.util.errorDisplay("Required fields are missing")
-            return
-        else:
-            # Load volume and add it to the loaded database
-            if slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
-                loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_name})
-                loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_id)
-                self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
-                self.updateLoadedObjectsView()
-            else:
-                slicer.util.errorDisplay("Invalid volume filetype specified")
-                return
-
+        self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
 
     @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
