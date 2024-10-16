@@ -155,6 +155,7 @@ class SlicerOpenLIFUSession:
         )
 
         return self.session.session
+
     def approve_virtual_fit_for_target(self, target : Optional[vtkMRMLMarkupsFiducialNode] = None):
         """Apply approval for the virtual fit of the given target. If no target is provided, then
         any existing approval is revoked."""
@@ -162,3 +163,7 @@ class SlicerOpenLIFUSession:
         if target is not None:
             target_id = fiducial_to_openlifu_point_id(target)
         self.session.session.virtual_fit_approval_for_target_id = target_id # apply the approval or lack thereof
+
+    def virtual_fit_is_approved_for_target(self, target : vtkMRMLMarkupsFiducialNode) -> bool:
+        """Return whether there is a virtual fit approval for the given target"""
+        return self.session.session.virtual_fit_approval_for_target_id == fiducial_to_openlifu_point_id(target)

@@ -1,5 +1,6 @@
-from typing import Optional, TYPE_CHECKING
-import warnings
+from typing import Optional, TYPE_CHECKING, Dict, List
+from functools import partial
+from collections import defaultdict
 
 import qt
 import vtk
@@ -87,11 +88,14 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
 
+        self.node_observations : Dict[str:List[int]] = defaultdict(list)
+
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUPrePlanning.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
+
 
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
@@ -132,6 +136,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         for positionLineEdit in self.targetPositionInputs:
             positionLineEdit.setValidator(position_coordinate_validator)
             positionLineEdit.editingFinished.connect(self.onTargetPositionEditingFinished)
+
+        # Watch any fiducial nodes that already existed before this module was set up
+        for fiducial_node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
+            self.watch_fiducial_node(fiducial_node)
 
         self.updateTargetsListView()
         self.updateApproveButtonEnabled()
@@ -207,32 +215,31 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
-                self.unwatch_fiducial_node(node)
+            self.unwatch_fiducial_node(node)
+            self.logic.revoke_approval_if_any(node)
         self.updateTargetsListView()
         self.updateInputOptions()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
-        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
-        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
-        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointModifiedEvent,self.onPointModified)
-        self.addObserver(node,slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified)
+        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,partial(self.onPointAddedOrRemoved, node)))
+        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,partial(self.onPointAddedOrRemoved, node)))
+        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,partial(self.onPointModified, node)))
+        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified))
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
-        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
-        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
-        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointModifiedEvent,self.onPointModified)
-        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified)
+        for tag in self.node_observations.pop(node.GetID()):
+            node.RemoveObserver(tag)
 
-    def onPointAddedOrRemoved(self, caller, event):
+    def onPointAddedOrRemoved(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetsListView()
         self.updateInputOptions()
+        self.logic.revoke_approval_if_any(node)
 
-    def onPointModified(self, caller, event):
+    def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetPositionInputs()
+        self.logic.revoke_approval_if_any(node)
 
     def onLockModified(self, caller, event):
         self.updateLockButtonIcon()
@@ -411,6 +418,22 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session = data_parameter_node.loaded_session
         session.approve_virtual_fit_for_target(target) # apply the approval or lack thereof
         data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
+
+    def revoke_approval_if_any(self, target : Optional[vtkMRMLMarkupsFiducialNode] = None):
+        """If there was a virtual fit approval for the given target, revoke it.
+        If no target is provided, then any existing virtual fit approval is revoked without regard for target.
+        If there is no active session then this does nothing.
+        """
+        data_parameter_node = get_openlifu_data_parameter_node()
+        session = data_parameter_node.loaded_session
+        if session is None:
+            return
+        if (
+            target is None
+            or session.virtual_fit_is_approved_for_target(target)
+        ):
+            session.approve_virtual_fit_for_target(None) # revoke approval
+            data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
 
     def virtual_fit(
             self,
