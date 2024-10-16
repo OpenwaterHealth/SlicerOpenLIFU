@@ -243,6 +243,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onLockModified(self, caller, event):
         self.updateLockButtonIcon()
+        self.updateEditTargetEnabled()
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
@@ -280,10 +281,14 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApprovalStatusLabel()
 
     def updateEditTargetEnabled(self):
-        """Update whether the controls that edit targets are enabled, based on whether a target is selected"""
-        enabled = self.getTargetsListViewCurrentSelection() is not None
-        for widget in [self.ui.removeTargetButton, *self.targetPositionInputs, self.ui.lockButton]:
-            widget.setEnabled(enabled)
+        """Update whether the controls that edit targets are enabled"""
+        current_selection = self.getTargetsListViewCurrentSelection()
+        target_position_inputs_enabled = (current_selection is not None) and (not current_selection.GetLocked())
+        target_deletion_and_locking_enabled = current_selection is not None
+        for widget in self.targetPositionInputs:
+            widget.setEnabled(target_position_inputs_enabled)
+        for widget in [self.ui.removeTargetButton, self.ui.lockButton]:
+            widget.setEnabled(target_deletion_and_locking_enabled)
 
     def onNewTargetClicked(self):
         # If we are already in point placement mode then do nothing
@@ -338,10 +343,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             return
         if node.GetLocked():
             self.ui.lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerLock.png"))
-            self.ui.lockButton.setToolTip("Target locked. Click to unlock to move target using the mouse.")
+            self.ui.lockButton.setToolTip("Target locked. Click to unlock moving the target.")
         else:
             self.ui.lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerUnlock.png"))
-            self.ui.lockButton.setToolTip("Target unlocked. Click to lock from moving target using the mouse.")
+            self.ui.lockButton.setToolTip("Target unlocked. Click to lock target from being moved.")
 
     def onLockClicked(self):
         node = self.getTargetsListViewCurrentSelection()
