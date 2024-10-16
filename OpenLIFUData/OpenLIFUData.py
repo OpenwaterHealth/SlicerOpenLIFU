@@ -605,14 +605,20 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         else:
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
+            protocol_openlifu : "openlifu.Protocol" = loaded_session.get_protocol().protocol
+            transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
             self.ui.sessionStatusSubjectNameIdValueLabel.setText(
                 f"{subject_openlifu.name} ({session_openlifu.subject_id})"
             )
             self.ui.sessionStatusSessionNameIdValueLabel.setText(
                 f"{session_openlifu.name} ({session_openlifu.id})"
             )
-            self.ui.sessionStatusProtocolValueLabel.setText(session_openlifu.protocol_id)
-            self.ui.sessionStatusTransducerValueLabel.setText(session_openlifu.transducer_id)
+            self.ui.sessionStatusProtocolValueLabel.setText(
+                f"{protocol_openlifu.name} ({session_openlifu.protocol_id})"
+            )
+            self.ui.sessionStatusTransducerValueLabel.setText(
+                f"{transducer_openlifu.name} ({session_openlifu.transducer_id})"
+            )
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
 
             # Build the additional info message here; this is status text that conditionally displays.
