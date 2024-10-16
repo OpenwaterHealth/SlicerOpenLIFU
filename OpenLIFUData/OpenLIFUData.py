@@ -608,16 +608,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             protocol_openlifu : "openlifu.Protocol" = loaded_session.get_protocol().protocol
             transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
             self.ui.sessionStatusSubjectNameIdValueLabel.setText(
-                f"{subject_openlifu.name} ({session_openlifu.subject_id})"
+                f"{subject_openlifu.name} (ID: {session_openlifu.subject_id})"
             )
             self.ui.sessionStatusSessionNameIdValueLabel.setText(
-                f"{session_openlifu.name} ({session_openlifu.id})"
+                f"{session_openlifu.name} (ID: {session_openlifu.id})"
             )
             self.ui.sessionStatusProtocolValueLabel.setText(
-                f"{protocol_openlifu.name} ({session_openlifu.protocol_id})"
+                f"{protocol_openlifu.name} (ID: {session_openlifu.protocol_id})"
             )
             self.ui.sessionStatusTransducerValueLabel.setText(
-                f"{transducer_openlifu.name} ({session_openlifu.transducer_id})"
+                f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
             )
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
 
