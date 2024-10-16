@@ -477,8 +477,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             else:
                 # Load volume and add it to the loaded database
                 if slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
-                    slicer.util.loadVolume(volume_filepath)
+                    loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_name})
+                    loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_id)
                     self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
+                    self.updateLoadedObjectsView()
                 else:
                     slicer.util.errorDisplay("Invalid volume filetype specified")
                     return
