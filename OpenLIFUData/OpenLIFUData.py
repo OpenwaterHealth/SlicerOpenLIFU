@@ -935,6 +935,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_session(self, subject_id, session_id) -> None:
 
+        # Make sure to the preplanning module is loaded in -- it is what watches for events
+        # that would cause virtual fit approval to be revoked. We could be about to load a
+        # session with virtual fit approval already applied so this is important.
+        slicer.util.getModule("OpenLIFUPrePlanning").widgetRepresentation()
+
         # === Ensure it's okay to load a session ===
 
         session_openlifu = self.get_session(subject_id, session_id)
