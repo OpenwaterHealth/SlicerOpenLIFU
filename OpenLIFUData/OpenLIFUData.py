@@ -470,20 +470,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         volumedlg = AddNewVolumeDialog()
         returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
 
-        if returncode:
-            if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
-                slicer.util.errorDisplay("Required fields are missing")
-                return
+        if not returncode:
+            return False
+        
+        if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
+            slicer.util.errorDisplay("Required fields are missing")
+            return
+        else:
+            # Load volume and add it to the loaded database
+            if slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
+                loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_name})
+                loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_id)
+                self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
+                self.updateLoadedObjectsView()
             else:
-                # Load volume and add it to the loaded database
-                if slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
-                    loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_name})
-                    loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_id)
-                    self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
-                    self.updateLoadedObjectsView()
-                else:
-                    slicer.util.errorDisplay("Invalid volume filetype specified")
-                    return
+                slicer.util.errorDisplay("Invalid volume filetype specified")
+                return
 
 
     @display_errors
@@ -1191,16 +1193,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # If a corresponding json file exists in the volume's parent directory,
             # then use volume_metadata included in the json file
             volume_json_filepath = Path(parent_dir, volume_id + '.json')
-            if Path.exists(volume_json_filepath):
+            if volume_json_filepath.exists():
 
-                with open(volume_json_filepath, 'r') as volume_json:
-                    volume_metadata = json.load(volume_json)
-                    if volume_metadata['data_filename'] == Path(filepath).name:
-                            loadedVolumeNode = slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
-                            # OnNodeAdded/updateLoadedObjectsView is called before attribute is set.
-                            loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
-                    else:
-                        slicer.util.loadVolume(filepath)
+                volume_metadata = json.loads(volume_json_filepath.read_text())
+                if volume_metadata['data_filename'] == Path(filepath).name:
+                        loadedVolumeNode = slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
+                        # OnNodeAdded/updateLoadedObjectsView is called before attribute is set.
+                        loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
+                else:
+                    slicer.util.loadVolume(filepath)
 
             # Otherwise, use default volume name and id based on filepath
             else:
@@ -1209,22 +1210,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
         elif Path(filepath).suffix == '.json':
             # Check for corresponding volume file
-            with open(filepath, 'r') as volume_json:
-                volume_metadata = json.load(volume_json)
-                if 'data_filename' in volume_metadata: 
-                    volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
-                    if Path.exists(volume_filepath):
-                        loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
-                        loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
-                    else:
-                        slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
+            volume_metadata = json.loads(filepath.read_text())
+            if 'data_filename' in volume_metadata: 
+                volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
+                if volume_filepath.exists():
+                    loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
+                    loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
                 else:
-                    slicer.util.errorDisplay("Invalid volume filetype specified")
+                    slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
+            else:
+                slicer.util.errorDisplay("Invalid volume filetype specified")
         else:
             slicer.util.errorDisplay("Invalid volume filetype specified")
 
-    @display_errors
-    def add_volume_to_database(self, subject_id, volume_id, volume_name, volume_filepath):
+    def add_volume_to_database(self, subject_id: str, volume_id: str, volume_name: str, volume_filepath: str) -> None:
         """ Adds volume to selected subject in loaded openlifu database.
 
         Args:
