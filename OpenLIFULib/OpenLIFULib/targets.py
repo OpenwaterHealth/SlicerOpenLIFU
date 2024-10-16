@@ -1,4 +1,4 @@
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Optional
 import numpy as np
 import slicer
 from slicer import vtkMRMLMarkupsFiducialNode
@@ -25,9 +25,19 @@ def get_target_candidates() -> List[vtkMRMLMarkupsFiducialNode]:
     ]
 
 def openlifu_point_to_fiducial(point : "openlifu.Point") -> vtkMRMLMarkupsFiducialNode:
-    """Create a fiducial node out of an openlifu Point."""
+    """Create a fiducial node out of an openlifu Point, removing any existing nodes that would have the same name.
+    The name of the node will be the openlifu point ID, so we do not allow this to be duplicated.
+    """
+
+    # Clear out any existing nodes with this name
+    node_name  = point.id
+    existing_nodes_dict = slicer.util.getNodes(node_name, useLists=True)
+    if node_name in existing_nodes_dict:
+        for  existing_node in existing_nodes_dict[node_name]:
+            slicer.mrmlScene.RemoveNode(existing_node)
+
     fiducial_node : vtkMRMLMarkupsFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-    fiducial_node.SetName(slicer.mrmlScene.GenerateUniqueName(point.id))
+    fiducial_node.SetName(node_name)
 
     # Get point position and convert it to Slicer coordinates
     position = np.array(point.position)
@@ -46,23 +56,36 @@ def openlifu_point_to_fiducial(point : "openlifu.Point") -> vtkMRMLMarkupsFiduci
 
     return fiducial_node
 
-def fiducial_to_openlifu_point_in_transducer_coords(fiducial_node:vtkMRMLMarkupsFiducialNode, transducer:"SlicerOpenLIFUTransducer", name:str = '') -> "openlifu.Point":
-    """Given a fiducial node with at least one point, return an openlifu Point in the local coordinates of the given transducer."""
+def fiducial_to_openlifu_point_id(fiducial_node:vtkMRMLMarkupsFiducialNode) -> str:
+    """Get the openlifu point ID that we would use if we were to convert the given fiducial node to an openlifu Point"""
+    return fiducial_node.GetName()
+
+def fiducial_to_openlifu_point_in_transducer_coords(fiducial_node:vtkMRMLMarkupsFiducialNode, transducer:"SlicerOpenLIFUTransducer", name:Optional[str] = None) -> "openlifu.Point":
+    """Given a fiducial node with at least one point, return an openlifu Point in the local coordinates of the given transducer.
+    If name is provided then it will be used as the name of the openlifu Point. Otherwise we use the label on the control point.
+    """
     if fiducial_node.GetNumberOfControlPoints() < 1:
         raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
     position = (np.linalg.inv(slicer.util.arrayFromTransformMatrix(transducer.transform_node)) @ np.array([*fiducial_node.GetNthControlPointPosition(0),1]))[:3] # TODO handle 4th coord here actually, would need to unprojectivize
-    return openlifu_lz().Point(position=position, name = name, dims=('x','y','z'), units = transducer.transducer.transducer.units) # Here x,y,z means transducer coordinates.
+    return openlifu_lz().Point(
+        position=position,
+        name = name if name is not None else fiducial_node.GetNthControlPointLabel(0),
+        id = f"{fiducial_to_openlifu_point_id(fiducial_node)}-in-transducer-coords",
+        dims=('x','y','z'), # Here x,y,z means transducer coordinates.
+        units = transducer.transducer.transducer.units,
+    )
 
 def fiducial_to_openlifu_point(fiducial_node:vtkMRMLMarkupsFiducialNode) -> "openlifu.Point":
     """Given a fiducial node with at least one point, return an openlifu Point in RAS coordinates.
     This tries to be roughly an inverse operation of `openlifu_point_to_fiducial`, but isn't an inverse when it comes to
-    for example the name, id, coordinates, and units."""
+    for example the coordinates, and units. The opnenlifu point ID is however preserved between this function and
+    `openlifu_point_to_fiducial`, because it is used as the node name."""
     if fiducial_node.GetNumberOfControlPoints() < 1:
         raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
     return openlifu_lz().Point(
         position = np.array(fiducial_node.GetNthControlPointPosition(0)),
         name = fiducial_node.GetNthControlPointLabel(0),
-        id = fiducial_node.GetName(),
+        id = fiducial_to_openlifu_point_id(fiducial_node),
         dims=('R','A','S'),
         units = "mm",
     )

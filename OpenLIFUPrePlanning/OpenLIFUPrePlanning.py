@@ -241,7 +241,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Update the list of targets in the target management UI"""
         self.ui.targetListWidget.clear()
         for target_node in get_target_candidates():
-            item = qt.QListWidgetItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()))
+            item = qt.QListWidgetItem(target_node.GetName())
             item.setData(qt.Qt.UserRole, target_node)
             self.ui.targetListWidget.addItem(item)
 

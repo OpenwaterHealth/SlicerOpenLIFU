@@ -13,7 +13,8 @@ from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper
 from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
-    fiducial_to_openlifu_point
+    fiducial_to_openlifu_point,
+    fiducial_to_openlifu_point_id,
 )
 from OpenLIFULib.coordinate_system_utils import (
     get_xx2mm_scale_factor,
@@ -159,6 +160,5 @@ class SlicerOpenLIFUSession:
         any existing approval is revoked."""
         target_id = None
         if target is not None:
-            point : "openlifu.Point" = fiducial_to_openlifu_point(target)
-            target_id = point.id
+            target_id = fiducial_to_openlifu_point_id(target)
         self.session.session.virtual_fit_approval_for_target_id = target_id # apply the approval or lack thereof

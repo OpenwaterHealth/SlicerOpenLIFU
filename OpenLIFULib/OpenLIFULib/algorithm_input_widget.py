@@ -154,7 +154,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         else:
             self.target_input.combo_box.setEnabled(True)
             for target_node in target_nodes:
-                self.target_input.combo_box.addItem("{} (ID: {})".format(target_node.GetName(),target_node.GetID()), target_node)
+                self.target_input.combo_box.addItem(target_node.GetName(), target_node)
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()
