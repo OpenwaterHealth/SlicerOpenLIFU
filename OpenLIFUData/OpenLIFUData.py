@@ -935,7 +935,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_session(self, subject_id, session_id) -> None:
 
-        # Make sure to the preplanning module is loaded in -- it is what watches for events
+        # Make sure to the preplanning module is loaded in -- it watches for some events
         # that would cause virtual fit approval to be revoked. We could be about to load a
         # session with virtual fit approval already applied so this is important.
         slicer.util.getModule("OpenLIFUPrePlanning").widgetRepresentation()
@@ -986,12 +986,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        self.load_transducer_from_openlifu(
+        newly_loaded_transducer = self.load_transducer_from_openlifu(
             transducer = self.db.load_transducer(session_openlifu.transducer_id),
             transducer_matrix = session_openlifu.array_transform.matrix,
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
         )
+        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
 
         # === Load protocol ===
 
@@ -1016,6 +1017,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.getParameterNode().loaded_session = new_session
 
+    def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
+        # Revoke any possible virtual fit approval if the transducer whose transform was just modified
+        # belongs to an active session
+        session = self.getParameterNode().loaded_session
+        if (
+            session is None
+            or session.session.session.virtual_fit_approval_for_target_id is None
+        ):
+            return
+        if session.get_transducer_id() == transducer.transducer.transducer.id:
+            session.approve_virtual_fit_for_target(None) # revoke approval
+            self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
 
     def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
@@ -1056,7 +1069,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
             replace_confirmed: bool = False,
-        ) -> None:
+        ) -> SlicerOpenLIFUTransducer:
         """Load an openlifu transducer object into the scene as a SlicerOpenLIFUTransducer,
         adding it to the list of loaded openlifu objects.
 
@@ -1068,6 +1081,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 these units. If left as None then the transducer's native units (Transducer.units) will be assumed.
             replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Transducer.
                 This could be used for example if we already know the user is okay with re-loading the transducer.
+
+        Returns: The newly loaded SlicerOpenLIFUTransducer.
         """
         if transducer.id == self.get_current_session_transducer_id():
             slicer.util.errorDisplay(
@@ -1084,11 +1099,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     return
             self.remove_transducer(transducer.id)
 
-        self.getParameterNode().loaded_transducers[transducer.id] = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(
+        newly_loaded_transducer = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(
             transducer,
             transducer_matrix=transducer_matrix,
             transducer_matrix_units=transducer_matrix_units,
         )
+        self.getParameterNode().loaded_transducers[transducer.id] = newly_loaded_transducer
+        return newly_loaded_transducer
 
     def remove_transducer(self, transducer_id:str, clean_up_scene:bool = True) -> None:
         """Remove a transducer from the list of loaded transducer, clearing away its data from the scene.

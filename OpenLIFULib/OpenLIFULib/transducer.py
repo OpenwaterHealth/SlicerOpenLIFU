@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Callable, Any
 import numpy as np
 import slicer
 from slicer import (
@@ -74,3 +74,19 @@ class SlicerOpenLIFUTransducer:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.transform_node)
+
+    def observe_transform_modified(self, callback : "Callable[[SlicerOpenLIFUTransducer],Any]") -> int:
+        """Add an observer to the TransformModifiedEvent of the transducer's transform node, providing this object to the callback.
+
+        The provided callback function should accept a single argument of type SlicerOpenLIFUTransducer.
+        When the transducer transform is modified, the callback will be called with this SlicerOpenLIFUTransducer as input.
+
+        Returns the observer tag, so that the observer could be removed using `stop_observing_transform_modified`.
+        """
+        return self.transform_node.AddObserver(
+            slicer.vtkMRMLTransformNode.TransformModifiedEvent,
+            lambda caller,event : callback(self)
+        )
+
+    def stop_observing_transform_modified(self, tag:int) -> None:
+        self.transform_node.RemoveObserver(tag)
