@@ -186,7 +186,6 @@ class AddNewSubjectDialog(qt.QDialog):
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.accept)
 
-
     def customexec_(self):
 
         returncode = self.exec_()
@@ -293,7 +292,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Add new volume to subject
         self.ui.addVolumeToSubjectButton.clicked.connect(self.onAddVolumeToSubjectClicked)
-        self.update_addVolumeToSubjectButton_enabled()
+        # Add new session
+        self.ui.newSessionButton.clicked.connect(self.onCreateNewSessionClicked)
+        self.update_subjectLevelButtons_enabled()
 
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
@@ -350,7 +351,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateSessionStatus()
 
     def onSubjectSessionSelected(self):
-        self.update_addVolumeToSubjectButton_enabled()
+        self.update_subjectLevelButtons_enabled()
         # Move elsewhere, only if subject
         currentIndex = self.ui.subjectSessionView.currentIndex()
         if not self.itemIsSession(currentIndex):
@@ -360,12 +361,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         index = self.ui.subjectSessionView.indexAt(point)
         if not self.itemIsSession(index):
             menu = qt.QMenu()
-            addNewSubjectAction = menu.addAction("Add volume to subject")
+            addNewSubjectAction = menu.addAction("Add volume to subject...")
+            addNewSessionAction = menu.addAction("Create new sesion...")
             action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
 
             if action == addNewSubjectAction:
                 self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
                 self.onAddVolumeToSubjectClicked(checked=True)
+            elif action == addNewSessionAction:
+                return
             
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
@@ -404,16 +408,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.newSubjectButton.setDisabled(True)
             self.ui.newSubjectButton.toolTip = 'Requires a loaded database'
 
-    def update_addVolumeToSubjectButton_enabled(self):
+    def update_subjectLevelButtons_enabled(self):
         """ Update whether the add volume to subject button is enabled based on whether a database has been loaded
         and a subject has been selected in the tree view"""
 
         if self.logic.db and not self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
             self.ui.addVolumeToSubjectButton.setEnabled(True)
             self.ui.addVolumeToSubjectButton.toolTip = 'Add new volume to selected subject'
+
+            self.ui.newSessionButton.setEnabled(True)
+            self.ui.newSessionButton.toolTip = 'Create new session for selected subject'
         else:
-            self.ui.addVolumeToSubjectButton.setDisabled(True)
+            self.ui.addVolumeToSubjectButton.setEnabled(False)
             self.ui.addVolumeToSubjectButton.toolTip = 'Requires a loaded database and subject to be selected'
+
+            self.ui.newSessionButton.setEnabled(False)
+            self.ui.newSessionButton.toolTip = 'Requires a loaded database and subject to be selected'
 
     def update_sessionLoadButton_enabled(self):
         """Update whether the session loading button is enabled based on whether any subject or session is selected."""
@@ -474,6 +484,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return False
         self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
 
+    @display_errors
+    def onCreateNewSessionClicked(self, checked:bool) -> None:
+        return
+    
     @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
         self.logic.clear_session(clean_up_scene=True)
