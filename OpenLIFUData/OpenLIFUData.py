@@ -1,5 +1,4 @@
 from pathlib import Path
-from os import path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
 import json
 
@@ -123,9 +122,11 @@ class AddNewVolumeDialog(qt.QDialog):
         self.buttonBox.accepted.connect(self.validateInputs)
 
     def updateVolumeDetails(self):
-        current_filepath = self.volumeFilePath.currentPath
-        if Path(current_filepath).is_file():
-            volume_name = path.basename(current_filepath).split('.')[0]
+        current_filepath = Path(self.volumeFilePath.currentPath)
+        if current_filepath.is_file():
+            while current_filepath.suffix:
+                current_filepath = current_filepath.with_suffix('')
+            volume_name = current_filepath.stem
             if not len(self.volumeName.text):
                 self.volumeName.setText(volume_name)
             if not len(self.volumeID.text): 
@@ -346,7 +347,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
 
-
     def onSubjectSessionSelected(self):
         self.update_addVolumeToSubjectButton_enabled()
         # Move elsewhere, only if subject
@@ -372,7 +372,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.updateSettingFromParameter('databaseDirectory')
         self.update_newSubjectButton_enabled()
-
 
     def updateSubjectSessionSelector(self):
         # Clear any items that are already there
@@ -467,13 +466,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     @display_errors
     def onAddVolumeToSubjectClicked(self, checked:bool) -> None:
-
         volumedlg = AddNewVolumeDialog()
         returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
-
         if not returncode:
             return False
-        
         self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
 
     @display_errors
