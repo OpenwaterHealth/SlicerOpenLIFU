@@ -31,6 +31,7 @@ from OpenLIFULib import (
     ensure_list,
     add_slicer_log_handler,
     get_target_candidates,
+    assign_openlifu_metadata_to_volume_node,
 )
 
 if TYPE_CHECKING:
@@ -1197,9 +1198,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
                 volume_metadata = json.loads(volume_json_filepath.read_text())
                 if volume_metadata['data_filename'] == Path(filepath).name:
-                        loadedVolumeNode = slicer.util.loadVolume(filepath, properties = {'name': volume_metadata['name']})
-                        # OnNodeAdded/updateLoadedObjectsView is called before attribute is set.
-                        loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
+                        loadedVolumeNode = slicer.util.loadVolume(filepath)
+                        assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
+                        # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is added to the node.
+
                 else:
                     slicer.util.loadVolume(filepath)
 
@@ -1209,13 +1211,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
         elif Path(filepath).suffix == '.json':
+            
             # Check for corresponding volume file
-            volume_metadata = json.loads(filepath.read_text())
+            volume_metadata = json.loads(Path(filepath).read_text())
             if 'data_filename' in volume_metadata: 
                 volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
                 if volume_filepath.exists():
-                    loadedVolumeNode = slicer.util.loadVolume(volume_filepath, properties = {'name': volume_metadata['name']})
-                    loadedVolumeNode.SetAttribute('OpenLIFUData.volume_id', volume_metadata['id'])
+                    loadedVolumeNode = slicer.util.loadVolume(volume_filepath)
+                    assign_openlifu_metadata_to_volume_node(loadedVolumeNode,volume_metadata)
                 else:
                     slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
             else:

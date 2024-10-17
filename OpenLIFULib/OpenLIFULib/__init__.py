@@ -299,7 +299,12 @@ def get_target_candidates() -> List[vtkMRMLMarkupsFiducialNode]:
         if fiducial_node.GetNumberOfControlPoints() == 1
     ]
 
+def assign_openlifu_metadata_to_volume_node(volume_node: vtkMRMLScalarVolumeNode, metadata: dict):
+    """ Assign the volume name and ID used by OpenLIFU to a volume node"""
 
+    volume_node.SetName(metadata['name'])
+    volume_node.SetAttribute('OpenLIFUData.volume_id', metadata['id'])
+    
 @parameterPack
 class SlicerOpenLIFUTransducer:
     """An openlifu Trasducer that has been loaded into Slicer (has a model node and transform node)"""
@@ -424,7 +429,7 @@ class SlicerOpenLIFUSession:
         bounds = [0]*6
         self.volume_node.GetRASBounds(bounds)
         return tuple(np.array(bounds).reshape((3,2)).sum(axis=1) / 2) # midpoints derived from bounds
-
+    
     @staticmethod
     def initialize_from_openlifu_session(
         session : "openlifu.db.Session",
@@ -433,8 +438,8 @@ class SlicerOpenLIFUSession:
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene."""
 
         # Load volume
-        volume_node = slicer.util.loadVolume(volume_info['data_abspath'], properties = {'name': volume_info['name']})
-        volume_node.SetAttribute('OpenLIFUData.volume_id', volume_info['id'])
+        volume_node = slicer.util.loadVolume(volume_info['data_abspath'])
+        assign_openlifu_metadata_to_volume_node(volume_node, volume_info) 
 
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
