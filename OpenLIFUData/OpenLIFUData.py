@@ -290,8 +290,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Add new volume to subject
         self.ui.addVolumeToSubjectButton.clicked.connect(self.onAddVolumeToSubjectClicked)
-
-        self.update_addVolumeToSubjectButton_enabled(subject_selected = False)
+        self.update_addVolumeToSubjectButton_enabled()
 
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
@@ -301,7 +300,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.subjectSessionView.doubleClicked.connect(self.on_item_double_clicked)
 
         # If a subject is clicked or double clicked, the add volume to subject button should be enabled
-        self.ui.subjectSessionView.clicked.connect(self.on_item_clicked)
+        self.ui.subjectSessionView.selectionModel().selectionChanged.connect(self.onSubjectSessionSelected)
 
         # Create custom context menu on right-click
         self.ui.subjectSessionView.setContextMenuPolicy(qt.Qt.CustomContextMenu)
@@ -348,6 +347,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateSessionStatus()
 
 
+    def onSubjectSessionSelected(self):
+        self.update_addVolumeToSubjectButton_enabled()
+        # Move elsewhere, only if subject
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        if not self.itemIsSession(currentIndex):
+            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(1)).text()
+ 
     def openSubjectSessionContextMenu(self, point):
         index = self.ui.subjectSessionView.indexAt(point)
         if not self.itemIsSession(index):
@@ -397,11 +403,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.newSubjectButton.setDisabled(True)
             self.ui.newSubjectButton.toolTip = 'Requires a loaded database'
 
-    def update_addVolumeToSubjectButton_enabled(self, subject_selected: bool):
+    def update_addVolumeToSubjectButton_enabled(self):
         """ Update whether the add volume to subject button is enabled based on whether a database has been loaded
         and a subject has been selected in the tree view"""
 
-        if self.logic.db and subject_selected:
+        if self.logic.db and not self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
             self.ui.addVolumeToSubjectButton.setEnabled(True)
             self.ui.addVolumeToSubjectButton.toolTip = 'Add new volume to selected subject'
         else:
@@ -421,26 +427,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionLoadButton.toolTip = 'Select a subject or session to load'
 
     @display_errors
-    def on_item_clicked(self, index : qt.QModelIndex):
-        if self.itemIsSession(index):
-            # Disable adding volume to subject
-            self.update_addVolumeToSubjectButton_enabled(subject_selected = False)
-
-        else: # If the item was a subject:
-            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-            
-            # Enable adding volume to subject
-            self.update_addVolumeToSubjectButton_enabled(subject_selected = True)
-
-    @display_errors
     def on_item_double_clicked(self, index : qt.QModelIndex):
+
         if self.itemIsSession(index):
             session_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
             subject_id = self.subjectSessionItemModel.itemFromIndex(index.parent().siblingAtColumn(1)).text()
             self.logic.load_session(subject_id, session_id)
-
-            # Disable adding volume to subject
-            self.update_addVolumeToSubjectButton_enabled(subject_selected = False)
 
         else: # If the item was a subject:
             subject_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
@@ -454,11 +446,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     subject_item.appendRow(session_row)
                 self.ui.subjectSessionView.expand(subject_item.index())
             
-            # Enable adding volume to subject
-            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-            self.update_addVolumeToSubjectButton_enabled(subject_selected = True)
-
-
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
