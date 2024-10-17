@@ -435,7 +435,13 @@ class SlicerOpenLIFUSession:
         session : "openlifu.db.Session",
         volume_info : dict
     ) -> "SlicerOpenLIFUSession":
-        """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene."""
+        """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
+        
+        Args:
+            session: OpenLIFUSession
+            volume_info: Dictionary containing the metadata (name, id and filepath) of the volume 
+            being loaded as part of the session
+        """
 
         # Load volume
         volume_node = slicer.util.loadVolume(volume_info['data_abspath'])
