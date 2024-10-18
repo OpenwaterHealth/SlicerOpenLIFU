@@ -129,16 +129,24 @@ class CreateNewSessionDialog(qt.QDialog):
     def add_items_to_combobox(self, comboBox: qt.QComboBox, itemList: List[str], name: str):
 
         if len(itemList) == 0:
-            comboBox.addItem(f"No {name} objects found")
+            comboBox.addItem(f"No {name} objects found", None)
             comboBox.setDisabled(True)
         else:
             for item in itemList:
-                comboBox.addItem(item)
+                comboBox.addItem(item, item)
 
     def validateInputs(self):
-        print("Validating inputs")
-        self.accept()
 
+        session_name = self.sessionName.text
+        session_id = self.sessionID.text
+        transducer_id = self.transducer.currentData
+        protocol_id = self.protocol.currentData
+        volume_id = self.volume.currentData
+        
+        if not len(session_name) or not len(session_id) or any(object is None for object in (volume_id,transducer_id,protocol_id)):
+            slicer.util.errorDisplay("Required fields are missing", parent = self)
+        else:
+            self.accept()
 
     def customexec_(self):
 
@@ -146,9 +154,9 @@ class CreateNewSessionDialog(qt.QDialog):
         session_parameters = {}
         session_parameters['name'] = self.sessionName.text
         session_parameters['id'] = self.sessionID.text
-        session_parameters['transducer'] = self.transducer
-        session_parameters['protocol'] = self.protocol
-        session_parameters['volume'] = self.volume
+        session_parameters['transducer_id'] = self.transducer.currentData
+        session_parameters['protocol_id'] = self.protocol.currentData
+        session_parameters['volume_id'] = self.volume.currentData
 
         return (returncode, session_parameters)
 
@@ -568,7 +576,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onCreateNewSessionClicked(self, checked:bool) -> None:
 
         current_subject = self.getSelectedSubjectSession()
-
         transducer_ids = self.logic.db.get_transducer_ids()
         protocol_ids = self.logic.db.get_protocol_ids()
         volume_ids = self.logic.db.get_volume_ids(current_subject['id'])
@@ -1383,7 +1390,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
   
-    def add_session_to_database(subject: Dict, session_parameters: Dict):
+    def add_session_to_database(self, subject: Dict, session_parameters: Dict):
         # Create openLIFU session and subject
         #self.db.write_session(openlifusubject, openlifusession, on_conflict)
         print("Logic: Adding session")
