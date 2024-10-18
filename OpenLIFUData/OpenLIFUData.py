@@ -142,7 +142,7 @@ class CreateNewSessionDialog(qt.QDialog):
         transducer_id = self.transducer.currentData
         protocol_id = self.protocol.currentData
         volume_id = self.volume.currentData
-        
+
         if not len(session_name) or not len(session_id) or any(object is None for object in (volume_id,transducer_id,protocol_id)):
             slicer.util.errorDisplay("Required fields are missing", parent = self)
         else:
@@ -554,14 +554,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     @display_errors
     def getSelectedSubjectSession(self) -> Dict:
-        """ Returns a dictionary containing the name and id of the subject or session selected the  SubjectSessionView """
+        """ Returns a dictionary containing the name and id of the subject or session selected the SubjectSessionView """
         data = {}
         currentIndex = self.ui.subjectSessionView.currentIndex()
         data['id'] = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(1)).text()
         data['name'] = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(0)).text()
         return data
 
-    
     @display_errors
     def onAddVolumeToSubjectClicked(self, checked:bool) -> None:
         volumedlg = AddNewVolumeDialog()
@@ -576,10 +575,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onCreateNewSessionClicked(self, checked:bool) -> None:
 
         current_subject = self.getSelectedSubjectSession()
-        transducer_ids = self.logic.db.get_transducer_ids()
-        protocol_ids = self.logic.db.get_protocol_ids()
-        volume_ids = self.logic.db.get_volume_ids(current_subject['id'])
-        sessiondlg = CreateNewSessionDialog(transducer_ids=transducer_ids, protocol_ids= protocol_ids, volume_ids=volume_ids)
+        db_transducer_ids = self.logic.db.get_transducer_ids()
+        db_protocol_ids = self.logic.db.get_protocol_ids()
+        db_volume_ids = self.logic.db.get_volume_ids(current_subject['id'])
+        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
         
         returncode, session_parameters = sessiondlg.customexec_()
         if not returncode:
@@ -1371,7 +1370,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             slicer.util.errorDisplay("Invalid volume filetype specified")
 
     def add_volume_to_database(self, subject_id: str, volume_id: str, volume_name: str, volume_filepath: str) -> None:
-        """ Adds volume to selected subject in loaded openlifu database.
+        """ Adds volume to selected subject in the loaded openlifu database.
 
         Args:
             subject_id: ID of subject associated with the volume (str)
@@ -1391,9 +1390,23 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
   
     def add_session_to_database(self, subject: Dict, session_parameters: Dict):
-        # Create openLIFU session and subject
-        #self.db.write_session(openlifusubject, openlifusession, on_conflict)
-        print("Logic: Adding session")
+        """ Add new session to selected subject in the loaded openlifu database
+
+        Args:
+            subject: Dictionary containing 'name' and 'id' of the selected subject
+            session_parameters: Dictionary containing the parameters output from the CreateNewSession Dialog
+        """
+
+        newOpenLIFUSession = openlifu_lz().db.session.Session(
+            name = session_parameters['name'],
+            id = session_parameters['id'],
+            subject_id = subject['id'],
+            protocol_id = session_parameters['protocol_id'],
+            volume_id = session_parameters['volume_id'],
+            transducer_id = session_parameters['transducer_id']
+        )
+                
+        self.db.write_session(self.get_subject(subject['id']), newOpenLIFUSession) #on_conflict
 
 #
 # OpenLIFUDataTest
