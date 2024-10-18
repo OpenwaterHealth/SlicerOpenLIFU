@@ -79,6 +79,86 @@ class OpenLIFUDataParameterNode:
     loaded_plan : "Optional[SlicerOpenLIFUPlan]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
 
+class CreateNewSessionDialog(qt.QDialog):
+    """ Create new session dialog """
+
+    def __init__(self, transducer_ids: List[str], protocol_ids: List[str], volume_ids: List[str], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        
+        self.setWindowTitle("Create New Session")
+        self.setWindowModality(1)
+        self.transducer_ids = transducer_ids
+        self.protocol_ids = protocol_ids
+        self.volume_ids = volume_ids
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(200)
+
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
+
+        self.sessionName = qt.QLineEdit()
+        formLayout.addRow(_("Session Name:"), self.sessionName)
+
+        self.sessionID = qt.QLineEdit()
+        formLayout.addRow(_("Session ID:"), self.sessionID)
+
+        self.transducer = qt.QComboBox()
+        self.add_items_to_combobox(self.transducer, self.transducer_ids, "transducer")
+
+        formLayout.addRow(_("Transducer:"), self.transducer)
+
+        self.protocol = qt.QComboBox()
+        formLayout.addRow(_("Protocol:"), self.protocol)
+        self.add_items_to_combobox(self.protocol, self.protocol_ids, "protocol")
+
+        self.volume = qt.QComboBox()
+        formLayout.addRow(_("Volume:"), self.volume)
+        self.add_items_to_combobox(self.volume, self.volume_ids, "volume")
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+    
+    def add_items_to_combobox(self, comboBox: qt.QComboBox, itemList: List[str], name: str):
+
+        if len(itemList) == 0:
+            comboBox.addItem(f"No {name} objects found", None)
+            comboBox.setDisabled(True)
+        else:
+            for item in itemList:
+                comboBox.addItem(item, item)
+
+    def validateInputs(self):
+
+        session_name = self.sessionName.text
+        session_id = self.sessionID.text
+        transducer_id = self.transducer.currentData
+        protocol_id = self.protocol.currentData
+        volume_id = self.volume.currentData
+
+        if not len(session_name) or not len(session_id) or any(object is None for object in (volume_id,transducer_id,protocol_id)):
+            slicer.util.errorDisplay("Required fields are missing", parent = self)
+        else:
+            self.accept()
+
+    def customexec_(self):
+
+        returncode = self.exec_()
+        session_parameters = {}
+        session_parameters['name'] = self.sessionName.text
+        session_parameters['id'] = self.sessionID.text
+        session_parameters['transducer_id'] = self.transducer.currentData
+        session_parameters['protocol_id'] = self.protocol.currentData
+        session_parameters['volume_id'] = self.volume.currentData
+
+        return (returncode, session_parameters)
 
 class AddNewVolumeDialog(qt.QDialog):
     """ Add new volume dialog """
@@ -186,7 +266,6 @@ class AddNewSubjectDialog(qt.QDialog):
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.accept)
 
-
     def customexec_(self):
 
         returncode = self.exec_()
@@ -293,7 +372,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Add new volume to subject
         self.ui.addVolumeToSubjectButton.clicked.connect(self.onAddVolumeToSubjectClicked)
-        self.update_addVolumeToSubjectButton_enabled()
+        # Add new session
+        self.ui.newSessionButton.clicked.connect(self.onCreateNewSessionClicked)
+        self.update_subjectLevelButtons_enabled()
 
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
@@ -350,22 +431,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateSessionStatus()
 
     def onSubjectSessionSelected(self):
-        self.update_addVolumeToSubjectButton_enabled()
-        # Move elsewhere, only if subject
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        if not self.itemIsSession(currentIndex):
-            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(1)).text()
- 
+        self.update_subjectLevelButtons_enabled()
+
     def openSubjectSessionContextMenu(self, point):
         index = self.ui.subjectSessionView.indexAt(point)
         if not self.itemIsSession(index):
             menu = qt.QMenu()
-            addNewSubjectAction = menu.addAction("Add volume to subject")
+            addNewSubjectAction = menu.addAction("Add volume to subject...")
+            addNewSessionAction = menu.addAction("Create new sesion...")
             action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
 
+            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
             if action == addNewSubjectAction:
-                self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
                 self.onAddVolumeToSubjectClicked(checked=True)
+            elif action == addNewSessionAction:
+                self.onCreateNewSessionClicked(checked=True)
             
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
@@ -404,16 +484,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.newSubjectButton.setDisabled(True)
             self.ui.newSubjectButton.toolTip = 'Requires a loaded database'
 
-    def update_addVolumeToSubjectButton_enabled(self):
-        """ Update whether the add volume to subject button is enabled based on whether a database has been loaded
+    def update_subjectLevelButtons_enabled(self):
+        """ Update whether the add volume and create session buttons are enabled based on whether a database has been loaded
         and a subject has been selected in the tree view"""
 
         if self.logic.db and not self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
             self.ui.addVolumeToSubjectButton.setEnabled(True)
             self.ui.addVolumeToSubjectButton.toolTip = 'Add new volume to selected subject'
+
+            self.ui.newSessionButton.setEnabled(True)
+            self.ui.newSessionButton.toolTip = 'Create new session for selected subject'
         else:
-            self.ui.addVolumeToSubjectButton.setDisabled(True)
+            self.ui.addVolumeToSubjectButton.setEnabled(False)
             self.ui.addVolumeToSubjectButton.toolTip = 'Requires a loaded database and subject to be selected'
+
+            self.ui.newSessionButton.setEnabled(False)
+            self.ui.newSessionButton.toolTip = 'Requires a loaded database and subject to be selected'
 
     def update_sessionLoadButton_enabled(self):
         """Update whether the session loading button is enabled based on whether any subject or session is selected."""
@@ -467,13 +553,40 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.updateSubjectSessionSelector()
     
     @display_errors
+    def getSelectedSubjectSession(self) -> Dict:
+        """ Returns a dictionary containing the name and id of the subject or session selected the SubjectSessionView """
+        data = {}
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        data['id'] = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(1)).text()
+        data['name'] = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(0)).text()
+        return data
+
+    @display_errors
     def onAddVolumeToSubjectClicked(self, checked:bool) -> None:
         volumedlg = AddNewVolumeDialog()
         returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
         if not returncode:
             return False
-        self.logic.add_volume_to_database(self.currentSubjectID, volume_id, volume_name, volume_filepath)
+        
+        current_subject = self.getSelectedSubjectSession()
+        self.logic.add_volume_to_database(current_subject['id'], volume_id, volume_name, volume_filepath)
 
+    @display_errors
+    def onCreateNewSessionClicked(self, checked:bool) -> None:
+
+        current_subject = self.getSelectedSubjectSession()
+        db_transducer_ids = self.logic.db.get_transducer_ids()
+        db_protocol_ids = self.logic.db.get_protocol_ids()
+        db_volume_ids = self.logic.db.get_volume_ids(current_subject['id'])
+        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
+        
+        returncode, session_parameters = sessiondlg.customexec_()
+        if not returncode:
+            return False
+        
+        self.logic.add_session_to_database(current_subject, session_parameters)
+        
+    
     @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
         self.logic.clear_session(clean_up_scene=True)
@@ -1257,7 +1370,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             slicer.util.errorDisplay("Invalid volume filetype specified")
 
     def add_volume_to_database(self, subject_id: str, volume_id: str, volume_name: str, volume_filepath: str) -> None:
-        """ Adds volume to selected subject in loaded openlifu database.
+        """ Adds volume to selected subject in the loaded openlifu database.
 
         Args:
             subject_id: ID of subject associated with the volume (str)
@@ -1276,6 +1389,25 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
   
+    def add_session_to_database(self, subject: Dict, session_parameters: Dict):
+        """ Add new session to selected subject in the loaded openlifu database
+
+        Args:
+            subject: Dictionary containing 'name' and 'id' of the selected subject
+            session_parameters: Dictionary containing the parameters output from the CreateNewSession Dialog
+        """
+
+        newOpenLIFUSession = openlifu_lz().db.session.Session(
+            name = session_parameters['name'],
+            id = session_parameters['id'],
+            subject_id = subject['id'],
+            protocol_id = session_parameters['protocol_id'],
+            volume_id = session_parameters['volume_id'],
+            transducer_id = session_parameters['transducer_id']
+        )
+                
+        self.db.write_session(self.get_subject(subject['id']), newOpenLIFUSession) #on_conflict
+
 #
 # OpenLIFUDataTest
 #
