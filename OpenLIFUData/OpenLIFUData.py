@@ -441,7 +441,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             addNewSessionAction = menu.addAction("Create new sesion...")
             action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
 
-            self.currentSubjectID = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
             if action == addNewSubjectAction:
                 self.onAddVolumeToSubjectClicked(checked=True)
             elif action == addNewSessionAction:
@@ -517,21 +516,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def on_item_double_clicked(self, index : qt.QModelIndex):
 
         if self.itemIsSession(index):
-            session_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-            subject_id = self.subjectSessionItemModel.itemFromIndex(index.parent().siblingAtColumn(1)).text()
+            session_id = self.getSelectedSubjectSession(index)[1]
+            subject_id = self.getSelectedSubjectSession(index.parent())[1]
             self.logic.load_session(subject_id, session_id)
 
         else: # If the item was a subject:
-            subject_id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-            subject_item : qt.QStandardItem = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0))
-            if subject_item.rowCount() == 0: # If we have not already expanded this subject
-                for session_id, session_name in self.logic.get_session_info(subject_id):
-                    session_row = list(map(
-                        create_noneditable_QStandardItem,
-                        [session_name, session_id]
-                    ))
-                    subject_item.appendRow(session_row)
-                self.ui.subjectSessionView.expand(subject_item.index())
+            self.addSessionsToSubjectSessionSelector(index)
             
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -553,13 +543,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.updateSubjectSessionSelector()
     
     @display_errors
-    def getSelectedSubjectSession(self) -> Dict:
-        """ Returns a dictionary containing the name and id of the subject or session selected the SubjectSessionView """
-        data = {}
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        data['id'] = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(1)).text()
-        data['name'] = self.subjectSessionItemModel.itemFromIndex(currentIndex.siblingAtColumn(0)).text()
-        return data
+    def getSelectedSubjectSession(self, index: qt.QModelIndex) -> Tuple[str, str]:
+        """ Returns the subject or session (name, id) currently selected in the SubjectSessionView """
+        
+        name = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0)).text()
+        id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
+        
+        return (name, id)
 
     @display_errors
     def onAddVolumeToSubjectClicked(self, checked:bool) -> None:
@@ -568,25 +558,54 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not returncode:
             return False
         
-        current_subject = self.getSelectedSubjectSession()
-        self.logic.add_volume_to_database(current_subject['id'], volume_id, volume_name, volume_filepath)
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        current_subject = self.getSelectedSubjectSession(currentIndex)
+        self.logic.add_volume_to_database(current_subject[1], volume_id, volume_name, volume_filepath)
 
     @display_errors
     def onCreateNewSessionClicked(self, checked:bool) -> None:
 
-        current_subject = self.getSelectedSubjectSession()
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        current_subject = self.getSelectedSubjectSession(currentIndex)
+        subject_id = current_subject[1]
         db_transducer_ids = self.logic.db.get_transducer_ids()
         db_protocol_ids = self.logic.db.get_protocol_ids()
-        db_volume_ids = self.logic.db.get_volume_ids(current_subject['id'])
+        db_volume_ids = self.logic.db.get_volume_ids(subject_id)
         sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
-        
         returncode, session_parameters = sessiondlg.customexec_()
         if not returncode:
             return False
         
-        self.logic.add_session_to_database(current_subject, session_parameters)
+        sessionAdded = self.logic.add_session_to_database(subject_id, session_parameters)
         
-    
+        # Only required if new session was added
+        if sessionAdded:
+            self.addSessionsToSubjectSessionSelector(currentIndex, session_parameters['name'], session_parameters['id'])
+            self.ui.subjectSessionView.expand(self.ui.subjectSessionView.currentIndex())
+            self.logic.load_session(subject_id, session_parameters['id'])
+
+    def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
+        """ Adds a new session to the Subject/Session selector following session creation instead of clearing and reloading the view.
+        This is done to maintain previously expanded subjects in the view"""
+
+        subject_id = self.getSelectedSubjectSession(index)[1]
+        subject_item = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0))
+
+        if subject_item.rowCount() == 0: # If we have not already expanded this subject
+            for session_id, session_name in self.logic.get_session_info(subject_id):
+                session_row = list(map(
+                    create_noneditable_QStandardItem,
+                    [session_name, session_id]
+                ))
+                subject_item.appendRow(session_row)
+        elif session_name and session_id:
+            session_row = list(map(
+                    create_noneditable_QStandardItem,
+                    [session_name, session_id]
+                ))
+            subject_item.appendRow(session_row)
+        self.ui.subjectSessionView.expand(index)
+
     @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
         self.logic.clear_session(clean_up_scene=True)
@@ -1389,24 +1408,35 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
   
-    def add_session_to_database(self, subject: Dict, session_parameters: Dict):
+    def add_session_to_database(self, subject_id: str, session_parameters: Dict):
         """ Add new session to selected subject in the loaded openlifu database
 
         Args:
-            subject: Dictionary containing 'name' and 'id' of the selected subject
+            subject: Tuple containing 'name' and 'id' of the selected subject
             session_parameters: Dictionary containing the parameters output from the CreateNewSession Dialog
         """
+
+        # Check if session already exists in database
+        existing_session_ids = self.get_session_info(subject_id)
+        for session in existing_session_ids:
+            if session_parameters['id'] == session[0]:
+                if not slicer.util.confirmYesNoDisplay(
+                f"Session ID {session_parameters['id']} already exists in the database for subject {subject_id}. Overwrite session?",
+                "Session already exists"
+            ):
+                    return False
 
         newOpenLIFUSession = openlifu_lz().db.session.Session(
             name = session_parameters['name'],
             id = session_parameters['id'],
-            subject_id = subject['id'],
+            subject_id = subject_id,
             protocol_id = session_parameters['protocol_id'],
             volume_id = session_parameters['volume_id'],
             transducer_id = session_parameters['transducer_id']
-        )
-                
-        self.db.write_session(self.get_subject(subject['id']), newOpenLIFUSession) #on_conflict
+        )   
+        self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        return True
+        
 
 #
 # OpenLIFUDataTest
