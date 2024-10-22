@@ -84,6 +84,11 @@ class CreateNewSessionDialog(qt.QDialog):
 
     def __init__(self, transducer_ids: List[str], protocol_ids: List[str], volume_ids: List[str], parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """ Args:
+                transducer_ids: IDs of the transducers available in the loaded database
+                protocol_ids: IDs of the protocols available in the loaded database
+                volume_ids: IDs of the volumes available for the selected subject in the loaded database
+        """
         
         self.setWindowTitle("Create New Session")
         self.setWindowModality(1)
@@ -1436,7 +1441,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )   
         self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
-        
 
 #
 # OpenLIFUDataTest
