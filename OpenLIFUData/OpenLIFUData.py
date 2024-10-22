@@ -675,7 +675,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
 
-
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
         parameter_node = self.logic.getParameterNode()
@@ -1075,6 +1074,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if self.getParameterNode().loaded_session is None:
             return None
         return self.getParameterNode().loaded_session.get_transducer_id()
+    
+    def get_current_session_volume_id(self) -> Optional[str]:
+        """Get the volume ID of the current session, if there is a current session. Returns None
+        if there isn't a current session."""
+        if self.getParameterNode().loaded_session is None:
+            return None
+        return self.getParameterNode().loaded_session.get_volume_id()
 
     def load_session(self, subject_id, session_id) -> None:
 
@@ -1114,6 +1120,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 "Confirm replace protocol"
             ):
                 return
+        
+        loaded_volumes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
+        loaded_volume_ids = [volume_node.GetAttribute('OpenLIFUData.volume_id') if volume_node.GetAttribute('OpenLIFUData.volume_id') else volume_node.GetID() for volume_node in loaded_volumes]
+        if (
+            session_openlifu.volume_id in loaded_volume_ids
+            and (
+                loaded_session is None
+                or session_openlifu.volume_id != loaded_session.get_volume_id()
+                # (we are okay reloading the volume if it's just the one affiliated with the session, since user already decided to replace the session)
+            )
+        ):
+            if not slicer.util.confirmYesNoDisplay(
+                f"Loading this session will replace the already loaded volume with ID {session_openlifu.volume_id}. Proceed?",
+                "Confirm replace volume"
+            ):
+                return
+            else:
+                # Remove the volume already in the scene
+                idx = loaded_volume_ids.index(session_openlifu.volume_id)
+                slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
         # === Proceed with loading session ===
 
@@ -1351,41 +1377,69 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("No active session.")
         return session.session.session.virtual_fit_approval_for_target_id
 
+    def load_volume_from_openlifu(self, volume_dir: Path, volume_metadata: Dict):
+        """ Load a volume based on openlifu metadata and check for duplicate volumes in the scene.
+        Args:
+            volume_dir: Full path to the database volume directory 
+            volume_metadata: openlifu volume metadata including the volume name, id and relative path. 
+        """
+        loaded_volumes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
+        loaded_volume_ids = [volume_node.GetAttribute('OpenLIFUData.volume_id') if volume_node.GetAttribute('OpenLIFUData.volume_id') else volume_node.GetID() for volume_node in loaded_volumes]
+
+        if volume_metadata['id'] == self.get_current_session_volume_id():
+            slicer.util.errorDisplay(
+                f"A volume with ID {volume_metadata['id']} is in use by the current session. Not loading it.",
+                "Volume in use by session",
+                )
+            return
+                        
+        # Check whether the same volume_id is already loaded
+        if volume_metadata['id'] in loaded_volume_ids: 
+            if not slicer.util.confirmYesNoDisplay(
+                f"A volume with ID {volume_metadata['id']} is already loaded. Reload it?",
+                "Volume already loaded",
+                ):
+                return
+            else:
+                idx = loaded_volume_ids.index(volume_metadata['id'])
+                slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
+
+        volume_filepath = Path(volume_dir,volume_metadata['data_filename'])
+        loadedVolumeNode = slicer.util.loadVolume(volume_filepath)
+        # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is assigned to the node so need 
+        # call updateLoadedObjectsView again to display openlifu name/id. 
+        assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata) 
+
     def load_volume_from_file(self, filepath: str) -> None:
+        """ Given either a volume or json filetype, load a volume into the scene and determine whether 
+        the volume should be loaded based on openlifu metadata or default slicer parameters"""
 
         parent_dir = Path(filepath).parent
         volume_id = parent_dir.name # assuming the user selected a volume within the database
   
         if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
-
             # If a corresponding json file exists in the volume's parent directory,
             # then use volume_metadata included in the json file
             volume_json_filepath = Path(parent_dir, volume_id + '.json')
             if volume_json_filepath.exists():
-
                 volume_metadata = json.loads(volume_json_filepath.read_text())
                 if volume_metadata['data_filename'] == Path(filepath).name:
-                        loadedVolumeNode = slicer.util.loadVolume(filepath)
-                        assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
-                        # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is added to the node.
-
+                    self.load_volume_from_openlifu(parent_dir, volume_metadata)     
+                # If the selected file doesn't match the filename included in the json file, use default volume name and id based on filepath
                 else:
                     slicer.util.loadVolume(filepath)
-
             # Otherwise, use default volume name and id based on filepath
             else:
                 slicer.util.loadVolume(filepath)
 
         # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
         elif Path(filepath).suffix == '.json':
-            
             # Check for corresponding volume file
             volume_metadata = json.loads(Path(filepath).read_text())
             if 'data_filename' in volume_metadata: 
                 volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
                 if volume_filepath.exists():
-                    loadedVolumeNode = slicer.util.loadVolume(volume_filepath)
-                    assign_openlifu_metadata_to_volume_node(loadedVolumeNode,volume_metadata)
+                    self.load_volume_from_openlifu(parent_dir, volume_metadata)
                 else:
                     slicer.util.errorDisplay(f"Cannot find associated volume file: {volume_filepath}")
             else:
@@ -1420,7 +1474,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             subject: Tuple containing 'name' and 'id' of the selected subject
             session_parameters: Dictionary containing the parameters output from the CreateNewSession Dialog
         """
-
+        
         # Check if session already exists in database
         existing_session_ids = self.get_session_info(subject_id)
         for session in existing_session_ids:

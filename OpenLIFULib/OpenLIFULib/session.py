@@ -54,6 +54,10 @@ class SlicerOpenLIFUSession:
     def get_protocol_id(self) -> Optional[str]:
         """Get the ID of the openlifu protocol associated with this session"""
         return self.session.session.protocol_id
+    
+    def get_volume_id(self) -> Optional[str]:
+        """Get the ID of the volume_node associated with this session"""
+        return self.volume_node.GetAttribute('OpenLIFUData.volume_id')
 
     def transducer_is_valid(self) -> bool:
         """Return whether this session's transducer is present in the list of loaded objects."""
