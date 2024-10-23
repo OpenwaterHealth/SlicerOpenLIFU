@@ -725,9 +725,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.loadedObjectsItemModel.appendRow(row)
         if parameter_node.loaded_solution is not None:
+            solution_openlifu = parameter_node.loaded_solution.solution.solution
             row = list(map(
                 create_noneditable_QStandardItem,
-                ["Sonication Solution", "Solution", '']
+                ["Sonication Solution", solution_openlifu.name, solution_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
 
