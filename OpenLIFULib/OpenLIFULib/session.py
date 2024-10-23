@@ -47,6 +47,14 @@ class SlicerOpenLIFUSession:
     in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
+    def get_session_id(self) -> str:
+        """Get the ID of the underlying openlifu session"""
+        return self.session.session.id
+
+    def get_subject_id(self) -> str:
+        """Get the ID of the underlying openlifu subject"""
+        return self.session.session.subject_id
+
     def get_transducer_id(self) -> Optional[str]:
         """Get the ID of the openlifu transducer associated with this session"""
         return self.session.session.transducer_id
@@ -113,7 +121,7 @@ class SlicerOpenLIFUSession:
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
 
         Args:
-            session: OpenLIFUSession
+            session: OpenLIFU Session
             volume_info: Dictionary containing the metadata (name, id and filepath) of the volume
             being loaded as part of the session
         """
