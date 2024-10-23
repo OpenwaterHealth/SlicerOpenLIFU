@@ -1331,7 +1331,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             self.validate_session()
 
     def set_solution(self, solution:SlicerOpenLIFUSolution):
+        """Set a solution to be the currently active solution. If there is an active session, write that solution to the database."""
         self.getParameterNode().loaded_solution = solution
+        if self.validate_session():
+            if self.db is None: # This should not happen -- if there is an active session then there should be a database connection as well.
+                raise RuntimeError("Unable to write solution to the session because there is no database connection")
+            session_openlifu = self.getParameterNode().loaded_session.session.session
+            solution_openlifu = solution.solution.solution
+            self.db.write_solution(session_openlifu, solution_openlifu)
+            
 
     def clear_solution(self,  clean_up_scene:bool = True) -> None:
         """Unload the current solution if there is one loaded.
