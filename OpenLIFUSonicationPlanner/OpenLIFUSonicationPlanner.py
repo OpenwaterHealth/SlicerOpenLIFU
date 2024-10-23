@@ -1,5 +1,4 @@
-from typing import Optional
-from typing import Optional, List, Tuple, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Tuple
 import warnings
 
 import vtk
@@ -16,20 +15,17 @@ from slicer import vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode
 from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
-    SolutionFocus,
-    SlicerOpenLIFUPoint,
-    SlicerOpenLIFUXADataset,
     SlicerOpenLIFUSolution,
-    xarray_lz,
     openlifu_lz,
+    xarray_lz,
     fiducial_to_openlifu_point_in_transducer_coords,
-    make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
     get_openlifu_data_parameter_node,
     BusyCursor,
     OpenLIFUAlgorithmInputWidget,
 )
 from OpenLIFULib.util import replace_widget
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -302,29 +298,29 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.virtualFitApprovalStatusLabel.text = ""
 
 #
-# Utilities
+# calc_solution (temporary stand-in for something that should be done in openlifu python)
 #
 
+from datetime import datetime
 def compute_solution_openlifu(
         protocol: "openlifu.Protocol",
         transducer:SlicerOpenLIFUTransducer,
         target_node:vtkMRMLMarkupsFiducialNode,
         volume_node:vtkMRMLScalarVolumeNode
-    ) -> Tuple[List[SolutionFocus], "xarray.DataArray", "xarray.DataArray"]:
-    """Run openlifu beamforming and k-wave simulation.
+    ) -> "Tuple[openlifu.Solution, xarray.DataArray, xarray.DataArray]":
+    """Run openlifu beamforming and k-wave simulation
 
     Returns:
-        solution_info: The list of focus points along with their beamforming information and k-wave simulation results
+        solution: the generated openlifu Solution
         pnp_aggregated: Peak negative pressure volume, a simulation output. This is max-aggregated over all focus points.
         intensity_aggregated: Time-averaged intensity, a simulation output. This is mean-aggregated over all focus points.
             Note: It should be weighted by the number of times each focus point is focused on, but this functionality is not yet represented by openlifu.
-
     """
+    openlifu = openlifu_lz()
+
     target_point = fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target')
 
-    # TODO: The low-level openlifu details here of obtaining the delays, apodization, and simulation output should be relegated to openlifu
-    # They are done here as a temporary measure.
-    # Here we just hit each focus point once, but there is supposed to be some way of specifying the sequence of focal points
+    # TODO Here we just hit each focus point once, but there is supposed to be some way of specifying the sequence of focal points
     # and possibly hitting them multiple times and even different numbers of times.
 
     params = protocol.seg_method.seg_params(
@@ -334,8 +330,10 @@ def compute_solution_openlifu(
 
     transducer_openlifu = transducer.transducer.transducer
 
-    solution_info : List[SolutionFocus] = []
-    target_pattern_points = protocol.focal_pattern.get_targets(target_point)
+    delays_to_stack : List[np.ndarray] = []
+    apodizations_to_stack : List[np.ndarray] = []
+    simulation_outputs_to_stack : "List[xarray.Dataset]" = []
+    target_pattern_points : "List[openlifu.Point]" = protocol.focal_pattern.get_targets(target_point)
     for focus_point in target_pattern_points:
         delays, apodization = protocol.beamform(arr=transducer_openlifu, target=focus_point, params=params)
 
@@ -352,21 +350,51 @@ def compute_solution_openlifu(
             gpu = False
         )
 
-        solution_info.append(SolutionFocus(
-            SlicerOpenLIFUPoint(focus_point),
-            delays,
-            apodization,
-            SlicerOpenLIFUXADataset(simulation_output_xarray),
-        ))
+        delays_to_stack.append(delays)
+        apodizations_to_stack.append(apodization)
+        simulation_outputs_to_stack.append(simulation_output_xarray)
 
-    # max-aggregate the PNP over the focus points
-    pnp_aggregated = xarray_lz().concat([solution_focus.simulation_output.dataset['p_min'] for solution_focus in solution_info], "stack").max(dim="stack")
+    simulation_output_stacked = xarray_lz().concat(
+        [
+            sim.assign_coords(focal_point_index=i)
+            for i,sim in enumerate(simulation_outputs_to_stack)
+        ],
+        dim='focal_point_index',
+    )
 
-    # mean-aggregate the intensity over the focus points
+    # Peak negative pressure volume, a simulation output. This is max-aggregated over all focus points.
+    pnp_aggregated = simulation_output_stacked['p_min'].max(dim="focal_point_index")
+
+    # Mean-aggregate the intensity over the focus points
     # TODO: Ensure this mean is weighted by the number of times each point is focused on, once openlifu supports hitting points different numbers of times
-    intensity_aggregated = xarray_lz().concat([solution_focus.simulation_output.dataset['ita'] for solution_focus in solution_info], "stack").mean(dim="stack")
+    intensity_aggregated = simulation_output_stacked['ita'].mean(dim="focal_point_index")
 
-    return solution_info, pnp_aggregated, intensity_aggregated
+    session = get_openlifu_data_parameter_node().loaded_session
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    solution_id = timestamp
+    if session is not None:
+        solution_id = f"{session.get_session_id()}_{solution_id}"
+    solution =  openlifu.Solution(
+        id=solution_id,
+        name=f"Solution {timestamp}",
+        protocol_id=protocol.id,
+        transducer_id=transducer_openlifu.id,
+        delays=np.stack(delays_to_stack, axis=0),
+        apodizations=np.stack(apodizations_to_stack, axis=0),
+        pulse=pulse, # TODO This pulse needs to be scaled via a port of scale_solution from matlab!!
+        sequence=protocol.sequence, # TODO is it correct to set the sequence the same as the protocol's here?
+        foci=target_pattern_points,
+        target=target_point,
+        simulation_result=simulation_output_stacked,
+        approved=False,
+        description= (
+            f"A solution computed for the {protocol.name} protocol with transducer {transducer_openlifu.name}"
+            f" for subject volume [TODO]" # TODO put volume ID here if it is not None, once Sadhana's PR #123 is merged
+            f" for target {fiducial_to_openlifu_point_id(target_node)}."
+            f" This solution was created for the session {session.get_session_id()} for subject {session.get_subject_id()}." if session is not None else ""
+        )
+    )
+    return solution, pnp_aggregated, intensity_aggregated
 
 
 #
@@ -392,19 +420,18 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         return OpenLIFUSonicationPlannerParameterNode(super().getParameterNode())
 
     def computeSolution(self, inputVolume: vtkMRMLScalarVolumeNode, inputTarget: vtkMRMLMarkupsFiducialNode, inputTransducer : SlicerOpenLIFUTransducer , inputProtocol: SlicerOpenLIFUProtocol ):
-        solution_info, pnp_aggregated, intensity_aggregated = compute_solution_openlifu(
+        solution_openlifu, pnp_aggregated, intensity_aggregated = compute_solution_openlifu(
             inputProtocol.protocol,
             inputTransducer,
             inputTarget,
             inputVolume,
         )
-        pnp_volume_node = make_volume_from_xarray_in_transducer_coords(pnp_aggregated, inputTransducer)
-        intensity_volume_node = make_volume_from_xarray_in_transducer_coords(intensity_aggregated, inputTransducer)
-
-        pnp_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
-        intensity_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
-
-        solution = SlicerOpenLIFUSolution(solution_info,pnp_volume_node,intensity_volume_node)
+        solution = SlicerOpenLIFUSolution.initialize_from_openlifu_data(
+            solution = solution_openlifu,
+            pnp_datarray=pnp_aggregated,
+            intensity_dataarray=intensity_aggregated,
+            transducer=inputTransducer,
+        )
         slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
 
     def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:

@@ -18,7 +18,7 @@ from OpenLIFULib.simulation import (
     make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
 )
-from OpenLIFULib.solution import SolutionFocus, SlicerOpenLIFUSolution
+from OpenLIFULib.solution import SlicerOpenLIFUSolution
 
 __all__ = [
     "openlifu_lz",
@@ -28,7 +28,6 @@ __all__ = [
     "SlicerOpenLIFUTransducer",
     "SlicerOpenLIFUPoint",
     "SlicerOpenLIFUXADataset",
-    "SolutionFocus",
     "get_openlifu_data_parameter_node",
     "BusyCursor",
     "get_target_candidates",
