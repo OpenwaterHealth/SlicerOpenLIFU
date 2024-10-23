@@ -2,7 +2,6 @@ from typing import Optional, List, TYPE_CHECKING, Tuple
 import warnings
 
 import vtk
-import numpy as np
 
 import slicer
 from slicer.i18n import tr as _
@@ -16,8 +15,6 @@ from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUSolution,
-    openlifu_lz,
-    xarray_lz,
     fiducial_to_openlifu_point_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
     get_openlifu_data_parameter_node,
@@ -25,7 +22,6 @@ from OpenLIFULib import (
     OpenLIFUAlgorithmInputWidget,
 )
 from OpenLIFULib.util import replace_widget
-from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -298,10 +294,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.virtualFitApprovalStatusLabel.text = ""
 
 #
-# calc_solution (temporary stand-in for something that should be done in openlifu python)
+# Solution computation function using openlifu
 #
 
-from datetime import datetime
 def compute_solution_openlifu(
         protocol: "openlifu.Protocol",
         transducer:SlicerOpenLIFUTransducer,
@@ -316,85 +311,14 @@ def compute_solution_openlifu(
         intensity_aggregated: Time-averaged intensity, a simulation output. This is mean-aggregated over all focus points.
             Note: It should be weighted by the number of times each focus point is focused on, but this functionality is not yet represented by openlifu.
     """
-    openlifu = openlifu_lz()
-
-    target_point = fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target')
-
-    # TODO Here we just hit each focus point once, but there is supposed to be some way of specifying the sequence of focal points
-    # and possibly hitting them multiple times and even different numbers of times.
-
-    params = protocol.seg_method.seg_params(
-        make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol)
+    session = get_openlifu_data_parameter_node().loaded_session 
+    solution, simulation_result_aggregated, scaled_solution_analysis = protocol.calc_solution(
+        transducer=transducer.transducer.transducer,
+        volume=make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol),
+        target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target'),
+        session=session.session.session if session is not None else None,
     )
-    pulse = protocol.pulse
-
-    transducer_openlifu = transducer.transducer.transducer
-
-    delays_to_stack : List[np.ndarray] = []
-    apodizations_to_stack : List[np.ndarray] = []
-    simulation_outputs_to_stack : "List[xarray.Dataset]" = []
-    target_pattern_points : "List[openlifu.Point]" = protocol.focal_pattern.get_targets(target_point)
-    for focus_point in target_pattern_points:
-        delays, apodization = protocol.beamform(arr=transducer_openlifu, target=focus_point, params=params)
-
-        simulation_output_xarray, simulation_output_kwave = openlifu_lz().sim.run_simulation(
-            arr=transducer_openlifu,
-            params=params,
-            delays=delays,
-            apod= apodization,
-            freq = pulse.frequency,
-            cycles = np.max([np.round(pulse.duration * pulse.frequency), 20]),
-            dt=protocol.sim_setup.dt,
-            t_end=protocol.sim_setup.t_end,
-            amplitude = 1,
-            gpu = False
-        )
-
-        delays_to_stack.append(delays)
-        apodizations_to_stack.append(apodization)
-        simulation_outputs_to_stack.append(simulation_output_xarray)
-
-    simulation_output_stacked = xarray_lz().concat(
-        [
-            sim.assign_coords(focal_point_index=i)
-            for i,sim in enumerate(simulation_outputs_to_stack)
-        ],
-        dim='focal_point_index',
-    )
-
-    # Peak negative pressure volume, a simulation output. This is max-aggregated over all focus points.
-    pnp_aggregated = simulation_output_stacked['p_min'].max(dim="focal_point_index")
-
-    # Mean-aggregate the intensity over the focus points
-    # TODO: Ensure this mean is weighted by the number of times each point is focused on, once openlifu supports hitting points different numbers of times
-    intensity_aggregated = simulation_output_stacked['ita'].mean(dim="focal_point_index")
-
-    session = get_openlifu_data_parameter_node().loaded_session
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    solution_id = timestamp
-    if session is not None:
-        solution_id = f"{session.get_session_id()}_{solution_id}"
-    solution =  openlifu.Solution(
-        id=solution_id,
-        name=f"Solution {timestamp}",
-        protocol_id=protocol.id,
-        transducer_id=transducer_openlifu.id,
-        delays=np.stack(delays_to_stack, axis=0),
-        apodizations=np.stack(apodizations_to_stack, axis=0),
-        pulse=pulse, # TODO This pulse needs to be scaled via a port of scale_solution from matlab!!
-        sequence=protocol.sequence, # TODO is it correct to set the sequence the same as the protocol's here?
-        foci=target_pattern_points,
-        target=target_point,
-        simulation_result=simulation_output_stacked,
-        approved=False,
-        description= (
-            f"A solution computed for the {protocol.name} protocol with transducer {transducer_openlifu.name}"
-            f" for subject volume [TODO]" # TODO put volume ID here if it is not None, once Sadhana's PR #123 is merged
-            f" for target {fiducial_to_openlifu_point_id(target_node)}."
-            f" This solution was created for the session {session.get_session_id()} for subject {session.get_subject_id()}." if session is not None else ""
-        )
-    )
-    return solution, pnp_aggregated, intensity_aggregated
+    return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["ita"]
 
 
 #
