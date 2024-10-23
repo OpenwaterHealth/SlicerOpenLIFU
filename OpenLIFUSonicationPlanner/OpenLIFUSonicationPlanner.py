@@ -343,7 +343,15 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUSonicationPlannerParameterNode(super().getParameterNode())
 
-    def computeSolution(self, inputVolume: vtkMRMLScalarVolumeNode, inputTarget: vtkMRMLMarkupsFiducialNode, inputTransducer : SlicerOpenLIFUTransducer , inputProtocol: SlicerOpenLIFUProtocol ):
+    def computeSolution(
+            self,
+            inputVolume: vtkMRMLScalarVolumeNode,
+            inputTarget: vtkMRMLMarkupsFiducialNode,
+            inputTransducer : SlicerOpenLIFUTransducer,
+            inputProtocol: SlicerOpenLIFUProtocol) -> SlicerOpenLIFUSolution:
+        """Compute solution for the given volume, target, transducer, and protocol, setting the solution as the active solution.
+        Note that setting the solution will trigger a write of the solution to the databse if there is an active session.
+        """
         solution_openlifu, pnp_aggregated, intensity_aggregated = compute_solution_openlifu(
             inputProtocol.protocol,
             inputTransducer,
@@ -357,6 +365,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             transducer=inputTransducer,
         )
         slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
+        return solution
 
     def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:
         """Get the PNP volume of the active solution, if there is an active solution. Return None if there isn't."""
