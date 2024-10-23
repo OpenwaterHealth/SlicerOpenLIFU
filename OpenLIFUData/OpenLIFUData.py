@@ -156,12 +156,13 @@ class CreateNewSessionDialog(qt.QDialog):
     def customexec_(self):
 
         returncode = self.exec_()
-        session_parameters = {}
-        session_parameters['name'] = self.sessionName.text
-        session_parameters['id'] = self.sessionID.text
-        session_parameters['transducer_id'] = self.transducer.currentData
-        session_parameters['protocol_id'] = self.protocol.currentData
-        session_parameters['volume_id'] = self.volume.currentData
+        session_parameters = {
+            'name': self.sessionName.text,
+            'id': self.sessionID.text,
+            'transducer_id': self.transducer.currentData,
+            'protocol_id': self.protocol.currentData,
+            'volume_id': self.volume.currentData,
+        }
 
         return (returncode, session_parameters)
 
@@ -443,7 +444,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not self.itemIsSession(index):
             menu = qt.QMenu()
             addNewSubjectAction = menu.addAction("Add volume to subject...")
-            addNewSessionAction = menu.addAction("Create new sesion...")
+            addNewSessionAction = menu.addAction("Create new session...")
             action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
 
             if action == addNewSubjectAction:
@@ -521,8 +522,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def on_item_double_clicked(self, index : qt.QModelIndex):
 
         if self.itemIsSession(index):
-            session_id = self.getSelectedSubjectSession(index)[1]
-            subject_id = self.getSelectedSubjectSession(index.parent())[1]
+            _, session_id = self.getSubjectSessionAtIndex(index)
+            _, subject_id = self.getSubjectSessionAtIndex(index.parent())
             self.logic.load_session(subject_id, session_id)
 
         else: # If the item was a subject:
@@ -548,8 +549,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.updateSubjectSessionSelector()
     
     @display_errors
-    def getSelectedSubjectSession(self, index: qt.QModelIndex) -> Tuple[str, str]:
-        """ Returns the subject or session (name, id) currently selected in the SubjectSessionView """
+    def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
+        """ Returns the subject or session (name, id) at the specified index in the SubjectSessionView """
         
         name = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0)).text()
         id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
@@ -564,15 +565,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return False
         
         currentIndex = self.ui.subjectSessionView.currentIndex()
-        current_subject = self.getSelectedSubjectSession(currentIndex)
-        self.logic.add_volume_to_database(current_subject[1], volume_id, volume_name, volume_filepath)
+        _, subject_id = self.getSubjectSessionAtIndex(currentIndex)
+        self.logic.add_volume_to_database(subject_id, volume_id, volume_name, volume_filepath)
 
     @display_errors
     def onCreateNewSessionClicked(self, checked:bool) -> None:
 
         currentIndex = self.ui.subjectSessionView.currentIndex()
-        current_subject = self.getSelectedSubjectSession(currentIndex)
-        subject_id = current_subject[1]
+        _, subject_id = self.getSubjectSessionAtIndex(currentIndex)
+
+        if self.logic.db is None:
+            raise RuntimeError("Cannot create session because there is no database connection")
+        
         db_transducer_ids = self.logic.db.get_transducer_ids()
         db_protocol_ids = self.logic.db.get_protocol_ids()
         db_volume_ids = self.logic.db.get_volume_ids(subject_id)
@@ -590,10 +594,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.logic.load_session(subject_id, session_parameters['id'])
 
     def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
-        """ Adds a new session to the Subject/Session selector following session creation instead of clearing and reloading the view.
-        This is done to maintain previously expanded subjects in the view"""
+        """ Adds sessions to the Subject/Session selector for the subject specified by 'index'.
+        This is done to maintain previously expanded subjects in the view instead of clearing and reloading the view"""
 
-        subject_id = self.getSelectedSubjectSession(index)[1]
+        _, subject_id = self.getSubjectSessionAtIndex(index)
         subject_item = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0))
 
         if subject_item.rowCount() == 0: # If we have not already expanded this subject
@@ -1467,12 +1471,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
   
-    def add_session_to_database(self, subject_id: str, session_parameters: Dict):
+    def add_session_to_database(self, subject_id: str, session_parameters: Dict) -> bool:
         """ Add new session to selected subject in the loaded openlifu database
 
         Args:
-            subject: Tuple containing 'name' and 'id' of the selected subject
+            subject_id: id of the subject to which a session is being added
             session_parameters: Dictionary containing the parameters output from the CreateNewSession Dialog
+        
+        Returns True if a session is successfully added to the database
         """
         
         # Check if session already exists in database
