@@ -167,12 +167,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
 
     def updateRunEnabled(self):
-        if slicer.util.getModuleLogic('OpenLIFUData').validate_plan():
+        if slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             self.ui.runPushButton.enabled = True
             self.ui.runPushButton.setToolTip("Run sonication")
         else:
             self.ui.runPushButton.enabled = False
-            self.ui.runPushButton.setToolTip("To run a sonication, first generate a plan in the sonication planning module.")
+            self.ui.runPushButton.setToolTip("To run a sonication, first generate a solution in the sonication planning module.")
 
     def onRunClicked(self):
         print("Placeholder text: Running sonication")

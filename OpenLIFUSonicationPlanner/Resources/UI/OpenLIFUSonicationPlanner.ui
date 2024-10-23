@@ -46,14 +46,14 @@ OpenLIFUAlgorithmInputWidget</string>
     </spacer>
    </item>
    <item>
-    <widget class="QPushButton" name="PlanPushButton">
+    <widget class="QPushButton" name="solutionPushButton">
      <property name="text">
-      <string>Plan</string>
+      <string>Compute sonication solution</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QProgressBar" name="planProgressBar">
+    <widget class="QProgressBar" name="solutionProgressBar">
      <property name="enabled">
       <bool>true</bool>
      </property>

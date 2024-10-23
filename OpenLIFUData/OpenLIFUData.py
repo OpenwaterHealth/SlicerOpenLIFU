@@ -23,7 +23,7 @@ from OpenLIFULib import (
     openlifu_lz,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
-    SlicerOpenLIFUPlan,
+    SlicerOpenLIFUSolution,
     SlicerOpenLIFUSession,
     get_target_candidates,
     assign_openlifu_metadata_to_volume_node,
@@ -76,7 +76,7 @@ class OpenLIFUDataParameterNode:
     databaseDirectory : Path
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
-    loaded_plan : "Optional[SlicerOpenLIFUPlan]"
+    loaded_solution : "Optional[SlicerOpenLIFUSolution]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
 
 class CreateNewSessionDialog(qt.QDialog):
@@ -724,10 +724,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [fiducial_node.GetName(), points_type, fiducial_node.GetID()]
             ))
             self.loadedObjectsItemModel.appendRow(row)
-        if parameter_node.loaded_plan is not None:
+        if parameter_node.loaded_solution is not None:
             row = list(map(
                 create_noneditable_QStandardItem,
-                ["Treatment Plan", "Plan", '']
+                ["Sonication Solution", "Solution", '']
             ))
             self.loadedObjectsItemModel.appendRow(row)
 
@@ -820,7 +820,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If the volume of the active session was removed, the session becomes invalid.
         if node.IsA('vtkMRMLVolumeNode'):
             self.logic.validate_session()
-            self.logic.validate_plan()
+            self.logic.validate_solution()
 
         self.updateLoadedObjectsView()
 
@@ -981,23 +981,23 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         return True
 
-    def validate_plan(self) -> bool:
-        """Check to ensure that the currently active plan is in a valid state, clearing out the plan
-        if it is not and returning whether there is an active valid plan."""
+    def validate_solution(self) -> bool:
+        """Check to ensure that the currently active solution is in a valid state, clearing out the solution
+        if it is not and returning whether there is an active valid solution."""
 
-        plan = self.getParameterNode().loaded_plan
+        solution = self.getParameterNode().loaded_solution
 
-        if plan is None:
-            return False # There is no active plan, no problem
+        if solution is None:
+            return False # There is no active solution, no problem
 
         # Check volumes are present
-        for volume_node in [plan.intensity, plan.pnp]:
+        for volume_node in [solution.intensity, solution.pnp]:
             if volume_node is None or slicer.mrmlScene.GetNodeByID(volume_node.GetID()) is None:
                 clean_up_scene = ObjectBeingUnloadedMessageBox(
-                    message="A volume that was in use by the active plan is now missing. The plan will be unloaded.",
-                    title="Plan invalidated",
+                    message="A volume that was in use by the active solution is now missing. The solution will be unloaded.",
+                    title="Solution invalidated",
                 ).customexec_()
-                self.clear_plan(clean_up_scene=clean_up_scene)
+                self.clear_solution(clean_up_scene=clean_up_scene)
                 return False
 
         return True
@@ -1329,23 +1329,23 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # If the transducer that was just removed was in use by an active session, invalidate that session
             self.validate_session()
 
-    def set_plan(self, plan:SlicerOpenLIFUPlan):
-        self.getParameterNode().loaded_plan = plan
+    def set_solution(self, solution:SlicerOpenLIFUSolution):
+        self.getParameterNode().loaded_solution = solution
 
-    def clear_plan(self,  clean_up_scene:bool = True) -> None:
-        """Unload the current plan if there is one loaded.
+    def clear_solution(self,  clean_up_scene:bool = True) -> None:
+        """Unload the current solution if there is one loaded.
 
         Args:
-            clean_up_scene: Whether to remove the plan's affiliated scene content.
+            clean_up_scene: Whether to remove the solution's affiliated scene content.
                 If False then the scene content is orphaned from its session.
                 If True then the scene content is removed.
         """
-        plan = self.getParameterNode().loaded_plan
-        self.getParameterNode().loaded_plan = None
-        if plan is None:
+        solution = self.getParameterNode().loaded_solution
+        self.getParameterNode().loaded_solution = None
+        if solution is None:
             return
         if clean_up_scene:
-            plan.clear_nodes()
+            solution.clear_nodes()
 
     @display_errors
     def add_subject_to_database(self, subject_name, subject_id):
