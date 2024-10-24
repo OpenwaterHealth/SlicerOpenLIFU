@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>258</width>
-    <height>190</height>
+    <height>213</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -33,6 +33,13 @@ OpenLIFUAlgorithmInputWidget</string>
     </widget>
    </item>
    <item>
+    <widget class="QLabel" name="trackingApprovalStatusLabel">
+     <property name="text">
+      <string>(transducer tracking approval here)</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer_2">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -46,14 +53,14 @@ OpenLIFUAlgorithmInputWidget</string>
     </spacer>
    </item>
    <item>
-    <widget class="QPushButton" name="PlanPushButton">
+    <widget class="QPushButton" name="solutionPushButton">
      <property name="text">
-      <string>Plan</string>
+      <string>Compute sonication solution</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QProgressBar" name="planProgressBar">
+    <widget class="QProgressBar" name="solutionProgressBar">
      <property name="enabled">
       <bool>true</bool>
      </property>
@@ -75,6 +82,13 @@ OpenLIFUAlgorithmInputWidget</string>
      </property>
      <property name="checkable">
       <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="approveButton">
+     <property name="text">
+      <string>Approve solution</string>
      </property>
     </widget>
    </item>

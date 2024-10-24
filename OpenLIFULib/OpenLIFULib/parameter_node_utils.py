@@ -56,6 +56,13 @@ class SlicerOpenLIFUSessionWrapper:
     def __init__(self, session: "Optional[openlifu.db.Session]" = None):
         self.session = session
 
+# For the same reason we have a thin wrapper around openlifu.Solution
+class SlicerOpenLIFUSolutionWrapper:
+    """Ultrathin wrapper of openlifu.Solution. This exists so that solutions can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, solution: "Optional[openlifu.Solution]" = None):
+        self.solution = solution
+
 # For the same reason we have a thin wrapper around xarray.Dataset
 class SlicerOpenLIFUXADataset:
     """Ultrathin wrapper of xarray.Dataset, so that it can have parameter node
@@ -173,6 +180,18 @@ class OpenLIFUSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFU
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSessionWrapper:
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUSessionWrapper(openlifu_lz().db.Session.from_json(json_string))
+
+@parameterNodeSerializer
+class OpenLIFUSolutionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSolutionWrapper)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUSolutionWrapper) -> None:
+        parameterNode.SetParameter(
+            name,
+            value.solution.to_json(include_simulation_data=True, compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSolutionWrapper:
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUSolutionWrapper(openlifu_lz().Solution.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPoint)):

@@ -1,9 +1,7 @@
-from typing import Optional
-from typing import Optional, List, Tuple, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Tuple
 import warnings
 
 import vtk
-import numpy as np
 
 import slicer
 from slicer.i18n import tr as _
@@ -16,14 +14,8 @@ from slicer import vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode
 from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
-    PlanFocus,
-    SlicerOpenLIFUPoint,
-    SlicerOpenLIFUXADataset,
-    SlicerOpenLIFUPlan,
-    xarray_lz,
-    openlifu_lz,
+    SlicerOpenLIFUSolution,
     fiducial_to_openlifu_point_in_transducer_coords,
-    make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
     get_openlifu_data_parameter_node,
     BusyCursor,
@@ -127,9 +119,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Initialize UI
         self.updateInputOptions()
-        self.updatePlanProgressBar()
+        self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updateVirtualFitApprovalStatus()
+        self.updateTrackingApprovalStatus()
 
         # Add an observer on the Data module's parameter node
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
@@ -139,10 +132,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
 
-        # Buttons
-        self.ui.PlanPushButton.clicked.connect(self.onPlanClicked)
-        self.checkCanPlan()
+        self.ui.solutionPushButton.clicked.connect(self.onComputeSolutionClicked)
         self.ui.renderPNPCheckBox.clicked.connect(self.onrenderPNPCheckBoxClicked)
+        self.ui.approveButton.clicked.connect(self.onApproveClicked)
+
+        self.checkCanComputeSolution()
+        self.updateApproveButton()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -197,16 +192,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
-    def checkCanPlan(self, caller = None, event = None) -> None:
+    def checkCanComputeSolution(self, caller = None, event = None) -> None:
 
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
-        # This means that the plan button can be enabled
+        # This means that the compute solution button can be enabled
         if self.algorithm_input_widget.has_valid_selections():
-            self.ui.PlanPushButton.enabled = True
-            self.ui.PlanPushButton.setToolTip("Execute planning")
+            self.ui.solutionPushButton.enabled = True
+            self.ui.solutionPushButton.setToolTip("Compute a sonication solution for the target under this protocol and subject-transducer scene")
         else:
-            self.ui.PlanPushButton.enabled = False
-            self.ui.PlanPushButton.setToolTip("Please specify the required inputs")
+            self.ui.solutionPushButton.enabled = False
+            self.ui.solutionPushButton.setToolTip("Please specify the required inputs")
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -228,23 +223,23 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
         self.algorithm_input_widget.update()
 
-        # Determine whether planning can be executed based on the status of combo boxes
-        self.checkCanPlan()
+        # Determine whether solution can be computed based on the status of combo boxes
+        self.checkCanComputeSolution()
 
-    def updatePlanProgressBar(self):
-        """Update the plan progress bar. 0% if there is no existing plan, 100% if there is an existing plan."""
-        self.ui.planProgressBar.maximum = 1 # (during planning we set maxmimum=0 to put it into an infinite loading animation)
+    def updateSolutionProgressBar(self):
+        """Update the solution progress bar. 0% if there is no existing solution, 100% if there is an existing solution."""
+        self.ui.solutionProgressBar.maximum = 1 # (during computation we set maxmimum=0 to put it into an infinite loading animation)
 
-        if get_openlifu_data_parameter_node().loaded_plan is None:
-            self.ui.planProgressBar.value = 0
+        if get_openlifu_data_parameter_node().loaded_solution is None:
+            self.ui.solutionProgressBar.value = 0
         else:
-            self.ui.planProgressBar.value = 1
+            self.ui.solutionProgressBar.value = 1
 
     def updateRenderPNPCheckBox(self):
-        if get_openlifu_data_parameter_node().loaded_plan is None:
+        if get_openlifu_data_parameter_node().loaded_solution is None:
             self.ui.renderPNPCheckBox.enabled = False
             self.ui.renderPNPCheckBox.checked = False
-            self.ui.renderPNPCheckBox.setToolTip("Run planning first to generate a PNP volume that can be visualized")
+            self.ui.renderPNPCheckBox.setToolTip("Compute a solution first to generate a PNP volume that can be visualized")
         else:
             self.ui.renderPNPCheckBox.enabled = True
             self.ui.renderPNPCheckBox.setToolTip("Show the PNP volume in the 3D view with maximum intensity projection")
@@ -252,9 +247,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateInputOptions()
-        self.updatePlanProgressBar()
+        self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updateVirtualFitApprovalStatus()
+        self.updateTrackingApprovalStatus()
+        self.updateApproveButton()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -269,7 +266,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onPointAddedOrRemoved(self, caller, event):
         self.updateInputOptions()
 
-    def onPlanClicked(self):
+    def onComputeSolutionClicked(self):
         activeProtocol, activeTransducer, activeVolume, activeTarget = self.algorithm_input_widget.get_current_data()
 
         # In case a PNP was previously being displayed, hide it since it is about to no longer belong to the active solution.
@@ -278,11 +275,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         with BusyCursor():
             try:
-                self.ui.planProgressBar.maximum = 0
+                self.ui.solutionProgressBar.maximum = 0
                 slicer.app.processEvents()
-                self.logic.runPlanning(activeVolume, activeTarget, activeTransducer, activeProtocol)
+                self.logic.computeSolution(activeVolume, activeTarget, activeTransducer, activeProtocol)
             finally:
-                self.updatePlanProgressBar()
+                self.updateSolutionProgressBar()
 
     def onrenderPNPCheckBoxClicked(self, checked:bool):
         if checked:
@@ -301,72 +298,67 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.virtualFitApprovalStatusLabel.text = ""
 
+    def updateTrackingApprovalStatus(self) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is not None:
+            if loaded_session.transducer_tracking_is_approved():
+                self.ui.trackingApprovalStatusLabel.text = f"(Transducer tracking is approved)"
+                self.ui.trackingApprovalStatusLabel.styleSheet = ""
+            else:
+                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is currently unapproved!"
+                self.ui.trackingApprovalStatusLabel.styleSheet = "color:red;"
+        else:
+            self.ui.virtualFitApprovalStatusLabel.text = ""
+
+    def updateApproveButton(self):
+        data_parameter_node = get_openlifu_data_parameter_node()
+        if data_parameter_node.loaded_solution is None:
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setToolTip("There is no active solution to write the approval")
+            self.ui.approveButton.setText("Approve solution")
+        else:
+            self.ui.approveButton.setEnabled(True)
+            if data_parameter_node.loaded_solution.is_approved():
+                self.ui.approveButton.setText("Unapprove solution")
+                self.ui.approveButton.setToolTip(
+                    "Revoke approval for the sonication solution"
+                )
+            else:
+                self.ui.approveButton.setText("Approve solution")
+                self.ui.approveButton.setToolTip(
+                    "Approve the sonicaiton solution"
+                )
+
+    def onApproveClicked(self):
+        with BusyCursor():
+            self.logic.toggle_solution_approval()
+
 #
-# Utilities
+# Solution computation function using openlifu
 #
 
-def generate_plan_openlifu(
+def compute_solution_openlifu(
         protocol: "openlifu.Protocol",
         transducer:SlicerOpenLIFUTransducer,
         target_node:vtkMRMLMarkupsFiducialNode,
         volume_node:vtkMRMLScalarVolumeNode
-    ) -> Tuple[List[PlanFocus], "xarray.DataArray", "xarray.DataArray"]:
-    """Run openlifu beamforming and k-wave simulation.
+    ) -> "Tuple[openlifu.Solution, xarray.DataArray, xarray.DataArray]":
+    """Run openlifu beamforming and k-wave simulation
 
     Returns:
-        plan_info: The list of focus points along with their beamforming information and k-wave simulation results
+        solution: the generated openlifu Solution
         pnp_aggregated: Peak negative pressure volume, a simulation output. This is max-aggregated over all focus points.
         intensity_aggregated: Time-averaged intensity, a simulation output. This is mean-aggregated over all focus points.
             Note: It should be weighted by the number of times each focus point is focused on, but this functionality is not yet represented by openlifu.
-
     """
-    target_point = fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target')
-
-    # TODO: The low-level openlifu details here of obtaining the delays, apodization, and simulation output should be relegated to openlifu
-    # They are done here as a temporary measure.
-    # Here we just hit each focus point once, but there is supposed to be some way of specifying the sequence of focal points
-    # and possibly hitting them multiple times and even different numbers of times.
-
-    params = protocol.seg_method.seg_params(
-        make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol)
+    session = get_openlifu_data_parameter_node().loaded_session
+    solution, pnp_aggregated, intensity_aggregated = protocol.calc_solution(
+        transducer.transducer.transducer,
+        make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol),
+        fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target'),
+        session.session.session if session is not None else None,
     )
-    pulse = protocol.pulse
-
-    transducer_openlifu = transducer.transducer.transducer
-
-    plan_info : List[PlanFocus] = []
-    target_pattern_points = protocol.focal_pattern.get_targets(target_point)
-    for focus_point in target_pattern_points:
-        delays, apodization = protocol.beamform(arr=transducer_openlifu, target=focus_point, params=params)
-
-        simulation_output_xarray, simulation_output_kwave = openlifu_lz().sim.run_simulation(
-            arr=transducer_openlifu,
-            params=params,
-            delays=delays,
-            apod= apodization,
-            freq = pulse.frequency,
-            cycles = np.max([np.round(pulse.duration * pulse.frequency), 20]),
-            dt=protocol.sim_setup.dt,
-            t_end=protocol.sim_setup.t_end,
-            amplitude = 1,
-            gpu = False
-        )
-
-        plan_info.append(PlanFocus(
-            SlicerOpenLIFUPoint(focus_point),
-            delays,
-            apodization,
-            SlicerOpenLIFUXADataset(simulation_output_xarray),
-        ))
-
-    # max-aggregate the PNP over the focus points
-    pnp_aggregated = xarray_lz().concat([plan_focus.simulation_output.dataset['p_min'] for plan_focus in plan_info], "stack").max(dim="stack")
-
-    # mean-aggregate the intensity over the focus points
-    # TODO: Ensure this mean is weighted by the number of times each point is focused on, once openlifu supports hitting points different numbers of times
-    intensity_aggregated = xarray_lz().concat([plan_focus.simulation_output.dataset['ita'] for plan_focus in plan_info], "stack").mean(dim="stack")
-
-    return plan_info, pnp_aggregated, intensity_aggregated
+    return solution, pnp_aggregated, intensity_aggregated
 
 
 #
@@ -391,33 +383,41 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUSonicationPlannerParameterNode(super().getParameterNode())
 
-    def runPlanning(self, inputVolume: vtkMRMLScalarVolumeNode, inputTarget: vtkMRMLMarkupsFiducialNode, inputTransducer : SlicerOpenLIFUTransducer , inputProtocol: SlicerOpenLIFUProtocol ):
-        plan_info, pnp_aggregated, intensity_aggregated = generate_plan_openlifu(
+    def computeSolution(
+            self,
+            inputVolume: vtkMRMLScalarVolumeNode,
+            inputTarget: vtkMRMLMarkupsFiducialNode,
+            inputTransducer : SlicerOpenLIFUTransducer,
+            inputProtocol: SlicerOpenLIFUProtocol) -> SlicerOpenLIFUSolution:
+        """Compute solution for the given volume, target, transducer, and protocol, setting the solution as the active solution.
+        Note that setting the solution will trigger a write of the solution to the databse if there is an active session.
+        """
+        solution_openlifu, pnp_aggregated, intensity_aggregated = compute_solution_openlifu(
             inputProtocol.protocol,
             inputTransducer,
             inputTarget,
             inputVolume,
         )
-        pnp_volume_node = make_volume_from_xarray_in_transducer_coords(pnp_aggregated, inputTransducer)
-        intensity_volume_node = make_volume_from_xarray_in_transducer_coords(intensity_aggregated, inputTransducer)
-
-        pnp_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
-        intensity_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
-
-        plan = SlicerOpenLIFUPlan(plan_info,pnp_volume_node,intensity_volume_node)
-        slicer.util.getModuleLogic('OpenLIFUData').set_plan(plan)
+        solution = SlicerOpenLIFUSolution.initialize_from_openlifu_data(
+            solution = solution_openlifu,
+            pnp_datarray=pnp_aggregated,
+            intensity_dataarray=intensity_aggregated,
+            transducer=inputTransducer,
+        )
+        slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
+        return solution
 
     def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:
-        """Get the PNP volume of the active plan, if there is an active plan. Return None if there isn't."""
-        plan : SlicerOpenLIFUPlan = get_openlifu_data_parameter_node().loaded_plan
-        if plan is None:
+        """Get the PNP volume of the active solution, if there is an active solution. Return None if there isn't."""
+        solution : SlicerOpenLIFUSolution = get_openlifu_data_parameter_node().loaded_solution
+        if solution is None:
             return None
-        return plan.pnp
+        return solution.pnp
 
     def render_pnp(self) -> None:
         pnp = self.get_pnp()
         if pnp is None:
-            raise RuntimeError("Cannot render PNP as there is no active plan.")
+            raise RuntimeError("Cannot render PNP as there is no active solution.")
         pnp.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
         volRenLogic = slicer.modules.volumerendering.logic()
         displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
@@ -443,6 +443,14 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         if not displayNode:
             displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
         displayNode.SetVisibility(False)
+
+    def toggle_solution_approval(self):
+        """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
+        This will write the approval to the solution in memory and, if there is an active session, it will
+        also write the solution approval to the database.
+        """
+        slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
+
 
 
 #

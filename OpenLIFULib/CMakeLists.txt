@@ -11,6 +11,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/transducer.py
   OpenLIFULib/targets.py
   OpenLIFULib/simulation.py
+  OpenLIFULib/solution.py
   OpenLIFULib/algorithm_input_widget.py
   OpenLIFULib/coordinate_system_utils.py
 )

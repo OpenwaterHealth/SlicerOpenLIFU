@@ -23,7 +23,7 @@ from OpenLIFULib import (
     openlifu_lz,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
-    SlicerOpenLIFUPlan,
+    SlicerOpenLIFUSolution,
     SlicerOpenLIFUSession,
     get_target_candidates,
     assign_openlifu_metadata_to_volume_node,
@@ -76,7 +76,7 @@ class OpenLIFUDataParameterNode:
     databaseDirectory : Path
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
-    loaded_plan : "Optional[SlicerOpenLIFUPlan]"
+    loaded_solution : "Optional[SlicerOpenLIFUSolution]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
 
 class CreateNewSessionDialog(qt.QDialog):
@@ -89,7 +89,7 @@ class CreateNewSessionDialog(qt.QDialog):
                 protocol_ids: IDs of the protocols available in the loaded database
                 volume_ids: IDs of the volumes available for the selected subject in the loaded database
         """
-        
+
         self.setWindowTitle("Create New Session")
         self.setWindowModality(1)
         self.transducer_ids = transducer_ids
@@ -130,7 +130,7 @@ class CreateNewSessionDialog(qt.QDialog):
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.validateInputs)
-    
+
     def add_items_to_combobox(self, comboBox: qt.QComboBox, itemList: List[str], name: str):
 
         if len(itemList) == 0:
@@ -184,10 +184,10 @@ class AddNewVolumeDialog(qt.QDialog):
 
         self.volumeFilePath = ctk.ctkPathLineEdit()
         self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files
-        
+
         # Allowable volume filetypes
         self.volume_extensions = ("Volume" + " (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
-        "Dicom" + " (*.dcm *.ima);;" + 
+        "Dicom" + " (*.dcm *.ima);;" +
         "All Files" + " (*)")
         self.volumeFilePath.nameFilters = [self.volume_extensions]
 
@@ -217,7 +217,7 @@ class AddNewVolumeDialog(qt.QDialog):
             volume_name = current_filepath.stem
             if not len(self.volumeName.text):
                 self.volumeName.setText(volume_name)
-            if not len(self.volumeID.text): 
+            if not len(self.volumeID.text):
                 self.volumeID.setText(volume_name)
 
     def validateInputs(self):
@@ -232,7 +232,7 @@ class AddNewVolumeDialog(qt.QDialog):
             slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
         else:
             self.accept()
-                               
+
     def customexec_(self):
 
         returncode = self.exec_()
@@ -241,7 +241,7 @@ class AddNewVolumeDialog(qt.QDialog):
         volume_filepath = self.volumeFilePath.currentPath
 
         return (returncode, volume_filepath,volume_name, volume_id)
-    
+
 class AddNewSubjectDialog(qt.QDialog):
     """ Add new subject dialog """
 
@@ -451,7 +451,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.onAddVolumeToSubjectClicked(checked=True)
             elif action == addNewSessionAction:
                 self.onCreateNewSessionClicked(checked=True)
-            
+
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
 
@@ -528,7 +528,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         else: # If the item was a subject:
             self.addSessionsToSubjectSessionSelector(index)
-            
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
@@ -547,14 +547,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.logic.add_subject_to_database(subject_name,subject_id)
                 #Update loaded subjects view
                 self.updateSubjectSessionSelector()
-    
+
     @display_errors
     def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
         """ Returns the subject or session (name, id) at the specified index in the SubjectSessionView """
-        
+
         name = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0)).text()
         id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-        
+
         return (name, id)
 
     @display_errors
@@ -563,7 +563,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
         if not returncode:
             return False
-        
+
         currentIndex = self.ui.subjectSessionView.currentIndex()
         _, subject_id = self.getSubjectSessionAtIndex(currentIndex)
         self.logic.add_volume_to_database(subject_id, volume_id, volume_name, volume_filepath)
@@ -576,7 +576,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if self.logic.db is None:
             raise RuntimeError("Cannot create session because there is no database connection")
-        
+
         db_transducer_ids = self.logic.db.get_transducer_ids()
         db_protocol_ids = self.logic.db.get_protocol_ids()
         db_volume_ids = self.logic.db.get_volume_ids(subject_id)
@@ -584,9 +584,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         returncode, session_parameters = sessiondlg.customexec_()
         if not returncode:
             return False
-        
+
         sessionAdded = self.logic.add_session_to_database(subject_id, session_parameters)
-        
+
         # Only required if new session was added
         if sessionAdded:
             self.addSessionsToSubjectSessionSelector(currentIndex, session_parameters['name'], session_parameters['id'])
@@ -655,7 +655,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Allowable volume filetypes includes *.json
         volume_extensions = ("Volume" + " (*.json *.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
-        "Dicom" + " (*.dcm *.ima);;" + 
+        "Dicom" + " (*.dcm *.ima);;" +
         "All Files" + " (*)")
 
         filepath: str = qt.QFileDialog.getOpenFileName(
@@ -668,7 +668,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if filepath:
             self.logic.load_volume_from_file(filepath)
             self.updateLoadedObjectsView() # Call function here to update view based on node attributes
-            
+
 
     def onLoadFiducialsPressed(self) -> None:
         """ Call slicer dialog to load fiducials into the scene"""
@@ -724,10 +724,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [fiducial_node.GetName(), points_type, fiducial_node.GetID()]
             ))
             self.loadedObjectsItemModel.appendRow(row)
-        if parameter_node.loaded_plan is not None:
+        if parameter_node.loaded_solution is not None:
+            solution_openlifu = parameter_node.loaded_solution.solution.solution
             row = list(map(
                 create_noneditable_QStandardItem,
-                ["Treatment Plan", "Plan", '']
+                ["Sonication Solution", solution_openlifu.name, solution_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
 
@@ -762,10 +763,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
 
             # Build the additional info message here; this is status text that conditionally displays.
-            additional_info = ""
+            additional_info_messages : List[str] = []
             if session_openlifu.virtual_fit_approval_for_target_id is not None:
-                additional_info += f"Virtual fit approved for \"{session_openlifu.virtual_fit_approval_for_target_id}\""
-            self.ui.sessionStatusAdditionalInfoLabel.setText(additional_info)
+                additional_info_messages.append(f"Virtual fit approved for \"{session_openlifu.virtual_fit_approval_for_target_id}\"")
+            if loaded_session.transducer_tracking_is_approved():
+                additional_info_messages.append(f"Transducer tracking approved")
+            self.ui.sessionStatusAdditionalInfoLabel.setText('\n'.join(additional_info_messages))
 
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
             for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
@@ -820,7 +823,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If the volume of the active session was removed, the session becomes invalid.
         if node.IsA('vtkMRMLVolumeNode'):
             self.logic.validate_session()
-            self.logic.validate_plan()
+            self.logic.validate_solution()
 
         self.updateLoadedObjectsView()
 
@@ -981,23 +984,23 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         return True
 
-    def validate_plan(self) -> bool:
-        """Check to ensure that the currently active plan is in a valid state, clearing out the plan
-        if it is not and returning whether there is an active valid plan."""
+    def validate_solution(self) -> bool:
+        """Check to ensure that the currently active solution is in a valid state, clearing out the solution
+        if it is not and returning whether there is an active valid solution."""
 
-        plan = self.getParameterNode().loaded_plan
+        solution = self.getParameterNode().loaded_solution
 
-        if plan is None:
-            return False # There is no active plan, no problem
+        if solution is None:
+            return False # There is no active solution, no problem
 
         # Check volumes are present
-        for volume_node in [plan.intensity, plan.pnp]:
+        for volume_node in [solution.intensity, solution.pnp]:
             if volume_node is None or slicer.mrmlScene.GetNodeByID(volume_node.GetID()) is None:
                 clean_up_scene = ObjectBeingUnloadedMessageBox(
-                    message="A volume that was in use by the active plan is now missing. The plan will be unloaded.",
-                    title="Plan invalidated",
+                    message="A volume that was in use by the active solution is now missing. The solution will be unloaded.",
+                    title="Solution invalidated",
                 ).customexec_()
-                self.clear_plan(clean_up_scene=clean_up_scene)
+                self.clear_solution(clean_up_scene=clean_up_scene)
                 return False
 
         return True
@@ -1078,7 +1081,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if self.getParameterNode().loaded_session is None:
             return None
         return self.getParameterNode().loaded_session.get_transducer_id()
-    
+
     def get_current_session_volume_id(self) -> Optional[str]:
         """Get the volume ID of the current session, if there is a current session. Returns None
         if there isn't a current session."""
@@ -1124,7 +1127,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 "Confirm replace protocol"
             ):
                 return
-        
+
         loaded_volumes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
         loaded_volume_ids = [volume_node.GetAttribute('OpenLIFUData.volume_id') if volume_node.GetAttribute('OpenLIFUData.volume_id') else volume_node.GetID() for volume_node in loaded_volumes]
         if (
@@ -1191,15 +1194,22 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.getParameterNode().loaded_session = new_session
 
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
+        session = self.getParameterNode().loaded_session
+
+        if session is None:
+            return
+
+        # Revoke transducer tracking approval if there was any
+        if session.transducer_tracking_is_approved():
+            session.toggle_transducer_tracking_approval() # revoke approval
+            self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
+
         # Revoke any possible virtual fit approval if the transducer whose transform was just modified
         # belongs to an active session
-        session = self.getParameterNode().loaded_session
         if (
-            session is None
-            or session.session.session.virtual_fit_approval_for_target_id is None
+            session.session.session.virtual_fit_approval_for_target_id is not None
+            and session.get_transducer_id() == transducer.transducer.transducer.id
         ):
-            return
-        if session.get_transducer_id() == transducer.transducer.transducer.id:
             session.approve_virtual_fit_for_target(None) # revoke approval
             self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
 
@@ -1329,23 +1339,31 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # If the transducer that was just removed was in use by an active session, invalidate that session
             self.validate_session()
 
-    def set_plan(self, plan:SlicerOpenLIFUPlan):
-        self.getParameterNode().loaded_plan = plan
+    def set_solution(self, solution:SlicerOpenLIFUSolution):
+        """Set a solution to be the currently active solution. If there is an active session, write that solution to the database."""
+        self.getParameterNode().loaded_solution = solution
+        if self.validate_session():
+            if self.db is None: # This should not happen -- if there is an active session then there should be a database connection as well.
+                raise RuntimeError("Unable to write solution to the session because there is no database connection")
+            session_openlifu = self.getParameterNode().loaded_session.session.session
+            solution_openlifu = solution.solution.solution
+            self.db.write_solution(session_openlifu, solution_openlifu)
 
-    def clear_plan(self,  clean_up_scene:bool = True) -> None:
-        """Unload the current plan if there is one loaded.
+
+    def clear_solution(self,  clean_up_scene:bool = True) -> None:
+        """Unload the current solution if there is one loaded.
 
         Args:
-            clean_up_scene: Whether to remove the plan's affiliated scene content.
+            clean_up_scene: Whether to remove the solution's affiliated scene content.
                 If False then the scene content is orphaned from its session.
                 If True then the scene content is removed.
         """
-        plan = self.getParameterNode().loaded_plan
-        self.getParameterNode().loaded_plan = None
-        if plan is None:
+        solution = self.getParameterNode().loaded_solution
+        self.getParameterNode().loaded_solution = None
+        if solution is None:
             return
         if clean_up_scene:
-            plan.clear_nodes()
+            solution.clear_nodes()
 
     @display_errors
     def add_subject_to_database(self, subject_name, subject_id):
@@ -1384,8 +1402,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def load_volume_from_openlifu(self, volume_dir: Path, volume_metadata: Dict):
         """ Load a volume based on openlifu metadata and check for duplicate volumes in the scene.
         Args:
-            volume_dir: Full path to the database volume directory 
-            volume_metadata: openlifu volume metadata including the volume name, id and relative path. 
+            volume_dir: Full path to the database volume directory
+            volume_metadata: openlifu volume metadata including the volume name, id and relative path.
         """
         loaded_volumes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
         loaded_volume_ids = [volume_node.GetAttribute('OpenLIFUData.volume_id') if volume_node.GetAttribute('OpenLIFUData.volume_id') else volume_node.GetID() for volume_node in loaded_volumes]
@@ -1396,9 +1414,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 "Volume in use by session",
                 )
             return
-                        
+
         # Check whether the same volume_id is already loaded
-        if volume_metadata['id'] in loaded_volume_ids: 
+        if volume_metadata['id'] in loaded_volume_ids:
             if not slicer.util.confirmYesNoDisplay(
                 f"A volume with ID {volume_metadata['id']} is already loaded. Reload it?",
                 "Volume already loaded",
@@ -1410,17 +1428,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         volume_filepath = Path(volume_dir,volume_metadata['data_filename'])
         loadedVolumeNode = slicer.util.loadVolume(volume_filepath)
-        # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is assigned to the node so need 
-        # call updateLoadedObjectsView again to display openlifu name/id. 
-        assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata) 
+        # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is assigned to the node so need
+        # call updateLoadedObjectsView again to display openlifu name/id.
+        assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
 
     def load_volume_from_file(self, filepath: str) -> None:
-        """ Given either a volume or json filetype, load a volume into the scene and determine whether 
+        """ Given either a volume or json filetype, load a volume into the scene and determine whether
         the volume should be loaded based on openlifu metadata or default slicer parameters"""
 
         parent_dir = Path(filepath).parent
         volume_id = parent_dir.name # assuming the user selected a volume within the database
-  
+
         if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
             # If a corresponding json file exists in the volume's parent directory,
             # then use volume_metadata included in the json file
@@ -1428,7 +1446,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             if volume_json_filepath.exists():
                 volume_metadata = json.loads(volume_json_filepath.read_text())
                 if volume_metadata['data_filename'] == Path(filepath).name:
-                    self.load_volume_from_openlifu(parent_dir, volume_metadata)     
+                    self.load_volume_from_openlifu(parent_dir, volume_metadata)
                 # If the selected file doesn't match the filename included in the json file, use default volume name and id based on filepath
                 else:
                     slicer.util.loadVolume(filepath)
@@ -1436,11 +1454,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             else:
                 slicer.util.loadVolume(filepath)
 
-        # If the user selects a json file, infer volume filepath information based on the volume_metadata. 
+        # If the user selects a json file, infer volume filepath information based on the volume_metadata.
         elif Path(filepath).suffix == '.json':
             # Check for corresponding volume file
             volume_metadata = json.loads(Path(filepath).read_text())
-            if 'data_filename' in volume_metadata: 
+            if 'data_filename' in volume_metadata:
                 volume_filepath = Path(parent_dir,volume_metadata['data_filename'])
                 if volume_filepath.exists():
                     self.load_volume_from_openlifu(parent_dir, volume_metadata)
@@ -1470,17 +1488,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 return
 
         self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
-  
+
     def add_session_to_database(self, subject_id: str, session_parameters: Dict) -> bool:
         """ Add new session to selected subject in the loaded openlifu database
 
         Args:
             subject_id: id of the subject to which a session is being added
             session_parameters: Dictionary containing the parameters output from the CreateNewSession Dialog
-        
+
         Returns True if a session is successfully added to the database
         """
-        
+
         # Check if session already exists in database
         existing_session_ids = self.get_session_info(subject_id)
         for session in existing_session_ids:
@@ -1498,26 +1516,24 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             protocol_id = session_parameters['protocol_id'],
             volume_id = session_parameters['volume_id'],
             transducer_id = session_parameters['transducer_id']
-        )   
+        )
         self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
-#
-# OpenLIFUDataTest
-#
-
-
-class OpenLIFUDataTest(ScriptedLoadableModuleTest):
-    """
-    This is the test case for your scripted module.
-    Uses ScriptedLoadableModuleTest base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
-
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
-
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
+    def toggle_solution_approval(self):
+        """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
+        This will write the approval to the solution in memory and, if there is an active session, it will
+        also write the solution approval to the database.
+        Raises runtime error if there is no active solution, or if there appears to be an active session but no connected database.
+        """
+        solution = self.getParameterNode().loaded_solution
+        session = self.getParameterNode().loaded_session
+        if solution is None: # We should never be calling toggle_solution_approval if there's no active solution
+            raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
+        if session is not None and self.db is None: # This shouldn't happen
+            raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
+        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+        solution.toggle_approval() # apply or revoke approval
+        if session is not None:
+            self.db.write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
+        self.getParameterNode().loaded_solution = solution # remember to write the updated solution object into the parameter node

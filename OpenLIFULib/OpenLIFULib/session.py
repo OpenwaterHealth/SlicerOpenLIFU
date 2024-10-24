@@ -47,6 +47,14 @@ class SlicerOpenLIFUSession:
     in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
+    def get_session_id(self) -> str:
+        """Get the ID of the underlying openlifu session"""
+        return self.session.session.id
+
+    def get_subject_id(self) -> str:
+        """Get the ID of the underlying openlifu subject"""
+        return self.session.session.subject_id
+
     def get_transducer_id(self) -> Optional[str]:
         """Get the ID of the openlifu transducer associated with this session"""
         return self.session.session.transducer_id
@@ -54,7 +62,7 @@ class SlicerOpenLIFUSession:
     def get_protocol_id(self) -> Optional[str]:
         """Get the ID of the openlifu protocol associated with this session"""
         return self.session.session.protocol_id
-    
+
     def get_volume_id(self) -> Optional[str]:
         """Get the ID of the volume_node associated with this session"""
         return self.volume_node.GetAttribute('OpenLIFUData.volume_id')
@@ -113,7 +121,7 @@ class SlicerOpenLIFUSession:
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
 
         Args:
-            session: OpenLIFUSession
+            session: OpenLIFU Session
             volume_info: Dictionary containing the metadata (name, id and filepath) of the volume
             being loaded as part of the session
         """
@@ -171,3 +179,11 @@ class SlicerOpenLIFUSession:
     def virtual_fit_is_approved_for_target(self, target : vtkMRMLMarkupsFiducialNode) -> bool:
         """Return whether there is a virtual fit approval for the given target"""
         return self.session.session.virtual_fit_approval_for_target_id == fiducial_to_openlifu_point_id(target)
+
+    def toggle_transducer_tracking_approval(self) -> None:
+        """Approve transducer tracking if it was not approved. Revoke approval if it was approved."""
+        self.session.session.transducer_tracking_approved = not self.session.session.transducer_tracking_approved
+
+    def transducer_tracking_is_approved(self) -> bool:
+        """Return whether transducer tracking has been approved"""
+        return self.session.session.transducer_tracking_approved
