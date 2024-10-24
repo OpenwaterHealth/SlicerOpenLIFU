@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>258</width>
-    <height>190</height>
+    <height>213</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -29,6 +29,13 @@ OpenLIFUAlgorithmInputWidget</string>
     <widget class="QLabel" name="virtualFitApprovalStatusLabel">
      <property name="text">
       <string>(virtual fit approval status here)</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="trackingApprovalStatusLabel">
+     <property name="text">
+      <string>(transducer tracking approval here)</string>
      </property>
     </widget>
    </item>
