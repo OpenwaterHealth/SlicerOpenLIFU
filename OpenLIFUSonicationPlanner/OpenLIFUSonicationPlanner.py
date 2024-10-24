@@ -330,7 +330,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 )
 
     def onApproveClicked(self):
-        self.logic.toggle_solution_approval()
+        with BusyCursor():
+            self.logic.toggle_solution_approval()
 
 #
 # Solution computation function using openlifu
@@ -444,13 +445,12 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         displayNode.SetVisibility(False)
 
     def toggle_solution_approval(self):
-        """Approve the currently active solution if it was not approved. Revoke approval if it was approved."""
-        data_parameter_node = get_openlifu_data_parameter_node()
-        solution = data_parameter_node.loaded_solution
-        if solution is None: # We should never be calling toggle_solution_approval if there's no active session.
-            raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
-        solution.toggle_approval() # apply or revoke approval
-        data_parameter_node.loaded_solution = solution # remember to write the updated solution object into the parameter node
+        """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
+        This will write the approval to the solution in memory and, if there is an active session, it will
+        also write the solution approval to the database.
+        """
+        slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
+
 
 
 #
