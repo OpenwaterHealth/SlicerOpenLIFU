@@ -1,6 +1,4 @@
-import logging
-import os
-from typing import Annotated, Optional
+from typing import Optional, TYPE_CHECKING
 
 import vtk
 
@@ -11,6 +9,9 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from OpenLIFULib import get_openlifu_data_parameter_node
+
+if TYPE_CHECKING:
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 #
 # OpenLIFUTransducerTracker
@@ -107,6 +108,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
         self.updateApproveButton()
+        self.updateApprovalStatusLabel()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -158,6 +160,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updateApproveButton()
+        self.updateApprovalStatusLabel()
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -177,6 +180,16 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.approveButton.setToolTip(
                     "Approve the current transducer positioning as accurately tracking the real transducer configuration relative to the subject"
                 )
+
+    def updateApprovalStatusLabel(self):
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is not None:
+            if loaded_session.transducer_tracking_is_approved():
+                self.ui.approvalStatusLabel.text = "Transducer tracking is approved."
+            else:
+                self.ui.approvalStatusLabel.text = "Transducer tracking is currently unapproved."
+        else:
+            self.ui.approvalStatusLabel.text = ""
 
     def onApproveClicked(self):
         self.logic.toggleTransducerTrackingApproval()
