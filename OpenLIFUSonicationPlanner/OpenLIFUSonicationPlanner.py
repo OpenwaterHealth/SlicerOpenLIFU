@@ -122,6 +122,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updateVirtualFitApprovalStatus()
+        self.updateTrackingApprovalStatus()
 
         # Add an observer on the Data module's parameter node
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
@@ -247,6 +248,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updateVirtualFitApprovalStatus()
+        self.updateTrackingApprovalStatus()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -290,6 +292,18 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.virtualFitApprovalStatusLabel.text = ""
             else:
                 self.ui.virtualFitApprovalStatusLabel.text = f"(Virtual fit was approved for target \"{target_id}\")"
+        else:
+            self.ui.virtualFitApprovalStatusLabel.text = ""
+
+    def updateTrackingApprovalStatus(self) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is not None:
+            if loaded_session.transducer_tracking_is_approved():
+                self.ui.trackingApprovalStatusLabel.text = f"(Transducer tracking is approved)"
+                self.ui.trackingApprovalStatusLabel.styleSheet = ""
+            else:
+                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is currently unapproved!"
+                self.ui.trackingApprovalStatusLabel.styleSheet = "color:red;"
         else:
             self.ui.virtualFitApprovalStatusLabel.text = ""
 
