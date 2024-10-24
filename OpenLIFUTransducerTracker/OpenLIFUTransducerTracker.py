@@ -10,7 +10,7 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-
+from OpenLIFULib import get_openlifu_data_parameter_node
 
 #
 # OpenLIFUTransducerTracker
@@ -23,10 +23,10 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Transducer Tracking")  # TODO: make this more human readable by adding spaces
+        self.parent.title = _("OpenLIFU Transducer Tracking")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
-        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
+        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
@@ -49,7 +49,7 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
 @parameterNodeWrapper
 class OpenLIFUTransducerTrackerParameterNode:
     """
-    The parameters needed by module.
+    The parameters needed by the module.
 
     """
 
@@ -91,16 +91,22 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUTransducerTrackerLogic()
 
-        # Connections
+        # Prevents possible creation of two OpenLIFUData widgets
+        # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
+        slicer.util.getModule("OpenLIFUData").widgetRepresentation()
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # Buttons
-        
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+
+        self.ui.approveButton.clicked.connect(self.onApproveClicked)
+
+        self.updateApproveButton()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -117,7 +123,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-      
+
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
         # Parameter node will be reset, do not use it anymore
@@ -149,7 +155,32 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
- 
+
+    def onDataParameterNodeModified(self, caller, event) -> None:
+        self.updateApproveButton()
+
+    def updateApproveButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setToolTip("There is no active session to write the approval")
+            self.ui.approveButton.setText("Approve transducer tracking")
+        else:
+            self.ui.approveButton.setEnabled(True)
+            session_openlifu = get_openlifu_data_parameter_node().loaded_session.session.session
+            if session_openlifu.transducer_tracking_approved:
+                self.ui.approveButton.setText("Unapprove transducer tracking")
+                self.ui.approveButton.setToolTip(
+                    "Revoke approval that the current transducer positioning is accurately tracking the real transducer configuration relative to the subject"
+                )
+            else:
+                self.ui.approveButton.setText("Approve transducer tracking")
+                self.ui.approveButton.setToolTip(
+                    "Approve the current transducer positioning as accurately tracking the real transducer configuration relative to the subject"
+                )
+
+    def onApproveClicked(self):
+        self.logic.toggleTransducerTrackingApproval()
+
 #
 # OpenLIFUTransducerTrackerLogic
 #
@@ -172,23 +203,11 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
 
-#
-# OpenLIFUTransducerTrackerTest
-#
-
-
-class OpenLIFUTransducerTrackerTest(ScriptedLoadableModuleTest):
-    """
-    This is the test case for your scripted module.
-    Uses ScriptedLoadableModuleTest base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
-
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
-
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
- 
+    def toggleTransducerTrackingApproval(self) -> None:
+        """Approve transducer tracking for the currently active session if it was not approved. Revoke approval if it was approved."""
+        data_parameter_node = get_openlifu_data_parameter_node()
+        session = data_parameter_node.loaded_session
+        if session is None: # We should never be calling toggleTransducerTrackingApproval if there's no active session.
+            raise RuntimeError("Cannot toggle tracking approval because there is no active session.")
+        session.toggle_transducer_tracking_approval() # apply the approval or lack thereof
+        data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node

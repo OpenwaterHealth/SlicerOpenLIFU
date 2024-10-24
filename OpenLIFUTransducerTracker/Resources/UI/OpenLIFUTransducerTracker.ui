@@ -19,6 +19,13 @@
     </widget>
    </item>
    <item>
+    <widget class="QPushButton" name="approveButton">
+     <property name="text">
+      <string>Approve transducer tracking</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
