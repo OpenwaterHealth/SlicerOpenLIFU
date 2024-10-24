@@ -85,6 +85,13 @@ OpenLIFUAlgorithmInputWidget</string>
      </property>
     </widget>
    </item>
+   <item>
+    <widget class="QPushButton" name="approveButton">
+     <property name="text">
+      <string>Approve solution</string>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>

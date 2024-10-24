@@ -132,10 +132,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
 
-        # Buttons
         self.ui.solutionPushButton.clicked.connect(self.onComputeSolutionClicked)
-        self.checkCanComputeSolution()
         self.ui.renderPNPCheckBox.clicked.connect(self.onrenderPNPCheckBoxClicked)
+        self.ui.approveButton.clicked.connect(self.onApproveClicked)
+
+        self.checkCanComputeSolution()
+        self.updateApproveButton()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -249,6 +251,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRenderPNPCheckBox()
         self.updateVirtualFitApprovalStatus()
         self.updateTrackingApprovalStatus()
+        self.updateApproveButton()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -307,6 +310,28 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.virtualFitApprovalStatusLabel.text = ""
 
+    def updateApproveButton(self):
+        data_parameter_node = get_openlifu_data_parameter_node()
+        if data_parameter_node.loaded_solution is None:
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setToolTip("There is no active solution to write the approval")
+            self.ui.approveButton.setText("Approve solution")
+        else:
+            self.ui.approveButton.setEnabled(True)
+            if data_parameter_node.loaded_solution.is_approved():
+                self.ui.approveButton.setText("Unapprove solution")
+                self.ui.approveButton.setToolTip(
+                    "Revoke approval for the sonication solution"
+                )
+            else:
+                self.ui.approveButton.setText("Approve solution")
+                self.ui.approveButton.setToolTip(
+                    "Approve the sonicaiton solution"
+                )
+
+    def onApproveClicked(self):
+        self.logic.toggle_solution_approval()
+
 #
 # Solution computation function using openlifu
 #
@@ -325,7 +350,7 @@ def compute_solution_openlifu(
         intensity_aggregated: Time-averaged intensity, a simulation output. This is mean-aggregated over all focus points.
             Note: It should be weighted by the number of times each focus point is focused on, but this functionality is not yet represented by openlifu.
     """
-    session = get_openlifu_data_parameter_node().loaded_session 
+    session = get_openlifu_data_parameter_node().loaded_session
     solution, simulation_result_aggregated, scaled_solution_analysis = protocol.calc_solution(
         transducer=transducer.transducer.transducer,
         volume=make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol),
@@ -417,6 +442,15 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         if not displayNode:
             displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
         displayNode.SetVisibility(False)
+
+    def toggle_solution_approval(self):
+        """Approve the currently active solution if it was not approved. Revoke approval if it was approved."""
+        data_parameter_node = get_openlifu_data_parameter_node()
+        solution = data_parameter_node.loaded_solution
+        if solution is None: # We should never be calling toggle_solution_approval if there's no active session.
+            raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
+        solution.toggle_approval() # apply or revoke approval
+        data_parameter_node.loaded_solution = solution # remember to write the updated solution object into the parameter node
 
 
 #
