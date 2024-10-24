@@ -167,12 +167,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
 
     def updateRunEnabled(self):
-        if slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
+        slicer.util.getModuleLogic('OpenLIFUData').validate_solution()
+        solution = get_openlifu_data_parameter_node().loaded_solution
+        if solution is None:
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
+        elif not solution.is_approved():
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("Cannot run because the currently active solution is not approved. It can be approved in the sonication planning module.")
+        else:
             self.ui.runPushButton.enabled = True
             self.ui.runPushButton.setToolTip("Run sonication")
-        else:
-            self.ui.runPushButton.enabled = False
-            self.ui.runPushButton.setToolTip("To run a sonication, first generate a solution in the sonication planning module.")
 
     def onRunClicked(self):
         print("Placeholder text: Running sonication")
@@ -203,25 +208,3 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
-
-
-#
-# OpenLIFUSonicationControlTest
-#
-
-
-class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
-    """
-    This is the test case for your scripted module.
-    Uses ScriptedLoadableModuleTest base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
-
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
-
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
- 
