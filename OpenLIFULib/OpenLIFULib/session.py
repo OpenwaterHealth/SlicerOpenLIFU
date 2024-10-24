@@ -62,7 +62,7 @@ class SlicerOpenLIFUSession:
     def get_protocol_id(self) -> Optional[str]:
         """Get the ID of the openlifu protocol associated with this session"""
         return self.session.session.protocol_id
-    
+
     def get_volume_id(self) -> Optional[str]:
         """Get the ID of the volume_node associated with this session"""
         return self.volume_node.GetAttribute('OpenLIFUData.volume_id')
@@ -179,3 +179,11 @@ class SlicerOpenLIFUSession:
     def virtual_fit_is_approved_for_target(self, target : vtkMRMLMarkupsFiducialNode) -> bool:
         """Return whether there is a virtual fit approval for the given target"""
         return self.session.session.virtual_fit_approval_for_target_id == fiducial_to_openlifu_point_id(target)
+
+    def toggle_transducer_tracking_approval(self) -> None:
+        """Approve transducer tracking if it was not approved. Revoke approval if it was approved."""
+        self.session.session.transducer_tracking_approved = not self.session.session.transducer_tracking_approved
+
+    def transducer_tracking_is_approved(self) -> bool:
+        """Return whether transducer tracking has been approved"""
+        return self.session.session.transducer_tracking_approved
