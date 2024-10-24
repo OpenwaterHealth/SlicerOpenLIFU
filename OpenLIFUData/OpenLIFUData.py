@@ -1520,22 +1520,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
-#
-# OpenLIFUDataTest
-#
-
-
-class OpenLIFUDataTest(ScriptedLoadableModuleTest):
-    """
-    This is the test case for your scripted module.
-    Uses ScriptedLoadableModuleTest base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
-
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
-
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
+    def toggle_solution_approval(self):
+        """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
+        This will write the approval to the solution in memory and, if there is an active session, it will
+        also write the solution approval to the database.
+        Raises runtime error if there is no active solution, or if there appears to be an active session but no connected database.
+        """
+        solution = self.getParameterNode().loaded_solution
+        session = self.getParameterNode().loaded_session
+        if solution is None: # We should never be calling toggle_solution_approval if there's no active solution
+            raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
+        if session is not None and self.db is None: # This shouldn't happen
+            raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
+        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+        solution.toggle_approval() # apply or revoke approval
+        if session is not None:
+            self.db.write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
+        self.getParameterNode().loaded_solution = solution # remember to write the updated solution object into the parameter node
