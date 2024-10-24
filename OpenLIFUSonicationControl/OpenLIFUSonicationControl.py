@@ -1,7 +1,6 @@
-import logging
-import os
-from typing import Annotated, Optional
+from typing import Optional, Callable, List
 
+import qt
 import vtk
 
 import slicer
@@ -11,7 +10,7 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-from OpenLIFULib import get_openlifu_data_parameter_node
+from OpenLIFULib import get_openlifu_data_parameter_node, SlicerOpenLIFUSolution
 
 #
 # OpenLIFUSonicationControl
@@ -92,24 +91,23 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUSonicationControlLogic()
 
-        # Connections
-
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
-        # Disable the Abort button. Can only be clicked once the user hits 'Run'
-        self.ui.abortPushButton.setDisabled(True)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
+        self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
         self.updateRunEnabled()
-    
+        self.updateAbortEnabled()
+        self.logic.call_on_running_changed(self.onRunningChanged)
+
         self.addObserver(
             get_openlifu_data_parameter_node().parameterNode,
             vtk.vtkCommand.ModifiedEvent,
             self.onDataParameterNodeModified
         )
-    
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
@@ -128,7 +126,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-      
+
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
         # Parameter node will be reset, do not use it anymore
@@ -167,11 +165,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
 
     def updateRunEnabled(self):
-        slicer.util.getModuleLogic('OpenLIFUData').validate_solution()
         solution = get_openlifu_data_parameter_node().loaded_solution
         if solution is None:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
+        elif self.logic.running:
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("Currently running...")
         elif not solution.is_approved():
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("Cannot run because the currently active solution is not approved. It can be approved in the sonication planning module.")
@@ -179,32 +179,73 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runPushButton.enabled = True
             self.ui.runPushButton.setToolTip("Run sonication")
 
-    def onRunClicked(self):
-        print("Placeholder text: Running sonication")
+    def updateAbortEnabled(self):
+        self.ui.abortPushButton.setEnabled(self.logic.running)
 
-        # Enable Abort button
-        self.ui.abortPushButton.setEnabled(True)
-        
-        #TODO: Once sonication control has been implemented,
-        # disbale 'Run' button during run and then disable 'Abort' again once completed. 
-        
+    def onRunningChanged(self, new_running_state:bool):
+        self.updateRunEnabled()
+        self.updateAbortEnabled()
+
+    def onRunClicked(self):
+        if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
+            raise RuntimeError("Invalid solution; not running sonication.")
+        solution = get_openlifu_data_parameter_node().loaded_solution
+
+        self.logic.run(solution)
+
+    def onAbortClicked(self):
+        self.logic.abort()
+
 # OpenLIFUSonicationControlLogic
 #
 
 
 class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
-    """This class should implement all the actual
-    computation done by your module.  The interface
-    should be such that other python code can import
-    this class and make use of the functionality without
-    requiring an instance of the Widget.
-    Uses ScriptedLoadableModuleLogic base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self._running : bool = False
+        """Whether sonication is currently running. Do not set this directly -- use the `running` property."""
+
+        self._on_running_changed_callbacks : List[Callable[[bool],None]] = []
+        """List of functions to call when `running` property is changed."""
+
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
+
+    def call_on_running_changed(self, f : Callable[[bool],None]) -> None:
+        """Set a function to be called whenever the `running` property is changed.
+        The provided callback should accept a single bool argument which will be the new running state.
+        """
+        self._on_running_changed_callbacks.append(f)
+
+    @property
+    def running(self) -> bool:
+        """Whether sonication is currently running"""
+        return self._running
+
+    @running.setter
+    def running(self, running_value : bool):
+        self._running = running_value
+        for f in self._on_running_changed_callbacks:
+            f(self._running)
+
+    def run(self, solution:SlicerOpenLIFUSolution) -> None:
+        self.running = True
+        slicer.util.infoDisplay(
+            text=(
+                "The run sonication button is a placeholder. Sonication control is not yet implemented."
+                f" Here the solution that would have been run is {solution.solution.solution.id}."
+                " The fake \"run\" will start after you close this dialog and end after three seconds."
+            ),
+            windowTitle="Not implemented"
+        )
+        def end_run():
+            """Placeholder function that represents a sonication ending"""
+            self.running = False
+        qt.QTimer.singleShot(3000, end_run)
+
+    def abort(self) -> None:
+        self.running = False
