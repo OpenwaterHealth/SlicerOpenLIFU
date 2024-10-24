@@ -59,3 +59,9 @@ class SlicerOpenLIFUSolution:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         slicer.mrmlScene.RemoveNode(self.pnp)
         slicer.mrmlScene.RemoveNode(self.intensity)
+
+    def is_approved(self) -> bool:
+        return self.solution.solution.approved
+
+    def toggle_approval(self) -> None:
+        self.solution.solution.approved = not self.solution.solution.approved
