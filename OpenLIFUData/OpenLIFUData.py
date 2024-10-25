@@ -921,6 +921,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.remove_transducer(loaded_session.get_transducer_id())
             if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
                 self.remove_protocol(loaded_session.get_protocol_id())
+            if (
+                self.getParameterNode().loaded_solution is not None
+                and loaded_session.last_generated_solution_id == self.getParameterNode().loaded_solution.solution.solution.id
+            ):
+                self.clear_solution(clean_up_scene=True)
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -1347,6 +1352,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 raise RuntimeError("Unable to write solution to the session because there is no database connection")
             session_openlifu = self.getParameterNode().loaded_session.session.session
             solution_openlifu = solution.solution.solution
+            self.getParameterNode().loaded_session.last_generated_solution_id = solution_openlifu.id
             self.db.write_solution(session_openlifu, solution_openlifu)
 
 
@@ -1522,18 +1528,33 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def toggle_solution_approval(self):
         """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
-        This will write the approval to the solution in memory and, if there is an active session, it will
-        also write the solution approval to the database.
-        Raises runtime error if there is no active solution, or if there appears to be an active session but no connected database.
+        This will write the approval to the solution in memory and, if there is an active session from which this solution was generated,
+        we will also write the solution approval to the database.
+
+        Raises runtime error if there is no active solution, or if there appears to be an active session to which the solution is
+        affiliated but no connected database to enable writing.
         """
         solution = self.getParameterNode().loaded_solution
         session = self.getParameterNode().loaded_session
         if solution is None: # We should never be calling toggle_solution_approval if there's no active solution
             raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
-        if session is not None and self.db is None: # This shouldn't happen
-            raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
-        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         solution.toggle_approval() # apply or revoke approval
         if session is not None:
-            self.db.write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
+            if session.last_generated_solution_id == solution.solution.solution.id:
+                if self.db is None: # This shouldn't happen
+                    raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
+                OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+                self.db.write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
+            else:
+                # This can happen if, for example, a solution is generated from a session and then a new session is loaded and the user
+                # tries to toggle approval on the old solution. The user would have to have kept the old solution around by
+                # invalidating the previous session while keeping its affiliated data around in an orphaned state.
+                # Weird case, but it can happen if someone is awkwardly switching between the manual and treatment workflows.
+                slicer.util.infoDisplay(
+                    text= (
+                        "There is an active session but it is not the one that generated this solution."
+                        " Since this solution has lost its session link, any approval state change will not be saved into the database."
+                    ),
+                    windowTitle="Not saving approval state"
+                )
         self.getParameterNode().loaded_solution = solution # remember to write the updated solution object into the parameter node
