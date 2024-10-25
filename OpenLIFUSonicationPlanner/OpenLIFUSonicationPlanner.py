@@ -446,8 +446,8 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
 
     def toggle_solution_approval(self):
         """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
-        This will write the approval to the solution in memory and, if there is an active session, it will
-        also write the solution approval to the database.
+        This will write the approval to the solution in memory and, if there is an active session from which
+        the active solution was generated, then it will also write the solution approval to the database.
         """
         slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
 
