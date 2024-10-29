@@ -424,9 +424,10 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session.approve_virtual_fit_for_target(target) # apply the approval or lack thereof
         data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
 
-    def revoke_approval_if_any(self, target : Optional[vtkMRMLMarkupsFiducialNode] = None):
+    def revoke_approval_if_any(self, target : vtkMRMLMarkupsFiducialNode):
         """If there was a virtual fit approval for the given target, revoke it.
-        If no target is provided, then any existing virtual fit approval is revoked without regard for target.
+        It is assumed that the virtual fit approval is being revoked because of a modification to the approved target,
+        so an info dialog is raised to that effect.
         If there is no active session then this does nothing.
         """
         data_parameter_node = get_openlifu_data_parameter_node()
@@ -437,6 +438,10 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             target is None
             or session.virtual_fit_is_approved_for_target(target)
         ):
+            slicer.util.infoDisplay(
+                text= "Virtual fit approval has been revoked because the approved target was modified.",
+                windowTitle="Approval revoked"
+            )
             session.approve_virtual_fit_for_target(None) # revoke approval
             data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
 
