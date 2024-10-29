@@ -53,6 +53,44 @@ class OpenLIFUSonicationControlParameterNode:
 
     """
 
+#
+# OpenLIFUSonicationControlDialogs
+#
+
+class onRunCompletedDialog(qt.QDialog):
+    """ Dialog to save run """
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Run completed")
+        self.setWindowModality(1)
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(200)
+
+        vBoxLayout = qt.QVBoxLayout()
+        self.setLayout(vBoxLayout)
+
+        self.label = qt.QLabel()
+        self.label.setText("Sonication control completed. Do you want to save this run? ")
+        vBoxLayout.addWidget(self.label)
+
+        self.successfulCheckBox = qt.QCheckBox('Check this box if the run was successful.')
+        self.successfulCheckBox.setStyleSheet("font-weight: bold")
+        vBoxLayout.addWidget(self.successfulCheckBox)
+
+        self.label_notes = qt.QLabel()
+        self.label_notes.setText("Enter additional notes to include (optional):")
+        vBoxLayout.addWidget(self.label_notes)
+        self.textBox = qt.QTextEdit()
+        vBoxLayout.addWidget(self.textBox)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Save |
+                                          qt.QDialogButtonBox.Discard)
+        vBoxLayout.addWidget(self.buttonBox)
 
 #
 # OpenLIFUSonicationControlWidget
@@ -192,6 +230,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         solution = get_openlifu_data_parameter_node().loaded_solution
 
         self.logic.run(solution)
+        runCompleteDialog = onRunCompletedDialog()
+        runCompleteDialog.exec_()
+
 
     def onAbortClicked(self):
         self.logic.abort()

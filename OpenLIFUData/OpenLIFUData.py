@@ -79,6 +79,10 @@ class OpenLIFUDataParameterNode:
     loaded_solution : "Optional[SlicerOpenLIFUSolution]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
 
+#
+# OpenLIFUDataDialogs
+#
+
 class CreateNewSessionDialog(qt.QDialog):
     """ Create new session dialog """
 
