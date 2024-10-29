@@ -1206,6 +1206,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # Revoke transducer tracking approval if there was any
         if session.transducer_tracking_is_approved():
+            slicer.util.infoDisplay(
+                text= "Transducer tracking approval has been revoked because the transducer was moved.",
+                windowTitle="Approval revoked"
+            )
             session.toggle_transducer_tracking_approval() # revoke approval
             self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
 
@@ -1215,6 +1219,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session.session.session.virtual_fit_approval_for_target_id is not None
             and session.get_transducer_id() == transducer.transducer.transducer.id
         ):
+            slicer.util.infoDisplay(
+                text= "Virtual fit approval has been revoked because the transducer was moved.",
+                windowTitle="Approval revoked"
+            )
             session.approve_virtual_fit_for_target(None) # revoke approval
             self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
 
