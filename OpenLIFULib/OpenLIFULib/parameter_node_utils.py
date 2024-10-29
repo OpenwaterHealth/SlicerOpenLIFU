@@ -70,6 +70,13 @@ class SlicerOpenLIFUXADataset:
     def __init__(self, dataset: "Optional[xarray.Dataset]" = None):
         self.dataset = dataset
 
+# For the same reason we have a thin wrapper around openlifu.Run.
+class SlicerOpenLIFURun:
+    """Ultrathin wrapper of openlifu.Run. This exists so that runs can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, run: "Optional[openlifu.Run]" = None):
+        self.run = run
+
 def SlicerOpenLIFUSerializerBaseMaker(
         serialized_type:type,
         default_args:Optional[list[Any]] = None,
@@ -211,6 +218,18 @@ class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPo
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUPoint(openlifu_lz().Point.from_json(json_string))
 
+@parameterNodeSerializer
+class OpenLIFURunSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFURun)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFURun) -> None:
+        parameterNode.SetParameter(
+            name,
+            value.run.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFURun:
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFURun(openlifu_lz().plan.Run.from_json(json_string))
+    
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUXADataset) -> None:

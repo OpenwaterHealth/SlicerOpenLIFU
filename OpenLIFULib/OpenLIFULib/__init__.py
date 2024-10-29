@@ -3,6 +3,7 @@ from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPoint,
     SlicerOpenLIFUXADataset,
     SlicerOpenLIFUProtocol,
+    SlicerOpenLIFURun,
 )
 from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
 from OpenLIFULib.util import get_openlifu_data_parameter_node, BusyCursor
@@ -28,6 +29,7 @@ __all__ = [
     "SlicerOpenLIFUTransducer",
     "SlicerOpenLIFUPoint",
     "SlicerOpenLIFUXADataset",
+    "SlicerOpenLIFURun",
     "get_openlifu_data_parameter_node",
     "BusyCursor",
     "get_target_candidates",
