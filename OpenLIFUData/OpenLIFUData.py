@@ -24,6 +24,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUSolution,
+    SlicerOpenLIFURun,
     SlicerOpenLIFUSession,
     get_target_candidates,
     assign_openlifu_metadata_to_volume_node,
@@ -78,6 +79,7 @@ class OpenLIFUDataParameterNode:
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
     loaded_solution : "Optional[SlicerOpenLIFUSolution]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
+    loaded_run: "Optional[SlicerOpenLIFURun]"
 
 #
 # OpenLIFUDataDialogs
@@ -735,6 +737,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [solution_openlifu.name, "Solution", solution_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
+        
+        if parameter_node.loaded_run is not None:
+            run_openlifu = parameter_node.loaded_run.run
+            row = list(map(
+                create_noneditable_QStandardItem,
+                [run_openlifu.id, "Run", run_openlifu.id]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
+
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
@@ -1383,6 +1394,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if clean_up_scene:
             solution.clear_nodes()
 
+    def set_run(self, run:SlicerOpenLIFURun):
+        """Set a run to be the currently active run. If there is an active session, write that run to the database."""
+        self.getParameterNode().loaded_run = run
+
+        # If there is an active session, save run to database
+        if self.validate_session():
+            if self.db is None: # This should not happen -- if there is an active session then there should be a database connection as well.
+                raise RuntimeError("Unable to write run to the session because there is no database connection")
+            session_openlifu = self.getParameterNode().loaded_session.session.session
+            
+            run_openlifu = run.run
+            self.db.write_run(run_openlifu, session_openlifu)
+            
     @display_errors
     def add_subject_to_database(self, subject_name, subject_id):
         """ Adds new subject to loaded openlifu database.

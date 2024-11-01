@@ -10,7 +10,11 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-from OpenLIFULib import get_openlifu_data_parameter_node, SlicerOpenLIFUSolution
+from OpenLIFULib import (get_openlifu_data_parameter_node, 
+                         SlicerOpenLIFUSolution,
+                         openlifu_lz,
+                         SlicerOpenLIFURun
+)
 
 #
 # OpenLIFUSonicationControl
@@ -89,8 +93,16 @@ class onRunCompletedDialog(qt.QDialog):
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Save |
-                                          qt.QDialogButtonBox.Discard)
+                                          qt.QDialogButtonBox.Cancel)
         vBoxLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.accept)
+    
+    def customexec_(self):
+
+        returncode = self.exec_()
+        return returncode
 
 #
 # OpenLIFUSonicationControlWidget
@@ -220,20 +232,29 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateAbortEnabled(self):
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
+    def onRunEnded(self):
+
+        if not self.logic.running:
+            runCompleteDialog = onRunCompletedDialog()
+            returncode = runCompleteDialog.customexec_()
+            if returncode:
+                self.logic.create_openlifu_run()
+            else:
+                print("Discard")
+
     def onRunningChanged(self, new_running_state:bool):
         self.updateRunEnabled()
         self.updateAbortEnabled()
+        self.onRunEnded()
 
     def onRunClicked(self):
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
         solution = get_openlifu_data_parameter_node().loaded_solution
 
-        self.logic.run(solution)
-        runCompleteDialog = onRunCompletedDialog()
-        runCompleteDialog.exec_()
-
-
+        self.logic.run(solution) # TODO: This should return a value that determines if the dialog and Slicer object should be created. 
+        # These are widget level operations
+        
     def onAbortClicked(self):
         self.logic.abort()
 
@@ -290,3 +311,20 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
     def abort(self) -> None:
         self.running = False
+
+    def create_openlifu_run(self) -> SlicerOpenLIFURun:
+
+        # Create an openlifu run
+        run_openlifu = openlifu_lz().plan.run.Run(
+            id = "Testrun",
+            success_flag = True,
+            note = "Example note",
+            session_id = "1234",
+            solution_id = "1234"
+        )
+
+        # Add SlicerOpenLIFURun to data parameter node
+        slicer.util.getModuleLogic('OpenLIFUData').set_run(SlicerOpenLIFURun(run_openlifu))
+        return run_openlifu
+
+
