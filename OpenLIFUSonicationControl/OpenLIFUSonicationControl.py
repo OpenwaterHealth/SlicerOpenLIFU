@@ -160,7 +160,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateAbortEnabled()
         self.logic.call_on_running_changed(self.onRunningChanged)
         self.logic.call_on_sonication_complete(self.onRunCompleted)
+        self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
 
+        # Initialize UI
+        self.updateRunProgressBar()
+
+        # Add an observer on the Data module's parameter node
         self.addObserver(
             get_openlifu_data_parameter_node().parameterNode,
             vtk.vtkCommand.ModifiedEvent,
@@ -222,6 +227,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateRunEnabled()
+        self.updateRunProgressBar()
 
     def updateRunEnabled(self):
         solution = get_openlifu_data_parameter_node().loaded_solution
@@ -243,7 +249,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
-
+        """If the soniction_run_complete variable changes from False to True, then open the RunComplete 
+        dialog to determine whether the run should be saved. Saving the run creates a SlicerOpenLIFURun object and 
+        writes the run to the database (only if there is an active session)."""
         if new_sonication_run_complete_state:
             runCompleteDialog = onRunCompletedDialog()
             returncode, run_parameters = runCompleteDialog.customexec_()
@@ -259,11 +267,22 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             raise RuntimeError("Invalid solution; not running sonication.")
         solution = get_openlifu_data_parameter_node().loaded_solution
 
+        self.ui.runProgressBar.value = 0
         self.logic.run(solution) 
         
     def onAbortClicked(self):
         self.logic.abort()
 
+    def updateRunProgressBar(self, new_run_progress_value = None):
+        """Update the run progress bar. 0% if there is no existing  run, 100% if there is an existing run."""
+        self.ui.runProgressBar.maximum = 100 # (during computation we set maxmimum=0 to put it into an infinite loading animation)
+        if new_run_progress_value is not None:
+            self.ui.runProgressBar.value = new_run_progress_value
+        else:
+            if get_openlifu_data_parameter_node().loaded_run is None:
+                self.ui.runProgressBar.value = 0
+            else:
+                self.ui.runProgressBar.value = 100
 # OpenLIFUSonicationControlLogic
 #
 
@@ -278,13 +297,20 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """Whether sonication is currently running. Do not set this directly -- use the `running` property."""
 
         self._sonication_run_complete : bool = False
-        """Whether sonication finished running till completion. Do not set this directly -- use the `sonication_run_complete` property."""
+        """Whether sonication finished running till completion. Do not set this directly -- use the `sonication_run_complete` property.
+        This variable is needed to distinguish when a run has ended due to sonication completion as opposed to the user aborting the process"""
 
         self._on_running_changed_callbacks : List[Callable[[bool],None]] = []
         """List of functions to call when `running` property is changed."""
 
         self._on_sonication_run_complete_changed_callbacks : List[Callable[[bool],None]] = []
         """List of functions to call when `sonication_run_complete` property is changed."""
+
+        self._run_progress : int = 0
+        """ The amount of progress made by the sonication algorithm. Do not set this directly -- use the `run_progress` property."""
+
+        self._on_run_progress_updated_callbacks: List[Callable[[int],None]] = []
+        """List of functions to call when `run_progress` property is changed."""
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
@@ -300,6 +326,13 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         The provided callback should accept a single bool argument which will indicate whether the sonication run is complete.
         """
         self._on_sonication_run_complete_changed_callbacks.append(f)
+
+    def call_on_run_progress_updated(self, f : Callable[[int],None]) -> None:
+        """Set a function to be called whenever the `run_progress` property is changed.
+        The provided callback should accept a single int value which will indicate the percentage (i.e. scale 0-100)
+        of progress made by the sonication control algorithm.
+        """
+        self._on_run_progress_updated_callbacks.append(f)
 
     @property
     def running(self) -> bool:
@@ -323,6 +356,16 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_sonication_run_complete_changed_callbacks:
             f(self._sonication_run_complete)
 
+    @property
+    def run_progress(self) -> int:
+        """The amount of progress made by the sonication algorithm on a scale of 0-100"""
+        return self._run_progress
+    
+    @run_progress.setter
+    def run_progress(self, run_progress_value : int):
+        self._run_progress = run_progress_value
+        for f in self._on_run_progress_updated_callbacks:
+            f(self._run_progress)
 
     def run(self, solution:SlicerOpenLIFUSolution):
         " Returns True when the sonication control algorithm is done"
@@ -342,9 +385,13 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             self.sonication_run_complete = True
 
         self.timer = qt.QTimer()
-        self.timer.timeout.connect(end_run) # Assumes that the sonication control algorithm can be connected to a function
+        self.timer.timeout.connect(end_run) # Assumes that the sonication algorithm can be connected to a function
         self.timer.setSingleShot(True)
         self.timer.start(3000)
+
+        # Dummy code to test updating run progress.
+        # TODO: This value should be set based on progress updates provided by the sonication algorithm
+        self.run_progress = 50
 
     def abort(self) -> None:
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
