@@ -1,7 +1,8 @@
-from typing import Optional, Callable, List
+from typing import Optional, Callable, Dict, List
 
 import qt
 import vtk
+from datetime import datetime
 
 import slicer
 from slicer.i18n import tr as _
@@ -15,6 +16,8 @@ from OpenLIFULib import (get_openlifu_data_parameter_node,
                          openlifu_lz,
                          SlicerOpenLIFURun
 )
+
+from OpenLIFULib.util import display_errors
 
 #
 # OpenLIFUSonicationControl
@@ -102,7 +105,12 @@ class onRunCompletedDialog(qt.QDialog):
     def customexec_(self):
 
         returncode = self.exec_()
-        return returncode
+        run_parameters = {
+            'success_flag': self.successfulCheckBox.isChecked(),
+            'note': self.textBox.toPlainText(),
+        }
+
+        return (returncode, run_parameters)
 
 #
 # OpenLIFUSonicationControlWidget
@@ -151,6 +159,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
         self.updateAbortEnabled()
         self.logic.call_on_running_changed(self.onRunningChanged)
+        self.logic.call_on_sonication_complete(self.onRunCompleted)
 
         self.addObserver(
             get_openlifu_data_parameter_node().parameterNode,
@@ -232,28 +241,25 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateAbortEnabled(self):
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
-    def onRunEnded(self):
+    @display_errors
+    def onRunCompleted(self, new_sonication_run_complete_state: bool):
 
-        if not self.logic.running:
+        if new_sonication_run_complete_state:
             runCompleteDialog = onRunCompletedDialog()
-            returncode = runCompleteDialog.customexec_()
+            returncode, run_parameters = runCompleteDialog.customexec_()
             if returncode:
-                self.logic.create_openlifu_run()
-            else:
-                print("Discard")
+                self.logic.create_openlifu_run(run_parameters)
 
     def onRunningChanged(self, new_running_state:bool):
         self.updateRunEnabled()
         self.updateAbortEnabled()
-        self.onRunEnded()
 
     def onRunClicked(self):
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
         solution = get_openlifu_data_parameter_node().loaded_solution
 
-        self.logic.run(solution) # TODO: This should return a value that determines if the dialog and Slicer object should be created. 
-        # These are widget level operations
+        self.logic.run(solution) 
         
     def onAbortClicked(self):
         self.logic.abort()
@@ -271,8 +277,14 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._running : bool = False
         """Whether sonication is currently running. Do not set this directly -- use the `running` property."""
 
+        self._sonication_run_complete : bool = False
+        """Whether sonication finished running till completion. Do not set this directly -- use the `sonication_run_complete` property."""
+
         self._on_running_changed_callbacks : List[Callable[[bool],None]] = []
         """List of functions to call when `running` property is changed."""
+
+        self._on_sonication_run_complete_changed_callbacks : List[Callable[[bool],None]] = []
+        """List of functions to call when `sonication_run_complete` property is changed."""
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
@@ -282,6 +294,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         The provided callback should accept a single bool argument which will be the new running state.
         """
         self._on_running_changed_callbacks.append(f)
+
+    def call_on_sonication_complete(self, f: Callable[[bool], None]) -> None:
+        """Set a function to be called whenever the `sonication_run_complete` property is changed.
+        The provided callback should accept a single bool argument which will indicate whether the sonication run is complete.
+        """
+        self._on_sonication_run_complete_changed_callbacks.append(f)
 
     @property
     def running(self) -> bool:
@@ -294,7 +312,20 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_running_changed_callbacks:
             f(self._running)
 
-    def run(self, solution:SlicerOpenLIFUSolution) -> None:
+    @property
+    def sonication_run_complete(self) -> bool:
+        """Whether sonication ran till completion"""
+        return self._sonication_run_complete
+    
+    @sonication_run_complete.setter
+    def sonication_run_complete(self, sonication_run_complete_value : bool):
+        self._sonication_run_complete = sonication_run_complete_value
+        for f in self._on_sonication_run_complete_changed_callbacks:
+            f(self._sonication_run_complete)
+
+
+    def run(self, solution:SlicerOpenLIFUSolution):
+        " Returns True when the sonication control algorithm is done"
         self.running = True
         slicer.util.infoDisplay(
             text=(
@@ -304,27 +335,53 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             ),
             windowTitle="Not implemented"
         )
+
         def end_run():
             """Placeholder function that represents a sonication ending"""
             self.running = False
-        qt.QTimer.singleShot(3000, end_run)
+            self.sonication_run_complete = True
+
+        self.timer = qt.QTimer()
+        self.timer.timeout.connect(end_run) # Assumes that the sonication control algorithm can be connected to a function
+        self.timer.setSingleShot(True)
+        self.timer.start(3000)
 
     def abort(self) -> None:
+        # Assumes that the sonication control algorithm will have a callback function to abort run, 
+        # that callback can be called here. 
+        self.timer.stop()
         self.running = False
+        self.sonication_run_complete = False
 
-    def create_openlifu_run(self) -> SlicerOpenLIFURun:
+    def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
 
-        # Create an openlifu run
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_solution = get_openlifu_data_parameter_node().loaded_solution
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        run_id = timestamp
+        if loaded_session is not None:
+            session_id = loaded_session.session.session.id
+            run_id = f"{session_id}_{run_id}"
+        else:
+            session_id = None
+        
+        if loaded_solution is not None: # This should never be the case. Cannot initiate a run without an approved solution
+            solution_id = loaded_solution.solution.solution.id
+            
         run_openlifu = openlifu_lz().plan.run.Run(
-            id = "Testrun",
-            success_flag = True,
-            note = "Example note",
-            session_id = "1234",
-            solution_id = "1234"
+            id = run_id,
+            name = f"Run_{timestamp}",
+            success_flag = run_parameters["success_flag"],
+            note = run_parameters["note"],
+            session_id = session_id,
+            solution_id = solution_id
         )
 
         # Add SlicerOpenLIFURun to data parameter node
-        slicer.util.getModuleLogic('OpenLIFUData').set_run(SlicerOpenLIFURun(run_openlifu))
-        return run_openlifu
+        run = SlicerOpenLIFURun(run_openlifu)
+        slicer.util.getModuleLogic('OpenLIFUData').set_run(run)
+        
+        return run
 
 

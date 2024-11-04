@@ -1407,7 +1407,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             run_openlifu = run.run
             self.db.write_run(run_openlifu, session_openlifu)
             
-    @display_errors
     def add_subject_to_database(self, subject_name, subject_id):
         """ Adds new subject to loaded openlifu database.
 
