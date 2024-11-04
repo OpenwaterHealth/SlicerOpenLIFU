@@ -1402,10 +1402,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if self.validate_session():
             if self.db is None: # This should not happen -- if there is an active session then there should be a database connection as well.
                 raise RuntimeError("Unable to write run to the session because there is no database connection")
-            session_openlifu = self.getParameterNode().loaded_session.session.session
-            
+            loaded_session = self.getParameterNode().loaded_session
+            session_openlifu = loaded_session.session.session
+            protocol_openlifu = loaded_session.get_protocol().protocol
+
             run_openlifu = run.run
-            self.db.write_run(run_openlifu, session_openlifu)
+            
+            # Session and protocol snapshots are optional arguments
+            self.db.write_run(run_openlifu, session_openlifu, protocol_openlifu)
             
     def add_subject_to_database(self, subject_name, subject_id):
         """ Adds new subject to loaded openlifu database.
