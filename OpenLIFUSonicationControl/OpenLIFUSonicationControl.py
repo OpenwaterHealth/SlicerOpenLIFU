@@ -64,13 +64,22 @@ class OpenLIFUSonicationControlParameterNode:
 # OpenLIFUSonicationControlDialogs
 #
 
-class onRunCompletedDialog(qt.QDialog):
+class OnRunCompletedDialog(qt.QDialog):
     """ Dialog to save run """
 
-    def __init__(self, parent="mainWindow"):
+    def __init__(self, run_complete : bool, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """
+        Args:
+            run_complete (bool): Flag indicating whether the sonication ran till completion (True) or was aborted (False) 
+        """
         self.setWindowTitle("Run completed")
         self.setWindowModality(1)
+        self.run_complete = run_complete
+        if self.run_complete:
+            self.status = "completed"
+        else:
+            self.status = "aborted"
         self.setup()
 
     def setup(self):
@@ -81,27 +90,52 @@ class onRunCompletedDialog(qt.QDialog):
         self.setLayout(vBoxLayout)
 
         self.label = qt.QLabel()
-        self.label.setText("Sonication control completed. Do you want to save this run? ")
+        self.label.setText(f"Sonication control {self.status}. Do you want to save this run? ")
         vBoxLayout.addWidget(self.label)
 
         self.successfulCheckBox = qt.QCheckBox('Check this box if the run was successful.')
         self.successfulCheckBox.setStyleSheet("font-weight: bold")
         vBoxLayout.addWidget(self.successfulCheckBox)
 
+        # If the run was aborted, the success_flag is set to False
+        if not self.run_complete:
+            self.successfulCheckBox.setChecked(False)
+            self.successfulCheckBox.setVisible(False)
+            self.run_unsuccesful_label = qt.QLabel()
+            self.run_unsuccesful_label.setText("Run flagged as unsuccessful")
+            self.run_unsuccesful_label.setStyleSheet("font-weight: bold")
+            vBoxLayout.addWidget(self.run_unsuccesful_label)
+
         self.label_notes = qt.QLabel()
-        self.label_notes.setText("Enter additional notes to include (optional):")
+        self.label_notes.setText("Enter additional notes to include:")
         vBoxLayout.addWidget(self.label_notes)
         self.textBox = qt.QTextEdit()
         vBoxLayout.addWidget(self.textBox)
 
         self.buttonBox = qt.QDialogButtonBox()
-        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Save |
-                                          qt.QDialogButtonBox.Cancel)
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Save)
         vBoxLayout.addWidget(self.buttonBox)
 
-        self.buttonBox.rejected.connect(self.reject)
-        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.accepted.connect(self.validateInputs)
     
+    def validateInputs(self):
+
+        success_flag =  self.successfulCheckBox.isChecked()
+        note = self.textBox.toPlainText()
+
+        if not success_flag and not note:
+            slicer.util.errorDisplay("Additional notes are required for unsuccessful or aborted runs", parent = self)
+        else:
+            self.accept()
+
+    def closeEvent(self,event):
+
+        reply = qt.QMessageBox.question(self, "Confirmation", "Closing this window will not save the sonication run. \nAre you sure you want to discard this run?", qt.QMessageBox.Yes | qt.QMessageBox.No)
+        if reply == qt.QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
     def customexec_(self):
 
         returncode = self.exec_()
@@ -253,7 +287,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         dialog to determine whether the run should be saved. Saving the run creates a SlicerOpenLIFURun object and 
         writes the run to the database (only if there is an active session)."""
         if new_sonication_run_complete_state:
-            runCompleteDialog = onRunCompletedDialog()
+            runCompleteDialog = OnRunCompletedDialog(True)
             returncode, run_parameters = runCompleteDialog.customexec_()
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
@@ -272,10 +306,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         
     def onAbortClicked(self):
         self.logic.abort()
+        runCompleteDialog = OnRunCompletedDialog(False)
+        returncode, run_parameters = runCompleteDialog.customexec_()
+        if returncode:
+            run_parameters['note'] = "Run aborted." + run_parameters['note'] # Append a note that the run was aborted.
+            self.logic.create_openlifu_run(run_parameters)
 
     def updateRunProgressBar(self, new_run_progress_value = None):
         """Update the run progress bar. 0% if there is no existing  run, 100% if there is an existing run."""
-        self.ui.runProgressBar.maximum = 100 # (during computation we set maxmimum=0 to put it into an infinite loading animation)
+        self.ui.runProgressBar.maximum = 100 
         if new_run_progress_value is not None:
             self.ui.runProgressBar.value = new_run_progress_value
         else:
@@ -283,6 +322,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.runProgressBar.value = 0
             else:
                 self.ui.runProgressBar.value = 100
+
 # OpenLIFUSonicationControlLogic
 #
 
@@ -382,6 +422,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         def end_run():
             """Placeholder function that represents a sonication ending"""
             self.running = False
+            self.run_progress = 100
             self.sonication_run_complete = True
 
         self.timer = qt.QTimer()
@@ -415,7 +456,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         
         if loaded_solution is not None: # This should never be the case. Cannot initiate a run without an approved solution
             solution_id = loaded_solution.solution.solution.id
-            
+        else:
+            raise RuntimeError("No loaded solution -- this run should not have been possible!")
+             
         run_openlifu = openlifu_lz().plan.run.Run(
             id = run_id,
             name = f"Run_{timestamp}",
@@ -430,5 +473,3 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         slicer.util.getModuleLogic('OpenLIFUData').set_run(run)
         
         return run
-
-
