@@ -742,7 +742,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             run_openlifu = parameter_node.loaded_run.run
             row = list(map(
                 create_noneditable_QStandardItem,
-                [run_openlifu.id, "Run", run_openlifu.id]
+                [run_openlifu.name, "Run", run_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
 
