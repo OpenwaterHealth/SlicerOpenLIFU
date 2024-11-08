@@ -1,5 +1,6 @@
 from typing import Optional, TYPE_CHECKING
 
+import vtk
 import slicer
 from slicer.i18n import tr as _
 from slicer.i18n import translate
@@ -48,10 +49,7 @@ class OpenLIFUHome(ScriptedLoadableModule):
 
 @parameterNodeWrapper
 class OpenLIFUHomeParameterNode:
-    """
-    The parameters needed by this module.
-    """
-    pass
+    guided_mode : bool 
 
 #
 # OpenLIFUHomeWidget
@@ -98,9 +96,15 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
+        # Set the initial guided mode status
+        self.logic.getParameterNode().guided_mode = False
+
         # Buttons
         self.ui.installPythonReqsButton.connect("clicked()", self.onInstallPythonRequirements)
+        self.ui.guidedModePushButton.connect("clicked()", self.onGuidedModeClicked)
         self.updateInstallButtonText()
+        self.updateGuidedModeButton()
+        self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
         # Switch modules
         self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
@@ -133,8 +137,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Install python requirements button action"""
         check_and_install_python_requirements(prompt_if_found=True)
         self.updateInstallButtonText()
-
-
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -170,7 +172,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.setParameterNode(self.logic.getParameterNode())
        
-
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFUHomeParameterNode]) -> None:
         """
         Set and observe parameter node.
@@ -185,7 +186,21 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
+    def onGuidedModeClicked(self):
+        self.logic.toggle_guided_mode_status()
+
+    def updateGuidedModeButton(self):
+        if self.logic.getParameterNode().guided_mode:
+            self.ui.guidedModePushButton.setText("Exit Guided Mode")
+        else:
+            self.ui.guidedModePushButton.setText("Start Guided Mode")
+            self.ui.guidedModePushButton.setToolTip(
+                    "Guided mode will take you step-by-step through the treatment workflow"
+                )
     
+    def onParameterNodeModified(self, caller, event) -> None:
+        self.updateGuidedModeButton()
+            
 #
 # OpenLIFUHomeLogic
 #
@@ -212,6 +227,8 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
     def clear_session(self) -> None:
         self.current_session = None
     
+    def toggle_guided_mode_status(self):
+        self.getParameterNode().guided_mode = not self.getParameterNode().guided_mode
 #
 # OpenLIFUHomeTest
 #

@@ -11,6 +11,19 @@
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_4">
+   <item>
+    <widget class="QPushButton" name="guidedModePushButton">
+     <property name="text">
+      <string>Start Guided Mode</string>
+     </property>
+     <property name="autoDefault">
+      <bool>false</bool>
+     </property>
+     <property name="default">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
    <item alignment="Qt::AlignTop">
     <widget class="ctkCollapsibleButton" name="ModuleNavigatorButton">
      <property name="text">

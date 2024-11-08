@@ -22,6 +22,11 @@ def get_openlifu_data_parameter_node() -> "OpenLIFUDataParameterNode":
     """Get the parameter node of the OpenLIFU Data module"""
     return slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
 
+def get_guided_mode_status() -> bool:
+    """Get guided mode status from the OpenLIFU Home module's parameter node"""
+    openlifu_home_parameter_node = slicer.util.getModuleLogic('OpenLIFUHome').getParameterNode()
+    return openlifu_home_parameter_node.guided_mode
+
 def display_errors(f):
     """Decorator to make functions forward their python exceptions along as slicer error displays"""
     def f_with_forwarded_errors(*args, **kwargs):
