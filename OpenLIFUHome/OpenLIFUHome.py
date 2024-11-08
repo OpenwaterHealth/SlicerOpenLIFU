@@ -188,6 +188,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onGuidedModeClicked(self):
         self.logic.toggle_guided_mode_status()
+        slicer.util.selectModule("OpenLIFUData")
 
     def updateGuidedModeButton(self):
         if self.logic.getParameterNode().guided_mode:
@@ -229,6 +230,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
     
     def toggle_guided_mode_status(self):
         self.getParameterNode().guided_mode = not self.getParameterNode().guided_mode
+        return
 #
 # OpenLIFUHomeTest
 #
