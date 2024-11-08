@@ -5,6 +5,7 @@ set(MODULE_NAME OpenLIFULib)
 set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/__init__.py
   OpenLIFULib/util.py
+  OpenLIFULib/guided_mode_util.py
   OpenLIFULib/lazyimport.py
   OpenLIFULib/parameter_node_utils.py
   OpenLIFULib/session.py
