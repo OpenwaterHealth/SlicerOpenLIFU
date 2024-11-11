@@ -1,6 +1,8 @@
-from typing import Optional, List, TYPE_CHECKING, Tuple
+from typing import Optional, Union, TYPE_CHECKING, Tuple, get_origin, get_args
 import warnings
+from dataclasses import fields
 
+import qt
 import vtk
 
 import slicer
@@ -20,11 +22,13 @@ from OpenLIFULib import (
     get_openlifu_data_parameter_node,
     BusyCursor,
     OpenLIFUAlgorithmInputWidget,
+    SlicerOpenLIFUSolutionAnalysis,
 )
-from OpenLIFULib.util import replace_widget
+from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu.plan
     import xarray
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
@@ -40,7 +44,7 @@ class OpenLIFUSonicationPlanner(ScriptedLoadableModule):
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Sonication Planning")  # TODO: make this more human readable by adding spaces
+        self.parent.title = _("OpenLIFU Sonication Planning")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
@@ -66,10 +70,7 @@ class OpenLIFUSonicationPlanner(ScriptedLoadableModule):
 
 @parameterNodeWrapper
 class OpenLIFUSonicationPlannerParameterNode:
-    """
-    The parameters needed by module.
-
-    """
+    solution_analysis : Optional[SlicerOpenLIFUSolutionAnalysis] = None
 
 #
 # OpenLIFUSonicationPlannerWidget
@@ -88,6 +89,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+
+        self._updating_solution_analysis = False
+        """Flag to help prevent recursive event when onParameterNodeModified causes the parameter node to be modified"""
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -108,6 +112,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUSonicationPlannerLogic()
 
+        # Create and set solution analysis table models
+        self.focusAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are per focus point
+        self.globalAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are for the whole solution, i.e. over all focus points
+        self.ui.focusAnalysisTableView.setModel(self.focusAnalysisTableModel)
+        self.ui.globalAnalysisTableView.setModel(self.globalAnalysisTableModel)
+
         # Connections
 
         # These connections ensure that we update parameter node when scene is closed
@@ -123,9 +133,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRenderPNPCheckBox()
         self.updateVirtualFitApprovalStatus()
         self.updateTrackingApprovalStatus()
+        self.updateSolutionAnalysis()
 
-        # Add an observer on the Data module's parameter node
+        # Add observers on the Data module's parameter node and this module's own parameter node
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
         # This ensures we update the drop down options in the volume and fiducial combo boxes when nodes are added/removed
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
@@ -333,6 +345,109 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         with BusyCursor():
             self.logic.toggle_solution_approval()
 
+    def onParameterNodeModified(self, caller, event) -> None:
+        if not self._updating_solution_analysis: # prevent recursive observer event
+            self._updating_solution_analysis = True
+            self.updateSolutionAnalysis()
+            self._updating_solution_analysis = False
+
+    def updateSolutionAnalysis(self) -> None:
+        """Update the solution analysis widgets"""
+
+        data_parameter_node = get_openlifu_data_parameter_node()
+        solution = data_parameter_node.loaded_solution
+
+        if solution is None:
+            self.clear_solution_analysis_tables() # clear out the table
+            self.ui.analysisStackedWidget.setCurrentIndex(0) # set the page to "no solution"
+            return
+
+        analysis = self.logic.getParameterNode().solution_analysis
+
+        if analysis is None: # There exists a solution but no solution analysis (we don't want this to be possible but with manual workflow it might be)
+            slicer.util.warningDisplay(
+                "There is a solution, but no associated solution analysis. The analysis will be computed now.",
+                "Missing analysis",
+            )
+            analysis = self.logic.compute_analysis_from_solution(solution)
+            if analysis is None: # This could happen for example if the user deletes the transducer from the scene after computing the solution
+                slicer.util.errorDisplay(
+                    "Could not compute analysis because OpenLIFU objects that were used to generate the solution are missing.",
+                    "Cannot compute analysis",
+                )
+                self.clear_solution_analysis_tables()
+                self.ui.analysisStackedWidget.setCurrentIndex(1) # set the page to show an empty table; this is an error state
+                return
+            self.logic.getParameterNode().solution_analysis = analysis
+
+        self.populate_solution_analysis_table()
+        self.ui.analysisStackedWidget.setCurrentIndex(1) # set the page to analysis
+
+    def clear_solution_analysis_tables(self) -> None:
+        """Clear out the solution analysis tables, removing all rows and column headers"""
+        self.focusAnalysisTableModel.removeRows(0,self.focusAnalysisTableModel.rowCount())
+        self.focusAnalysisTableModel.setColumnCount(0)
+        self.globalAnalysisTableModel.removeRows(0,self.globalAnalysisTableModel.rowCount())
+        self.globalAnalysisTableModel.setColumnCount(0)
+
+    def populate_solution_analysis_table(self) -> None:
+        """Fill the solution analysis table models with the information from the current solution analysis.
+        Assumes that there is a valid solution analysis, raises error if not.
+        """
+        analysis = self.logic.getParameterNode().solution_analysis
+        if analysis is None:
+            raise RuntimeError("Cannot populate solution analysis tables because there is no solution analysis.")
+        analysis_openlifu = analysis.analysis
+
+        self.clear_solution_analysis_tables()
+
+        # Max length of list type fields in the dataclass
+        max_len = max(
+            len(getattr(analysis_openlifu, f.name))
+            for f in fields(analysis_openlifu)
+            if get_origin(f.type) is list
+        )
+
+        self.focusAnalysisTableModel.setHorizontalHeaderLabels(['Metric'] + [f"Focus {i+1}" for  i in range(max_len)])
+        self.globalAnalysisTableModel.setHorizontalHeaderLabels(['Metric', 'Value'])
+        self.ui.focusAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
+        self.ui.globalAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
+
+        for field in fields(analysis_openlifu):
+
+            # we expect field.type could be either "List[float]" or "Optional[float]" which is actually "Union[float,NoneType]"
+            # here `origin`` would be the "List" or "Union" part
+            # and `args`` would be the "float" or "None" part
+            origin = get_origin(field.type)
+            args = get_args(field.type)
+
+            # lists of floats go into the focusAnalysisTableModel
+            if origin is list and args == (float,):
+                values = getattr(analysis_openlifu,field.name)
+                value_strs = [
+                    str(values[i]) if i<len(values) else ""
+                    for i in range(max_len)
+                ]
+                self.focusAnalysisTableModel.appendRow(list(map(
+                    create_noneditable_QStandardItem,
+                    [field.name, *value_strs]
+                )))
+
+            # individual floats go into the globalAnalysisTableModel
+            elif origin is Union and len(args)==2 and float in args and type(None) in args:
+                value = getattr(analysis_openlifu,field.name)
+                value_str = str(value) if value is not None else ""
+                self.globalAnalysisTableModel.appendRow(list(map(
+                    create_noneditable_QStandardItem,
+                    [field.name, value_str]
+                )))
+
+            else:
+                raise RuntimeError(f"Not sure what to do with the SolutionAnalysis field {field.name}")
+
+
+
+
 #
 # Solution computation function using openlifu
 #
@@ -342,7 +457,7 @@ def compute_solution_openlifu(
         transducer:SlicerOpenLIFUTransducer,
         target_node:vtkMRMLMarkupsFiducialNode,
         volume_node:vtkMRMLScalarVolumeNode
-    ) -> "Tuple[openlifu.Solution, xarray.DataArray, xarray.DataArray]":
+    ) -> "Tuple[openlifu.Solution, xarray.DataArray, xarray.DataArray, openlifu.plan.SolutionAnalysis]":
     """Run openlifu beamforming and k-wave simulation
 
     Returns:
@@ -358,7 +473,7 @@ def compute_solution_openlifu(
         target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target'),
         session=session.session.session if session is not None else None,
     )
-    return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["ita"]
+    return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["ita"], scaled_solution_analysis
 
 
 #
@@ -388,11 +503,11 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             inputVolume: vtkMRMLScalarVolumeNode,
             inputTarget: vtkMRMLMarkupsFiducialNode,
             inputTransducer : SlicerOpenLIFUTransducer,
-            inputProtocol: SlicerOpenLIFUProtocol) -> SlicerOpenLIFUSolution:
+            inputProtocol: SlicerOpenLIFUProtocol) -> Tuple[SlicerOpenLIFUSolution, SlicerOpenLIFUSolutionAnalysis]:
         """Compute solution for the given volume, target, transducer, and protocol, setting the solution as the active solution.
         Note that setting the solution will trigger a write of the solution to the databse if there is an active session.
         """
-        solution_openlifu, pnp_aggregated, intensity_aggregated = compute_solution_openlifu(
+        solution_openlifu, pnp_aggregated, intensity_aggregated, analysis_openlifu = compute_solution_openlifu(
             inputProtocol.protocol,
             inputTransducer,
             inputTarget,
@@ -404,8 +519,10 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             intensity_dataarray=intensity_aggregated,
             transducer=inputTransducer,
         )
+        analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
         slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
-        return solution
+        self.getParameterNode().solution_analysis = analysis
+        return solution, analysis
 
     def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:
         """Get the PNP volume of the active solution, if there is an active solution. Return None if there isn't."""
@@ -451,6 +568,25 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         """
         slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
 
+    def compute_analysis_from_solution(self, solution:SlicerOpenLIFUSolution) -> Optional[SlicerOpenLIFUSolutionAnalysis]:
+        """Compute solution analysis from a given solution.
+        Returns the SlicerOpenLIFUSolutionAnalysis on success.
+        If the protocol or transducer used to compute the solution are not present, then this returns None.
+        """
+        solution_openlifu = solution.solution.solution
+        data_parameter_node = get_openlifu_data_parameter_node()
+        if (
+            solution_openlifu.transducer_id not in data_parameter_node.loaded_transducers
+            or solution_openlifu.protocol_id not in data_parameter_node.loaded_protocols
+        ):
+            return None
+        transducer = data_parameter_node.loaded_transducers[solution_openlifu.transducer_id]
+        protocol = data_parameter_node.loaded_protocols[solution_openlifu.protocol_id]
+        analysis_openlifu = solution_openlifu.analyze(
+            transducer=transducer.transducer.transducer,
+            options=protocol.protocol.analysis_options
+        )
+        return SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
 
 
 #

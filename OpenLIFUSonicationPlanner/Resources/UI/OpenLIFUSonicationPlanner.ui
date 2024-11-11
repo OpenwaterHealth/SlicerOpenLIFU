@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>258</width>
-    <height>213</height>
+    <height>432</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -37,6 +37,55 @@ OpenLIFUAlgorithmInputWidget</string>
      <property name="text">
       <string>(transducer tracking approval here)</string>
      </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="analysisCollapsible" native="true">
+     <property name="text" stdset="0">
+      <string>Solution analysis</string>
+     </property>
+     <property name="collapsed" stdset="0">
+      <bool>false</bool>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QStackedWidget" name="analysisStackedWidget">
+        <widget class="QWidget" name="noSolutionPage">
+         <layout class="QVBoxLayout" name="verticalLayout_4">
+          <item>
+           <widget class="QGroupBox" name="noSolutionGroupBox">
+            <property name="title">
+             <string/>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_5">
+             <item>
+              <widget class="QLabel" name="noSolutionLabel">
+               <property name="text">
+                <string>No solution</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="analysisPage">
+         <layout class="QVBoxLayout" name="verticalLayout_6">
+          <item>
+           <widget class="QTableView" name="focusAnalysisTableView"/>
+          </item>
+          <item>
+           <widget class="QTableView" name="globalAnalysisTableView"/>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -99,6 +148,12 @@ OpenLIFUAlgorithmInputWidget</string>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

@@ -18,6 +18,7 @@ from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
     import openlifu.db
+    import openlifu.plan
     import xarray
 
 
@@ -70,12 +71,19 @@ class SlicerOpenLIFUXADataset:
     def __init__(self, dataset: "Optional[xarray.Dataset]" = None):
         self.dataset = dataset
 
-# For the same reason we have a thin wrapper around openlifu.Run.
+# For the same reason we have a thin wrapper around openlifu.plan.Run.
 class SlicerOpenLIFURun:
-    """Ultrathin wrapper of openlifu.Run. This exists so that runs can have parameter node
+    """Ultrathin wrapper of openlifu.plan.Run. This exists so that runs can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, run: "Optional[openlifu.Run]" = None):
+    def __init__(self, run: "Optional[openlifu.plan.Run]" = None):
         self.run = run
+
+# For the same reason we have a thin wrapper around openlifu.plan.SolutionAnalysis.
+class SlicerOpenLIFUSolutionAnalysis:
+    """Ultrathin wrapper of openlifu.plan.SolutionAnalaysis.
+    This exists so that runs can have parameter node support while we still do lazy-loading of openlifu."""
+    def __init__(self, analysis: "Optional[openlifu.plan.SolutionAnalysis]" = None):
+        self.analysis = analysis
 
 def SlicerOpenLIFUSerializerBaseMaker(
         serialized_type:type,
@@ -229,7 +237,19 @@ class OpenLIFURunSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFURun)
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFURun:
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFURun(openlifu_lz().plan.Run.from_json(json_string))
-    
+
+@parameterNodeSerializer
+class OpenLIFUSolutionAnalysisSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSolutionAnalysis)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUSolutionAnalysis) -> None:
+        parameterNode.SetParameter(
+            name,
+            value.analysis.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSolutionAnalysis:
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUSolutionAnalysis(openlifu_lz().plan.SolutionAnalysis.from_json(json_string))
+
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUXADataset) -> None:
