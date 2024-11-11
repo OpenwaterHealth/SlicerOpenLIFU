@@ -26,6 +26,7 @@ add_subdirectory(OpenLIFUSonicationControl)
 add_subdirectory(OpenLIFUProtocolConfig)
 add_subdirectory(OpenLIFUSonicationPlanner)
 add_subdirectory(OpenLIFUTransducerTracker)
+add_subdirectory(OpenLIFUTextureModel)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
