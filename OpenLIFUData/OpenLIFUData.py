@@ -36,7 +36,7 @@ from OpenLIFULib.util import (
     add_slicer_log_handler,
 )
 
-from OpenLIFULib.guided_mode_util import get_guided_mode_status
+from OpenLIFULib.guided_mode_util import get_guided_mode_state
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -805,9 +805,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-
-        # Temp code to test that the data module is aware of guided mode when entering module
-        print("Setting up in Guided Mode?:", get_guided_mode_status())
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""

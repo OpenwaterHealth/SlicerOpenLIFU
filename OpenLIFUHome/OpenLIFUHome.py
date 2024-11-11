@@ -8,11 +8,12 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-
 from OpenLIFULib.lazyimport import (
     python_requirements_exist,
     check_and_install_python_requirements,
 )
+
+from OpenLIFULib.guided_mode_util import set_guided_mode_state
 
 #
 # OpenLIFUHome
@@ -49,7 +50,7 @@ class OpenLIFUHome(ScriptedLoadableModule):
 
 @parameterNodeWrapper
 class OpenLIFUHomeParameterNode:
-    guided_mode : bool 
+    guided_mode : bool = False
 
 #
 # OpenLIFUHomeWidget
@@ -95,9 +96,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-
-        # Set the initial guided mode status
-        self.logic.getParameterNode().guided_mode = False
 
         # Buttons
         self.ui.installPythonReqsButton.connect("clicked()", self.onInstallPythonRequirements)
@@ -187,8 +185,11 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onGuidedModeClicked(self):
-        self.logic.toggle_guided_mode_status()
-        slicer.util.selectModule("OpenLIFUData")
+        new_guided_mode_state = not self.logic.getParameterNode().guided_mode
+        if new_guided_mode_state:
+            self.logic.start_guided_mode()
+        else:
+            set_guided_mode_state(new_guided_mode_state)
 
     def updateGuidedModeButton(self):
         if self.logic.getParameterNode().guided_mode:
@@ -227,10 +228,11 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
     def clear_session(self) -> None:
         self.current_session = None
-    
-    def toggle_guided_mode_status(self):
-        self.getParameterNode().guided_mode = not self.getParameterNode().guided_mode
-        return
+
+    def start_guided_mode(self):
+        set_guided_mode_state(True)
+        slicer.util.selectModule("OpenLIFUData")
+
 #
 # OpenLIFUHomeTest
 #
