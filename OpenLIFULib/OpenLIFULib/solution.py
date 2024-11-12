@@ -53,6 +53,10 @@ class SlicerOpenLIFUSolution:
         pnp_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
         intensity_volume_node.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
 
+        # Set openlifu solution attribute
+        pnp_volume_node.SetAttribute('isOpenLIFUSolution', 'True')
+        intensity_volume_node.SetAttribute('isOpenLIFUSolution', 'True')
+
         return SlicerOpenLIFUSolution(SlicerOpenLIFUSolutionWrapper(solution),pnp_volume_node,intensity_volume_node)
 
     def clear_nodes(self) -> None:

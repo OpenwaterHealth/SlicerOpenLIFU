@@ -103,7 +103,9 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         else:
             self.volume_input.combo_box.setEnabled(True)
             for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
-                self.add_volume_to_combobox(volume_node)
+                # Check that the volume is not an OpenLIFUSolution output volume
+                if not volume_node.GetAttribute('isOpenLIFUSolution'):
+                    self.add_volume_to_combobox(volume_node)
 
         self.set_session_related_combobox_tooltip("")
 
