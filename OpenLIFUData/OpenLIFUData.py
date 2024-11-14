@@ -426,8 +426,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
-        self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
-
+       
         self.session_status_field_widgets = [
             self.ui.sessionStatusSubjectNameIdValueLabel,
             self.ui.sessionStatusSessionNameIdValueLabel,
@@ -437,10 +436,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ]
 
         # ====================================
-
+        
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-
+        
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
 
@@ -689,7 +688,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
-        parameter_node = self.logic.getParameterNode()
+        parameter_node = self._parameterNode
+        if parameter_node is None:
+            return
         if parameter_node.loaded_session is not None:
             session : SlicerOpenLIFUSession = parameter_node.loaded_session
             session_openlifu : "openlifu.db.Session" = session.session.session
@@ -713,6 +714,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
+            if volume_node.GetAttribute('isOpenLIFUSolution') is not None:
+                continue
             if volume_node.GetAttribute('OpenLIFUData.volume_id'):
                 row = list(map(
                     create_noneditable_QStandardItem,
@@ -751,7 +754,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
-        loaded_session = self.logic.getParameterNode().loaded_session
+        loaded_session = self._parameterNode.loaded_session
         if loaded_session is None:
             for label in self.session_status_field_widgets:
                 label.setText("") # Doing this before setCurrentIndex(0) results in the desired scrolling behavior
@@ -893,6 +896,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
+
 
 # OpenLIFUDataLogic
 #

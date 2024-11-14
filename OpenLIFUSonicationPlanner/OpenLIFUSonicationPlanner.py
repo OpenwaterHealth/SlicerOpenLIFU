@@ -137,8 +137,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Add observers on the Data module's parameter node and this module's own parameter node
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
-        self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
-
+        
         # This ensures we update the drop down options in the volume and fiducial combo boxes when nodes are added/removed
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
@@ -203,6 +202,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def checkCanComputeSolution(self, caller = None, event = None) -> None:
 
@@ -266,7 +266,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateApproveButton()
 
         if get_openlifu_data_parameter_node().loaded_solution is None:
-            self.logic.getParameterNode().solution_analysis = None
+            self._parameterNode.solution_analysis = None
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -365,7 +365,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.analysisStackedWidget.setCurrentIndex(0) # set the page to "no solution"
             return
 
-        analysis = self.logic.getParameterNode().solution_analysis
+        analysis = self._parameterNode.solution_analysis
 
         if analysis is None: # There exists a solution but no solution analysis (we don't want this to be possible but with manual workflow it might be)
             slicer.util.warningDisplay(
@@ -381,7 +381,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.clear_solution_analysis_tables()
                 self.ui.analysisStackedWidget.setCurrentIndex(2) # set the page to show that this is an error state
                 return
-            self.logic.getParameterNode().solution_analysis = analysis
+            self._parameterNode.solution_analysis = analysis
 
         self.populate_solution_analysis_table()
         self.ui.analysisStackedWidget.setCurrentIndex(1) # set the page to analysis
@@ -397,7 +397,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Fill the solution analysis table models with the information from the current solution analysis.
         Assumes that there is a valid solution analysis, raises error if not.
         """
-        analysis = self.logic.getParameterNode().solution_analysis
+        analysis = self._parameterNode.solution_analysis
         if analysis is None:
             raise RuntimeError("Cannot populate solution analysis tables because there is no solution analysis.")
         analysis_openlifu = analysis.analysis

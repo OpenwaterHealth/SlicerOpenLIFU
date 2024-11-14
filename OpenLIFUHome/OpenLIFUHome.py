@@ -102,8 +102,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.guidedModePushButton.connect("clicked()", self.onGuidedModeClicked)
         self.updateInstallButtonText()
         self.updateGuidedModeButton()
-        self.addObserver(self.logic.getParameterNode().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
-
+        
         # Switch modules
         self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
         self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
@@ -183,16 +182,17 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def onGuidedModeClicked(self):
-        new_guided_mode_state = not self.logic.getParameterNode().guided_mode
+        new_guided_mode_state = not self._parameterNode.guided_mode
         if new_guided_mode_state:
             self.logic.start_guided_mode()
         else:
             set_guided_mode_state(new_guided_mode_state)
 
     def updateGuidedModeButton(self):
-        if self.logic.getParameterNode().guided_mode:
+        if self._parameterNode.guided_mode:
             self.ui.guidedModePushButton.setText("Exit Guided Mode")
         else:
             self.ui.guidedModePushButton.setText("Start Guided Mode")
