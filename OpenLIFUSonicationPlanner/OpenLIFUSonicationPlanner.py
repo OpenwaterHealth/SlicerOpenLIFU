@@ -379,7 +379,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     "Cannot compute analysis",
                 )
                 self.clear_solution_analysis_tables()
-                self.ui.analysisStackedWidget.setCurrentIndex(1) # set the page to show an empty table; this is an error state
+                self.ui.analysisStackedWidget.setCurrentIndex(2) # set the page to show that this is an error state
                 return
             self.logic.getParameterNode().solution_analysis = analysis
 

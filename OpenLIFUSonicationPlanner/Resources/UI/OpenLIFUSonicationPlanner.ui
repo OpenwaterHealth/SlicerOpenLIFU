@@ -50,6 +50,9 @@ OpenLIFUAlgorithmInputWidget</string>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
        <widget class="QStackedWidget" name="analysisStackedWidget">
+        <property name="currentIndex">
+         <number>0</number>
+        </property>
         <widget class="QWidget" name="noSolutionPage">
          <layout class="QVBoxLayout" name="verticalLayout_4">
           <item>
@@ -80,6 +83,25 @@ OpenLIFUAlgorithmInputWidget</string>
           </item>
           <item>
            <widget class="QTableView" name="globalAnalysisTableView"/>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="errorPage">
+         <layout class="QVBoxLayout" name="verticalLayout_7">
+          <item>
+           <widget class="QLabel" name="errorLabel">
+            <property name="styleSheet">
+             <string notr="true">color:red;</string>
+            </property>
+            <property name="text">
+             <string>Error: Could not
+compute solution
+analysis.</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>
