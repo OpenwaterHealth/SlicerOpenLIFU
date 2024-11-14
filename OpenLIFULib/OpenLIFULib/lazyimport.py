@@ -5,7 +5,7 @@ from pathlib import Path
 import slicer
 import importlib
 import sys
-from OpenLIFULib.busycursor import BusyCursor
+from OpenLIFULib.util import BusyCursor
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
     import xarray
