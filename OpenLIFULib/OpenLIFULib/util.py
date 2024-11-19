@@ -83,13 +83,12 @@ def create_noneditable_QStandardItem(text:str) -> qt.QStandardItem:
             item.setEditable(False)
             return item
 
-T = TypeVar('T', bound=qt.QWidget)
-def replace_widget(old_widget: qt.QWidget, new_widget_class: Type[T], ui_object=None) -> T:
+def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=None):
     """Replace a widget by another. Meant for use in a scripted module, to replace widgets inside a layout.
 
     Args:
         old_widget: The widget to replace. It is assumed to be inside a layout.
-        new_widget_class: The class that should be used to construct the new widget.
+        new_widget: The new widget that should replace old_widget.
         ui_object: The ui object from which to erase the replaced widget, if there is one.
             This is referring to the `ui` attribute that is often defined in the setup of scripted
             modules and constructed via `slicer.util.childWidgetVariables`.
@@ -115,7 +114,5 @@ def replace_widget(old_widget: qt.QWidget, new_widget_class: Type[T], ui_object=
     if ui_object is not None:
         for attr_name in ui_attrs_to_delete:
             delattr(ui_object, attr_name)
-
-    new_widget = new_widget_class(parent=parent)
+            
     layout.insertWidget(index, new_widget)
-    return new_widget

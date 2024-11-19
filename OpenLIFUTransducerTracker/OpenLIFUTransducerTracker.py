@@ -1,14 +1,18 @@
 from typing import Optional, TYPE_CHECKING
 
 import vtk
-
+import qt
 import slicer
 from slicer.i18n import tr as _
 from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from OpenLIFULib import get_openlifu_data_parameter_node
+from OpenLIFULib import (
+    get_openlifu_data_parameter_node,
+    OpenLIFUAlgorithmInputWidget,
+)
+from OpenLIFULib.util import replace_widget
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -105,6 +109,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
+        # Replace the placeholder algorithm input widget by the actual one
+        self.algorithm_input_names = ["Protocol", "Transducer", "Volume"]
+        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(self.algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
+        self.updateInputOptions()
+
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
         self.updateApproveButton()
@@ -161,6 +171,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
+        self.updateInputOptions()
+
+    def updateInputOptions(self):
+        """Update the algorithm input options"""
+        self.algorithm_input_widget.update()
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:

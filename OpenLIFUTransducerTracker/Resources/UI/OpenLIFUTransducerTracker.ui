@@ -6,16 +6,22 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>325</width>
-    <height>311</height>
+    <width>350</width>
+    <height>148</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Module under construction</string>
-     </property>
+   <item alignment="Qt::AlignVCenter">
+    <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="placeholderLabel">
+        <property name="text">
+         <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>

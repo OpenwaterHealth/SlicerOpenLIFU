@@ -20,24 +20,34 @@ class AlgorithmInput:
         self.combo_box.setDisabled(True)
 
 class OpenLIFUAlgorithmInputWidget(qt.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, algorithm_input_names : List[str], parent=None):
         super().__init__(parent)
+        """
+        Args:
+            algorithm_input_names: Names of inputs required for the algorithm i.e. "Volume", "Transducer" etc
+        """
 
         layout = qt.QFormLayout(self)
         self.setLayout(layout)
 
-        self.protocol_input = AlgorithmInput("Protocol", qt.QComboBox(self))
-        self.transducer_input = AlgorithmInput("Transducer", qt.QComboBox(self))
-        self.volume_input = AlgorithmInput("Volume", qt.QComboBox(self))
-        self.target_input = AlgorithmInput("Target", qt.QComboBox(self))
-
-        self.inputs : List[AlgorithmInput] = [
-            self.protocol_input,
-            self.transducer_input,
-            self.volume_input,
-            self.target_input,
-        ]
-
+        self.algorithm_input_names = algorithm_input_names
+        self.inputs = []
+        for input_name in self.algorithm_input_names:
+            if input_name == "Protocol":
+                self.protocol_input = AlgorithmInput("Protocol", qt.QComboBox(self))
+                self.inputs.append(self.protocol_input)
+            elif input_name == "Transducer":
+                self.transducer_input = AlgorithmInput("Transducer", qt.QComboBox(self))
+                self.inputs.append(self.transducer_input)
+            elif input_name == "Volume":
+                self.volume_input = AlgorithmInput("Volume", qt.QComboBox(self))
+                self.inputs.append(self.volume_input)
+            elif input_name == "Target":
+                self.target_input = AlgorithmInput("Target", qt.QComboBox(self))
+                self.inputs.append(self.target_input)
+            else:
+                raise RuntimeError("Invalid algorithm input specified.")
+                
         for input in self.inputs:
             layout.addRow(f"{input.name}:", input.combo_box)
 
@@ -149,14 +159,15 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         else:
             self._populate_from_loaded_objects()
 
-        # Update target combo box
-        target_nodes = get_target_candidates()
-        if len(target_nodes) == 0:
-            self.target_input.indicate_no_options()
-        else:
-            self.target_input.combo_box.setEnabled(True)
-            for target_node in target_nodes:
-                self.target_input.combo_box.addItem(target_node.GetName(), target_node)
+        # Update target combo box if part of the algorithm inputs
+        if "Target" in self.algorithm_input_names:
+            target_nodes = get_target_candidates()
+            if len(target_nodes) == 0:
+                self.target_input.indicate_no_options()
+            else:
+                self.target_input.combo_box.setEnabled(True)
+                for target_node in target_nodes:
+                    self.target_input.combo_box.addItem(target_node.GetName(), target_node)
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()
