@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>350</width>
-    <height>148</height>
+    <width>330</width>
+    <height>313</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -22,6 +22,27 @@
        </widget>
       </item>
      </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="loadPhotoscanButton">
+     <property name="text">
+      <string>Load photoscan</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="loadTransducerSurfaceButton">
+     <property name="text">
+      <string>Load transducer registration surface</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="runTrackingButton">
+     <property name="text">
+      <string>Run transducer tracking</string>
+     </property>
     </widget>
    </item>
    <item>

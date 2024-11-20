@@ -8,6 +8,7 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer import vtkMRMLModelNode
 from OpenLIFULib import (
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
@@ -53,11 +54,9 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
 
 @parameterNodeWrapper
 class OpenLIFUTransducerTrackerParameterNode:
-    """
-    The parameters needed by the module.
 
-    """
-
+    loaded_transducer_surface: vtkMRMLModelNode = None
+    loaded_photoscan: vtkMRMLModelNode = None
 
 #
 # OpenLIFUTransducerTrackerWidget
@@ -115,6 +114,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
 
+        self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanClicked)
+        self.ui.loadTransducerSurfaceButton.clicked.connect(self.onLoadTransducerRegistrationSurfaceClicked)
+        self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
         self.updateApproveButton()
@@ -167,15 +169,65 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateInputOptions()
 
+    def onParameterNodeModified(self, caller, event) -> None:
+        self.checkCanRunTracking()
+        
     def updateInputOptions(self):
         """Update the algorithm input options"""
         self.algorithm_input_widget.update()
+
+        # Determine whether transducer tracking can be run based on the status of combo boxes
+        self.checkCanRunTracking()
+
+    def onLoadPhotoscanClicked(self):
+
+        # Using a custom file dialog instead of slicer.util.openAddModelDialog() incase database specific 
+        # customizations are required later 
+        qsettings = qt.QSettings()
+
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(), # parent
+            'Load photoscan', # title of dialog
+            qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
+            "Model (*.obj; *.vtk);;All Files (*)", # file type filter
+        )
+        if filepath:
+            self._parameterNode.loaded_photoscan = slicer.util.loadModel(filepath)
+            
+
+    def onLoadTransducerRegistrationSurfaceClicked(self):
+        qsettings = qt.QSettings()
+
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(), # parent
+            'Load transducer', # title of dialog
+            qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
+            "Model (*.obj; *.vtk);;All Files (*)", # file type filter
+        )
+        if filepath:
+            self._parameterNode.loaded_transducer_surface = slicer.util.loadModel(filepath)
+
+    def checkCanRunTracking(self,caller = None, event = None) -> None:
+ 
+        # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
+        # If the user has also loaded a photoscan and transducer surface, this means that the run transducer tracking button can be enabled
+        if self.algorithm_input_widget.has_valid_selections() and self._parameterNode.loaded_photoscan and self._parameterNode.loaded_transducer_surface:
+            self.ui.runTrackingButton.enabled = True
+            self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
+        else:
+            self.ui.runTrackingButton.enabled = False
+            self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
+
+    def onRunTrackingClicked(self):
+        activeProtocol, activeTransducer, activeVolume = self.algorithm_input_widget.get_current_data()
+        self.logic.runTransducerTracking(activeProtocol, activeTransducer, activeVolume, self._parameterNode.loaded_photoscan, self._parameterNode.loaded_transducer_surface)
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -239,3 +291,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Cannot toggle tracking approval because there is no active session.")
         session.toggle_transducer_tracking_approval() # apply the approval or lack thereof
         data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
+
+    def runTransducerTracking(self) -> None:
+        ## Need to integrate with transducer tracking library here
+        pass
