@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Tuple, TYPE_CHECKING
 
 import vtk
 import qt
@@ -8,9 +8,13 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer import vtkMRMLScalarVolumeNode,vtkMRMLModelNode, vtkMRMLTransformNode
+
 from OpenLIFULib import (
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
+    SlicerOpenLIFUProtocol,
+    SlicerOpenLIFUTransducer
 )
 from OpenLIFULib.util import replace_widget
 
@@ -303,6 +307,13 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session.toggle_transducer_tracking_approval() # apply the approval or lack thereof
         data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
 
-    def runTransducerTracking(self) -> None:
+    def runTransducerTracking(self,
+                              inputProtocol: SlicerOpenLIFUProtocol,
+                              inputTransducer : SlicerOpenLIFUTransducer,
+                              inputVolume: vtkMRMLScalarVolumeNode,
+                              inputPhotoscan: vtkMRMLModelNode,
+                              inputTRS: vtkMRMLModelNode
+                              ) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
         ## Need to integrate with transducer tracking library here
-        pass
+        print("Transducer tracking integration under development")
+        return None, None
