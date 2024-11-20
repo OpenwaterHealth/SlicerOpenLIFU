@@ -8,7 +8,6 @@ from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLModelNode
 from OpenLIFULib import (
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
@@ -54,9 +53,7 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
 
 @parameterNodeWrapper
 class OpenLIFUTransducerTrackerParameterNode:
-
-    loaded_transducer_surface: vtkMRMLModelNode = None
-    loaded_photoscan: vtkMRMLModelNode = None
+    pass
 
 #
 # OpenLIFUTransducerTrackerWidget
@@ -108,11 +105,19 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
+        # This ensures we update the drop down options in the volume and photoscan comboBox when nodes are added/removed
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
+
         # Replace the placeholder algorithm input widget by the actual one
-        self.algorithm_input_names = ["Protocol", "Transducer", "Volume"]
+        self.algorithm_input_names = ["Protocol", "Transducer", "Volume", "Photoscan"]
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(self.algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
+
+        # NOTE: Temp code to initialize tranducer registration surface. 
+        # This won't be needed once openlifu-python is updated to include the surface
+        self.activeTRS = None
 
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanClicked)
         self.ui.loadTransducerSurfaceButton.clicked.connect(self.onLoadTransducerRegistrationSurfaceClicked)
@@ -169,16 +174,22 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateInputOptions()
-
-    def onParameterNodeModified(self, caller, event) -> None:
-        self.checkCanRunTracking()
         
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        """ Update volume and photoscan combo boxes when nodes are removed from the scene"""
+        self.updateInputOptions()
+
+    @vtk.calldata_type(vtk.VTK_OBJECT)
+    def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        """ Update volume and photoscan combo boxes when nodes are added to the scene"""
+        self.updateInputOptions()
+
     def updateInputOptions(self):
         """Update the algorithm input options"""
         self.algorithm_input_widget.update()
@@ -187,7 +198,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.checkCanRunTracking()
 
     def onLoadPhotoscanClicked(self):
-
         # Using a custom file dialog instead of slicer.util.openAddModelDialog() incase database specific 
         # customizations are required later 
         qsettings = qt.QSettings()
@@ -199,9 +209,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             "Model (*.obj; *.vtk);;All Files (*)", # file type filter
         )
         if filepath:
-            self._parameterNode.loaded_photoscan = slicer.util.loadModel(filepath)
+            modelNode = slicer.util.loadModel(filepath)
+            modelNode.SetAttribute('isOpenLIFUPhotoscan', 'True')
+            self.updateInputOptions() # OnNodeAdded is called before the attribute is set
             
-
     def onLoadTransducerRegistrationSurfaceClicked(self):
         qsettings = qt.QSettings()
 
@@ -212,13 +223,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             "Model (*.obj; *.vtk);;All Files (*)", # file type filter
         )
         if filepath:
-            self._parameterNode.loaded_transducer_surface = slicer.util.loadModel(filepath)
+            self.activeTRS = slicer.util.loadModel(filepath) # Temporary approach
+            self.checkCanRunTracking()
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
- 
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
-        # If the user has also loaded a photoscan and transducer surface, this means that the run transducer tracking button can be enabled
-        if self.algorithm_input_widget.has_valid_selections() and self._parameterNode.loaded_photoscan and self._parameterNode.loaded_transducer_surface:
+        # If the user has also loaded a transducer surface, this means that the run transducer tracking button can be enabled
+        if self.algorithm_input_widget.has_valid_selections() and self.activeTRS:
             self.ui.runTrackingButton.enabled = True
             self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
         else:
@@ -226,8 +237,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
 
     def onRunTrackingClicked(self):
-        activeProtocol, activeTransducer, activeVolume = self.algorithm_input_widget.get_current_data()
-        self.logic.runTransducerTracking(activeProtocol, activeTransducer, activeVolume, self._parameterNode.loaded_photoscan, self._parameterNode.loaded_transducer_surface)
+        activeProtocol, activeTransducer, activeVolume, activePhotoscan = self.algorithm_input_widget.get_current_data()
+        self.logic.runTransducerTracking(activeProtocol, activeTransducer, activeVolume, activePhotoscan, self.activeTRS)
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:

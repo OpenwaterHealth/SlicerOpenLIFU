@@ -2,7 +2,7 @@ from typing import Tuple, Any, List
 from dataclasses import dataclass
 import qt
 import slicer
-from slicer import vtkMRMLScalarVolumeNode, vtkMRMLMarkupsFiducialNode
+from slicer import vtkMRMLScalarVolumeNode, vtkMRMLMarkupsFiducialNode, vtkMRMLModelNode
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
 from OpenLIFULib.util import get_openlifu_data_parameter_node
 from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
@@ -45,6 +45,9 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             elif input_name == "Target":
                 self.target_input = AlgorithmInput("Target", qt.QComboBox(self))
                 self.inputs.append(self.target_input)
+            elif input_name == "Photoscan":
+                self.photoscan_input = AlgorithmInput("Photoscan", qt.QComboBox(self))
+                self.inputs.append(self.photoscan_input)
             else:
                 raise RuntimeError("Invalid algorithm input specified.")
                 
@@ -60,6 +63,9 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
 
     def add_volume_to_combobox(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
         self.volume_input.combo_box.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
+
+    def add_photoscan_to_combobox(self, model_node : vtkMRMLModelNode) -> None:
+        self.photoscan_input.combo_box.addItem("{} (ID: {})".format(model_node.GetName(),model_node.GetID()), model_node)
 
     def set_session_related_combobox_tooltip(self, text:str):
         """Set tooltip on the transducer and volume comboboxes."""
@@ -88,7 +94,6 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def _populate_from_loaded_objects(self) -> None:
         """" Update protocol, transducer, and volume comboboxes based on the OpenLIFU objects loaded into the scene.
         Adds the items only; does not clear the ComboBoxes."""
-
         dataParameterNode = get_openlifu_data_parameter_node()
 
         # Update protocol combo box
@@ -168,6 +173,20 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 self.target_input.combo_box.setEnabled(True)
                 for target_node in target_nodes:
                     self.target_input.combo_box.addItem(target_node.GetName(), target_node)
+
+        # Update photoscans combobox 
+        # NOTE: This code can be moved to populate_from_loaded_objects once photoscans are associated with sessions
+        # This is temporarily here to populate the combobox with the photoscan loaded to the scene in the
+        # transducer tracking module. This may change based on how openlifu-python handles photoscans. 
+        if "Photoscan" in self.algorithm_input_names:
+            num_photoscans = 0
+            for model_node in slicer.util.getNodesByClass('vtkMRMLModelNode'):
+                # Check that the model is a loaded photoscan model
+                if model_node.GetAttribute('isOpenLIFUPhotoscan'):
+                    self.add_photoscan_to_combobox(model_node)
+                    num_photoscans += 1
+            if num_photoscans == 0:
+                self.photoscan_input.indicate_no_options()
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()
