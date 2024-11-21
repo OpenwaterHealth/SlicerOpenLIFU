@@ -210,7 +210,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             slicer.util.mainWindow(), # parent
             'Load photoscan', # title of dialog
             qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
-            "Model (*.obj; *.vtk);;All Files (*)", # file type filter
+            "Model (*.obj *.vtk);;All Files (*)", # file type filter
         )
         if filepath:
             modelNode = slicer.util.loadModel(filepath)
@@ -224,7 +224,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             slicer.util.mainWindow(), # parent
             'Load transducer', # title of dialog
             qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
-            "Model (*.obj; *.vtk);;All Files (*)", # file type filter
+            "Model (*.obj *.vtk);;All Files (*)", # file type filter
         )
         if filepath:
             self.activeTRS = slicer.util.loadModel(filepath) # Temporary approach
