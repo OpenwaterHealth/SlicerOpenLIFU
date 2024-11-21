@@ -118,7 +118,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.activeTRS = None
 
         # Replace the placeholder algorithm input widget by the actual one
-        algorithm_input_names = ["Volume", "Photoscan"]
+        algorithm_input_names = ["Protocol","Volume","Transducer", "Photoscan"]
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
@@ -315,5 +315,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                               inputTRS: vtkMRMLModelNode
                               ) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
         ## Need to integrate with transducer tracking library here
-        print("Transducer tracking integration under development")
+        slicer.util.infoDisplay(
+            text="This run button is a placeholder. The transducer tracking algorithm is under development.",
+            windowTitle="Not implemented"
+        )
         return None, None
