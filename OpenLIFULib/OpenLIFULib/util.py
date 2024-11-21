@@ -115,4 +115,6 @@ def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=Non
         for attr_name in ui_attrs_to_delete:
             delattr(ui_object, attr_name)
             
+    new_widget.setParent(parent)
+    new_widget.show()
     layout.insertWidget(index, new_widget)
