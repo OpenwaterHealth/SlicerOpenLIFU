@@ -159,3 +159,11 @@ class SlicerOpenLIFUTransducer:
 
     def stop_observing_transform_modified(self, tag:int) -> None:
         self.transform_node.RemoveObserver(tag)
+
+    def set_current_transform_to_match_transform_node(self, transform_node : vtkMRMLTransformNode) -> None:
+        """Set the matrix on the current transform node of this transducer to match the matrix of a given transform node.
+        (This is done by a copy not reference, so it's a one-time update -- the tranforms do not become linked in any way.)"""
+
+        transform_matrix = vtk.vtkMatrix4x4()
+        transform_node.GetMatrixTransformToParent(transform_matrix)
+        self.transform_node.SetMatrixTransformToParent(transform_matrix)
