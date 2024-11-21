@@ -5,7 +5,7 @@ import vtk
 from vtk.util import numpy_support
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
-from OpenLIFULib.coordinate_system_utils import get_RAS2IJK
+from OpenLIFULib.coordinate_system_utils import get_RAS2IJK, get_xxx2ras_matrix
 from OpenLIFULib.lazyimport import xarray_lz
 
 if TYPE_CHECKING:
@@ -71,6 +71,26 @@ def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolume
     )
     volume_resampled_dataarray = xarray_lz().DataArray(
         volume_resampled_array,
+        coords=coords,
+        name=volume_node.GetName(),
+        attrs={'vtkMRMLNodeID':volume_node.GetID(),}
+    )
+    return volume_resampled_dataarray
+
+def make_xarray_in_LPS_from_volume(volume_node:vtkMRMLScalarVolumeNode) -> "xarray.DataArray":
+    """Convert a volume node into a DataArray in LPS coordinates. There is no resampling."""
+    # Here are the coordinate systems involved:
+    # ras : The slicer world RAS coordinate system
+    # lps: The slicer world LPS coordinate system
+    # IJK : the volume node's underlying data array indices, which will also be the indices of the ouput DataArray
+    ras2IJK = get_RAS2IJK(volume_node)
+    lps2ras = get_xxx2ras_matrix('L', 'P', 'S')
+    lps2IJK = ras2IJK @ lps2ras
+
+    # TODO: use lps2IJK to construct coords below
+
+    volume_resampled_dataarray = xarray_lz().DataArray(
+        slicer.util.arrayFromVolume(volume_node).transpose((2,1,0)), # the array indices come in KJI rather than IJK so we permute them
         coords=coords,
         name=volume_node.GetName(),
         attrs={'vtkMRMLNodeID':volume_node.GetID(),}
