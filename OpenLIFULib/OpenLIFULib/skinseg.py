@@ -1,4 +1,4 @@
-"""Skin segmentation tools useful mainly for debugging"""
+"""Skin segmentation tools"""
 
 from OpenLIFULib.lazyimport import openlifu_lz
 from slicer import vtkMRMLScalarVolumeNode, vtkMRMLModelNode

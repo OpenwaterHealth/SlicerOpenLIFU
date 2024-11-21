@@ -50,6 +50,7 @@ def linear_to_affine(matrix, translation=None):
 
 def get_IJK2RAS(volume_node: vtkMRMLScalarVolumeNode):
     """Get the trasnfrom from IJK to the _world_ RAS for a given volume node.
+
     This takes into account any transforms that the volume node may be subject to.
 
     Returns a numpy array of shape (4,4).
