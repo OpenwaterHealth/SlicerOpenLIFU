@@ -14,15 +14,20 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
 
 from OpenLIFULib import (
+    openlifu_lz,
     get_target_candidates,
     get_openlifu_data_parameter_node,
+    fiducial_to_openlifu_point_in_transducer_coords,
+    make_xarray_in_transducer_coords_from_volume,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
+    BusyCursor,
 )
 from OpenLIFULib.util import replace_widget
 
 if TYPE_CHECKING:
+    import openlifu
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
@@ -392,7 +397,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approvalStatusLabel.text = ""
 
     def onvirtualfitClicked(self):
-        self.logic.virtual_fit(*(self.algorithm_input_widget.get_current_data()))
+        with BusyCursor():
+            self.logic.virtual_fit(*(self.algorithm_input_widget.get_current_data()))
 
 #
 # OpenLIFUPrePlanningLogic
@@ -446,15 +452,33 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
 
     def virtual_fit(
-            self,
-            protocol: SlicerOpenLIFUProtocol,
-            transducer : SlicerOpenLIFUTransducer,
-            volume: vtkMRMLScalarVolumeNode,
-            target: vtkMRMLMarkupsFiducialNode,
-        ):
-        slicer.util.infoDisplay(
-            text="The virtual fit button is a placeholder. Virtual fit algorithm not yet implemented.",
-            windowTitle="Not implemented"
+        self,
+        protocol: SlicerOpenLIFUProtocol,
+        transducer : SlicerOpenLIFUTransducer,
+        volume: vtkMRMLScalarVolumeNode,
+        target: vtkMRMLMarkupsFiducialNode,
+    ):
+        transducer_openlifu = transducer.transducer.transducer
+        virtual_fit = openlifu_lz().VirtualFit(
+            transducer = transducer_openlifu,
+            # TODO: This resamples the volume into the simulation coordinate grid, but we may want to have a separate
+            # "virtual fitting" coordinate grid, so we might need another version of make_xarray_in_transducer_coords_from_volume
+            # see https://github.com/OpenwaterHealth/OpenLIFU-python/issues/165#issuecomment-2486522010
+            volume = make_xarray_in_transducer_coords_from_volume(volume, transducer, protocol.protocol),
+            # TODO: use protocol to set the below things. See https://github.com/OpenwaterHealth/OpenLIFU-python/issues/165
+            # pitch_range = ,
+            # pitch_step = ,
+            # yaw_range = ,
+            # yaw_step = ,
+            # search_range_units = ,
+        )
+        transducer_transform_update = virtual_fit.run(
+            # TODO: make sure these are the coordinates in which the target is expected, I am pretty sure it's right.
+            target=fiducial_to_openlifu_point_in_transducer_coords(target, transducer, name = 'preplanning target')
+        )
+        transducer.update_transform(
+            transform_matrix = transducer_transform_update,
+            transform_matrix_units = None, # TODO: what should be expected? See https://github.com/OpenwaterHealth/OpenLIFU-python/pull/162#discussion_r1848947468
         )
 
 #
