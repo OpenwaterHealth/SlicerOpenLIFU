@@ -122,8 +122,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # Replace the placeholder algorithm input widget by the actual one
-        self.algorithm_input_names = ["Protocol", "Transducer", "Volume", "Target"]
-        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(self.algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
+        algorithm_input_names = ["Protocol", "Transducer", "Volume", "Target"]
+        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
 
         self.ui.targetListWidget.currentItemChanged.connect(self.onTargetListWidgetCurrentItemChanged)
@@ -379,8 +379,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.virtualfitButton.setToolTip("Specify all required inputs to enable virtual fitting")
 
     def onApproveClicked(self):
-        _,_,_,currently_selected_target = self.algorithm_input_widget.get_current_data()
-        self.logic.approve_virtual_fit_for_target(currently_selected_target)
+        currently_selected_data = self.algorithm_input_widget.get_current_data()
+        self.logic.approve_virtual_fit_for_target(currently_selected_data["Target"])
 
     def updateApprovalStatusLabel(self):
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
@@ -394,7 +394,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approvalStatusLabel.text = ""
 
     def onvirtualfitClicked(self):
-        self.logic.virtual_fit(*(self.algorithm_input_widget.get_current_data()))
+        activeData = self.algorithm_input_widget.get_current_data()
+        self.logic.virtual_fit(activeData["Protocol"],activeData["Transducer"], activeData["Volume"], activeData["Target"])
 
 #
 # OpenLIFUPrePlanningLogic

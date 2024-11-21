@@ -113,15 +113,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
-        # Replace the placeholder algorithm input widget by the actual one
-        self.algorithm_input_names = ["Protocol", "Transducer", "Volume", "Photoscan"]
-        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(self.algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
-        replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
-        self.updateInputOptions()
-
         # NOTE: Temp code to initialize tranducer registration surface. 
         # This won't be needed once openlifu-python is updated to include the surface
         self.activeTRS = None
+
+        # Replace the placeholder algorithm input widget by the actual one
+        algorithm_input_names = ["Volume", "Photoscan"]
+        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
+        self.updateInputOptions()
 
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanClicked)
         self.ui.loadTransducerSurfaceButton.clicked.connect(self.onLoadTransducerRegistrationSurfaceClicked)
@@ -241,8 +241,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
 
     def onRunTrackingClicked(self):
-        activeProtocol, activeTransducer, activeVolume, activePhotoscan = self.algorithm_input_widget.get_current_data()
-        self.logic.runTransducerTracking(activeProtocol, activeTransducer, activeVolume, activePhotoscan, self.activeTRS)
+        activeData = self.algorithm_input_widget.get_current_data()
+        self.logic.runTransducerTracking(activeData["Protocol"], activeData["Transducer"], activeData["Volume"], activeData["Photoscan"], self.activeTRS)
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
