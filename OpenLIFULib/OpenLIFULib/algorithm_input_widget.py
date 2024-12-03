@@ -58,7 +58,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         """Set tooltip on the transducer, protocol and volume comboboxes."""
 
         for input in ["Protocol", "Transducer", "Volume"]:
-            if input in self.inputs_dict.keys():
+            if input in self.inputs_dict:
                 self.inputs_dict[input].combo_box.setToolTip(text)
 
     def _clear_input_options(self):
@@ -81,7 +81,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         dataParameterNode = get_openlifu_data_parameter_node()
 
         # Update protocol combo box
-        if "Protocol" in self.inputs_dict.keys():
+        if "Protocol" in self.inputs_dict:
             if len(dataParameterNode.loaded_protocols) == 0:
                 self.inputs_dict["Protocol"].indicate_no_options()
             else:
@@ -90,7 +90,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                     self.add_protocol_to_combobox(protocol)
 
         # Update transducer combo box
-        if "Transducer" in self.inputs_dict.keys():
+        if "Transducer" in self.inputs_dict:
             if len(dataParameterNode.loaded_transducers) == 0:
                 self.inputs_dict["Transducer"].indicate_no_options()
             else:
@@ -99,7 +99,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                     self.add_transducer_to_combobox(transducer)
 
         # Update volume combo box
-        if "Volume" in self.inputs_dict.keys():
+        if "Volume" in self.inputs_dict:
             if len(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')) == 0:
                 self.inputs_dict["Volume"].indicate_no_options()
             else:
@@ -127,17 +127,17 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         volume_node : vtkMRMLScalarVolumeNode = session.volume_node
 
         # Update protocol combo box
-        if "Protocol" in self.inputs_dict.keys():
+        if "Protocol" in self.inputs_dict:
             self.inputs_dict["Protocol"].combo_box.setDisabled(True)
             self.add_protocol_to_combobox(protocol)
 
         # Update transducer combo box
-        if "Transducer" in self.inputs_dict.keys():
+        if "Transducer" in self.inputs_dict:
             self.inputs_dict["Transducer"].combo_box.setDisabled(True)
             self.add_transducer_to_combobox(transducer)
 
         # Update volume combo box
-        if "Volume" in self.inputs_dict.keys():
+        if "Volume" in self.inputs_dict:
             self.inputs_dict["Volume"].combo_box.setDisabled(True)
             self.add_volume_to_combobox(volume_node)
 
@@ -155,7 +155,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             self._populate_from_loaded_objects()
 
         # Update target combo box if part of the algorithm inputs
-        if "Target" in self.inputs_dict.keys():
+        if "Target" in self.inputs_dict:
             target_nodes = get_target_candidates()
             if len(target_nodes) == 0:
                 self.inputs_dict["Target"].indicate_no_options()
@@ -168,7 +168,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         # NOTE: This code can be moved to populate_from_loaded_objects once photoscans are associated with sessions
         # This is temporarily here to populate the combobox with the photoscan loaded to the scene in the
         # transducer tracking module. This may change based on how openlifu-python handles photoscans. 
-        if "Photoscan" in self.inputs_dict.keys():
+        if "Photoscan" in self.inputs_dict:
             num_photoscans = 0
             for model_node in slicer.util.getNodesByClass('vtkMRMLModelNode'):
                 # Check that the model is a loaded photoscan model
@@ -194,7 +194,8 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             Volume: vtkMRMLScalarVolumeNode
             Target: vtkMRMLMarkupsFiducialNode
             Photoscan: vtkMRMLModelNode """
-        current_data_dict = {}
-        for input in self.inputs_dict.values():
-            current_data_dict[input.name] = input.combo_box.currentData
+        current_data_dict = {
+            input.name : input.combo_box.currentData
+            for input in self.inputs_dict.values()
+        }
         return current_data_dict
