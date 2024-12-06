@@ -455,10 +455,20 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             volume: vtkMRMLScalarVolumeNode,
             target: vtkMRMLMarkupsFiducialNode,
         ):
-        slicer.util.infoDisplay(
-            text="The virtual fit button is a placeholder. Virtual fit algorithm not yet implemented.",
-            windowTitle="Not implemented"
-        )
+        # Temporary measure of "manual" virtual fitting. See https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/153
+        transducer.transform_node.CreateDefaultDisplayNodes()
+        if not transducer.transform_node.GetDisplayNode().GetEditorVisibility():
+            slicer.util.infoDisplay(
+                text=(
+                    "The automatic virtual fitting algorithm is not yet implemented."
+                    " Use the interaction handles on the transducer to manually fit it."
+                    " You can click the Virtual fit button again to remove the interaction handles."
+                ),
+                windowTitle="Not implemented"
+            )
+            transducer.transform_node.GetDisplayNode().SetEditorVisibility(True)
+        else:
+            transducer.transform_node.GetDisplayNode().SetEditorVisibility(False)
 
 #
 # OpenLIFUPrePlanningTest
