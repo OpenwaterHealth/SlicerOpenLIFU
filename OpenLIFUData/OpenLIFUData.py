@@ -250,6 +250,108 @@ class AddNewVolumeDialog(qt.QDialog):
 
         return (returncode, volume_filepath,volume_name, volume_id)
 
+class AddNewPhotoscanDialog(qt.QDialog):
+    """ Add new photoscan dialog """
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Add New Photoscan")
+        self.setWindowModality(1)
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
+
+        # Model filepath
+        self.photoscanModelFilePath = ctk.ctkPathLineEdit()
+        self.photoscanModelFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allowable photoscan filetypes
+        self.photoscan_model_extensions = ("Photoscan Model" + " (*.obj *.vtk *.stl *.ply *.vtp *.g);;" +
+        "All Files" + " (*)")
+        self.photoscanModelFilePath.nameFilters = [self.photoscan_model_extensions]
+        self.photoscanModelFilePath.currentPathChanged.connect(self.updatePhotoscanDetails)
+        formLayout.addRow(_("Model Filepath:"), self.photoscanModelFilePath)
+
+        # Texture filepath
+        self.photoscanTextureFilePath = ctk.ctkPathLineEdit()
+        self.photoscanTextureFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allowable photoscan filetypes
+        self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
+        "All Files" + " (*)")
+        self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
+        formLayout.addRow(_("Texture Filepath:"), self.photoscanTextureFilePath)
+
+        # MTL filepath
+        self.photoscanMTLFilePath = ctk.ctkPathLineEdit()
+        self.photoscanMTLFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allowable photoscan filetypes
+        self.photoscan_mtl_extensions = ("Photoscan Material" + " (*.mtl);;" +
+        "All Files" + " (*)")
+        self.photoscanMTLFilePath.nameFilters = [self.photoscan_mtl_extensions]
+        formLayout.addRow(_("Materials Filepath:"), self.photoscanMTLFilePath)
+
+        self.photoscanName = qt.QLineEdit()
+        formLayout.addRow(_("Photoscan Name:"), self.photoscanName)
+
+        self.photoscanID = qt.QLineEdit()
+        formLayout.addRow(_("Photoscan ID:"), self.photoscanID)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def updatePhotoscanDetails(self):
+        current_filepath = Path(self.photoscanModelFilePath.currentPath)
+        if current_filepath.is_file():
+            while current_filepath.suffix:
+                current_filepath = current_filepath.with_suffix('')
+            photoscan_name = current_filepath.stem
+            if not len(self.photoscanName.text):
+                self.photoscanName.setText(photoscan_name)
+            if not len(self.photoscanID.text):
+                self.photoscanID.setText(photoscan_name)
+
+    def validateInputs(self):
+        """
+        The MTL filepath is an optional input for writing a photoscan to the database.
+        """
+        photoscan_name = self.photoscanName.text
+        photoscan_id = self.photoscanID.text
+        photoscan_model_filepath = self.photoscanModelFilePath.currentPath
+        photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath
+        photoscan_mtl_filepath = self.photoscanMTLFilePath.currentPath
+
+        if not len(photoscan_name) or not len(photoscan_id) or not len(photoscan_model_filepath) or not len(photoscan_texture_filepath):
+            slicer.util.errorDisplay("Required fields are missing", parent = self)
+        elif not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
+            slicer.util.errorDisplay("Invalid photoscan filetype specified", parent = self)
+        else:
+            self.accept()
+
+    def customexec_(self):
+
+        returncode = self.exec_()
+        if not len(self.photoscanMTLFilePath.currentPath):
+            mtl_filepath = None
+        else:
+            mtl_filepath = self.photoscanMTLFilePath.currentPath
+        photoscan_dict = {
+            "model_filepath" : self.photoscanModelFilePath.currentPath,
+            "texture_filepath" : self.photoscanTextureFilePath.currentPath,
+            "mtl_filepath" : mtl_filepath,
+            "name": self.photoscanName.text,
+            "id": self.photoscanID.text
+        }
+        return (returncode, photoscan_dict)
+
 class AddNewSubjectDialog(qt.QDialog):
     """ Add new subject dialog """
 
@@ -386,9 +488,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Add new volume to subject
         self.ui.addVolumeToSubjectButton.clicked.connect(self.onAddVolumeToSubjectClicked)
+
         # Add new session
         self.ui.newSessionButton.clicked.connect(self.onCreateNewSessionClicked)
         self.update_subjectLevelButtons_enabled()
+
+        # Add new photoscan to session
+        self.ui.addPhotoscanToSessionButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
+        self.update_sessionLevelButtons_enabled()
 
         self.subjectSessionItemModel = qt.QStandardItemModel()
         self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
@@ -445,10 +552,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onSubjectSessionSelected(self):
         self.update_subjectLevelButtons_enabled()
+        self.update_sessionLevelButtons_enabled()
 
     def openSubjectSessionContextMenu(self, point):
         index = self.ui.subjectSessionView.indexAt(point)
-        if not self.itemIsSession(index):
+        if self.itemIsSession(index):
+            menu = qt.QMenu()
+            addNewPhotoscanAction = menu.addAction("Add photoscan to session...")
+            action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
+            if action == addNewPhotoscanAction:
+                self.onAddPhotoscanToSessionClicked(checked=True)
+
+        else:
             menu = qt.QMenu()
             addNewSubjectAction = menu.addAction("Add volume to subject...")
             addNewSessionAction = menu.addAction("Create new session...")
@@ -512,6 +627,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             self.ui.newSessionButton.setEnabled(False)
             self.ui.newSessionButton.toolTip = 'Requires a loaded database and subject to be selected'
+    
+    def update_sessionLevelButtons_enabled(self):
+        """ Update whether the add photoscan button is enabled based on whether a database has been loaded
+        and a session has been selected in the tree view"""
+
+        if self.logic.db and self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
+            self.ui.addPhotoscanToSessionButton.setEnabled(True)
+            self.ui.addPhotoscanToSessionButton.toolTip = 'Add new photoscan to selected session'
+        else:
+            self.ui.addPhotoscanToSessionButton.setEnabled(False)
+            self.ui.addPhotoscanToSessionButton.toolTip = 'Requires a loaded database and session to be selected'
 
     def update_sessionLoadButton_enabled(self):
         """Update whether the session loading button is enabled based on whether any subject or session is selected."""
@@ -599,6 +725,23 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.addSessionsToSubjectSessionSelector(currentIndex, session_parameters['name'], session_parameters['id'])
             self.ui.subjectSessionView.expand(self.ui.subjectSessionView.currentIndex())
             self.logic.load_session(subject_id, session_parameters['id'])
+
+    @display_errors
+    def onAddPhotoscanToSessionClicked(self, checked:bool) -> None:
+        photoscandlg = AddNewPhotoscanDialog()
+        returncode, photoscan_dict = photoscandlg.customexec_()
+        if not returncode:
+            return False
+
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        _, session_id = self.getSubjectSessionAtIndex(currentIndex)
+        _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
+        self.logic.add_photoscan_to_database(subject_id, session_id,
+                                            photoscan_dict['id'],
+                                            photoscan_dict['name'],
+                                            photoscan_dict['model_filepath'],
+                                            photoscan_dict['texture_filepath'],
+                                            photoscan_dict['mtl_filepath'])
 
     def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
         """ Adds sessions to the Subject/Session selector for the subject specified by 'index'.
@@ -1571,6 +1714,30 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
         self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
+
+    def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_id: str, photoscan_name: str, model_data_filepath: str, texture_data_filepath: str, mtl_data_filepath: str = None) -> None:
+        """ Add new photoscan to selected subject/session in the loaded openlifu database
+
+        Args:
+            subject_id: ID of subject associated with the photoscan (str)
+            session_id: ID of session associated with the photoscan (str)
+            photoscan_id: ID of photoscan to be added (str)
+            photoscan_name: Name of photoscan to be added (str)
+            photoscan_filepath: filepath of photoscan to be added (str)
+        """
+        photoscan_ids = self.db.get_photoscan_ids(subject_id, session_id)
+        if photoscan_id in photoscan_ids:
+            if not slicer.util.confirmYesNoDisplay(
+                f"Photoscan ID {photoscan_id} already exists in the database for session {session_id}. Overwrite photoscan?",
+                "Photoscan already exists"
+            ):
+                return
+
+        self.db.write_photoscan(subject_id, session_id, photoscan_id, photoscan_name, 
+                                model_data_filepath, 
+                                texture_data_filepath, 
+                                mtl_data_filepath, 
+                                on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
     def toggle_solution_approval(self):
         """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
