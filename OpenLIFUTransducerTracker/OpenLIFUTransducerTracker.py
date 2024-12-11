@@ -198,6 +198,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Update the algorithm input options"""
         self.algorithm_input_widget.update()
 
+        # Temporary code to include skin segmentation model as input
+        loaded_models = slicer.util.getNodesByClass('vtkMRMLModelNode')
+        if len(loaded_models) == 3:
+            self.ui.skinSegmentationModelqMRMLNodeComboBox.enabled = False
+        else:
+            self.ui.skinSegmentationModelqMRMLNodeComboBox.enabled = True
+
         # Determine whether transducer tracking can be run based on the status of combo boxes
         self.checkCanRunTracking()
 
@@ -233,7 +240,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
         # If the user has also loaded a transducer surface, this means that the run transducer tracking button can be enabled
-        if self.algorithm_input_widget.has_valid_selections() and self.activeTRS:
+        if self.algorithm_input_widget.has_valid_selections() and self.activeTRS and self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode() is not None:
             self.ui.runTrackingButton.enabled = True
             self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
         else:
@@ -242,7 +249,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onRunTrackingClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
-        self.logic.runTransducerTracking(activeData["Protocol"], activeData["Transducer"], activeData["Volume"], activeData["Photoscan"], self.activeTRS)
+        self.skinSurfaceModel = self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode()
+        self.logic.runTransducerTracking(activeData["Protocol"], activeData["Transducer"], self.skinSurfaceModel, activeData["Photoscan"], self.activeTRS)
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -310,7 +318,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def runTransducerTracking(self,
                               inputProtocol: SlicerOpenLIFUProtocol,
                               inputTransducer : SlicerOpenLIFUTransducer,
-                              inputVolume: vtkMRMLScalarVolumeNode,
+                              inputSkinSegmentation: vtkMRMLModelNode,
                               inputPhotoscan: vtkMRMLModelNode,
                               inputTRS: vtkMRMLModelNode
                               ) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:

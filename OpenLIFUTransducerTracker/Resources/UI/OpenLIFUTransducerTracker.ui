@@ -6,20 +6,55 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>330</width>
-    <height>313</height>
+    <width>524</width>
+    <height>235</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-   <item alignment="Qt::AlignVCenter">
-    <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
-     <layout class="QFormLayout" name="formLayout">
-      <item row="0" column="0">
-       <widget class="QLabel" name="placeholderLabel">
-        <property name="text">
-         <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
-        </property>
+   <item>
+    <widget class="QWidget" name="tempWidget" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <item>
+       <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
+        <layout class="QFormLayout" name="formLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="placeholderLabel">
+           <property name="text">
+            <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
+      </item>
+      <item>
+       <layout class="QFormLayout" name="formLayout_2">
+        <item row="0" column="0">
+         <widget class="QLabel" name="skinSegmentationModelLabel">
+          <property name="text">
+           <string>Skin segmentation model:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="qMRMLNodeComboBox" name="skinSegmentationModelqMRMLNodeComboBox">
+          <property name="nodeTypes">
+           <stringlist>
+            <string>vtkMRMLModelNode</string>
+           </stringlist>
+          </property>
+          <property name="noneEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="addEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="removeEnabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
@@ -76,6 +111,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
@@ -83,5 +123,22 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>OpenLIFUTransducerTracking</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>skinSegmentationModelqMRMLNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>261</x>
+     <y>117</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>328</x>
+     <y>64</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
