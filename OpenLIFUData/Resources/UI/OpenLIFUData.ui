@@ -66,6 +66,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="addPhotoscanToSessionButton">
+        <property name="text">
+         <string>Add Photoscan to Session</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="subjectSessionLabel">
         <property name="text">
          <string>Subject/session selector:</string>
