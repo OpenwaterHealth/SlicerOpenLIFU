@@ -1723,7 +1723,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session_id: ID of session associated with the photoscan (str)
             photoscan_id: ID of photoscan to be added (str)
             photoscan_name: Name of photoscan to be added (str)
-            photoscan_filepath: filepath of photoscan to be added (str)
+            model_filepath: filepath of photoscan model to be added (str)
+            texture_filepath: filepath of photoscan texture image to be added (str)
+            mtl_filepath: Optional filepath of photoscan materials file to be added (str)
         """
         photoscan_ids = self.db.get_photoscan_ids(subject_id, session_id)
         if photoscan_id in photoscan_ids:
