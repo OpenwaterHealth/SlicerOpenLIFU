@@ -37,10 +37,12 @@ class SlicerOpenLIFUPhotoscan:
             model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
             model_node.SetAndObservePolyData(photoscan.model)
             model_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
+            model_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{photoscan.id}-model"))
 
             texture_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVectorVolumeNode")
             texture_node.SetAndObserveImageData(photoscan.texture)
             texture_node.SetAttribute('isOpenLIFUPhotoscan', 'True') 
+            texture_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{photoscan.id}-texture"))
 
         return SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan),model_node,texture_node)
 
@@ -71,9 +73,9 @@ class SlicerOpenLIFUPhotoscan:
         modelDisplayNode.SetTextureImageDataConnection(textureImageFlipVert.GetOutputPort())
 
     def is_approved(self) -> bool:
-        return self.photoscan.photoscan.approved
+        return self.photoscan.photoscan.photoscan_approved
                        
     def toggle_approval(self) -> None:
-        self.photoscan.photoscan.approved = not self.photoscan.photoscan.approved 
+        self.photoscan.photoscan.approved = not self.photoscan.photoscan.photoscan_approved 
 
         
