@@ -26,6 +26,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolution,
     SlicerOpenLIFURun,
     SlicerOpenLIFUSession,
+    SlicerOpenLIFUPhotoscan,
     get_target_candidates,
     assign_openlifu_metadata_to_volume_node,
 )
@@ -389,6 +390,80 @@ class AddNewSubjectDialog(qt.QDialog):
 
         return (returncode, subject_name, subject_id)
 
+class LoadPhotoscanDialog(qt.QDialog):
+    """ Load photoscan dialog """
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Load photoscan")
+        self.setWindowModality(1)
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+
+        self.formLayout = qt.QFormLayout()
+        self.setLayout(self.formLayout)
+
+        # Model filepath
+        self.photoscanModelFilePath = ctk.ctkPathLineEdit()
+        self.photoscanModelFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allowable photoscan filetypes
+        self.photoscan_model_extensions = ("Photoscan Model" + " (*.obj *.vtk *.stl *.ply *.vtp *.g *json);;" +
+        "All Files" + " (*)")
+        self.photoscanModelFilePath.nameFilters = [self.photoscan_model_extensions]
+        self.photoscanModelFilePath.currentPathChanged.connect(self.updateDialog)
+        self.formLayout.addRow(_("Model Filepath:"), self.photoscanModelFilePath)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        self.formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def updateDialog(self):
+        """If the selected model file path is an .obj (or related format) model file, then
+        the user needs to specify the corresponding texture file. This function updates the 
+        dialog to prompt the user to select the texture image. If the user selects a .json file
+        as the model file, then the model and texture filepaths are determined from the json file."""
+
+        current_filepath = Path(self.photoscanModelFilePath.currentPath)
+        if current_filepath.suffix != '.json' and self.formLayout.rowCount() == 2:
+            # Texture filepath
+            self.photoscanTextureFilePath = ctk.ctkPathLineEdit()
+            self.photoscanTextureFilePath.filters = ctk.ctkPathLineEdit.Files
+            # Allowable photoscan filetypes
+            self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
+            "All Files" + " (*)")
+            self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
+            self.formLayout.insertRow(1,_("Texture Filepath:"), self.photoscanTextureFilePath)
+        elif current_filepath.suffix == '.json' and self.formLayout.rowCount() == 3:
+            self.formLayout.removeRow(1) 
+
+    def validateInputs(self):
+        photoscan_model_filepath = Path(self.photoscanModelFilePath.currentPath)
+        if photoscan_model_filepath.suffix != 'json':
+            photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath  
+            if not len(photoscan_texture_filepath):
+                slicer.util.errorDisplay("Model and texture files both need to be specified", parent = self)
+                return
+            elif not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
+                slicer.util.errorDisplay("Invalid photoscan filetype specified", parent = self)
+                return
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        model_filepath = self.photoscanModelFilePath.currentPath
+        texture_filepath = None
+        if Path(model_filepath).suffix != '.json':
+            texture_filepath = self.photoscanTextureFilePath.currentPath
+
+        return returncode, model_filepath, texture_filepath
+    
 class ObjectBeingUnloadedMessageBox(qt.QMessageBox):
     """Warning box for when an object is about to be or has been unloaded"""
 
@@ -532,6 +607,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
+        self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
        
         self.session_status_field_widgets = [
             self.ui.sessionStatusSubjectNameIdValueLabel,
@@ -823,6 +899,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
 
+    @display_errors
+    def onLoadPhotoscanPressed(self, checked:bool) -> None:
+        load_photoscan_dlg = LoadPhotoscanDialog()
+        returncode, model_filepath, texture_filepath = load_photoscan_dlg.customexec_()
+        if not returncode:
+            return False
+
+        # self.logic.load_photoscan_from_file(model_filepath, texture_filepath)
+        # self.updateLoadedObjectsView() # Call function here to update view based on node attributes
+           
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
         parameter_node = self._parameterNode
