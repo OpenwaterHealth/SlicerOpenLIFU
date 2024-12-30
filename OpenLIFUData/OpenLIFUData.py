@@ -908,7 +908,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return False
 
         self.logic.load_photoscan_from_file(model_filepath, texture_filepath)
-        # self.updateLoadedObjectsView() # Call function here to update view based on node attributes
+        self.updateLoadedObjectsView() # Call function here to update view based on node attributes (for texture volume)
            
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
@@ -938,7 +938,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ))
             self.loadedObjectsItemModel.appendRow(row)
         for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
-            if volume_node.GetAttribute('isOpenLIFUSolution') is not None:
+            if volume_node.GetAttribute('isOpenLIFUSolution') is not None or volume_node.GetAttribute('isOpenLIFUPhotoscan') is not None:
                 continue
             if volume_node.GetAttribute('OpenLIFUData.volume_id'):
                 row = list(map(
@@ -966,7 +966,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [solution_openlifu.name, "Solution", solution_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
-        
         if parameter_node.loaded_run is not None:
             run_openlifu = parameter_node.loaded_run.run
             row = list(map(
@@ -974,7 +973,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 [run_openlifu.name, "Run", run_openlifu.id]
             ))
             self.loadedObjectsItemModel.appendRow(row)
-
+        for photoscan_slicer in parameter_node.loaded_photoscans.values():
+            photoscan_slicer : SlicerOpenLIFUPhotoscan
+            photoscan_openlifu : "openlifu.Photoscan" = photoscan_slicer.photoscan.photoscan
+            row = list(map(
+                create_noneditable_QStandardItem,
+                [photoscan_openlifu.name, "Photoscan", photoscan_openlifu.id]
+            ))
+            self.loadedObjectsItemModel.appendRow(row)
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
@@ -1193,8 +1199,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         self.db.write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
-
-
 
     def validate_session(self) -> bool:
         """Check to ensure that the currently active session is in a valid state, clearing out the session
