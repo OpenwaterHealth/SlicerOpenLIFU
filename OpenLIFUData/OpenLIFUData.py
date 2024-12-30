@@ -326,8 +326,7 @@ class AddNewPhotoscanDialog(qt.QDialog):
         photoscan_name = self.photoscanName.text
         photoscan_id = self.photoscanID.text
         photoscan_model_filepath = self.photoscanModelFilePath.currentPath
-        photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath
-        photoscan_mtl_filepath = self.photoscanMTLFilePath.currentPath
+        photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath  
 
         if not len(photoscan_name) or not len(photoscan_id) or not len(photoscan_model_filepath) or not len(photoscan_texture_filepath):
             slicer.util.errorDisplay("Required fields are missing", parent = self)
@@ -344,9 +343,9 @@ class AddNewPhotoscanDialog(qt.QDialog):
         else:
             mtl_filepath = self.photoscanMTLFilePath.currentPath
         photoscan_dict = {
-            "model_filepath" : self.photoscanModelFilePath.currentPath,
-            "texture_filepath" : self.photoscanTextureFilePath.currentPath,
-            "mtl_filepath" : mtl_filepath,
+            "model_abspath" : self.photoscanModelFilePath.currentPath,
+            "texture_abspath" : self.photoscanTextureFilePath.currentPath,
+            "mtl_abspath" : mtl_filepath,
             "name": self.photoscanName.text,
             "id": self.photoscanID.text
         }
@@ -736,12 +735,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         currentIndex = self.ui.subjectSessionView.currentIndex()
         _, session_id = self.getSubjectSessionAtIndex(currentIndex)
         _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
-        self.logic.add_photoscan_to_database(subject_id, session_id,
-                                            photoscan_dict['id'],
-                                            photoscan_dict['name'],
-                                            photoscan_dict['model_filepath'],
-                                            photoscan_dict['texture_filepath'],
-                                            photoscan_dict['mtl_filepath'])
+        self.logic.add_photoscan_to_database(subject_id, session_id, photoscan_dict)
 
     def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
         """ Adds sessions to the Subject/Session selector for the subject specified by 'index'.
@@ -1715,30 +1709,23 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
-    def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_id: str, photoscan_name: str, model_data_filepath: str, texture_data_filepath: str, mtl_data_filepath: str = None) -> None:
+    def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_parameters: Dict) -> None:
         """ Add new photoscan to selected subject/session in the loaded openlifu database
-
         Args:
             subject_id: ID of subject associated with the photoscan (str)
             session_id: ID of session associated with the photoscan (str)
-            photoscan_id: ID of photoscan to be added (str)
-            photoscan_name: Name of photoscan to be added (str)
-            model_filepath: filepath of photoscan model to be added (str)
-            texture_filepath: filepath of photoscan texture image to be added (str)
-            mtl_filepath: Optional filepath of photoscan materials file to be added (str)
+            photoscan_parameters: Dictionary containing the required parameters for adding a photoscan to database
         """
         photoscan_ids = self.db.get_photoscan_ids(subject_id, session_id)
-        if photoscan_id in photoscan_ids:
+        if photoscan_parameters['id'] in photoscan_ids:
             if not slicer.util.confirmYesNoDisplay(
-                f"Photoscan ID {photoscan_id} already exists in the database for session {session_id}. Overwrite photoscan?",
+                f"Photoscan ID {photoscan_parameters['id']} already exists in the database for session {session_id}. Overwrite photoscan?",
                 "Photoscan already exists"
             ):
                 return
 
-        self.db.write_photoscan(subject_id, session_id, photoscan_id, photoscan_name, 
-                                model_data_filepath, 
-                                texture_data_filepath, 
-                                mtl_data_filepath, 
+        newOpenLIFUPhotoscan = openlifu_lz().db.Photoscan().from_dict(photoscan_parameters)
+        self.db.write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
                                 on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
     def toggle_solution_approval(self):
