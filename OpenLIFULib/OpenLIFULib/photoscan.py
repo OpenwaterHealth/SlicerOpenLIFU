@@ -25,7 +25,7 @@ class SlicerOpenLIFUPhotoscan:
     """Texture volume node"""
 
     @staticmethod
-    def initialize_from_openlifu_data(photoscan : "openlifu.Photoscan",) -> "SlicerOpenLIFUPhotoscan":
+    def initialize_from_openlifu_photoscan(photoscan : "openlifu.Photoscan",) -> "SlicerOpenLIFUPhotoscan":
         """Create a SlicerOpenLIFUPhotoscan from an openlifu Photoscan.
 
         Args:
