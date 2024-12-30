@@ -85,6 +85,14 @@ class SlicerOpenLIFUSolutionAnalysis:
     def __init__(self, analysis: "Optional[openlifu.plan.SolutionAnalysis]" = None):
         self.analysis = analysis
 
+# For the same reason we have a thin wrapper around openlifu.Photoscan. But the name SlicerOpenLIFUPhotoscan
+# is reserved for the upcoming parameter pack.
+class SlicerOpenLIFUPhotoscanWrapper:
+    """Ultrathin wrapper of openlifu.Photoscan. This exists so that photoscans can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, photoscan: "Optional[openlifu.Photoscan]" = None):
+        self.photoscan = photoscan
+
 def SlicerOpenLIFUSerializerBaseMaker(
         serialized_type:type,
         default_args:Optional[list[Any]] = None,
@@ -249,6 +257,24 @@ class OpenLIFUSolutionAnalysisSerializer(SlicerOpenLIFUSerializerBaseMaker(Slice
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSolutionAnalysis:
         json_string = parameterNode.GetParameter(name)
         return SlicerOpenLIFUSolutionAnalysis(openlifu_lz().plan.SolutionAnalysis.from_json(json_string))
+
+@parameterNodeSerializer
+class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPhotoscanWrapper)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUPhotoscanWrapper) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.photoscan.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUPhotoscanWrapper:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)    
+        return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().db.Photoscan.from_json(json_string))
 
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
