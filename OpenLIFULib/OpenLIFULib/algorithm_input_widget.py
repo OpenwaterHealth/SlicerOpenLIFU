@@ -99,15 +99,16 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                     self.add_transducer_to_combobox(transducer)
 
         # Update volume combo box
+        valid_input_volumes = 0
         if "Volume" in self.inputs_dict:
-            if len(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')) == 0:
+            self.inputs_dict["Volume"].combo_box.setEnabled(True)
+            for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
+                # Check that the volume is not an OpenLIFUSolution output volume
+                if volume_node.GetAttribute('isOpenLIFUSolution') is None and volume_node.GetAttribute('isOpenLIFUPhotoscan') is None :
+                    self.add_volume_to_combobox(volume_node)
+                    valid_input_volumes += 1
+            if valid_input_volumes == 0:
                 self.inputs_dict["Volume"].indicate_no_options()
-            else:
-                self.inputs_dict["Volume"].combo_box.setEnabled(True)
-                for volume_node in slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode'):
-                    # Check that the volume is not an OpenLIFUSolution output volume
-                    if volume_node.GetAttribute('isOpenLIFUSolution') is None:
-                        self.add_volume_to_combobox(volume_node)
 
         self.set_session_related_combobox_tooltip("")
 
