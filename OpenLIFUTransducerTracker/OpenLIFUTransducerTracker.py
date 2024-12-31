@@ -123,7 +123,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
 
-        self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanClicked)
         self.ui.loadTransducerSurfaceButton.clicked.connect(self.onLoadTransducerRegistrationSurfaceClicked)
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
@@ -207,22 +206,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Determine whether transducer tracking can be run based on the status of combo boxes
         self.checkCanRunTracking()
-
-    def onLoadPhotoscanClicked(self):
-        # Using a custom file dialog instead of slicer.util.openAddModelDialog() incase database specific 
-        # customizations are required later 
-        qsettings = qt.QSettings()
-
-        filepath: str = qt.QFileDialog.getOpenFileName(
-            slicer.util.mainWindow(), # parent
-            'Load photoscan', # title of dialog
-            qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
-            "Model (*.obj *.vtk);;All Files (*)", # file type filter
-        )
-        if filepath:
-            modelNode = slicer.util.loadModel(filepath)
-            modelNode.SetAttribute('isOpenLIFUPhotoscan', 'True')
-            self.updateInputOptions() # OnNodeAdded is called before the attribute is set
             
     def onLoadTransducerRegistrationSurfaceClicked(self):
         qsettings = qt.QSettings()
