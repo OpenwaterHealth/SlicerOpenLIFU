@@ -6,6 +6,7 @@ from slicer import vtkMRMLScalarVolumeNode, vtkMRMLMarkupsFiducialNode, vtkMRMLM
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
 from OpenLIFULib.util import get_openlifu_data_parameter_node
 from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
+from OpenLIFULib.photoscan import SlicerOpenLIFUPhotoscan
 from OpenLIFULib.targets import get_target_candidates
 
 @dataclass
@@ -51,8 +52,9 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def add_volume_to_combobox(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
         self.inputs_dict["Volume"].combo_box.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
 
-    def add_photoscan_to_combobox(self, model_node : vtkMRMLModelNode) -> None:
-        self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(model_node.GetName(),model_node.GetID()), model_node)
+    def add_photoscan_to_combobox(self, photoscan: SlicerOpenLIFUPhotoscan) -> None:
+        photoscan_openlifu = photoscan.photoscan.photoscan
+        self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(photoscan_openlifu.name, photoscan_openlifu.id , photoscan))
 
     def set_session_related_combobox_tooltip(self, text:str):
         """Set tooltip on the transducer, protocol and volume comboboxes."""
@@ -167,18 +169,15 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
 
         # Update photoscans combobox 
         # NOTE: This code can be moved to populate_from_loaded_objects once photoscans are associated with sessions
-        # This is temporarily here to populate the combobox with the photoscan loaded to the scene in the
-        # transducer tracking module. This may change based on how openlifu-python handles photoscans. 
+        # The photoscan options are populated based on the data parameter node
+        dataParameterNode = get_openlifu_data_parameter_node()
         if "Photoscan" in self.inputs_dict:
-            num_photoscans = 0
-            for model_node in slicer.util.getNodesByClass('vtkMRMLModelNode'):
-                # Check that the model is a loaded photoscan model
-                if model_node.GetAttribute('isOpenLIFUPhotoscan'):
-                    self.inputs_dict["Photoscan"].combo_box.setEnabled(True)
-                    self.add_photoscan_to_combobox(model_node)
-                    num_photoscans += 1
-            if num_photoscans == 0:
+            if len(dataParameterNode.loaded_photoscans) == 0:
                 self.inputs_dict["Photoscan"].indicate_no_options()
+            else:
+                self.inputs_dict["Photoscan"].combo_box.setEnabled(True)
+                for photoscan in dataParameterNode.loaded_photoscans.values():
+                    self.add_photoscan_to_combobox(photoscan)
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()
