@@ -1773,6 +1773,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # Otherwise, use default photoscan name and id based on filepath
             else:
                 photoscan_openlifu = openlifu_lz().db.Photoscan.from_filepaths(model_filepath, texture_filepath)
+                self.load_photoscan_from_openlifu(photoscan_openlifu)
 
         # If the user selects a json file, infer photoscan filepath information based on the photoscan_metadata.
         elif Path(model_filepath).suffix == '.json':
