@@ -292,7 +292,7 @@ class AddNewPhotoscanDialog(qt.QDialog):
         self.photoscan_mtl_extensions = ("Photoscan Material" + " (*.mtl);;" +
         "All Files" + " (*)")
         self.photoscanMTLFilePath.nameFilters = [self.photoscan_mtl_extensions]
-        formLayout.addRow(_("Materials Filepath:"), self.photoscanMTLFilePath)
+        formLayout.addRow(_("Materials Filepath (Optional):"), self.photoscanMTLFilePath)
 
         self.photoscanName = qt.QLineEdit()
         formLayout.addRow(_("Photoscan Name:"), self.photoscanName)
@@ -1724,8 +1724,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
+        model_abspath = photoscan_parameters.pop("model_abspath")
+        texture_abspath = photoscan_parameters.pop("texture_abspath")
+        mtl_abspath = photoscan_parameters.pop("mtl_abspath")
+
         newOpenLIFUPhotoscan = openlifu_lz().db.Photoscan().from_dict(photoscan_parameters)
         self.db.write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
+                                model_abspath,
+                                texture_abspath,
+                                mtl_abspath,
                                 on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
     def toggle_solution_approval(self):
