@@ -863,7 +863,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         filepath: str = qt.QFileDialog.getOpenFileName(
             slicer.util.mainWindow(), # parent
-            'Load protocol', # title of dialog
+            'Load transducer', # title of dialog
             qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
             "Transducers (*.json);;All Files (*)", # file type filter
         )
@@ -907,8 +907,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not returncode:
             return False
 
-        self.logic.load_photoscan_from_file(model_filepath, texture_filepath)
+        newly_loaded_photoscan = self.logic.load_photoscan_from_file(model_filepath, texture_filepath)
         self.updateLoadedObjectsView() # Call function here to update view based on node attributes (for texture volume)
+
+        # Visualize textured photoscan
+        if newly_loaded_photoscan:
+            newly_loaded_photoscan.show_model_with_texture()
            
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
@@ -1764,35 +1768,33 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 photoscan_metadata = json.loads(photoscan_json_filepath.read_text())
                 if photoscan_metadata['model_filename'] == Path(model_filepath).name:
                     photoscan_openlifu = openlifu_lz().db.Photoscan.from_file(photoscan_json_filepath)
-                    self.load_photoscan_from_openlifu(photoscan_openlifu)
+                    return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = photoscan_json_filepath.parent)
                 # If the selected file doesn't match the filename included in the json file, use the model file and default photoscan name and id based on filepath
                 else:
-                    # Load from filepaths
-                    photoscan_openlifu = openlifu_lz().db.Photoscan.from_filepaths(model_filepath, texture_filepath)
-                    self.load_photoscan_from_openlifu(photoscan_openlifu)
-            # Otherwise, use default photoscan name and id based on filepath
+                    # Load from data filepaths
+                    newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_data_filepaths(model_filepath, texture_filepath)
+                    self.getParameterNode().loaded_photoscans[newly_loaded_photoscan.photoscan.photoscan.id] = newly_loaded_photoscan
+                    return newly_loaded_photoscan
             else:
-                photoscan_openlifu = openlifu_lz().db.Photoscan.from_filepaths(model_filepath, texture_filepath)
-                self.load_photoscan_from_openlifu(photoscan_openlifu)
-
+                # Load from data filepaths
+                newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_data_filepaths(model_filepath, texture_filepath)
+                self.getParameterNode().loaded_photoscans[newly_loaded_photoscan.photoscan.photoscan.id] = newly_loaded_photoscan
+                return newly_loaded_photoscan
+            
         # If the user selects a json file, infer photoscan filepath information based on the photoscan_metadata.
         elif Path(model_filepath).suffix == '.json':
-            photoscan_metadata = json.loads(Path(model_filepath).read_text())
-            # Check for corresponding photoscan files
-            if 'model_filename' and 'texture_filename' in photoscan_metadata:
                 photoscan_openlifu = openlifu_lz().db.Photoscan.from_file(model_filepath)
-                self.load_photoscan_from_openlifu(photoscan_openlifu)
-            else:
-                slicer.util.errorDisplay("Invalid photoscan filetype specified")
+                return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = Path(model_filepath).parent)
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
 
-    def load_photoscan_from_openlifu(self, photoscan: "openlifu.Photoscan", replace_confirmed = True) -> SlicerOpenLIFUPhotoscan:
+    def load_photoscan_from_openlifu(self, photoscan: "openlifu.Photoscan", parent_dir, replace_confirmed : bool = False) -> SlicerOpenLIFUPhotoscan:
         """Load an openlifu photoscan object into the scene as a SlicerOpenLIFUPhotoscan,
         adding it to the list of loaded openlifu objects.
 
         Args:
             photoscan: The openlifu Photoscan object
+            parent_dir: Absolute path to the parent directory containing the photoscan data files
             replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Photoscan.
                 This could be used for example if we already know the user is okay with re-loading the photoscan.
 
@@ -1805,14 +1807,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     "Photoscan already loaded",
                 ):
                     return
-            # self.remove_photoscan(photoscan.id) TODO: Not yet implemented
+            # self.remove_photoscan(photoscan.id) TODO: Not yet implemented. Implement after photoscans have been associated with sessions. 
 
-        newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(photoscan)
+        newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(photoscan, parent_dir)
         
         # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is assigned to the node so need
         # call updateLoadedObjectsView again to display openlifu name/id.
         # assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
-
         self.getParameterNode().loaded_photoscans[photoscan.id] = newly_loaded_photoscan
         return newly_loaded_photoscan
 
