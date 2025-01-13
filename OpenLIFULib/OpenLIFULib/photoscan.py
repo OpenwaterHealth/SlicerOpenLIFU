@@ -21,10 +21,10 @@ class SlicerOpenLIFUPhotoscan:
     photoscan : SlicerOpenLIFUPhotoscanWrapper 
     """Underlying openlifu Photoscan in a thin wrapper"""
 
-    model : vtkMRMLModelNode
+    model_node : vtkMRMLModelNode
     """Photoscan model node"""
 
-    texture : vtkMRMLVectorVolumeNode
+    texture_node : vtkMRMLVectorVolumeNode
     """Texture volume node"""
 
     @staticmethod
@@ -86,19 +86,19 @@ class SlicerOpenLIFUPhotoscan:
     def show_model_with_texture(self):
         # Shift/Scale texture map to uchar
         filter = vtk.vtkImageShiftScale()
-        typeString = self.texture.GetImageData().GetScalarTypeAsString()
+        typeString = self.texture_node.GetImageData().GetScalarTypeAsString()
         # default
         scale = 1
         if typeString =='unsigned short':
             scale = 1 / 255.0
         filter.SetScale(scale)
         filter.SetOutputScalarTypeToUnsignedChar()
-        filter.SetInputData(self.texture.GetImageData())
+        filter.SetInputData(self.texture_node.GetImageData())
         filter.SetClampOverflow(True)
         filter.Update()
 
-        self.model.CreateDefaultDisplayNodes()
-        modelDisplayNode = self.model.GetDisplayNode()
+        self.model_node.CreateDefaultDisplayNodes()
+        modelDisplayNode = self.model_node.GetDisplayNode()
         modelDisplayNode.SetBackfaceCulling(0)
         textureImageFlipVert = vtk.vtkImageFlip()
         textureImageFlipVert.SetFilteredAxis(1)
