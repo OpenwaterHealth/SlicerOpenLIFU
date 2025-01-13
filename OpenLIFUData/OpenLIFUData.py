@@ -910,7 +910,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         newly_loaded_photoscan = self.logic.load_photoscan_from_file(model_filepath, texture_filepath)
         self.updateLoadedObjectsView() # Call function here to update view based on node attributes (for texture volume)
 
-        # Visualize textured photoscan
+        # Visualize textured photoscan. NOTE: This functionality is temporary and 
+        # will be moved to the transducer tracking module once the functionality to
+        #  preview photoscans has been added.
         if newly_loaded_photoscan:
             newly_loaded_photoscan.show_model_with_texture()
            
@@ -1070,6 +1072,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.logic.on_transducer_affiliated_node_about_to_be_removed(node.GetID(),'transform_node')
         if node.IsA('vtkMRMLModelNode'):
             self.logic.on_transducer_affiliated_node_about_to_be_removed(node.GetID(),'model_node')
+        
+        # If any SlicerOpenLIFUPhotoscan objects relied on this model or texture volume node, then we need to remove them
+        # as they are now invalid.
+        if node.IsA('vtkMRMLModelNode'):
+            self.logic.on_photoscan_affiliated_node_about_to_be_removed(node.GetID(),'model_node')
+        if node.IsA('vtkMRMLVectorVolumeNode'):
+            self.logic.on_photoscan_affiliated_node_about_to_be_removed(node.GetID(),'texture_node')
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -1807,7 +1816,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     "Photoscan already loaded",
                 ):
                     return
-            # self.remove_photoscan(photoscan.id) TODO: Not yet implemented. Implement after photoscans have been associated with sessions. 
+            self.remove_photoscan(photoscan.id) 
 
         newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(photoscan, parent_dir)
         
@@ -1816,6 +1825,52 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
         self.getParameterNode().loaded_photoscans[photoscan.id] = newly_loaded_photoscan
         return newly_loaded_photoscan
+    
+    def on_photoscan_affiliated_node_about_to_be_removed(self, node_mrml_id:str, affiliated_node_attribute_name:str) -> None:
+        """Handle cleanup on SlicerOpenLIFUPhotoscan objects when the mrml nodes they depend on get removed from the scene.
+
+        Args:
+            node_mrml_id: The mrml scene ID of the node that was (or is about to be) removed
+            affiliated_node_attribute_name: The name of the affected vtkMRMLNode-valued SlicerOpenLIFUPhotoscanNode attribute
+                (so "texture_node" or "model_node")
+        """
+        matching_photoscan_openlifu_ids = [
+            photoscan_openlifu_id
+            for photoscan_openlifu_id, photoscan in self.getParameterNode().loaded_photoscans.items()
+            if getattr(photoscan,affiliated_node_attribute_name).GetID() == node_mrml_id
+        ]
+
+        # If this fails, then a single mrml node was shared across multiple loaded SlicerOpenLIFUPhotoscans, which
+        # should not be possible in the application logic.
+        assert(len(matching_photoscan_openlifu_ids) <= 1)
+
+        if matching_photoscan_openlifu_ids:
+            # Remove the photoscan, but keep any other nodes under it. This transducer was removed
+            # by manual mrml scene manipulation, so we don't want to pull other nodes out from
+            # under the user.
+            photoscan_openlifu_id = matching_photoscan_openlifu_ids[0]
+            clean_up_scene = ObjectBeingUnloadedMessageBox(
+                message = f"The photoscan with id {photoscan_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
+                title="Photoscan removed",
+                checkbox_tooltip = "Ensures cleanup of the model node and texture volume node affiliated with the photoscan",
+            ).customexec_()
+            self.remove_photoscan(photoscan_openlifu_id, clean_up_scene=clean_up_scene)
+
+    def remove_photoscan(self, photoscan_id:str, clean_up_scene:bool = True) -> None:
+        """Remove a photoscan from the list of loaded photoscans, clearing away its data from the scene.
+
+        Args:
+            photoscan_id: The openlifu ID of the photoscan to remove
+            clean_up_scene: Whether to remove the SlicerOpenLIFUPhotoscan's affiliated nodes from the scene.
+        """
+        loaded_photoscans = self.getParameterNode().loaded_photoscans
+        if not photoscan_id in loaded_photoscans:
+            raise IndexError(f"No photoscan with ID {photoscan_id} appears to be loaded; cannot remove it.")
+        # Clean-up order matters here: we should pop the photoscan out of the loaded objects dict and *then* clear out its
+        # affiliated nodes. This is because clearing the nodes triggers the check on_photoscan_affiliated_node_removed.
+        photoscan = loaded_photoscans.pop(photoscan_id)
+        if clean_up_scene:
+            photoscan.clear_nodes()
 
     def add_volume_to_database(self, subject_id: str, volume_id: str, volume_name: str, volume_filepath: str) -> None:
         """ Adds volume to selected subject in the loaded openlifu database.
