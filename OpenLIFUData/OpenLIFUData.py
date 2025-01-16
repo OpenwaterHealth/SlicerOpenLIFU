@@ -1004,7 +1004,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
             protocol_openlifu : "openlifu.Protocol" = loaded_session.get_protocol().protocol
-            transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
+            
             self.ui.sessionStatusSubjectNameIdValueLabel.setText(
                 f"{subject_openlifu.name} (ID: {session_openlifu.subject_id})"
             )
@@ -1014,10 +1014,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionStatusProtocolValueLabel.setText(
                 f"{protocol_openlifu.name} (ID: {session_openlifu.protocol_id})"
             )
-            self.ui.sessionStatusTransducerValueLabel.setText(
-                f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
-            )
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
+            
+            # Add a validity check here since this function call is triggered after a transducer is removed but 
+            # before a session is invalidated. 
+            if loaded_session.transducer_is_valid():
+                transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
+                self.ui.sessionStatusTransducerValueLabel.setText(
+                    f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
+                )
 
             # Build the additional info message here; this is status text that conditionally displays.
             additional_info_messages : List[str] = []
@@ -1595,7 +1600,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             affiliated_node_attribute_name: List of the possible names of the affected vtkMRMLNode-valued SlicerOpenLIFUTransducerNode attribute
                 (so "transform_node" or "model_node" or "body_model_node" or "surface_model_node")
         """
-        print('Triggered by:', node_mrml_id)
         matching_transducer_openlifu_ids = [
             transducer_openlifu_id
             for transducer_openlifu_id, transducer in self.getParameterNode().loaded_transducers.items()
