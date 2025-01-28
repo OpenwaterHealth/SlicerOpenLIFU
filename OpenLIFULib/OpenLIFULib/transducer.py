@@ -102,11 +102,18 @@ class SlicerOpenLIFUTransducer:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         
         shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-        sceneItemID = shNode.GetSceneItemID()
-        folderID = shNode.GetItemChildWithName(sceneItemID, self.name) # Find the ID of the parent folder
-        shNode.RemoveItem(folderID, True, True) # TODO: Fix error when folder is deleted by user
+        transducer_name = self.model_node.GetName() # What happens if node is deleted?
+        slicer.mrmlScene.RemoveNode(self.body_model_node)
+        slicer.mrmlScene.RemoveNode(self.surface_model_node)
+        slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.transform_node)
-
+    
+        # Get the parent folder and remove the now empty folder if 
+        # it still exists.
+        folderID = shNode.GetItemByName(transducer_name)
+        if folderID:
+            shNode.RemoveItem(folderID)
+        
     def observe_transform_modified(self, callback : "Callable[[SlicerOpenLIFUTransducer],Any]") -> int:
         """Add an observer to the TransformModifiedEvent of the transducer's transform node, providing this object to the callback.
 
