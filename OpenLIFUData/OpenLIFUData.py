@@ -1728,7 +1728,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         texture_abspath = photoscan_parameters.pop("texture_abspath")
         mtl_abspath = photoscan_parameters.pop("mtl_abspath")
 
-        newOpenLIFUPhotoscan = openlifu_lz().db.Photoscan().from_dict(photoscan_parameters)
+        newOpenLIFUPhotoscan = openlifu_lz().photoscan.Photoscan().from_dict(photoscan_parameters)
         self.db.write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
                                 model_abspath,
                                 texture_abspath,
