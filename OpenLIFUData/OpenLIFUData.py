@@ -549,6 +549,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAboutToBeRemovedEvent, self.onNodeAboutToBeRemoved)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAboutToBeRemovedEvent, self.onNodeAboutToBeRemoved)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
@@ -1619,6 +1620,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             affiliated_node_attribute_name: List of the possible names of the affected vtkMRMLNode-valued SlicerOpenLIFUTransducerNode attribute
                 (so "transform_node" or "model_node" or "body_model_node" or "surface_model_node")
         """
+        
         matching_transducer_openlifu_ids = [
             transducer_openlifu_id
             for transducer_openlifu_id, transducer in self.getParameterNode().loaded_transducers.items()
@@ -1631,6 +1633,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         assert(len(matching_transducer_openlifu_ids) <= 1)
 
         if matching_transducer_openlifu_ids:
+            # Remove the transducer, but keep any other nodes under it. This transducer was removed
+            # by manual mrml scene manipulation, so we don't want to pull other nodes out from
+            # under the user.
             # Remove the transducer, but keep any other nodes under it. This transducer was removed
             # by manual mrml scene manipulation, so we don't want to pull other nodes out from
             # under the user.
