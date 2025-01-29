@@ -13,8 +13,7 @@ from OpenLIFULib.coordinate_system_utils import (
     get_xxx2ras_matrix,
     get_xx2mm_scale_factor,
     numpy_to_vtk_4x4
-)
-from vtk import vtkCollection 
+) 
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
@@ -52,14 +51,10 @@ class SlicerOpenLIFUTransducer:
         shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
         slicer_transducer_name = slicer.mrmlScene.GenerateUniqueName(transducer.id)
         parentFolderItem = shNode.CreateFolderItem(shNode.GetSceneItemID(), slicer_transducer_name)
+        shNode.SetItemAttribute(parentFolderItem, 'transducer_id', transducer.id)
 
-        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        model_node.SetName(slicer_transducer_name)
-        model_node.SetAndObservePolyData(transducer.get_polydata())
         transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
         transform_node.SetName(f"{slicer_transducer_name}-matrix")
-        model_node.SetAndObserveTransformNodeID(transform_node.GetID())
-        shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
 
         # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
         # the `transducer` object. There is no such attribute yet but it should exist eventually once this is done:
@@ -76,6 +71,14 @@ class SlicerOpenLIFUTransducer:
 
         transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
         transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+        shNode.SetItemParent(shNode.GetItemByDataNode(transform_node), parentFolderItem)
+
+        #Model nodes
+        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        model_node.SetName(f"{slicer_transducer_name}-transducer")
+        model_node.SetAndObservePolyData(transducer.get_polydata())
+        model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+        shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
         model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
         if transducer.transducer_body_filename:
@@ -101,16 +104,14 @@ class SlicerOpenLIFUTransducer:
     def clear_nodes(self) -> None:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         
-        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-        transducer_name = self.model_node.GetName() # What happens if node is deleted?
         slicer.mrmlScene.RemoveNode(self.body_model_node)
         slicer.mrmlScene.RemoveNode(self.surface_model_node)
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.transform_node)
-    
-        # Get the parent folder and remove the now empty folder if 
-        # it still exists.
-        folderID = shNode.GetItemByName(transducer_name)
+
+        # Get the parent folder and remove the now empty folder if it still exists.
+        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+        folderID = shNode.GetItemByName(self.name)
         if folderID:
             shNode.RemoveItem(folderID)
         
