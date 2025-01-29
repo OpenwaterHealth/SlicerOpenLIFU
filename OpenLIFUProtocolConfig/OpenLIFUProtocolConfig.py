@@ -1,8 +1,11 @@
 import logging
 import os
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Dict
+from enum import Enum
 
 import vtk
+import qt
+import ctk
 
 import slicer
 from slicer.i18n import tr as _
@@ -26,7 +29,9 @@ class OpenLIFUProtocolConfig(ScriptedLoadableModule):
         self.parent.title = _("OpenLIFU Protocol Configuration")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
-        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
+        self.parent.contributors = [
+            "Ebrahim Ebrahim (Kitware), Andrew Howe (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"
+        ]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
@@ -40,6 +45,9 @@ class OpenLIFUProtocolConfig(ScriptedLoadableModule):
             "and development."
         )
 
+class FocalPatternType(Enum):
+    SINGLE_POINT=0
+    WHEEL=1
 
 #
 # OpenLIFUProtocolConfigParameterNode
@@ -66,8 +74,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
-        self.logic = None
-        self._parameterNode = None
+        self.logic: Optional[OpenLIFUProtocolConfigLogic] = None
+        self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
         self._parameterNodeGuiTag = None
 
     def setup(self) -> None:
@@ -94,6 +102,27 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+
+        # === Connections and UI setup for Protocol Configuration =======
+
+        self.focalPattern_name_to_type : Dict[str,FocalPatternType] = {
+            'single point' : FocalPatternType.SINGLE_POINT,
+            'wheel' : FocalPatternType.WHEEL,
+        }
+        self.focalPattern_type_to_pageName : Dict[FocalPatternType,str] = {
+            FocalPatternType.SINGLE_POINT : "singlePointPage",
+            FocalPatternType.WHEEL : "wheelPage",
+        }
+
+        self.ui.focalPatternComboBox.currentIndexChanged.connect(
+            lambda : self.ui.focalPatternOptionsStackedWidget.setCurrentWidget(
+                self.ui.focalPatternOptionsStackedWidget.findChild(
+                    qt.QWidget,
+                    self.focalPattern_type_to_pageName[self.getCurrentlySelectedFocalPatternType()]
+                )
+            )
+        )
+        self.ui.focalPatternComboBox.addItems(list(self.focalPattern_name_to_type.keys()))
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -146,7 +175,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-      
+
+    def getCurrentlySelectedFocalPatternType(self) -> FocalPatternType:
+        """Return the type of focal pattern that is currently selected in the protocol configuration."""
+        return self.focalPattern_name_to_type[self.ui.focalPatternComboBox.currentText]
+
 
 #
 # OpenLIFUProtocolConfigLogic
@@ -190,4 +223,3 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
-

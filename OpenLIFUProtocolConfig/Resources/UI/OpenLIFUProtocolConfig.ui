@@ -1,46 +1,259 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>OpenLIFUProtocolConfiguration</class>
- <widget class="qMRMLWidget" name="OpenLIFUProtocolConfiguration">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>325</width>
-    <height>311</height>
-   </rect>
-  </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Module under construction</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-  </layout>
- </widget>
- <customwidgets>
-  <customwidget>
-   <class>qMRMLWidget</class>
-   <extends>QWidget</extends>
-   <header>qMRMLWidget.h</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
- <resources/>
- <connections/>
+  <class>OpenLIFUProtocolConfig</class>
+  <widget class="qMRMLWidget" name="OpenLIFUProtocolConfig">
+    <property name="geometry">
+      <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>559</width>
+        <height>695</height>
+      </rect>
+    </property>
+    <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+        <widget class="QLabel" name="label">
+          <property name="text">
+            <string>Module under construction</string>
+          </property>
+          <property name="styleSheet">
+            <string>
+              color: red;
+              font-size: 32px;
+              font-weight: bold;
+            </string>
+          </property>
+          <property name="alignment">
+            <set>Qt::AlignCenter</set>
+          </property>
+        </widget>
+      </item>
+      <item>
+        <widget class="ctkComboBox" name="protocolSelector">
+          <property name="defaultText">
+            <string>Select a protocol...</string>
+          </property>
+        </widget>
+      </item>
+      <item>
+        <widget class="QPushButton" name="loadProtocolButton">
+          <property name="toolTip">
+            <string>Load an openlifu protocol from json</string>
+          </property>
+          <property name="text">
+            <string>Load Protocol</string>
+          </property>
+        </widget>
+      </item>
+      <item>
+        <widget class="QPushButton" name="createNewProtocolButton">
+          <property name="toolTip">
+            <string>Create a new openlifu protocol</string>
+          </property>
+          <property name="text">
+            <string>Create New Protocol</string>
+          </property>
+        </widget>
+      </item>
+      <item>
+        <layout class="QFormLayout" name="protocolFormLayout">
+          <item row="0" column="0">
+            <widget class="QLabel" name="protocolNameLabel">
+              <property name="text">
+                <string>Name</string>
+              </property>
+            </widget>
+          </item>
+          <item row="0" column="1">
+            <widget class="QLineEdit" name="protocolNameLineEdit">
+              <property name="toolTip">
+                <string>Protocol name</string>
+              </property>
+            </widget>
+          </item>
+          <item row="1" column="0">
+            <widget class="QLabel" name="protocolIdLabel">
+              <property name="text">
+                <string>ID</string>
+              </property>
+            </widget>
+          </item>
+          <item row="1" column="1">
+            <widget class="QLineEdit" name="protocolIdLineEdit">
+              <property name="toolTip">
+                <string>Protocol ID</string>
+              </property>
+            </widget>
+          </item>
+          <item row="2" column="0">
+            <widget class="QLabel" name="protocolDescriptionLabel">
+              <property name="text">
+                <string>Description</string>
+              </property>
+            </widget>
+          </item>
+          <item row="2" column="1">
+            <widget class="QPlainTextEdit" name="protocolDescriptionTextEdit">
+              <property name="toolTip">
+                <string>Protocol description</string>
+              </property>
+            </widget>
+          </item>
+          <item row="3" column="0">
+            <widget class="QLabel" name="pulseFrequencyLabel">
+              <property name="text">
+                <string>Pulse frequency</string>
+              </property>
+            </widget>
+          </item>
+          <item row="4" column="0">
+            <widget class="QLabel" name="pulseDurationLabel">
+              <property name="text">
+                <string>Pulse duration</string>
+              </property>
+            </widget>
+          </item>
+          <item row="5" column="0">
+            <widget class="QLabel" name="focalPatternLabel">
+              <property name="text">
+                <string>Focal pattern type</string>
+              </property>
+            </widget>
+          </item>
+          <item row="5" column="1">
+            <widget class="QComboBox" name="focalPatternComboBox">
+              <property name="toolTip">
+                <string>
+                  Type of pattern to use to determine target points
+                </string>
+              </property>
+            </widget>
+          </item>
+          <item row="6" column="1">
+            <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
+              <property name="currentIndex">
+                <number>0</number>
+              </property>
+              <widget class="QWidget" name="noFocalPatternPage" />
+              <widget class="QWidget" name="singlePointPage">
+                <layout class="QVBoxLayout" name="verticalLayout_4">
+                  <item>
+                    <widget class="QLabel" name="singlePointOptionsLabel">
+                      <property name="text">
+                        <string>
+                          (No options for the single point pattern)
+                        </string>
+                      </property>
+                      <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                      </property>
+                    </widget>
+                  </item>
+                </layout>
+              </widget>
+              <widget class="QWidget" name="wheelPage">
+                <layout class="QFormLayout" name="formLayout_2">
+                  <item row="0" column="1">
+                    <widget class="QCheckBox" name="wheelCenterCheckBox">
+                      <property name="toolTip">
+                        <string>
+                          Whether to include the center point of the wheel
+                          pattern
+                        </string>
+                      </property>
+                      <property name="text">
+                        <string />
+                      </property>
+                    </widget>
+                  </item>
+                  <item row="1" column="0">
+                    <widget class="QLabel" name="numSpokesLabel">
+                      <property name="text">
+                        <string>Spokes</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item row="0" column="0">
+                    <widget class="QLabel" name="wheelCenterLabel">
+                      <property name="text">
+                        <string>Center?</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item row="1" column="1">
+                    <widget class="QSpinBox" name="numSpokesSpinBox" />
+                  </item>
+                  <item row="2" column="0">
+                    <widget class="QLabel" name="spokeRadiusLabel">
+                      <property name="text">
+                        <string>Spoke Radius</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item row="2" column="1">
+                    <widget class="QDoubleSpinBox" name="spokeRadiusSpinBox" />
+                  </item>
+                </layout>
+              </widget>
+            </widget>
+          </item>
+          <item row="6" column="0">
+            <widget class="QLabel" name="focalPatternOptionsLabel">
+              <property name="text">
+                <string>Focal pattern options</string>
+              </property>
+            </widget>
+          </item>
+          <item row="3" column="1">
+            <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
+              <property name="toolTip">
+                <string>Frequency of the pulse in Hz</string>
+              </property>
+            </widget>
+          </item>
+          <item row="4" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBox_2">
+              <property name="toolTip">
+                <string>Duration of the pulse in s</string>
+              </property>
+            </widget>
+          </item>
+        </layout>
+      </item>
+      <item>
+        <layout class="QHBoxLayout" name="protocolButtonsLayout">
+          <item>
+            <widget class="QPushButton" name="protocolSaveButton">
+              <property name="text">
+                <string>Save Protocol</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="pushButton">
+              <property name="text">
+                <string>Delete Protocol</string>
+              </property>
+            </widget>
+          </item>
+        </layout>
+      </item>
+    </layout>
+  </widget>
+  <customwidgets>
+    <customwidget>
+      <class>qMRMLWidget</class>
+      <extends>QWidget</extends>
+      <header>qMRMLWidget.h</header>
+      <container>1</container>
+    </customwidget>
+    <customwidget>
+      <class>ctkComboBox</class>
+      <extends>QComboBox</extends>
+      <header>ctkComboBox.h</header>
+      <container>1</container>
+    </customwidget>
+  </customwidgets>
+  <resources />
+  <connections />
 </ui>
