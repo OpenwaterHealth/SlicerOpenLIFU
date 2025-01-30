@@ -28,6 +28,21 @@ class SlicerOpenLIFUPhotoscan:
     """Texture volume node"""
 
     @staticmethod
+    def _create_nodes(model_data, texture_data, node_name_prefix: str):
+        """Helper method to create model and texture nodes."""
+        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        model_node.SetAndObservePolyData(model_data)
+        model_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
+        model_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{node_name_prefix}-model"))
+
+        texture_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVectorVolumeNode")
+        texture_node.SetAndObserveImageData(texture_data)
+        texture_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
+        texture_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{node_name_prefix}-texture"))
+
+        return model_node, texture_node
+    
+    @staticmethod
     def initialize_from_openlifu_photoscan(photoscan : "openlifu.Photoscan", parent_dir) -> "SlicerOpenLIFUPhotoscan":
         """Create a SlicerOpenLIFUPhotoscan from an openlifu Photoscan.
         Args:
@@ -38,19 +53,12 @@ class SlicerOpenLIFUPhotoscan:
         with BusyCursor():
             model_data, texture_data = openlifu_lz().db.photoscan.load_data_from_photoscan(photoscan, parent_dir = parent_dir)
 
-        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        model_node.SetAndObservePolyData(model_data)
-        model_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
-        model_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{photoscan.id}-model"))
-
-        texture_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVectorVolumeNode")
-        texture_node.SetAndObserveImageData(texture_data)
-        texture_node.SetAttribute('isOpenLIFUPhotoscan', 'True') 
-        texture_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{photoscan.id}-texture"))
+        model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, photoscan.id)
 
         return SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan),model_node,texture_node)
 
-    def initialize_from_data_filepaths(model_abspath, texture_abspath):
+    @staticmethod
+    def initialize_from_data_filepaths(model_abspath, texture_abspath) -> "SlicerOpenLIFUPhotoscan":
         """Create a SlicerOpenLIFUPhotoscan based on absolute paths to the data filenames.
         Args:
             model_abspath: Absolute path to the model data file
@@ -61,19 +69,12 @@ class SlicerOpenLIFUPhotoscan:
         with BusyCursor():
             model_data, texture_data = openlifu_lz().db.photoscan.load_data_from_filepaths(model_abspath, texture_abspath)
 
-        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        model_node.SetAndObservePolyData(model_data)
-        model_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
-        model_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{Path(model_abspath).stem}"))
-
-        texture_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVectorVolumeNode")
-        texture_node.SetAndObserveImageData(texture_data)
-        texture_node.SetAttribute('isOpenLIFUPhotoscan', 'True') 
-        texture_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{Path(texture_abspath).stem}"))
+        node_name_prefix = Path(model_abspath).stem
+        model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, node_name_prefix)
 
         # Create a dummy photoscan to keep track of metadata to apply to the openlifu object. This photoscan is not associated with the database
         photoscan_openlifu = openlifu_lz().db.photoscan.Photoscan(id = model_node.GetID(), 
-                                                                  name = Path(model_abspath).stem,
+                                                                  name = node_name_prefix,
                                                                   )
 
         return SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu), model_node,texture_node)
@@ -84,6 +85,8 @@ class SlicerOpenLIFUPhotoscan:
         slicer.mrmlScene.RemoveNode(self.texture_node)
 
     def show_model_with_texture(self):
+        """Displays the photoscan model node with the texture image applied"""
+        
         # Shift/Scale texture map to uchar
         filter = vtk.vtkImageShiftScale()
         typeString = self.texture_node.GetImageData().GetScalarTypeAsString()
