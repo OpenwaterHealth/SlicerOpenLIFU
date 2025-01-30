@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>524</width>
-    <height>235</height>
+    <height>237</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -57,13 +57,6 @@
        </layout>
       </item>
      </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QPushButton" name="loadPhotoscanButton">
-     <property name="text">
-      <string>Load photoscan</string>
-     </property>
     </widget>
    </item>
    <item>
