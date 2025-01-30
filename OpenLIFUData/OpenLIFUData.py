@@ -1433,8 +1433,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         volume_info = self.db.get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
+        # Returns an empty dictionary if no photoscans are found
         photoscan_info = {id:self.db.get_photoscan_info(subject_id, session_id, id) for id in self.db.get_photoscan_ids(subject_id, session_id)}
-        print(photoscan_info)
 
         # Create the SlicerOpenLIFU session object; this handles loading volume and targets
         new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(

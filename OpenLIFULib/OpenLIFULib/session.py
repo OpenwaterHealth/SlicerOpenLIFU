@@ -48,7 +48,7 @@ class SlicerOpenLIFUSession:
     in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
-    photoscan_info : dict = None
+    photoscan_info : dict
     """Dictionary containing photoscan_id: photoscan_info for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
     transducer tracking as required. We store the photoscans as photoscan_info dictionaries since we need the absolute filepaths to the associated model
@@ -118,11 +118,10 @@ class SlicerOpenLIFUSession:
         """Load and return the photoscan associated with photoscan_id"""
         
         photoscan_info = self.photoscan_info
-        parent_dir = Path(photoscan_info['model_abspath']).parent
         if photoscan_id not in photoscan_info.keys():
             raise ValueError(f"Photoscan ID {photoscan_id} is not associated with the current session")
-        openlifu_photoscan = openlifu_lz().photoscan.Photoscan.from_absolute
-        newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(openlifu_photoscan, parent_dir)
+        openlifu_photoscan = openlifu_lz().photoscan.Photoscan.from_absolute_filepaths_info(photoscan_info)
+        newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_data_filepaths(photoscan_info['model_abspath'], openlifu_photoscan)
         return newly_loaded_photoscan
 
     def clear_volume_and_target_nodes(self) -> None:
