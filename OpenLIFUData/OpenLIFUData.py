@@ -907,14 +907,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not returncode:
             return False
 
-        newly_loaded_photoscan = self.logic.load_photoscan_from_file(model_or_json_filepath, texture_filepath)
+        self.logic.load_photoscan_from_file(model_or_json_filepath, texture_filepath)
         self.updateLoadedObjectsView() # Call function here to update view based on node attributes (for texture volume)
-
-        # Visualize textured photoscan. NOTE: This functionality is temporary and 
-        # will be moved to the transducer tracking module once the functionality to
-        #  preview photoscans has been added.
-        if newly_loaded_photoscan:
-            newly_loaded_photoscan.show_model_with_texture()
            
     def updateLoadedObjectsView(self):
         self.loadedObjectsItemModel.removeRows(0,self.loadedObjectsItemModel.rowCount())
