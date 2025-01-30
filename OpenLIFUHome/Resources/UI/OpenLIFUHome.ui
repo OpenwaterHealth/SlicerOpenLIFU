@@ -65,6 +65,13 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QPushButton" name="protocolConfigPushButton">
+        <property name="text">
+         <string>OpenLIFU Protocol Configuration</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
