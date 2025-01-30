@@ -1417,10 +1417,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         volume_info = self.db.get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
+        affiliated_photoscans = {id:self.db.load_photoscan(subject_id, session_id, id) for id in self.db.get_photoscan_ids(subject_id, session_id)}
         # Create the SlicerOpenLIFU session object; this handles loading volume and targets
         new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(
             session_openlifu,
-            volume_info
+            volume_info,
+            affiliated_photoscans
         )
 
         # === Load transducer ===

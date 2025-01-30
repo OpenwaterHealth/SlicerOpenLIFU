@@ -1,4 +1,4 @@
-from typing import List, TYPE_CHECKING, Optional, Tuple
+from typing import List, TYPE_CHECKING, Optional, Tuple, Dict
 from pathlib import Path
 import numpy as np
 import slicer
@@ -10,7 +10,7 @@ from slicer import (
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.util import get_openlifu_data_parameter_node
 from OpenLIFULib.lazyimport import openlifu_lz
-from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper
+from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
 from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
     fiducial_to_openlifu_point,
@@ -25,8 +25,7 @@ from OpenLIFULib.coordinate_system_utils import (
 if TYPE_CHECKING:
     import openlifu
     import openlifu.db
-    from OpenLIFULib import SlicerOpenLIFUTransducer
-    from OpenLIFULib import SlicerOpenLIFUProtocol
+    from OpenLIFULib import SlicerOpenLIFUTransducer, SlicerOpenLIFUProtocol
 
 def assign_openlifu_metadata_to_volume_node(volume_node: vtkMRMLScalarVolumeNode, metadata: dict):
     """ Assign the volume name and ID used by OpenLIFU to a volume node"""
@@ -46,6 +45,12 @@ class SlicerOpenLIFUSession:
     """The list of targets that were loaded by loading the session. We remember these here just
     in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
+
+    affiliated_photoscans : Optional[Dict[str,SlicerOpenLIFUPhotoscanWrapper]] = None
+    """Dictionary containing photoscan_id: photoscan_info for any photoscans associated with the session. We keep track of 
+    any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
+    transducer tracking as required. We store the photoscans as photoscan_info dictionaries since we need the absolute filepaths to the associated model
+    and texture data files. To convert this dictionary to an openlifu photoscan, the data filepaths must first be converted to relative paths."""
 
     last_generated_solution_id : Optional[str] = None
     """The solution ID of the last solution that was generated for this session, or None if there isn't one.
@@ -103,6 +108,13 @@ class SlicerOpenLIFUSession:
         """
         return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
 
+    def get_affiliated_photoscan_ids(self):
+        return self.affiliated_photoscans.keys() if self.affiliated_photoscans else None
+    
+    def get_affiliated_photoscans(self):
+        """Returns a list of openlifu photoscans associated with this session"""
+        return [photoscan.photoscan for photoscan in self.affiliated_photoscans.values()] if self.affiliated_photoscans else None
+
     def clear_volume_and_target_nodes(self) -> None:
         """Clear the session's affiliated volume and target nodes from the scene."""
         for node in [self.volume_node, *self.target_nodes]:
@@ -121,7 +133,8 @@ class SlicerOpenLIFUSession:
     @staticmethod
     def initialize_from_openlifu_session(
         session : "openlifu.db.Session",
-        volume_info : dict
+        volume_info : dict,
+        affiliated_photoscans : Optional[Dict[str, "openlifu.Photoscan"]] = None
     ) -> "SlicerOpenLIFUSession":
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
 
@@ -129,6 +142,9 @@ class SlicerOpenLIFUSession:
             session: OpenLIFU Session
             volume_info: Dictionary containing the metadata (name, id and filepath) of the volume
             being loaded as part of the session
+            photoscan_absolute_filepaths_info: Dictionary containing the metadata (name, id, approval status and absolute 
+            data filepaths) for each of the photoscans affiliated with the session. The photoscans are only loaded as SlicerOpenLIFUPhotoscans
+            when the user runs tranducer tracking.
         """
 
         # Load volume
@@ -137,8 +153,13 @@ class SlicerOpenLIFUSession:
 
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
-
-        return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
+        
+        # Serialize list of affiliated openlifu photoscans
+        if affiliated_photoscans:
+            serialized_openlifu_photoscans = {photoscan.id:SlicerOpenLIFUPhotoscanWrapper(photoscan) for photoscan in affiliated_photoscans.values()}
+            return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes, serialized_openlifu_photoscans)
+        else:
+            return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
 
     def update_underlying_openlifu_session(self, targets : List[vtkMRMLMarkupsFiducialNode]) -> "openlifu.db.Session":
         """Update the underlying openlifu session and the list of target nodes that are considered to be affiliated with this session.
