@@ -15,6 +15,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/solution.py
   OpenLIFULib/algorithm_input_widget.py
   OpenLIFULib/coordinate_system_utils.py
+  OpenLIFULib/photoscan.py
 )
 
 set(MODULE_PYTHON_RESOURCES
