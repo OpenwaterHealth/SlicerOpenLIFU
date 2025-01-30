@@ -1771,7 +1771,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # then use the photoscan_metadata included in the json file to load the photoscan. 
             photoscan_json_filepath = Path(parent_dir, photoscan_id + '.json')
             if photoscan_json_filepath.exists():
-                photoscan_openlifu = openlifu_lz().db.Photoscan.from_file(photoscan_json_filepath)
+                photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(photoscan_json_filepath)
                 return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = photoscan_json_filepath.parent)
             else:
                 # Load from data filepaths
@@ -1781,7 +1781,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             
         # If the user selects a json file,use the photoscan_metadata included in the json file to load the photoscan.
         elif Path(model_or_json_filepath).suffix == '.json':
-                photoscan_openlifu = openlifu_lz().db.Photoscan.from_file(model_or_json_filepath)
+                photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(model_or_json_filepath)
                 return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = Path(model_or_json_filepath).parent)
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
