@@ -1724,18 +1724,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         the volume should be loaded based on openlifu metadata or default slicer parameters"""
 
         parent_dir = Path(filepath).parent
-        volume_id = parent_dir.name # assuming the user selected a volume within the database
-
+        # Load volume using use slicer default volume name and id based on filepath
         if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
-            # If a corresponding json file exists in the volume's parent directory,
-            # then use volume_metadata included in the json file
-            volume_json_filepath = Path(parent_dir, volume_id + '.json')
-            if volume_json_filepath.exists():
-                volume_metadata = json.loads(volume_json_filepath.read_text())
-                self.load_volume_from_openlifu(parent_dir, volume_metadata)
-            # Otherwise, use default volume name and id based on filepath
-            else:
-                slicer.util.loadVolume(filepath)
+            slicer.util.loadVolume(filepath)
 
         # If the user selects a json file, infer volume filepath information based on the volume_metadata.
         elif Path(filepath).suffix == '.json':
@@ -1757,21 +1748,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         the photoscan should be loaded based on openlifu metadata or default slicer parameters.
         """
 
-        parent_dir = Path(model_or_json_filepath).parent
-        photoscan_id = parent_dir.name # assuming the user selected a photoscan within the database
-
+        # Load from data filepaths
         if slicer.app.coreIOManager().fileType(model_or_json_filepath) == 'ModelFile':
-            # If a corresponding json file exists in the same directory as the selected model file,
-            # then use the photoscan_metadata included in the json file to load the photoscan. 
-            photoscan_json_filepath = Path(parent_dir, photoscan_id + '.json')
-            if photoscan_json_filepath.exists():
-                photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(photoscan_json_filepath)
-                return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = photoscan_json_filepath.parent)
-            else:
-                # Load from data filepaths
-                newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_data_filepaths(model_filepath, texture_filepath)
-                self.getParameterNode().loaded_photoscans[newly_loaded_photoscan.photoscan.photoscan.id] = newly_loaded_photoscan
-                return newly_loaded_photoscan
+            newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_data_filepaths(model_or_json_filepath, texture_filepath)
+            self.getParameterNode().loaded_photoscans[newly_loaded_photoscan.photoscan.photoscan.id] = newly_loaded_photoscan
+            return newly_loaded_photoscan
             
         # If the user selects a json file,use the photoscan_metadata included in the json file to load the photoscan.
         elif Path(model_or_json_filepath).suffix == '.json':
