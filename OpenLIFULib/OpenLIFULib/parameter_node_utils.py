@@ -274,7 +274,7 @@ class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLI
         Reads and returns the value with the given name from the parameterNode.
         """
         json_string = parameterNode.GetParameter(name)    
-        return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().db.Photoscan.from_json(json_string))
+        return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().photoscan.Photoscan.from_json(json_string))
 
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):

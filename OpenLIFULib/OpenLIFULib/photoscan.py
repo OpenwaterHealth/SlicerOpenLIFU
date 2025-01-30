@@ -51,7 +51,7 @@ class SlicerOpenLIFUPhotoscan:
         Returns: the newly constructed SlicerOpenLIFUPhotoscan object
         """
         with BusyCursor():
-            model_data, texture_data = openlifu_lz().db.photoscan.load_data_from_photoscan(photoscan, parent_dir = parent_dir)
+            model_data, texture_data = openlifu_lz().photoscan.load_data_from_photoscan(photoscan, parent_dir = parent_dir)
 
         model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, photoscan.id)
 
@@ -67,13 +67,13 @@ class SlicerOpenLIFUPhotoscan:
         """
 
         with BusyCursor():
-            model_data, texture_data = openlifu_lz().db.photoscan.load_data_from_filepaths(model_abspath, texture_abspath)
+            model_data, texture_data = openlifu_lz().photoscan.load_data_from_filepaths(model_abspath, texture_abspath)
 
         node_name_prefix = Path(model_abspath).stem
         model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, node_name_prefix)
 
         # Create a dummy photoscan to keep track of metadata to apply to the openlifu object. This photoscan is not associated with the database
-        photoscan_openlifu = openlifu_lz().db.photoscan.Photoscan(id = model_node.GetID(), 
+        photoscan_openlifu = openlifu_lz().photoscan.Photoscan(id = model_node.GetID(), 
                                                                   name = node_name_prefix,
                                                                   )
 
