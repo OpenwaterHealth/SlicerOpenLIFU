@@ -1,13 +1,16 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 import qt
 import slicer
-from slicer import vtkMRMLScalarVolumeNode, vtkMRMLMarkupsFiducialNode, vtkMRMLModelNode
+from slicer import vtkMRMLScalarVolumeNode
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
 from OpenLIFULib.util import get_openlifu_data_parameter_node
-from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
-from OpenLIFULib.photoscan import SlicerOpenLIFUPhotoscan
+from OpenLIFULib import SlicerOpenLIFUTransducer
+
 from OpenLIFULib.targets import get_target_candidates
+
+if TYPE_CHECKING:
+    import openlifu
 
 @dataclass
 class AlgorithmInput:
@@ -52,9 +55,8 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def add_volume_to_combobox(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
         self.inputs_dict["Volume"].combo_box.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
 
-    def add_photoscan_to_combobox(self, photoscan: SlicerOpenLIFUPhotoscan) -> None:
-        photoscan_openlifu = photoscan.photoscan.photoscan
-        self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(photoscan_openlifu.name, photoscan_openlifu.id , photoscan))
+    def add_photoscan_to_combobox(self, photoscan_openlifu: "openlifu.Photoscan") -> None:
+        self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(photoscan_openlifu.name, photoscan_openlifu.id , photoscan_openlifu))
 
     def set_session_related_combobox_tooltip(self, text:str):
         """Set tooltip on the transducer, protocol and volume comboboxes."""
@@ -111,11 +113,24 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                     valid_input_volumes += 1
             if valid_input_volumes == 0:
                 self.inputs_dict["Volume"].indicate_no_options()
+        
+        # Update photoscans combobox 
+        if "Photoscan" in self.inputs_dict:
+            if len(dataParameterNode.loaded_photoscans) == 0:
+                self.inputs_dict["Photoscan"].indicate_no_options()
+            else:
+                self.inputs_dict["Photoscan"].combo_box.setEnabled(True)
+                for photoscan in dataParameterNode.loaded_photoscans.values():
+                    photoscan_openlifu = photoscan.photoscan.photoscan
+                    self.add_photoscan_to_combobox(photoscan_openlifu)
 
         self.set_session_related_combobox_tooltip("")
 
     def _populate_from_session(self) -> None:
-        """Update protocol, transducer, and volume comboboxes if present based on the active session, and lock them.
+        """Update protocol, transducer and volume comboboxes if present based on the active session, and lock them.
+        
+        Populate the photoscan combobox if present with any photoscans saved under the session. The combobox should
+        not be locked since there can be multiple photoscans associated with a session. 
 
         Does not check that the session is still valid and everything it needs is there in the scene; make sure to
         check before using this.
@@ -124,10 +139,11 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         """
         session = get_openlifu_data_parameter_node().loaded_session
 
-        # These are the protocol, transducer, and volume that will be used
+        # These are the protocol, transducer, photoscans and and volume that will be used
         protocol : SlicerOpenLIFUProtocol = session.get_protocol()
         transducer : SlicerOpenLIFUTransducer = session.get_transducer()
         volume_node : vtkMRMLScalarVolumeNode = session.volume_node
+        affiliated_photoscans_list : List["openlifu.Photoscan"] = session.get_affiliated_photoscans()
 
         # Update protocol combo box
         if "Protocol" in self.inputs_dict:
@@ -145,6 +161,15 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             self.add_volume_to_combobox(volume_node)
 
         self.set_session_related_combobox_tooltip("This choice is fixed by the active session")
+
+        # Update photoscan combo box
+        if "Photoscan" in self.inputs_dict:
+            if affiliated_photoscans_list is None:
+                self.inputs_dict["Photoscan"].indicate_no_options()
+            else:
+                self.inputs_dict["Photoscan"].combo_box.setEnabled(True)
+                for photoscan_openlifu in affiliated_photoscans_list:
+                    self.add_photoscan_to_combobox(photoscan_openlifu) 
 
     def update(self):
         """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
@@ -166,18 +191,6 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 self.inputs_dict["Target"].combo_box.setEnabled(True)
                 for target_node in target_nodes:
                     self.inputs_dict["Target"].combo_box.addItem(target_node.GetName(), target_node)
-
-        # Update photoscans combobox 
-        # NOTE: This code can be moved to populate_from_loaded_objects once photoscans are associated with sessions
-        # The photoscan options are populated based on the data parameter node
-        dataParameterNode = get_openlifu_data_parameter_node()
-        if "Photoscan" in self.inputs_dict:
-            if len(dataParameterNode.loaded_photoscans) == 0:
-                self.inputs_dict["Photoscan"].indicate_no_options()
-            else:
-                self.inputs_dict["Photoscan"].combo_box.setEnabled(True)
-                for photoscan in dataParameterNode.loaded_photoscans.values():
-                    self.add_photoscan_to_combobox(photoscan)
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()
