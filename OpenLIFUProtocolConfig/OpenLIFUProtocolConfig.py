@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Annotated, Optional, Dict,TYPE_CHECKING
+from typing import Annotated, Optional, Dict, List, TYPE_CHECKING
 from enum import Enum
 
 import vtk
@@ -55,6 +55,11 @@ class OpenLIFUProtocolConfig(ScriptedLoadableModule):
             "and development."
         )
 
+class SaveState(Enum):
+    NO_CHANGES=0
+    UNSAVED_CHANGES=1
+    SAVED_CHANGES=2
+
 class FocalPatternType(Enum):
     SINGLE_POINT=0
     WHEEL=1
@@ -67,8 +72,12 @@ class FocalPatternType(Enum):
         else:
             raise ValueError(f"Unhandled enum value: {self}")
 
+    @staticmethod
+    def get_pattern_names() -> List[str]:
+        return ['single point', 'wheel']
+
     @classmethod
-    def to_enum(cls, focal_pattern: str) -> "FocalPatternType":
+    def from_string_to_enum(cls, focal_pattern: str) -> "FocalPatternType":
             if focal_pattern == "single point":
                 return cls.SINGLE_POINT
             elif focal_pattern == "wheel":
@@ -76,6 +85,15 @@ class FocalPatternType(Enum):
             else:
                 raise ValueError(f"Unknown focal pattern: {focal_pattern}")
 #
+    @classmethod
+    def from_classtype_to_enum(cls, focal_pattern_classname: str) -> "FocalPatternType":
+            if focal_pattern_classname == "SinglePoint":
+                return cls.SINGLE_POINT
+            elif focal_pattern_classname == "Wheel":
+                return cls.WHEEL
+            else:
+                raise ValueError(f"Unknown focal pattern class: {focal_pattern_classname}")
+
 # OpenLIFUProtocolConfigParameterNode
 #
 
@@ -104,6 +122,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.dataLogic = None
         self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
         self._parameterNodeGuiTag = None
+        self.focalPattern_type_to_pageName : Dict[FocalPatternType,str] = {
+            FocalPatternType.SINGLE_POINT : "singlePointPage",
+            FocalPatternType.WHEEL : "wheelPage",
+        }
+
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -135,20 +158,29 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
+        # Connect signals to trigger save state update
+        trigger_unsaved_changes = lambda: self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
+
+        self.ui.protocolNameLineEdit.textChanged.connect(trigger_unsaved_changes)
+        self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
+        self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseFrequencySpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseDurationSpinBox.valueChanged.connect(trigger_unsaved_changes)
+
+        self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
+        self.ui.numSpokesSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
+        self.ui.spokeRadiusSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
+
+        # Connect main widget functions
+
         self.ui.protocolSelector.textActivated.connect(self.onProtocolSelected)
         self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
+        # TODO: GOALS: 1) make it so that this results in blank fields with some
+        # possibly laid out. 
+        self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
 
         # === Connections and UI setup for Focal Pattern specifically =======
-
-        self.focalPattern_name_to_type : Dict[str,FocalPatternType] = {
-            'single point' : FocalPatternType.SINGLE_POINT,
-            'wheel' : FocalPatternType.WHEEL,
-        }
-        self.focalPattern_type_to_pageName : Dict[FocalPatternType,str] = {
-            FocalPatternType.SINGLE_POINT : "singlePointPage",
-            FocalPatternType.WHEEL : "wheelPage",
-        }
 
         self.ui.focalPatternComboBox.currentIndexChanged.connect(
             lambda : self.ui.focalPatternOptionsStackedWidget.setCurrentWidget(
@@ -158,7 +190,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 )
             )
         )
-        self.ui.focalPatternComboBox.addItems(list(self.focalPattern_name_to_type.keys()))
+        self.ui.focalPatternComboBox.addItems(FocalPatternType.get_pattern_names())
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -202,8 +234,43 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.protocolSelector.addItem(item)
 
     def onProtocolSelected(self, selected_protocol: str):
-        # TODO
-        print(selected_protocol)
+        # Extract the protocol id from what was chosen in the combo box
+        _, protocol_id = selected_protocol.rsplit(" (ID: ", maxsplit=1)
+        protocol_id = protocol_id.rstrip(")")
+        protocol = get_openlifu_data_parameter_node().loaded_protocols[protocol_id].protocol
+
+        # Set the main fields
+        self.ui.protocolNameLineEdit.setText(protocol.name)
+        self.ui.protocolIdLineEdit.setText(protocol.id)
+        self.ui.protocolDescriptionTextEdit.setPlainText(protocol.description)
+        self.ui.pulseFrequencySpinBox.setValue(protocol.pulse.frequency)
+        self.ui.pulseDurationSpinBox.setValue(protocol.pulse.duration)
+        
+        # Deal with getting the focal pattern
+        focal_pattern_classname: str = type(protocol.focal_pattern).__name__
+        focal_pattern: FocalPatternType = FocalPatternType.from_classtype_to_enum(focal_pattern_classname)
+        self.ui.focalPatternComboBox.setCurrentText(focal_pattern.to_string())
+
+        if focal_pattern == FocalPatternType.WHEEL:
+            self.ui.wheelCenterCheckBox.setCheckState(protocol.focal_pattern.center)
+            self.ui.numSpokesSpinBox.setValue(protocol.focal_pattern.num_spokes)  # wheel
+            self.ui.spokeRadiusSpinBox.setValue(protocol.focal_pattern.spoke_radius)  # wheel
+
+        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+
+    @display_errors
+    def onNewProtocolClicked(self, checked: bool) -> None:
+        """Set the widget fields with default protocol values."""
+        defaults = self.logic.DEFAULTS
+
+        self.ui.protocolNameLineEdit.setText(defaults["Name"])
+        self.ui.protocolIdLineEdit.setText(defaults["ID"])
+        self.ui.protocolDescriptionTextEdit.setPlainText(defaults["Description"])
+        self.ui.pulseFrequencySpinBox.setValue(defaults["Pulse frequency"])
+        self.ui.pulseDurationSpinBox.setValue(defaults["Pulse duration"])
+        self.ui.focalPatternComboBox.setCurrentText(defaults["Focal patten type"])
+
+        self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
 
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -217,6 +284,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         )
         if filepath:
             self.dataLogic.load_protocol_from_file(filepath)
+
+    def updateWidgetSaveState(self, state: SaveState):
+        if state == SaveState.NO_CHANGES:
+            self.ui.saveStateLabel.setProperty("text", "")  
+        elif state == SaveState.UNSAVED_CHANGES:
+            self.ui.saveStateLabel.setProperty("text", "You have unsaved changes!")
+            self.ui.saveStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 5px;")
+        elif state == SaveState.SAVED_CHANGES:
+            self.ui.saveStateLabel.setProperty("text", "Changes saved.")
+            self.ui.saveStateLabel.setProperty("styleSheet", "color: green; font-size: 16px;")
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -242,7 +319,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def getCurrentlySelectedFocalPatternType(self) -> FocalPatternType:
         """Return the type of focal pattern that is currently selected in the protocol configuration."""
-        return self.focalPattern_name_to_type[self.ui.focalPatternComboBox.currentText]
+        return FocalPatternType.from_string_to_enum(self.ui.focalPatternComboBox.currentText)
 
 
 #
@@ -259,6 +336,16 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     Uses ScriptedLoadableModuleLogic base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
+    
+    DEFAULTS = {
+        "Name": "New Protocol",
+        "ID": "new_protocol_1",
+        "Description": "",
+        "Pulse frequency": 0.00,
+        "Pulse duration": 0.00,
+        "Focal patten type": "single point",
+        "Focal patten options": None,
+    }
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
