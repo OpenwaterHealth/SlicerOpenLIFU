@@ -14,6 +14,16 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
+# TODO: somehow you need to observe the data logic so you can connect the button here to it.
+from OpenLIFULib import (
+    openlifu_lz,
+    get_openlifu_data_parameter_node
+)
+
+from OpenLIFULib.util import (
+    display_errors,
+)
+
 #
 # OpenLIFUProtocolConfig
 #
@@ -75,6 +85,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic: Optional[OpenLIFUProtocolConfigLogic] = None
+        self.dataLogic = None
         self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
         self._parameterNodeGuiTag = None
 
@@ -97,13 +108,21 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUProtocolConfigLogic()
 
-        # Connections
+        # Gets the logic _instance_ of the Data module
+        self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+        self.onDataParameterNodeModified()
+
+        # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # === Connections and UI setup for Protocol Configuration =======
+        self.ui.protocolSelector.textActivated.connect(self.onProtocolSelected)
+
+        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+
+        # === Connections and UI setup for Focal Pattern specifically =======
 
         self.focalPattern_name_to_type : Dict[str,FocalPatternType] = {
             'single point' : FocalPatternType.SINGLE_POINT,
@@ -153,6 +172,21 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+
+    def onDataParameterNodeModified(self, caller = None, event = None):
+        self.ui.protocolSelector.clear()
+
+        placeholder_text = "Select a protocol..."
+        self.ui.protocolSelector.setProperty("defaultText", placeholder_text)  
+        self.ui.protocolSelector.setProperty("placeholderText", placeholder_text)  
+
+        for protocol_id, protocol in get_openlifu_data_parameter_node().loaded_protocols.items():
+            item = f"{protocol.protocol.name} (ID: {protocol_id})"
+            self.ui.protocolSelector.addItem(item)
+
+    def onProtocolSelected(self, selected_protocol: str):
+        # TODO
+        print(selected_protocol)
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
