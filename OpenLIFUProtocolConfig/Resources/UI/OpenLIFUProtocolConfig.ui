@@ -106,10 +106,24 @@
               </property>
             </widget>
           </item>
+          <item row="3" column="1">
+            <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
+              <property name="toolTip">
+                <string>Frequency of the pulse in Hz</string>
+              </property>
+            </widget>
+          </item>
           <item row="4" column="0">
             <widget class="QLabel" name="pulseDurationLabel">
               <property name="text">
                 <string>Pulse duration</string>
+              </property>
+            </widget>
+          </item>
+          <item row="4" column="1">
+            <widget class="QDoubleSpinBox" name="pulseDurationSpinBox">
+              <property name="toolTip">
+                <string>Duration of the pulse in s</string>
               </property>
             </widget>
           </item>
@@ -126,6 +140,13 @@
                 <string>
                   Type of pattern to use to determine target points
                 </string>
+              </property>
+            </widget>
+          </item>
+          <item row="6" column="0">
+            <widget class="QLabel" name="focalPatternOptionsLabel">
+              <property name="text">
+                <string>Focal pattern options</string>
               </property>
             </widget>
           </item>
@@ -197,27 +218,6 @@
               </widget>
             </widget>
           </item>
-          <item row="6" column="0">
-            <widget class="QLabel" name="focalPatternOptionsLabel">
-              <property name="text">
-                <string>Focal pattern options</string>
-              </property>
-            </widget>
-          </item>
-          <item row="3" column="1">
-            <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
-              <property name="toolTip">
-                <string>Frequency of the pulse in Hz</string>
-              </property>
-            </widget>
-          </item>
-          <item row="4" column="1">
-            <widget class="QDoubleSpinBox" name="doubleSpinBox_2">
-              <property name="toolTip">
-                <string>Duration of the pulse in s</string>
-              </property>
-            </widget>
-          </item>
         </layout>
       </item>
       <item>
@@ -230,7 +230,7 @@
             </widget>
           </item>
           <item>
-            <widget class="QPushButton" name="pushButton">
+            <widget class="QPushButton" name="protocolDeleteButton">
               <property name="text">
                 <string>Delete Protocol</string>
               </property>
