@@ -221,6 +221,13 @@
         </layout>
       </item>
       <item>
+        <widget class="QLabel" name="saveStateLabel">
+          <property name="alignment">
+            <set>Qt::AlignCenter</set>
+          </property>
+        </widget>
+      </item>
+      <item>
         <layout class="QHBoxLayout" name="protocolButtonsLayout">
           <item>
             <widget class="QPushButton" name="protocolSaveButton">
