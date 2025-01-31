@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Annotated, Optional, Dict
+from typing import Annotated, Optional, Dict,TYPE_CHECKING
 from enum import Enum
 
 import vtk
@@ -58,6 +58,23 @@ class OpenLIFUProtocolConfig(ScriptedLoadableModule):
 class FocalPatternType(Enum):
     SINGLE_POINT=0
     WHEEL=1
+
+    def to_string(self) -> str:
+        match self:
+            case FocalPatternType.SINGLE_POINT:
+                return "single point"
+            case FocalPatternType.WHEEL:
+                return "wheel"
+
+    @classmethod
+    def to_enum(cls, focal_pattern: str) -> "FocalPatternType":
+        match focal_pattern:
+            case "single point":
+                return cls.SINGLE_POINT
+            case "wheel":
+                return cls.WHEEL
+            case _:
+                raise ValueError(f"Unknown focal pattern: {focal_pattern}")
 
 #
 # OpenLIFUProtocolConfigParameterNode
@@ -117,10 +134,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         self.ui.protocolSelector.textActivated.connect(self.onProtocolSelected)
 
-        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # === Connections and UI setup for Focal Pattern specifically =======
 
@@ -235,7 +252,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
-        return OpenLIFUProtocolConfigParameterNode(super().getParameterNode())
+        return OpenLIFUProtocolConfigParameterNode(super().getParameterNode())  # pyright: ignore[reportCallIssue]
 
 
 #
