@@ -60,22 +60,21 @@ class FocalPatternType(Enum):
     WHEEL=1
 
     def to_string(self) -> str:
-        match self:
-            case FocalPatternType.SINGLE_POINT:
-                return "single point"
-            case FocalPatternType.WHEEL:
-                return "wheel"
+        if self == FocalPatternType.SINGLE_POINT:
+            return "single point"
+        elif self == FocalPatternType.WHEEL:
+            return "wheel"
+        else:
+            raise ValueError(f"Unhandled enum value: {self}")
 
     @classmethod
     def to_enum(cls, focal_pattern: str) -> "FocalPatternType":
-        match focal_pattern:
-            case "single point":
+            if focal_pattern == "single point":
                 return cls.SINGLE_POINT
-            case "wheel":
+            elif focal_pattern == "wheel":
                 return cls.WHEEL
-            case _:
+            else:
                 raise ValueError(f"Unknown focal pattern: {focal_pattern}")
-
 #
 # OpenLIFUProtocolConfigParameterNode
 #
@@ -137,6 +136,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         self.ui.protocolSelector.textActivated.connect(self.onProtocolSelected)
+        self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
 
 
         # === Connections and UI setup for Focal Pattern specifically =======
@@ -204,6 +204,19 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onProtocolSelected(self, selected_protocol: str):
         # TODO
         print(selected_protocol)
+
+    @display_errors
+    def onLoadProtocolPressed(self, checked:bool) -> None:
+        qsettings = qt.QSettings()
+
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(), # parent
+            'Load protocol', # title of dialog
+            qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
+            "Protocols (*.json);;All Files (*)", # file type filter
+        )
+        if filepath:
+            self.dataLogic.load_protocol_from_file(filepath)
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
