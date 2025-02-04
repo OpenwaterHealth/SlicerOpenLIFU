@@ -183,6 +183,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
         self.ui.protocolSaveButton.connect("clicked()", self.onSaveProtocolClicked)
+        self.ui.protocolDeleteButton.connect("clicked()", self.onDeleteProtocolClicked)
 
         # === Connections and UI setup for Focal Pattern specifically =======
 
@@ -283,6 +284,50 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")
 
         self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
+
+    @display_errors
+    def onDeleteProtocolClicked(self) -> None:
+        selected_protocol = self.ui.protocolSelector.currentText
+        if selected_protocol == "Select a protocol...":
+            return
+
+        # Check if the user really wants to delete
+
+        want_delete = False
+        want_delete = slicer.util.confirmYesNoDisplay(
+            text = f'Are you sure you want to delete the protocol "{selected_protocol}"?',
+            windowTitle = "Protocol Delete Confirmation",
+        )
+        if not want_delete:
+            return
+
+        # Delete the protocol
+        
+        _, protocol_id = selected_protocol.rsplit(" (ID: ", maxsplit=1)
+        protocol_id = protocol_id.rstrip(")")
+
+        # we might delete a protocol that only exists temporarily
+        if protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
+            get_openlifu_data_parameter_node().loaded_protocols.pop(protocol_id)
+
+        self.logic.delete_protocol(protocol_id)  # delete in db
+
+        # Update the GUI
+
+        empty_protocol = openlifu_lz().plan.Protocol(
+            name = "",
+            id = "",
+            description = "",
+            pulse = openlifu_lz().bf.Pulse(frequency=0, duration=0),
+            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
+        )
+        self.updateProtocolDisplayFromProtocol(empty_protocol)
+        self.ui.protocolSelector.setCurrentText("Select a protocol...")
+        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+
+        # Notify user
+
+        slicer.util.infoDisplay("Protocol deleted.")
 
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -437,6 +482,12 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         if dataLogic.db is None:
             raise RuntimeError("Cannot save session because there is no database connection")
         dataLogic.db.write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+
+    def delete_protocol(self, protocol_id: str) -> None:
+        dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+        if dataLogic.db is None:
+            raise RuntimeError("Cannot delete protocol because there is no database connection")
+        dataLogic.db.delete_protocol(protocol_id, openlifu_lz().db.database.OnConflictOpts.ERROR)
 
 
 #
