@@ -12,23 +12,6 @@
     </property>
     <layout class="QVBoxLayout" name="protocolConfigLayout">
       <item>
-        <widget class="QLabel" name="label">
-          <property name="text">
-            <string>Module under construction</string>
-          </property>
-          <property name="styleSheet">
-            <string>
-              color: red;
-              font-size: 32px;
-              font-weight: bold;
-            </string>
-          </property>
-          <property name="alignment">
-            <set>Qt::AlignCenter</set>
-          </property>
-        </widget>
-      </item>
-      <item>
         <widget class="ctkComboBox" name="protocolSelector">
           <property name="defaultText">
             <string>Select a protocol...</string>
