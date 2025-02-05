@@ -10,24 +10,7 @@
         <height>695</height>
       </rect>
     </property>
-    <layout class="QVBoxLayout" name="verticalLayout_3">
-      <item>
-        <widget class="QLabel" name="label">
-          <property name="text">
-            <string>Module under construction</string>
-          </property>
-          <property name="styleSheet">
-            <string>
-              color: red;
-              font-size: 32px;
-              font-weight: bold;
-            </string>
-          </property>
-          <property name="alignment">
-            <set>Qt::AlignCenter</set>
-          </property>
-        </widget>
-      </item>
+    <layout class="QVBoxLayout" name="protocolConfigLayout">
       <item>
         <widget class="ctkComboBox" name="protocolSelector">
           <property name="defaultText">
@@ -74,7 +57,7 @@
           <item row="1" column="0">
             <widget class="QLabel" name="protocolIdLabel">
               <property name="text">
-                <string>ID</string>
+                <string>Protocol ID</string>
               </property>
             </widget>
           </item>
@@ -106,10 +89,24 @@
               </property>
             </widget>
           </item>
+          <item row="3" column="1">
+            <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
+              <property name="toolTip">
+                <string>Frequency of the pulse in Hz</string>
+              </property>
+            </widget>
+          </item>
           <item row="4" column="0">
             <widget class="QLabel" name="pulseDurationLabel">
               <property name="text">
                 <string>Pulse duration</string>
+              </property>
+            </widget>
+          </item>
+          <item row="4" column="1">
+            <widget class="QDoubleSpinBox" name="pulseDurationSpinBox">
+              <property name="toolTip">
+                <string>Duration of the pulse in s</string>
               </property>
             </widget>
           </item>
@@ -129,6 +126,13 @@
               </property>
             </widget>
           </item>
+          <item row="6" column="0">
+            <widget class="QLabel" name="focalPatternOptionsLabel">
+              <property name="text">
+                <string>Focal pattern options</string>
+              </property>
+            </widget>
+          </item>
           <item row="6" column="1">
             <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
               <property name="currentIndex">
@@ -136,7 +140,7 @@
               </property>
               <widget class="QWidget" name="noFocalPatternPage" />
               <widget class="QWidget" name="singlePointPage">
-                <layout class="QVBoxLayout" name="verticalLayout_4">
+                <layout class="QVBoxLayout" name="singlePointOptionsLayout">
                   <item>
                     <widget class="QLabel" name="singlePointOptionsLabel">
                       <property name="text">
@@ -152,7 +156,14 @@
                 </layout>
               </widget>
               <widget class="QWidget" name="wheelPage">
-                <layout class="QFormLayout" name="formLayout_2">
+                <layout class="QFormLayout" name="wheelOptionsLayout">
+                  <item row="0" column="0">
+                    <widget class="QLabel" name="wheelCenterLabel">
+                      <property name="text">
+                        <string>Center?</string>
+                      </property>
+                    </widget>
+                  </item>
                   <item row="0" column="1">
                     <widget class="QCheckBox" name="wheelCenterCheckBox">
                       <property name="toolTip">
@@ -173,13 +184,6 @@
                       </property>
                     </widget>
                   </item>
-                  <item row="0" column="0">
-                    <widget class="QLabel" name="wheelCenterLabel">
-                      <property name="text">
-                        <string>Center?</string>
-                      </property>
-                    </widget>
-                  </item>
                   <item row="1" column="1">
                     <widget class="QSpinBox" name="numSpokesSpinBox" />
                   </item>
@@ -197,28 +201,14 @@
               </widget>
             </widget>
           </item>
-          <item row="6" column="0">
-            <widget class="QLabel" name="focalPatternOptionsLabel">
-              <property name="text">
-                <string>Focal pattern options</string>
-              </property>
-            </widget>
-          </item>
-          <item row="3" column="1">
-            <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
-              <property name="toolTip">
-                <string>Frequency of the pulse in Hz</string>
-              </property>
-            </widget>
-          </item>
-          <item row="4" column="1">
-            <widget class="QDoubleSpinBox" name="doubleSpinBox_2">
-              <property name="toolTip">
-                <string>Duration of the pulse in s</string>
-              </property>
-            </widget>
-          </item>
         </layout>
+      </item>
+      <item>
+        <widget class="QLabel" name="dataStateLabel">
+          <property name="alignment">
+            <set>Qt::AlignCenter</set>
+          </property>
+        </widget>
       </item>
       <item>
         <layout class="QHBoxLayout" name="protocolButtonsLayout">
@@ -230,7 +220,14 @@
             </widget>
           </item>
           <item>
-            <widget class="QPushButton" name="pushButton">
+            <widget class="QPushButton" name="protocolRevertChangesButton">
+              <property name="text">
+                <string>Revert Changes</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="protocolDeleteButton">
               <property name="text">
                 <string>Delete Protocol</string>
               </property>
