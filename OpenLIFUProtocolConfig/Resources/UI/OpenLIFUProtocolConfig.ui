@@ -220,6 +220,13 @@
             </widget>
           </item>
           <item>
+            <widget class="QPushButton" name="protocolRevertChangesButton">
+              <property name="text">
+                <string>Revert Changes</string>
+              </property>
+            </widget>
+          </item>
+          <item>
             <widget class="QPushButton" name="protocolDatabaseDeleteButton">
               <property name="text">
                 <string>Delete Protocol From Database</string>
