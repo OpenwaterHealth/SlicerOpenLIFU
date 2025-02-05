@@ -181,6 +181,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
         self.ui.protocolSaveButton.clicked.connect(self.onSaveProtocolClicked)
+        self.ui.protocolRevertChangesButton.clicked.connect(self.onRevertChangesClicked)
         self.ui.protocolDeleteButton.clicked.connect(self.onDeleteProtocolClicked)
 
         # === Connections and UI setup for Focal Pattern specifically =======
@@ -317,6 +318,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
     @display_errors
+    def onRevertChangesClicked(self, checked: bool) -> None:
+        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+
+    @display_errors
     def onDeleteProtocolClicked(self, checked: bool) -> None:
         selected_protocol = self.ui.protocolSelector.currentText
         if selected_protocol == "Select a protocol...":
@@ -381,12 +386,15 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if state == SaveState.NO_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "")  
             self.ui.saveStateLabel.setProperty("styleSheet", "border: none;")
+            self.ui.protocolRevertChangesButton.setEnabled(False)
         elif state == SaveState.UNSAVED_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "You have unsaved changes!")
             self.ui.saveStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
+            self.ui.protocolRevertChangesButton.setEnabled(True)
         elif state == SaveState.SAVED_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "Changes saved.")
             self.ui.saveStateLabel.setProperty("styleSheet", "color: green; font-size: 16px; border: 2px solid green; padding: 30px;")
+            self.ui.protocolRevertChangesButton.setEnabled(False)
 
     def updateProtocolDisplayFromProtocol(self, protocol: "openlifu.plan.Protocol"):
         # Set the main fields
@@ -473,6 +481,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.spokeRadiusSpinBox.setEnabled(enabled)  # wheel
 
         self.ui.protocolSaveButton.setEnabled(enabled)
+        self.ui.protocolRevertChangesButton.setEnabled(enabled)
         self.ui.protocolDeleteButton.setEnabled(enabled)
 
 #
