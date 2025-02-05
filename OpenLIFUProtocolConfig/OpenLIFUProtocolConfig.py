@@ -14,7 +14,6 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-# TODO: somehow you need to observe the data logic so you can connect the button here to it.
 from OpenLIFULib import (
     openlifu_lz,
     get_openlifu_data_parameter_node
@@ -337,12 +336,29 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onRevertChangesClicked(self, checked: bool) -> None:
+        self.logic.cached_protocols.pop(self.logic.cur_protocol_id, None)  # delete in cache
+
+        # Reset to loaded protocol and visuals
+
+        protocol = get_openlifu_data_parameter_node().loaded_protocols[self.logic.cur_protocol_id].protocol
+        self.updateProtocolDisplayFromProtocol(protocol)
         self.updateWidgetDataState(DataState.NO_CHANGES)
 
     @display_errors
     def onDeleteProtocolFromDatabaseClicked(self, checked: bool) -> None:
+        empty_protocol = openlifu_lz().plan.Protocol(
+            name = "",
+            id = "",
+            description = "",
+            pulse = openlifu_lz().bf.Pulse(frequency=0, duration=0),
+            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
+        )
+
         selected_protocol = self.ui.protocolSelector.currentText
         if selected_protocol == "Select a protocol...":
+            # If no protocol is selected, we just wipe the screen and return
+            self.updateProtocolDisplayFromProtocol(empty_protocol)
+            self.updateWidgetDataState(DataState.NO_CHANGES)
             return
 
         # Check if the user really wants to delete
@@ -366,13 +382,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # Update the GUI
 
-        empty_protocol = openlifu_lz().plan.Protocol(
-            name = "",
-            id = "",
-            description = "",
-            pulse = openlifu_lz().bf.Pulse(frequency=0, duration=0),
-            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
-        )
         self.updateProtocolDisplayFromProtocol(empty_protocol)
         self.ui.protocolSelector.setCurrentText("Select a protocol...")
         self.updateWidgetDataState(DataState.NO_CHANGES)
@@ -420,7 +429,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         elif state == DataState.UNSAVED_CHANGES:
             self.ui.dataStateLabel.setProperty("text", "You have unsaved changes!")
             self.ui.dataStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
-            self.ui.protocolRevertChangesButton.setEnabled(True)
+            # You shouldn't be able to revert changes for uncacheable protocols
+            if self.logic.cur_protocol_id == self.logic.UNCACHEABLE_PROTOCOL_ID:
+                self.ui.protocolRevertChangesButton.setEnabled(False)
+            else:
+                self.ui.protocolRevertChangesButton.setEnabled(True)
         elif state == DataState.SAVED_CHANGES:
             self.ui.dataStateLabel.setProperty("text", "Changes saved.")
             self.ui.dataStateLabel.setProperty("styleSheet", "color: green; font-size: 16px; border: 2px solid green; padding: 30px;")
@@ -539,14 +552,14 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         "Focal patten options": None,
     }
 
-    UNCACHEABLE_PROTOCOL_ID = None
+    UNCACHEABLE_PROTOCOL_ID = ""
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = None
 
         self.cur_data_state = None
-        self.cur_protocol_id = None
+        self.cur_protocol_id = self.UNCACHEABLE_PROTOCOL_ID
         self.cached_protocols = {}
 
         ScriptedLoadableModuleLogic.__init__(self)
