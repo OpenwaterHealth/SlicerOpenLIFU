@@ -261,14 +261,35 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateWidgetDataState(DataState.NO_CHANGES)
 
     def onProtocolSelected(self, selected_protocol: str):
+
+        # Cache current changes
+
+        cur_protocol_changes = self.getProtocolFromGUI()
+        self.logic.cache_protocol(cur_protocol_changes)
+
         # Extract the protocol id from what was chosen in the combo box
+
         _, protocol_id = selected_protocol.rsplit(" (ID: ", maxsplit=1)
         protocol_id = protocol_id.rstrip(")")
-        protocol = get_openlifu_data_parameter_node().loaded_protocols[protocol_id].protocol
 
+        # Grab the protocol from the cache if it is there
+        if protocol_id in self.logic.cached_protocols:
+            protocol = self.logic.cached_protocols[protocol_id]
+        else:
+            protocol = get_openlifu_data_parameter_node().loaded_protocols[protocol_id].protocol
+
+        # Update current protocol
         self.updateProtocolDisplayFromProtocol(protocol)
+        self.logic.cur_protocol_id = protocol_id 
 
-        self.updateWidgetDataState(DataState.NO_CHANGES)
+        # Update state. We must do this last because
+        # updateProtocolDisplayFromProtocol will always set the state to
+        # UNSAVED_CHANGES
+
+        if protocol_id in self.logic.cached_protocols:
+            self.updateWidgetDataState(DataState.UNSAVED_CHANGES)
+        else:
+            self.updateWidgetDataState(DataState.NO_CHANGES)
 
     @display_errors
     def onNewProtocolClicked(self, checked: bool) -> None:
@@ -284,10 +305,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.focalPatternComboBox.setCurrentText(defaults["Focal patten type"])
 
         # Set the text of the protocolSelector to a nonexistent protocol
-        tmp_item = f'{defaults["Name"]} (ID: {unique_default_id})'
         self.ui.protocolSelector.setCurrentIndex(-1)
-        self.ui.protocolSelector.setCurrentText(tmp_item)
-
+        self.logic.cur_protocol_id = self.logic.UNCACHEABLE_PROTOCOL_ID
         self.updateWidgetDataState(DataState.UNSAVED_CHANGES)
 
     @display_errors
@@ -307,7 +326,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             if not want_overwrite:
                 return
 
+        self.logic.cached_protocols.pop(protocol.id, None)  # delete in cache
         self.logic.save_protocol_to_database(protocol)  # save to database
+
         self.logic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
         self.updateProtocolDisplayFromProtocol(protocol)  # update widget
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")
@@ -339,10 +360,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         _, protocol_id = selected_protocol.rsplit(" (ID: ", maxsplit=1)
         protocol_id = protocol_id.rstrip(")")
 
-        # we might delete a protocol that only exists temporarily
-        if protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
-            get_openlifu_data_parameter_node().loaded_protocols.pop(protocol_id)
-
+        get_openlifu_data_parameter_node().loaded_protocols.pop(protocol_id)  # unload protocol
+        self.logic.cached_protocols.pop(protocol_id, None)  # delete in cache
         self.logic.delete_protocol_from_database(protocol_id)  # delete in db
 
         # Update the GUI
@@ -372,12 +391,22 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
             "Protocols (*.json);;All Files (*)", # file type filter
         )
-        if filepath:
-            protocol = openlifu_lz().Protocol.from_file(filepath)
-            self.logic.load_protocol_from_openlifu(protocol)  # load to memory
-            self.updateProtocolDisplayFromProtocol(protocol)  # update widget
-            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
-            self.updateWidgetDataState(DataState.NO_CHANGES)  # update save state
+        if not filepath:
+            return
+
+        # Cache current changes
+
+        current_protocol_changes = self.getProtocolFromGUI()
+        self.logic.cache_protocol(current_protocol_changes)
+
+        # Load the new protocol
+
+        protocol = openlifu_lz().Protocol.from_file(filepath)
+        self.logic.load_protocol_from_openlifu(protocol)  # load to memory
+        self.updateProtocolDisplayFromProtocol(protocol)  # update widget
+        self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
+        self.logic.cur_protocol_id = protocol.id
+        self.updateWidgetDataState(DataState.NO_CHANGES)  # update save state
 
     def updateWidgetDataState(self, state: DataState):
         self.logic.cur_data_state = state
@@ -510,11 +539,15 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         "Focal patten options": None,
     }
 
+    UNCACHEABLE_PROTOCOL_ID = None
+
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = None
 
         self.cur_data_state = None
+        self.cur_protocol_id = None
+        self.cached_protocols = {}
 
         ScriptedLoadableModuleLogic.__init__(self)
 
@@ -555,6 +588,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         if self.dataLogic.db is None:
             raise RuntimeError("Cannot save protocol because there is no database connection")
         self.dataLogic.db.write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+
+    def cache_protocol(self, protocol_changes: "openlifu.plan.Protocol") -> None:
+        if self.cur_data_state == DataState.UNSAVED_CHANGES and self.cur_protocol_id is not self.UNCACHEABLE_PROTOCOL_ID:
+            self.cached_protocols[self.cur_protocol_id] = protocol_changes
 
     def delete_protocol_from_database(self, protocol_id: str) -> None:
         if self.dataLogic.db is None:
