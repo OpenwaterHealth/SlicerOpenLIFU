@@ -252,19 +252,24 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         for protocol_id, protocol in get_openlifu_data_parameter_node().loaded_protocols.items():
             item = f"{protocol.protocol.name} (ID: {protocol_id})"
+            if protocol_id in self.logic.cached_protocols:
+                item = "[ + ]  " + item
             self.ui.protocolSelector.addItem(item)
 
-        # We update the save state because we assume reloading all the
-        # protocols will reset changes
-
+        # We update the save state because we assume reloading all the protocols will reset changes
         self.updateWidgetDataState(DataState.NO_CHANGES)
 
     def onProtocolSelected(self, selected_protocol: str):
 
-        # Cache current changes
+        # Cache current changes and add indicator to selection
 
-        cur_protocol_changes = self.getProtocolFromGUI()
-        self.logic.cache_protocol(cur_protocol_changes)
+        current_protocol_changes = self.getProtocolFromGUI()
+        self.logic.cache_protocol(current_protocol_changes)
+
+        if self.logic.cur_data_state == DataState.UNSAVED_CHANGES:
+            prev_protocol = self.logic.cur_protocol_text.removeprefix("[ + ]  ")
+            prev_protocol_idx = self.ui.protocolSelector.findText(self.logic.cur_protocol_text)
+            self.ui.protocolSelector.setItemText(prev_protocol_idx, "[ + ]  " + prev_protocol)
 
         # Extract the protocol id from what was chosen in the combo box
 
@@ -280,11 +285,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Update current protocol
         self.updateProtocolDisplayFromProtocol(protocol)
         self.logic.cur_protocol_id = protocol_id 
+        self.logic.cur_protocol_text = self.ui.protocolSelector.currentText
 
-        # Update state. We must do this last because
-        # updateProtocolDisplayFromProtocol will always set the state to
-        # UNSAVED_CHANGES
-
+        # Update state. We must do this last because updateProtocolDisplayFromProtocol will always set the state to UNSAVED_CHANGES
         if protocol_id in self.logic.cached_protocols:
             self.updateWidgetDataState(DataState.UNSAVED_CHANGES)
         else:
@@ -306,6 +309,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Set the text of the protocolSelector to a nonexistent protocol
         self.ui.protocolSelector.setCurrentIndex(-1)
         self.logic.cur_protocol_id = self.logic.UNCACHEABLE_PROTOCOL_ID
+        self.logic.cur_protocol_text = ""
         self.updateWidgetDataState(DataState.UNSAVED_CHANGES)
 
     @display_errors
@@ -329,8 +333,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.logic.save_protocol_to_database(protocol)  # save to database
 
         self.logic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
+        self.logic.cur_protocol_id = protocol.id  # update current protocol
         self.updateProtocolDisplayFromProtocol(protocol)  # update widget
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")
+        self.logic.cur_protocol_text = self.ui.protocolSelector.currentText
 
         self.updateWidgetDataState(DataState.SAVED_CHANGES)
 
@@ -338,11 +344,17 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onRevertChangesClicked(self, checked: bool) -> None:
         self.logic.cached_protocols.pop(self.logic.cur_protocol_id, None)  # delete in cache
 
-        # Reset to loaded protocol and visuals
-
+        # Reset the editable fields of the protocol
         protocol = get_openlifu_data_parameter_node().loaded_protocols[self.logic.cur_protocol_id].protocol
         self.updateProtocolDisplayFromProtocol(protocol)
         self.updateWidgetDataState(DataState.NO_CHANGES)
+
+        # Reset the combo box entry for the protocol
+        prev_protocol = self.logic.cur_protocol_text.removeprefix("[ + ]  ")
+        prev_protocol_idx = self.ui.protocolSelector.findText(self.logic.cur_protocol_text)
+        self.ui.protocolSelector.setItemText(prev_protocol_idx, prev_protocol)
+        self.logic.cur_protocol_text = self.ui.protocolSelector.currentText
+
 
     @display_errors
     def onDeleteProtocolFromDatabaseClicked(self, checked: bool) -> None:
@@ -403,18 +415,24 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if not filepath:
             return
 
-        # Cache current changes
+        # Cache current changes and add indicator to selection
 
         current_protocol_changes = self.getProtocolFromGUI()
         self.logic.cache_protocol(current_protocol_changes)
+
+        if self.logic.cur_data_state == DataState.UNSAVED_CHANGES:
+            prev_protocol = self.logic.cur_protocol_text.removeprefix("[ + ]  ")
+            prev_protocol_idx = self.ui.protocolSelector.findText(self.logic.cur_protocol_text)
+            self.ui.protocolSelector.setItemText(prev_protocol_idx, "[ + ]  " + prev_protocol)
 
         # Load the new protocol
 
         protocol = openlifu_lz().Protocol.from_file(filepath)
         self.logic.load_protocol_from_openlifu(protocol)  # load to memory
+        self.logic.cur_protocol_id = protocol.id  # update current protocol
         self.updateProtocolDisplayFromProtocol(protocol)  # update widget
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
-        self.logic.cur_protocol_id = protocol.id
+        self.logic.cur_protocol_text = self.ui.protocolSelector.currentText
         self.updateWidgetDataState(DataState.NO_CHANGES)  # update save state
 
     def updateWidgetDataState(self, state: DataState):
@@ -560,6 +578,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
         self.cur_data_state = None
         self.cur_protocol_id = self.UNCACHEABLE_PROTOCOL_ID
+        self.cur_protocol_text = ""
         self.cached_protocols = {}
 
         ScriptedLoadableModuleLogic.__init__(self)
