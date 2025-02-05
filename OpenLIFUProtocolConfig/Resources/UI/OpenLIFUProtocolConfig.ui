@@ -204,7 +204,7 @@
         </layout>
       </item>
       <item>
-        <widget class="QLabel" name="saveStateLabel">
+        <widget class="QLabel" name="dataStateLabel">
           <property name="alignment">
             <set>Qt::AlignCenter</set>
           </property>

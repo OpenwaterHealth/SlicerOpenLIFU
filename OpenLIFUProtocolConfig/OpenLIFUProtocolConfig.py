@@ -59,7 +59,8 @@ class OpenLIFUProtocolConfig(ScriptedLoadableModule):
             "and development."
         )
 
-class SaveState(Enum):
+class DataState(Enum):
+    NO_DATABASE=-1
     NO_CHANGES=0
     UNSAVED_CHANGES=1
     SAVED_CHANGES=2
@@ -162,7 +163,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # Connect signals to trigger save state update
-        trigger_unsaved_changes = lambda: self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
+        trigger_unsaved_changes = lambda: self.updateWidgetDataState(DataState.UNSAVED_CHANGES)
 
         self.ui.protocolNameLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
@@ -205,6 +206,15 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+
+        # If there is no database loaded, widget should be grayed out
+        if not self.logic.database_is_loaded():
+            self.updateWidgetDataState(DataState.NO_DATABASE)
+            self.setAllWidgetsEnabled(False)
+        elif self.logic.cur_data_state == DataState.NO_DATABASE:
+            self.updateWidgetDataState(DataState.NO_CHANGES)
+            self.setAllWidgetsEnabled(True)
+
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
 
@@ -228,19 +238,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def onDataParameterNodeModified(self, caller = None, event = None):
 
-        # If there is no database loaded, widget should be grayed out
-
-        if not self.logic.database_is_loaded():
-            self.setAllWidgetsEnabled(False)
-            self.ui.saveStateLabel.setProperty("text", "You must load a database to configure protocols.")
-            self.ui.saveStateLabel.setProperty("styleSheet", "color: blue; font-weight: bold; font-size: 16px; border: 3px solid blue; padding: 30px;")
-            return
-
-        # If there is a database loaded, then set up the available protocols and
-        # editing widgets
-
-        self.setAllWidgetsEnabled(True)
-
         self.ui.protocolSelector.clear()
         
         if len(get_openlifu_data_parameter_node().loaded_protocols) == 0:
@@ -259,9 +256,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.protocolSelector.addItem(item)
 
         # We update the save state because we assume reloading all the
-        # protocols will reset all changes
+        # protocols will reset changes
 
-        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+        self.updateWidgetDataState(DataState.NO_CHANGES)
 
     def onProtocolSelected(self, selected_protocol: str):
         # Extract the protocol id from what was chosen in the combo box
@@ -271,7 +268,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.updateProtocolDisplayFromProtocol(protocol)
 
-        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+        self.updateWidgetDataState(DataState.NO_CHANGES)
 
     @display_errors
     def onNewProtocolClicked(self, checked: bool) -> None:
@@ -291,7 +288,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolSelector.setCurrentIndex(-1)
         self.ui.protocolSelector.setCurrentText(tmp_item)
 
-        self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
+        self.updateWidgetDataState(DataState.UNSAVED_CHANGES)
 
     @display_errors
     def onSaveProtocolClicked(self, checked: bool) -> None:
@@ -315,11 +312,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateProtocolDisplayFromProtocol(protocol)  # update widget
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")
 
-        self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
+        self.updateWidgetDataState(DataState.SAVED_CHANGES)
 
     @display_errors
     def onRevertChangesClicked(self, checked: bool) -> None:
-        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+        self.updateWidgetDataState(DataState.NO_CHANGES)
 
     @display_errors
     def onDeleteProtocolClicked(self, checked: bool) -> None:
@@ -359,7 +356,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         )
         self.updateProtocolDisplayFromProtocol(empty_protocol)
         self.ui.protocolSelector.setCurrentText("Select a protocol...")
-        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+        self.updateWidgetDataState(DataState.NO_CHANGES)
 
         # Notify user
 
@@ -380,20 +377,24 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.logic.load_protocol_from_openlifu(protocol)  # load to memory
             self.updateProtocolDisplayFromProtocol(protocol)  # update widget
             self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
-            self.updateWidgetSaveState(SaveState.NO_CHANGES)  # update save state
+            self.updateWidgetDataState(DataState.NO_CHANGES)  # update save state
 
-    def updateWidgetSaveState(self, state: SaveState):
-        if state == SaveState.NO_CHANGES:
-            self.ui.saveStateLabel.setProperty("text", "")  
-            self.ui.saveStateLabel.setProperty("styleSheet", "border: none;")
+    def updateWidgetDataState(self, state: DataState):
+        self.logic.cur_data_state = state
+        if state == DataState.NO_DATABASE:
+            self.ui.dataStateLabel.setProperty("text", "You must load a database to configure protocols.")
+            self.ui.dataStateLabel.setProperty("styleSheet", "color: blue; font-weight: bold; font-size: 16px; border: 3px solid blue; padding: 30px;")
+        elif state == DataState.NO_CHANGES:
+            self.ui.dataStateLabel.setProperty("text", "")  
+            self.ui.dataStateLabel.setProperty("styleSheet", "border: none;")
             self.ui.protocolRevertChangesButton.setEnabled(False)
-        elif state == SaveState.UNSAVED_CHANGES:
-            self.ui.saveStateLabel.setProperty("text", "You have unsaved changes!")
-            self.ui.saveStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
+        elif state == DataState.UNSAVED_CHANGES:
+            self.ui.dataStateLabel.setProperty("text", "You have unsaved changes!")
+            self.ui.dataStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
             self.ui.protocolRevertChangesButton.setEnabled(True)
-        elif state == SaveState.SAVED_CHANGES:
-            self.ui.saveStateLabel.setProperty("text", "Changes saved.")
-            self.ui.saveStateLabel.setProperty("styleSheet", "color: green; font-size: 16px; border: 2px solid green; padding: 30px;")
+        elif state == DataState.SAVED_CHANGES:
+            self.ui.dataStateLabel.setProperty("text", "Changes saved.")
+            self.ui.dataStateLabel.setProperty("styleSheet", "color: green; font-size: 16px; border: 2px solid green; padding: 30px;")
             self.ui.protocolRevertChangesButton.setEnabled(False)
 
     def updateProtocolDisplayFromProtocol(self, protocol: "openlifu.plan.Protocol"):
@@ -512,6 +513,9 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = None
+
+        self.cur_data_state = None
+
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
