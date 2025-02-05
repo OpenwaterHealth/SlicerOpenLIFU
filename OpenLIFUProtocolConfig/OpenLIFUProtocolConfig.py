@@ -169,6 +169,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.pulseFrequencySpinBox.valueChanged.connect(trigger_unsaved_changes)
         self.ui.pulseDurationSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.focalPatternComboBox.currentIndexChanged.connect(trigger_unsaved_changes)
 
         self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
         self.ui.numSpokesSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
@@ -208,11 +209,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # If there is no database loaded, widget should be grayed out
         if not self.logic.database_is_loaded():
-            self.updateWidgetDataState(DataState.NO_DATABASE)
             self.setAllWidgetsEnabled(False)
+            self.updateWidgetDataState(DataState.NO_DATABASE)
         elif self.logic.cur_data_state == DataState.NO_DATABASE:
-            self.updateWidgetDataState(DataState.NO_CHANGES)
             self.setAllWidgetsEnabled(True)
+            self.updateWidgetDataState(DataState.NO_CHANGES)
 
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
@@ -576,7 +577,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = None
 
-        self.cur_data_state = None
+        self.cur_data_state = DataState.NO_DATABASE
         self.cur_protocol_id = self.UNCACHEABLE_PROTOCOL_ID
         self.cur_protocol_text = ""
         self.cached_protocols = {}
