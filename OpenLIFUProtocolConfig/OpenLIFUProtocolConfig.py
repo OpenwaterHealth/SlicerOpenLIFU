@@ -177,11 +177,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Connect main widget functions
 
         self.ui.protocolSelector.textActivated.connect(self.onProtocolSelected)
-        self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolClicked)
+        self.ui.loadProtocolFromFileButton.clicked.connect(self.onLoadProtocolClicked)
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
-        self.ui.protocolSaveButton.clicked.connect(self.onSaveProtocolClicked)
-        self.ui.protocolDeleteButton.clicked.connect(self.onDeleteProtocolClicked)
+        self.ui.protocolDatabaseSaveButton.clicked.connect(self.onSaveProtocolToDatabaseClicked)
+        self.ui.protocolDatabaseDeleteButton.clicked.connect(self.onDeleteProtocolFromDatabaseClicked)
 
         # === Connections and UI setup for Focal Pattern specifically =======
 
@@ -293,7 +293,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
 
     @display_errors
-    def onSaveProtocolClicked(self, checked: bool) -> None:
+    def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
         protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI()
 
         if protocol.id == "":
@@ -309,7 +309,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             if not want_overwrite:
                 return
 
-        self.logic.save_protocol(protocol)  # save to database
+        self.logic.save_protocol_to_database(protocol)  # save to database
         self.logic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
         self.updateProtocolDisplayFromProtocol(protocol)  # update widget
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")
@@ -317,7 +317,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
     @display_errors
-    def onDeleteProtocolClicked(self, checked: bool) -> None:
+    def onDeleteProtocolFromDatabaseClicked(self, checked: bool) -> None:
         selected_protocol = self.ui.protocolSelector.currentText
         if selected_protocol == "Select a protocol...":
             return
@@ -341,7 +341,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
             get_openlifu_data_parameter_node().loaded_protocols.pop(protocol_id)
 
-        self.logic.delete_protocol(protocol_id)  # delete in db
+        self.logic.delete_protocol_from_database(protocol_id)  # delete in db
 
         # Update the GUI
 
@@ -358,7 +358,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # Notify user
 
-        slicer.util.infoDisplay("Protocol deleted.")
+        slicer.util.infoDisplay("Protocol deleted from database.")
 
     @display_errors
     def onLoadProtocolClicked(self, checked:bool) -> None:
@@ -459,7 +459,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def setAllWidgetsEnabled(self, enabled: bool) -> None:
         self.ui.protocolSelector.setEnabled(enabled)
-        self.ui.loadProtocolButton.setEnabled(enabled)
+        self.ui.loadProtocolFromFileButton.setEnabled(enabled)
         self.ui.createNewProtocolButton.setEnabled(enabled)
         
         self.ui.protocolNameLineEdit.setEnabled(enabled)
@@ -472,8 +472,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.numSpokesSpinBox.setEnabled(enabled)  # wheel
         self.ui.spokeRadiusSpinBox.setEnabled(enabled)  # wheel
 
-        self.ui.protocolSaveButton.setEnabled(enabled)
-        self.ui.protocolDeleteButton.setEnabled(enabled)
+        self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
+        self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
 
 #
 # OpenLIFUProtocolConfigLogic
@@ -538,12 +538,12 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             """
             self.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed)
 
-    def save_protocol(self, protocol: "openlifu.plan.Protocol") -> None:
+    def save_protocol_to_database(self, protocol: "openlifu.plan.Protocol") -> None:
         if self.dataLogic.db is None:
             raise RuntimeError("Cannot save protocol because there is no database connection")
         self.dataLogic.db.write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
-    def delete_protocol(self, protocol_id: str) -> None:
+    def delete_protocol_from_database(self, protocol_id: str) -> None:
         if self.dataLogic.db is None:
             raise RuntimeError("Cannot delete protocol because there is no database connection")
         self.dataLogic.db.delete_protocol(protocol_id, openlifu_lz().db.database.OnConflictOpts.ERROR)
