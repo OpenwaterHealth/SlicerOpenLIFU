@@ -79,6 +79,7 @@ class OpenLIFUData(ScriptedLoadableModule):
 @parameterNodeWrapper
 class OpenLIFUDataParameterNode:
     databaseDirectory : Path
+    database_is_loaded : bool
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
     loaded_solution : "Optional[SlicerOpenLIFUSolution]"
@@ -1302,6 +1303,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         }
 
         subject_names = [subject.name for subject in self._subjects.values()]
+
+        self.getParameterNode().database_is_loaded = True
 
         return zip(subject_ids, subject_names)
 

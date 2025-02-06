@@ -176,8 +176,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # Connect main widget functions
 
-        self.ui.protocolSelector.textActivated.connect(self.onProtocolSelected)
-        self.ui.loadProtocolFromFileButton.clicked.connect(self.onLoadProtocolClicked)
+        self.ui.protocolSelector.currentIndexChanged.connect(self.onProtocolSelected)
+        self.ui.loadProtocolFromFileButton.clicked.connect(self.onLoadProtocolFromFileClicked)
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
         self.ui.protocolDatabaseSaveButton.clicked.connect(self.onSaveProtocolToDatabaseClicked)
@@ -228,48 +228,37 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onDataParameterNodeModified(self, caller = None, event = None):
 
         # If there is no database loaded, widget should be grayed out
-
-        if not self.logic.database_is_loaded():
+        if not get_openlifu_data_parameter_node().database_is_loaded:
             self.setAllWidgetsEnabled(False)
             self.ui.saveStateLabel.setProperty("text", "You must load a database to configure protocols.")
             self.ui.saveStateLabel.setProperty("styleSheet", "color: blue; font-weight: bold; font-size: 16px; border: 3px solid blue; padding: 30px;")
             return
 
-        # If there is a database loaded, then set up the available protocols and
-        # editing widgets
+        # If there is a database loaded, then set up the available protocols and editing widgets
 
         self.setAllWidgetsEnabled(True)
 
         self.ui.protocolSelector.clear()
-        
         if len(get_openlifu_data_parameter_node().loaded_protocols) == 0:
-            placeholder_text = "No protocols to select"
             tooltip = "Load a protocol first in order to select it for editing"
+            self.ui.protocolSelector.setProperty("defaultText", "No protocols to select.")  
+            self.setProtocolEditorEnabled(False)
         else:
-            placeholder_text = "Select a protocol..."
-            tooltip = ""
+            tooltip = "Select a protocol..."
+            for protocol_id, protocol in get_openlifu_data_parameter_node().loaded_protocols.items():
+                text = f"{protocol.protocol.name} (ID: {protocol_id})"
+                self.ui.protocolSelector.addItem(text, protocol.protocol)
+            self.setProtocolEditorEnabled(True)
 
         self.ui.protocolSelector.setToolTip(tooltip)
-        self.ui.protocolSelector.setProperty("defaultText", placeholder_text)  
-        self.ui.protocolSelector.setProperty("placeholderText", placeholder_text)  
 
-        for protocol_id, protocol in get_openlifu_data_parameter_node().loaded_protocols.items():
-            item = f"{protocol.protocol.name} (ID: {protocol_id})"
-            self.ui.protocolSelector.addItem(item)
-
-        # We update the save state because we assume reloading all the
-        # protocols will reset all changes
-
+        # We update the save state because we assume reloading all the protocols will reset all changes
         self.updateWidgetSaveState(SaveState.NO_CHANGES)
 
-    def onProtocolSelected(self, selected_protocol: str):
-        # Extract the protocol id from what was chosen in the combo box
-        _, protocol_id = selected_protocol.rsplit(" (ID: ", maxsplit=1)
-        protocol_id = protocol_id.rstrip(")")
-        protocol = get_openlifu_data_parameter_node().loaded_protocols[protocol_id].protocol
-
-        self.updateProtocolDisplayFromProtocol(protocol)
-
+    def onProtocolSelected(self):
+        protocol = self.ui.protocolSelector.currentData
+        if protocol is not None:
+            self.updateProtocolDisplayFromProtocol(protocol)
         self.updateWidgetSaveState(SaveState.NO_CHANGES)
 
     @display_errors
@@ -289,6 +278,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         tmp_item = f'{defaults["Name"]} (ID: {unique_default_id})'
         self.ui.protocolSelector.setCurrentIndex(-1)
         self.ui.protocolSelector.setCurrentText(tmp_item)
+
+        self.setProtocolEditorEnabled(True)  # enable editor
 
         self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
 
@@ -310,7 +301,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 return
 
         self.logic.save_protocol_to_database(protocol)  # save to database
-        self.logic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
+        self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
         self.updateProtocolDisplayFromProtocol(protocol)  # update widget
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")
 
@@ -318,50 +309,26 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onDeleteProtocolFromDatabaseClicked(self, checked: bool) -> None:
-        selected_protocol = self.ui.protocolSelector.currentText
-        if selected_protocol == "Select a protocol...":
-            return
-
+        protocol = self.ui.protocolSelector.currentData
         # Check if the user really wants to delete
-
         want_delete = False
         want_delete = slicer.util.confirmYesNoDisplay(
-            text = f'Are you sure you want to delete the protocol "{selected_protocol}"?',
+            text = f'Are you sure you want to delete the protocol "{self.ui.protocolSelector.currentText}"?',
             windowTitle = "Protocol Delete Confirmation",
         )
         if not want_delete:
             return
 
         # Delete the protocol
-        
-        _, protocol_id = selected_protocol.rsplit(" (ID: ", maxsplit=1)
-        protocol_id = protocol_id.rstrip(")")
 
-        # we might delete a protocol that only exists temporarily
-        if protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
-            get_openlifu_data_parameter_node().loaded_protocols.pop(protocol_id)
-
-        self.logic.delete_protocol_from_database(protocol_id)  # delete in db
-
-        # Update the GUI
-
-        empty_protocol = openlifu_lz().plan.Protocol(
-            name = "",
-            id = "",
-            description = "",
-            pulse = openlifu_lz().bf.Pulse(frequency=0, duration=0),
-            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
-        )
-        self.updateProtocolDisplayFromProtocol(empty_protocol)
-        self.ui.protocolSelector.setCurrentText("Select a protocol...")
-        self.updateWidgetSaveState(SaveState.NO_CHANGES)
+        self.logic.delete_protocol_from_database(protocol.id)  # delete in db
+        get_openlifu_data_parameter_node().loaded_protocols.pop(protocol.id)  # unload (calls onDataParameterNodeModified)
 
         # Notify user
-
         slicer.util.infoDisplay("Protocol deleted from database.")
 
     @display_errors
-    def onLoadProtocolClicked(self, checked:bool) -> None:
+    def onLoadProtocolFromFileClicked(self, checked:bool) -> None:
         qsettings = qt.QSettings()
 
         filepath: str = qt.QFileDialog.getOpenFileName(
@@ -371,11 +338,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             "Protocols (*.json);;All Files (*)", # file type filter
         )
         if filepath:
-            protocol = openlifu_lz().Protocol.from_file(filepath)
-            self.logic.load_protocol_from_openlifu(protocol)  # load to memory
-            self.updateProtocolDisplayFromProtocol(protocol)  # update widget
-            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
-            self.updateWidgetSaveState(SaveState.NO_CHANGES)  # update save state
+            self.logic.dataLogic.load_protocol_from_file(filepath)
 
     def updateWidgetSaveState(self, state: SaveState):
         if state == SaveState.NO_CHANGES:
@@ -457,20 +420,17 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         return protocol
 
+    def setProtocolEditorEnabled(self, enabled: bool) -> None:
+        self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
+        self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
+        self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+
     def setAllWidgetsEnabled(self, enabled: bool) -> None:
         self.ui.protocolSelector.setEnabled(enabled)
         self.ui.loadProtocolFromFileButton.setEnabled(enabled)
         self.ui.createNewProtocolButton.setEnabled(enabled)
         
-        self.ui.protocolNameLineEdit.setEnabled(enabled)
-        self.ui.protocolIdLineEdit.setEnabled(enabled)
-        self.ui.protocolDescriptionTextEdit.setEnabled(enabled)
-        self.ui.pulseFrequencySpinBox.setEnabled(enabled)
-        self.ui.pulseDurationSpinBox.setEnabled(enabled)
-        self.ui.focalPatternComboBox.setEnabled(enabled)
-        self.ui.wheelCenterCheckBox.setEnabled(enabled)  # wheel
-        self.ui.numSpokesSpinBox.setEnabled(enabled)  # wheel
-        self.ui.spokeRadiusSpinBox.setEnabled(enabled)  # wheel
+        self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
 
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
@@ -514,29 +474,12 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     def protocol_id_exists(self, protocol_id: str) -> bool:
         return self.protocol_id_is_loaded(protocol_id) or protocol_id in self.dataLogic.db.get_protocol_ids()
 
-    def database_is_loaded(self) -> bool:
-        return self.dataLogic.db is not None
-
     def generate_unique_default_id(self) -> str:
         i = 1
         base_name = self.DEFAULTS['ID']
         while self.protocol_id_is_loaded(name := f"{base_name}_{i}"):
             i += 1
         return name
-
-    def load_protocol_from_file(self, filepath:str) -> None:
-        self.dataLogic.open_protocol_from_file(filepath)
-
-    def load_protocol_from_openlifu(self, protocol:"openlifu.Protocol", replace_confirmed: bool = False) -> None:
-            """Load an openlifu protocol object into the scene as a SlicerOpenLIFUProtocol,
-            adding it to the list of loaded openlifu objects.
-
-            Args:
-                protocol: The openlifu Protocol object
-                replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Protocol.
-                    This could be used for example if we already know the user is okay with re-loading the protocol.
-            """
-            self.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed)
 
     def save_protocol_to_database(self, protocol: "openlifu.plan.Protocol") -> None:
         if self.dataLogic.db is None:
