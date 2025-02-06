@@ -19,12 +19,12 @@
         </widget>
       </item>
       <item>
-        <widget class="QPushButton" name="loadProtocolButton">
+        <widget class="QPushButton" name="loadProtocolFromFileButton">
           <property name="toolTip">
             <string>Load an openlifu protocol from json</string>
           </property>
           <property name="text">
-            <string>Load Protocol</string>
+            <string>Load Protocol From File</string>
           </property>
         </widget>
       </item>
@@ -213,16 +213,16 @@
       <item>
         <layout class="QHBoxLayout" name="protocolButtonsLayout">
           <item>
-            <widget class="QPushButton" name="protocolSaveButton">
+            <widget class="QPushButton" name="protocolDatabaseSaveButton">
               <property name="text">
-                <string>Save Protocol</string>
+                <string>Save Protocol To Database</string>
               </property>
             </widget>
           </item>
           <item>
-            <widget class="QPushButton" name="protocolDeleteButton">
+            <widget class="QPushButton" name="protocolDatabaseDeleteButton">
               <property name="text">
-                <string>Delete Protocol</string>
+                <string>Delete Protocol From Database</string>
               </property>
             </widget>
           </item>
