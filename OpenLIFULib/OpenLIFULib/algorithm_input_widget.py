@@ -170,6 +170,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 self.inputs_dict["Photoscan"].combo_box.setEnabled(True)
                 for photoscan_openlifu in affiliated_photoscans_list:
                     self.add_photoscan_to_combobox(photoscan_openlifu) 
+            self.inputs_dict["Photoscan"].combo_box.setToolTip("These choices are based on the active session")
 
     def update(self):
         """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
