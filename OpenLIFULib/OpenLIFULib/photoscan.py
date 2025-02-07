@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 import vtk
 from pathlib import Path
 import slicer
@@ -43,19 +43,23 @@ class SlicerOpenLIFUPhotoscan:
         return model_node, texture_node
     
     @staticmethod
-    def initialize_from_openlifu_photoscan(photoscan : "openlifu.Photoscan", parent_dir) -> "SlicerOpenLIFUPhotoscan":
+    def initialize_from_openlifu_photoscan(photoscan_openlifu : "openlifu.Photoscan",
+                                           model_data: vtk.vtkPolyData,
+                                           texture_data: vtk.vtkImageData
+                                           ) -> "SlicerOpenLIFUPhotoscan":
         """Create a SlicerOpenLIFUPhotoscan from an openlifu Photoscan.
         Args:
             photoscan: OpenLIFU Photoscan object
-            parent_dir: Absolute path to folder containing photoscan data
+            model_data: vtkPolyData
+            texture_data: vtkImageData
         Returns: the newly constructed SlicerOpenLIFUPhotoscan object
         """
-        with BusyCursor():
-            model_data, texture_data = openlifu_lz().photoscan.load_data_from_photoscan(photoscan, parent_dir = parent_dir)
-
-        model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, photoscan.id)
-
-        return SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan),model_node,texture_node)
+        
+        model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, photoscan_openlifu.id)
+        photoscan = SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu),model_node,texture_node)
+        photoscan.apply_texture_to_model()
+        
+        return photoscan
 
     @staticmethod
     def initialize_from_data_filepaths(model_abspath, texture_abspath) -> "SlicerOpenLIFUPhotoscan":
@@ -76,16 +80,17 @@ class SlicerOpenLIFUPhotoscan:
         photoscan_openlifu = openlifu_lz().photoscan.Photoscan(id = model_node.GetID(), 
                                                                   name = node_name_prefix,
                                                                   )
-
-        return SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu), model_node,texture_node)
-
+        photoscan = SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu), model_node,texture_node)
+        photoscan.apply_texture_to_model()
+        return photoscan
+    
     def clear_nodes(self) -> None:
         """Clear associated mrml nodes from the scene."""
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.texture_node)
 
-    def show_model_with_texture(self):
-        """Displays the photoscan model node with the texture image applied"""
+    def apply_texture_to_model(self):
+        """Apply the texture image to the model node"""
         
         # Shift/Scale texture map to uchar
         filter = vtk.vtkImageShiftScale()
@@ -100,13 +105,16 @@ class SlicerOpenLIFUPhotoscan:
         filter.SetClampOverflow(True)
         filter.Update()
 
-        self.model_node.CreateDefaultDisplayNodes()
+        self.model_node.CreateDefaultDisplayNodes() # By default, this turns model visibility on
         modelDisplayNode = self.model_node.GetDisplayNode()
         modelDisplayNode.SetBackfaceCulling(0)
         textureImageFlipVert = vtk.vtkImageFlip()
         textureImageFlipVert.SetFilteredAxis(1)
         textureImageFlipVert.SetInputConnection(filter.GetOutputPort())
         modelDisplayNode.SetTextureImageDataConnection(textureImageFlipVert.GetOutputPort())
+
+        # Turn model visibility off
+        modelDisplayNode.SetVisibility(False)
 
     def is_approved(self) -> bool:
         return self.photoscan.photoscan.photoscan_approved
