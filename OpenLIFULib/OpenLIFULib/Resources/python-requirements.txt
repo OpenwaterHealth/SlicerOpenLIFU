@@ -1,1 +1,1 @@
-git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@9a1590d14fb7dddbc3cc1dcffe3c30188f6ba704
+git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@0233a10efd1669df4a3b74a601f887797ab3229e
