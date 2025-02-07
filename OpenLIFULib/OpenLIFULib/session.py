@@ -47,10 +47,9 @@ class SlicerOpenLIFUSession:
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
     affiliated_photoscans : Optional[Dict[str,SlicerOpenLIFUPhotoscanWrapper]] = None
-    """Dictionary containing photoscan_id: photoscan_info for any photoscans associated with the session. We keep track of 
+    """Dictionary containing photoscan_id: SlicerOpenLIFUPhotoscanWrapper for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
-    transducer tracking as required. We store the photoscans as photoscan_info dictionaries since we need the absolute filepaths to the associated model
-    and texture data files. To convert this dictionary to an openlifu photoscan, the data filepaths must first be converted to relative paths."""
+    transducer tracking as required. SlicerOpenLIFUPhotoscanWarpper is a wrapper around an openlifu photoscan so that it is serializable."""
 
     last_generated_solution_id : Optional[str] = None
     """The solution ID of the last solution that was generated for this session, or None if there isn't one.
@@ -134,7 +133,6 @@ class SlicerOpenLIFUSession:
     def initialize_from_openlifu_session(
         session : "openlifu.db.Session",
         volume_info : dict,
-        affiliated_photoscans : Optional[Dict[str, "openlifu.Photoscan"]] = None
     ) -> "SlicerOpenLIFUSession":
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
 
@@ -154,12 +152,13 @@ class SlicerOpenLIFUSession:
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
         
+        return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
+
+    def update_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
+        
         # Serialize list of affiliated openlifu photoscans
-        if affiliated_photoscans:
-            serialized_openlifu_photoscans = {photoscan.id:SlicerOpenLIFUPhotoscanWrapper(photoscan) for photoscan in affiliated_photoscans.values()}
-            return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes, serialized_openlifu_photoscans)
-        else:
-            return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
+        serialized_openlifu_photoscans = {photoscan.id:SlicerOpenLIFUPhotoscanWrapper(photoscan) for photoscan in affiliated_photoscans.values()}
+        self.affiliated_photoscans = serialized_openlifu_photoscans
 
     def update_underlying_openlifu_session(self, targets : List[vtkMRMLMarkupsFiducialNode]) -> "openlifu.db.Session":
         """Update the underlying openlifu session and the list of target nodes that are considered to be affiliated with this session.

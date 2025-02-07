@@ -814,6 +814,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         _, session_id = self.getSubjectSessionAtIndex(currentIndex)
         _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
         self.logic.add_photoscan_to_database(subject_id, session_id, photoscan_dict)
+        
+        # If the photoscan is being added to a currently active session,
+        # update the session and the transducer tracking module to reflect the added photoscan.
+        loaded_session = self._parameterNode.loaded_session
+        if loaded_session is not None and session_id == loaded_session.get_session_id():
+            self.logic.update_photoscans_affiliated_with_loaded_session()
+            # Update the transducer tracking drop down to reflect new photoscans 
+            transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerTracker').widgetRepresentation()
+            transducer_tracking_widget.self().algorithm_input_widget.update()
 
     def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
         """ Adds sessions to the Subject/Session selector for the subject specified by 'index'.
@@ -1352,6 +1361,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             return None
         return self.getParameterNode().loaded_session.get_volume_id()
 
+    def update_photoscans_affiliated_with_loaded_session(self) -> None:
+
+        loaded_session = self.getParameterNode().loaded_session
+        subject_id = loaded_session.get_subject_id()
+        session_id = loaded_session.get_session_id()
+        
+        # Keep track of any photoscans associated with the session
+        affiliated_photoscans = {id:self.db.load_photoscan(subject_id, session_id, id) for id in self.db.get_photoscan_ids(subject_id, session_id)}
+        if affiliated_photoscans:
+            loaded_session.update_affiliated_photoscans(affiliated_photoscans)
+
     def load_session(self, subject_id, session_id) -> None:
 
         # Make sure to the preplanning module is loaded in -- it watches for some events
@@ -1417,12 +1437,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         volume_info = self.db.get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
-        affiliated_photoscans = {id:self.db.load_photoscan(subject_id, session_id, id) for id in self.db.get_photoscan_ids(subject_id, session_id)}
-        # Create the SlicerOpenLIFU session object; this handles loading volume and targets
+       # Create the SlicerOpenLIFU session object; this handles loading volume and targets
         new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(
             session_openlifu,
-            volume_info,
-            affiliated_photoscans
+            volume_info
         )
 
         # === Load transducer ===
@@ -1457,6 +1475,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Set the newly created session as the currently active session ===
 
         self.getParameterNode().loaded_session = new_session
+        self.update_photoscans_affiliated_with_loaded_session()
 
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
         session = self.getParameterNode().loaded_session
