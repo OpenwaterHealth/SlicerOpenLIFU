@@ -180,6 +180,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.loadProtocolFromFileButton.clicked.connect(self.onLoadProtocolFromFileClicked)
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
+        self.ui.protocolEditButton.clicked.connect(self.onEditProtocolClicked)
         self.ui.protocolDatabaseSaveButton.clicked.connect(self.onSaveProtocolToDatabaseClicked)
         self.ui.protocolDatabaseDeleteButton.clicked.connect(self.onDeleteProtocolFromDatabaseClicked)
 
@@ -242,13 +243,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if len(get_openlifu_data_parameter_node().loaded_protocols) == 0:
             tooltip = "Load a protocol first in order to select it for editing"
             self.ui.protocolSelector.setProperty("defaultText", "No protocols to select.")  
-            self.setProtocolEditorEnabled(False)
+            self.setProtocolEditButtonEnabled(False)
         else:
             tooltip = "Select a protocol..."
             for protocol_id, protocol in get_openlifu_data_parameter_node().loaded_protocols.items():
                 text = f"{protocol.protocol.name} (ID: {protocol_id})"
                 self.ui.protocolSelector.addItem(text, protocol.protocol)
-            self.setProtocolEditorEnabled(True)
+            self.setProtocolEditButtonEnabled(True)
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
@@ -259,6 +260,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         protocol = self.ui.protocolSelector.currentData
         if protocol is not None:
             self.updateProtocolDisplayFromProtocol(protocol)
+            self.setProtocolEditorEnabled(False)
         self.updateWidgetSaveState(SaveState.NO_CHANGES)
 
     @display_errors
@@ -274,14 +276,21 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.pulseDurationSpinBox.setValue(defaults["Pulse duration"])
         self.ui.focalPatternComboBox.setCurrentText(defaults["Focal patten type"])
 
-        # Set the text of the protocolSelector to a nonexistent protocol
-        tmp_item = f'{defaults["Name"]} (ID: {unique_default_id})'
-        self.ui.protocolSelector.setCurrentIndex(-1)
-        self.ui.protocolSelector.setCurrentText(tmp_item)
+        protocol = self.getProtocolFromGUI()
 
+        # Set the text of the protocolSelector to a nonexistent protocol
+        text = f'{protocol.name} (ID: {protocol.id})'
+        self.ui.protocolSelector.addItem(text, protocol)
+        self.ui.protocolSelector.setCurrentText(text)
+
+        self.setProtocolEditButtonEnabled(True)  # enable edit button (consistency)
         self.setProtocolEditorEnabled(True)  # enable editor
 
         self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
+
+    @display_errors
+    def onEditProtocolClicked(self, checked: bool) -> None:
+        self.setProtocolEditorEnabled(True)
 
     @display_errors
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
@@ -425,6 +434,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
 
+    def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
+        self.ui.protocolEditButton.setEnabled(enabled)
+        if enabled == False:
+            self.setProtocolEditorEnabled(False)  # depends
+
     def setAllWidgetsEnabled(self, enabled: bool) -> None:
         self.ui.protocolSelector.setEnabled(enabled)
         self.ui.loadProtocolFromFileButton.setEnabled(enabled)
@@ -434,6 +448,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+        self.ui.protocolEditButton.setEnabled(enabled)
 
 #
 # OpenLIFUProtocolConfigLogic
