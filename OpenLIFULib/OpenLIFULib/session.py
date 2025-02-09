@@ -49,7 +49,7 @@ class SlicerOpenLIFUSession:
     affiliated_photoscans : Optional[Dict[str,SlicerOpenLIFUPhotoscanWrapper]] = None
     """Dictionary containing photoscan_id: SlicerOpenLIFUPhotoscanWrapper for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
-    transducer tracking as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan so that it is serializable."""
+    transducer tracking as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan."""
 
     last_generated_solution_id : Optional[str] = None
     """The solution ID of the last solution that was generated for this session, or None if there isn't one.
@@ -153,9 +153,10 @@ class SlicerOpenLIFUSession:
 
     def update_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
         
-        # Serialize list of affiliated openlifu photoscans
-        serialized_openlifu_photoscans = {photoscan.id:SlicerOpenLIFUPhotoscanWrapper(photoscan) for photoscan in affiliated_photoscans.values()}
-        self.affiliated_photoscans = serialized_openlifu_photoscans
+        # Wrap the list of affiliated openlifu photoscans using the SlicerOpenLIFUPhotoscanWrapper for 
+        # compatability with the SlicerOpenLIFUSession parameter pack. 
+        wrapped_openlifu_photoscans = {photoscan.id:SlicerOpenLIFUPhotoscanWrapper(photoscan) for photoscan in affiliated_photoscans.values()}
+        self.affiliated_photoscans = wrapped_openlifu_photoscans
 
     def update_underlying_openlifu_session(self, targets : List[vtkMRMLMarkupsFiducialNode]) -> "openlifu.db.Session":
         """Update the underlying openlifu session and the list of target nodes that are considered to be affiliated with this session.
