@@ -1765,9 +1765,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         else:
             slicer.util.errorDisplay("Invalid volume filetype specified")
 
-    def load_photoscan_from_file(self, model_or_json_filepath: str, texture_filepath = None) -> None:
+    def load_photoscan_from_file(self, model_or_json_filepath: str, texture_filepath:Optional[str] = None) -> SlicerOpenLIFUPhotoscan:
         """ Given either a model or json filetype, load a photoscan model into the scene and determine whether
-        the photoscan should be loaded based on openlifu metadata or default slicer parameters.
+        the photoscan should be loaded based on openlifu metadata or default slicer parameters. If `model_or_json_filepath` is a
+        model filepath, then `texture_filepath` must also be provided.
         """
 
         # Load from data filepaths

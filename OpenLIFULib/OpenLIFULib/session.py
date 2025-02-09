@@ -49,7 +49,7 @@ class SlicerOpenLIFUSession:
     affiliated_photoscans : Optional[Dict[str,SlicerOpenLIFUPhotoscanWrapper]] = None
     """Dictionary containing photoscan_id: SlicerOpenLIFUPhotoscanWrapper for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
-    transducer tracking as required. SlicerOpenLIFUPhotoscanWarpper is a wrapper around an openlifu photoscan so that it is serializable."""
+    transducer tracking as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan so that it is serializable."""
 
     last_generated_solution_id : Optional[str] = None
     """The solution ID of the last solution that was generated for this session, or None if there isn't one.
@@ -108,11 +108,11 @@ class SlicerOpenLIFUSession:
         return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
 
     def get_affiliated_photoscan_ids(self):
-        return self.affiliated_photoscans.keys() if self.affiliated_photoscans else None
+        return self.affiliated_photoscans.keys() if self.affiliated_photoscans else []
     
     def get_affiliated_photoscans(self):
         """Returns a list of openlifu photoscans associated with this session"""
-        return [photoscan.photoscan for photoscan in self.affiliated_photoscans.values()] if self.affiliated_photoscans else None
+        return [photoscan.photoscan for photoscan in self.affiliated_photoscans.values()] if self.affiliated_photoscans else []
 
     def clear_volume_and_target_nodes(self) -> None:
         """Clear the session's affiliated volume and target nodes from the scene."""
@@ -140,9 +140,6 @@ class SlicerOpenLIFUSession:
             session: OpenLIFU Session
             volume_info: Dictionary containing the metadata (name, id and filepath) of the volume
             being loaded as part of the session
-            photoscan_absolute_filepaths_info: Dictionary containing the metadata (name, id, approval status and absolute 
-            data filepaths) for each of the photoscans affiliated with the session. The photoscans are only loaded as SlicerOpenLIFUPhotoscans
-            when the user runs tranducer tracking.
         """
 
         # Load volume
