@@ -229,16 +229,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def onDataParameterNodeModified(self, caller = None, event = None):
 
-        # If there is no database loaded, widget should be grayed out
-        if not get_openlifu_data_parameter_node().database_is_loaded:
-            self.setAllWidgetsEnabled(False)
-            self.ui.saveStateLabel.setProperty("text", "You must load a database to configure protocols.")
-            self.ui.saveStateLabel.setProperty("styleSheet", "color: blue; font-weight: bold; font-size: 16px; border: 3px solid blue; padding: 30px;")
-            return
-
         # If there is a database loaded, then set up the available protocols and editing widgets
-
-        self.setAllWidgetsEnabled(True)
 
         prev_index = self.ui.protocolSelector.currentIndex
         self.ui.protocolSelector.clear()
@@ -253,6 +244,14 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 self.ui.protocolSelector.addItem(text, protocol.protocol)
             self.ui.protocolSelector.setCurrentIndex(prev_index)
             self.setProtocolEditButtonEnabled(True)
+
+        # If there is no database loaded, widget should be grayed out
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            self.setDatabaseButtonsEnabled(False)
+            return
+        else:
+            self.setDatabaseButtonsEnabled(True)
+
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
@@ -327,12 +326,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             return
 
         if self.logic.protocol_id_exists(protocol.id):
-            want_overwrite = False
-            want_overwrite = slicer.util.confirmYesNoDisplay(
+            if not slicer.util.confirmYesNoDisplay(
                 text = "This protocol ID already exists in the loaded database. Do you want to overwrite it?",
                 windowTitle = "Overwrite Confirmation",
-            )
-            if not want_overwrite:
+            ):
                 return
 
         self.logic.save_protocol_to_database(protocol)  # save to database
@@ -352,12 +349,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onDeleteProtocolFromDatabaseClicked(self, checked: bool) -> None:
         protocol = self.ui.protocolSelector.currentData
         # Check if the user really wants to delete
-        want_delete = False
-        want_delete = slicer.util.confirmYesNoDisplay(
+        if not slicer.util.confirmYesNoDisplay(
             text = f'Are you sure you want to delete the protocol "{self.ui.protocolSelector.currentText}"?',
             windowTitle = "Protocol Delete Confirmation",
-        )
-        if not want_delete:
+        ):
             return
 
         # Delete the protocol
@@ -471,8 +466,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditButton.setEnabled(enabled)
-        if enabled == False:
+        if not enabled:
             self.setProtocolEditorEnabled(False)  # depends
+
+    def setDatabaseButtonsEnabled(self, enabled: bool) -> None:
+        self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
+        self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+        self.ui.createNewProtocolButton.setEnabled(enabled)
 
     def setAllWidgetsEnabled(self, enabled: bool) -> None:
         self.ui.protocolSelector.setEnabled(enabled)
