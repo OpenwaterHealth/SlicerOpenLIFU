@@ -56,7 +56,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         self.inputs_dict["Volume"].combo_box.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
 
     def add_photoscan_to_combobox(self, photoscan_openlifu: "openlifu.Photoscan") -> None:
-        self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(photoscan_openlifu.name, photoscan_openlifu.id , photoscan_openlifu))
+        self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(photoscan_openlifu.name, photoscan_openlifu.id), photoscan_openlifu)
 
     def set_session_related_combobox_tooltip(self, text:str):
         """Set tooltip on the transducer, protocol and volume comboboxes."""
