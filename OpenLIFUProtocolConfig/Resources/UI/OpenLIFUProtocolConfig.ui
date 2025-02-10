@@ -230,11 +230,11 @@
         </layout>
       </item>
       <item>
-          <widget class="QPushButton" name="protocolEditButton">
-            <property name="text">
-              <string>Edit Protocol</string>
-            </property>
-          </widget>
+        <widget class="QPushButton" name="protocolEditButton">
+          <property name="text">
+            <string>Edit Protocol</string>
+          </property>
+        </widget>
       </item>
     </layout>
   </widget>
