@@ -123,7 +123,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic: Optional[OpenLIFUProtocolConfigLogic] = None
-        self._is_saving_changes = False
+        self._is_saving_changes: bool = False
+        self._cur_protocol_id: str = ""  # important if WIPs change the ID
+        self._cur_save_state = SaveState.NO_CHANGES
         self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
         self._parameterNodeGuiTag = None
         self.focalPattern_type_to_pageName : Dict[FocalPatternType,str] = {
@@ -131,6 +133,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             FocalPatternType.WHEEL : "wheelPage",
         }
 
+    @property
+    def cur_protocol_id(self):
+        return self._cur_protocol_id
+
+    @property
+    def cur_save_state(self):
+        return self._cur_save_state
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -267,20 +276,20 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         else:
             self.setDatabaseButtonsEnabled(True)
 
-        if self.logic.cur_protocol_id in self.logic.new_protocol_ids:
+        if self._cur_protocol_id in self.logic.new_protocol_ids:
             self.setNewProtocolWidgets()
 
     def onProtocolSelectorIndexChanged(self):
-        if self.logic.cur_save_state == SaveState.UNSAVED_CHANGES:
+        if self._cur_save_state == SaveState.UNSAVED_CHANGES:
             protocol_changed = self.getProtocolFromGUI()
-            self.logic.cache_protocol(protocol_changed)
+            self.cache_protocol(protocol_changed)
 
         protocol = self.ui.protocolSelector.currentData
         if protocol is None:
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
             return
 
-        self.logic.cur_protocol_id = protocol.id
+        self._cur_protocol_id = protocol.id
 
         if protocol.id in self.logic.cached_protocols:
             cached_protocol = self.logic.cached_protocols[protocol.id]
@@ -296,7 +305,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 self.updateWidgetSaveState(SaveState.NO_CHANGES)
 
         # You can't delete new protocols from db
-        if self.logic.cur_protocol_id in self.logic.new_protocol_ids:
+        if self._cur_protocol_id in self.logic.new_protocol_ids:
             self.setNewProtocolWidgets()
 
     @display_errors
@@ -315,8 +324,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.updateProtocolDisplayFromProtocol(protocol)
 
-        self.logic.cur_protocol_id = protocol.id
-        self.logic.cache_protocol(protocol)
+        self._cur_protocol_id = protocol.id
+        self.cache_protocol(protocol)
         self.logic.new_protocol_ids.add(protocol.id)
 
         # Set the text of the protocolSelector
@@ -350,15 +359,15 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseDeleteButton.setEnabled(True)  # can delete now
         self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
-        self.logic.cached_protocols.pop(self.logic.cur_protocol_id, None)  # remove from cache
-        if self.logic.cur_protocol_id in self.logic.new_protocol_ids:
-            self.logic.new_protocol_ids.discard(self.logic.cur_protocol_id)
+        self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
+        if self._cur_protocol_id in self.logic.new_protocol_ids:
+            self.logic.new_protocol_ids.discard(self._cur_protocol_id)
 
         self._is_saving_changes = True
         self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
         self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # details might have changed
         self._is_saving_changes = False
-        self.logic.cur_protocol_id = protocol.id  # id might have changed
+        self._cur_protocol_id = protocol.id  # id might have changed
 
         self.setProtocolEditorEnabled(False)
 
@@ -395,7 +404,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.logic.dataLogic.load_protocol_from_file(filepath)
 
     def updateWidgetSaveState(self, state: SaveState):
-        self.logic.cur_save_state = state
+        self._cur_save_state = state
         if state == SaveState.NO_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "")  
             self.ui.saveStateLabel.setProperty("styleSheet", "border: none;")
@@ -510,6 +519,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
         self.ui.protocolEditButton.setEnabled(enabled)
 
+    def cache_protocol(self, protocol_changes: "openlifu.plan.Protocol") -> None:
+        self.logic.cached_protocols[self._cur_protocol_id] = protocol_changes
+
 #
 # OpenLIFUProtocolConfigLogic
 #
@@ -539,8 +551,6 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = None
 
-        self.cur_save_state = SaveState.NO_CHANGES
-        self.cur_protocol_id = ""  # important if WIPs change the ID
         self.cached_protocols = {}
         self.new_protocol_ids = set()
 
@@ -564,9 +574,6 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         while self.protocol_id_exists(name := f"{base_name}_{i}"):
             i += 1
         return name
-
-    def cache_protocol(self, protocol_changes: "openlifu.plan.Protocol") -> None:
-        self.cached_protocols[self.cur_protocol_id] = protocol_changes
 
     def save_protocol_to_database(self, protocol: "openlifu.plan.Protocol") -> None:
         if self.dataLogic.db is None:
