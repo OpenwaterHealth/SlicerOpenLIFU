@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Optional
 import vtk
 from pathlib import Path
 import slicer
-from slicer import vtkMRMLVectorVolumeNode, vtkMRMLModelNode
+from slicer import vtkMRMLVectorVolumeNode, vtkMRMLModelNode, vtkMRMLViewNode
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPhotoscanWrapper,
@@ -121,5 +121,11 @@ class SlicerOpenLIFUPhotoscan:
                        
     def toggle_approval(self) -> None:
         self.photoscan.photoscan.approved = not self.photoscan.photoscan.photoscan_approved 
+    
+    def toggle_model_display(self, visibility_on: bool = False, viewNode: vtkMRMLViewNode = None):
+        """ If a viewNode is not specified, the model is displayed in the default view"""
+        self.model_node.GetDisplayNode().SetVisibility(visibility_on)
+        if viewNode:
+            self.model_node.GetDisplayNode().AddViewNodeID(viewNode.GetID())
 
         

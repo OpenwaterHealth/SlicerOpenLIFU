@@ -213,7 +213,8 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             Transducer: SlicerOpenLIFUTransducer
             Volume: vtkMRMLScalarVolumeNode
             Target: vtkMRMLMarkupsFiducialNode
-            Photoscan: vtkMRMLModelNode """
+            Photoscan: "openlifu.Photoscan"
+            """
         current_data_dict = {
             input.name : input.combo_box.currentData
             for input in self.inputs_dict.values()
