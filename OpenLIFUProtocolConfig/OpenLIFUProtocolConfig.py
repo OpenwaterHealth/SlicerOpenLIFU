@@ -247,6 +247,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def onDataParameterNodeModified(self, caller = None, event = None):
 
+        # If there is no database loaded, widget should be grayed out
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            self.setDatabaseButtonsEnabled(False)
+        else:
+            self.setDatabaseButtonsEnabled(True)
+
+
         # If there is a database loaded, then set up the available protocols and editing widgets
 
         prev_protocol = self.ui.protocolSelector.currentText
@@ -269,12 +276,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.setProtocolEditButtonEnabled(True)
 
         self.ui.protocolSelector.setToolTip(tooltip)
-
-        # If there is no database loaded, widget should be grayed out
-        if not get_openlifu_data_parameter_node().database_is_loaded:
-            self.setDatabaseButtonsEnabled(False)
-        else:
-            self.setDatabaseButtonsEnabled(True)
 
         if self._cur_protocol_id in self.logic.new_protocol_ids:
             self.setNewProtocolWidgets()
@@ -338,7 +339,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onEditProtocolClicked(self, checked: bool) -> None:
-        self.setProtocolEditorEnabled(True)
+        if self._cur_protocol_id not in self.logic.new_protocol_ids:
+            self.setProtocolEditorEnabled(True)
 
     @display_errors
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
