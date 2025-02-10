@@ -14,11 +14,13 @@ from OpenLIFULib import (
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
-    SlicerOpenLIFUTransducer
+    SlicerOpenLIFUTransducer,
+    SlicerOpenLIFUSession
 )
 from OpenLIFULib.util import replace_widget
 
 if TYPE_CHECKING:
+    import openlifu
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 #
@@ -204,6 +206,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Determine whether transducer tracking can be run based on the status of combo boxes
         self.checkCanRunTracking()
+            
+    def onPreviewPhotoscanClicked(self):
+        session = get_openlifu_data_parameter_node().loaded_session
+        current_data = self.algorithm_input_widget.get_current_data()
+        selected_photoscan = current_data['Photoscan']
+        if session:
+            # add busy cursor
+            (model_data, texture_data) = self.logic.load_photoscan_data_from_database(session, selected_photoscan.id)
+            self.CreateVTKRenderWindow()
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
@@ -262,6 +273,42 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onApproveClicked(self):
         self.logic.toggleTransducerTrackingApproval()
 
+    def CreateVTKRenderWindow(self):
+
+        # Create a sphere source
+        sphere_source = vtk.vtkSphereSource()
+        sphere_source.SetRadius(1.0)
+        sphere_source.SetThetaResolution(20)
+        sphere_source.SetPhiResolution(20)
+        sphere_source.Update()
+
+        # Create a mapper
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(sphere_source.GetOutput())
+
+        # Create an actor
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+
+        # Create renderer and add actor
+        renderer = vtk.vtkRenderer()
+        renderer.AddActor(actor)
+        renderer.SetBackground(0.1, 0.2, 0.4)
+
+        # Create render window and interactor
+        render_window = vtk.vtkRenderWindow()
+        render_window.SetSize(600, 400)
+        render_window.AddRenderer(renderer)
+
+        interactor = vtk.vtkRenderWindowInteractor()
+        interactor.SetRenderWindow(render_window)
+
+        # Initialize and start interaction
+        render_window.Render()
+        interactor.Initialize()
+        interactor.Start()
+
+
 #
 # OpenLIFUTransducerTrackerLogic
 #
@@ -281,8 +328,16 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self._loaded_database = slicer.util.getModuleLogic('OpenLIFUData').db
+
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
+
+    def load_photoscan_data_from_database(self, current_session: SlicerOpenLIFUSession, photoscan_id: str) -> Tuple[vtk.vtkPolyData, vtk.vtkImageData]:
+        """TODO: Loads openlifu data and returns vtk data"""
+
+        _,(model_data, texture_data) = self._loaded_database.load_photoscan(current_session.get_subject_id(),current_session.get_session_id(), photoscan_id, load_data = True)
+        return (model_data, texture_data)
 
     def toggleTransducerTrackingApproval(self) -> None:
         """Approve transducer tracking for the currently active session if it was not approved. Revoke approval if it was approved."""
