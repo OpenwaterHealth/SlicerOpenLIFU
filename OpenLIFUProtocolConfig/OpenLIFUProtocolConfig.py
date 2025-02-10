@@ -160,9 +160,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUProtocolConfigLogic()
 
-        # Gets the logic _instance_ of the Data module
-        self.logic.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
-
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -209,9 +206,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.setProtocolEditButtonEnabled(False)
         self.setProtocolEditorEnabled(False)
-        self.setDatabaseButtonsEnabled(False)
-        self.ui.protocolSelector.setProperty("defaultText", "No protocols to select.")  
-        self.ui.protocolSelector.setToolTip("Load a protocol first in order to select it for editing")
 
         self.onDataParameterNodeModified()  # might not have queued
 
@@ -267,13 +261,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             tooltip = "Select a protocol..."
             for protocol_id, protocol_w in get_openlifu_data_parameter_node().loaded_protocols.items():
                 self.ui.protocolSelector.addItem(f"{protocol_w.protocol.name} (ID: {protocol_id})", protocol_w.protocol)
-            for protocol_id in self.logic.cached_protocols:
-                if protocol_id in self.logic.new_protocol_ids:
-                    protocol = self.logic.cached_protocols[protocol_id]
-                    self.ui.protocolSelector.addItem(f"{protocol.name} (ID: {protocol.id})", protocol)
             if total_num_protocols > 1:
                 self.ui.protocolSelector.setCurrentText(prev_protocol)
             self.setProtocolEditButtonEnabled(True)
+
+        for protocol_id in self.logic.new_protocol_ids:
+            protocol = self.logic.cached_protocols[protocol_id]
+            self.ui.protocolSelector.addItem(f"{protocol.name} (ID: {protocol.id})", protocol)
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
@@ -494,11 +488,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
         if enabled and get_openlifu_data_parameter_node().database_is_loaded:
-            self.ui.protocolDatabaseSaveButton.setEnabled(True)
-            self.ui.protocolDatabaseDeleteButton.setEnabled(True)
+            self.setDatabaseButtonsEnabled(True)
         elif not enabled:
-            self.ui.protocolDatabaseSaveButton.setEnabled(False)
-            self.ui.protocolDatabaseDeleteButton.setEnabled(False)
+            self.setDatabaseButtonsEnabled(False)
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditButton.setEnabled(enabled)
@@ -551,7 +543,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
-        self.dataLogic = None
+        self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
 
         self.cached_protocols = {}
         self.new_protocol_ids = set()
