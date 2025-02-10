@@ -123,6 +123,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking)
+        self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
