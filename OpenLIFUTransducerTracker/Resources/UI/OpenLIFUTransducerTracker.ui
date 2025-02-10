@@ -60,13 +60,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="loadTransducerSurfaceButton">
-     <property name="text">
-      <string>Load transducer registration surface</string>
-     </property>
-    </widget>
-   </item>
-   <item>
     <widget class="QPushButton" name="runTrackingButton">
      <property name="text">
       <string>Run transducer tracking</string>
