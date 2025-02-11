@@ -241,15 +241,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def onDataParameterNodeModified(self, caller = None, event = None):
 
-        # If there is no database loaded, widget should be grayed out
         if not get_openlifu_data_parameter_node().database_is_loaded:
-            self.setDatabaseButtonsEnabled(False)
+            self.setDatabaseSaveAndDeleteEnabled(False)
         else:
-            self.setDatabaseButtonsEnabled(True)
-
+            self.setDatabaseSaveAndDeleteEnabled(True)
 
         # If there is a database loaded, then set up the available protocols and editing widgets
-
         prev_protocol = self.ui.protocolSelector.currentText
         total_num_protocols = len(get_openlifu_data_parameter_node().loaded_protocols) + len(self.logic.new_protocol_ids)
         self.ui.protocolSelector.clear()
@@ -488,18 +485,20 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
         if enabled and get_openlifu_data_parameter_node().database_is_loaded:
-            self.setDatabaseButtonsEnabled(True)
+            self.setDatabaseSaveAndDeleteEnabled(True)
         elif not enabled:
-            self.setDatabaseButtonsEnabled(False)
+            self.setDatabaseSaveAndDeleteEnabled(False)
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditButton.setEnabled(enabled)
         if not enabled:
             self.setProtocolEditorEnabled(False)  # depends
 
-    def setDatabaseButtonsEnabled(self, enabled: bool) -> None:
+    def setDatabaseSaveAndDeleteEnabled(self, enabled: bool) -> None:
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+
+    def setCreateNewProtocolButtonEnabled(self, enabled: bool) -> None:
         self.ui.createNewProtocolButton.setEnabled(enabled)
 
     def setAllWidgetsEnabled(self, enabled: bool) -> None:
@@ -553,14 +552,19 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUProtocolConfigParameterNode(super().getParameterNode())  # pyright: ignore[reportCallIssue]
 
+    def protocol_id_is_new(self, protocol_id: str) -> bool:
+        return protocol_id in self.new_protocol_ids
+
     def protocol_id_is_loaded(self, protocol_id: str) -> bool:
         return protocol_id in get_openlifu_data_parameter_node().loaded_protocols
 
     def protocol_id_is_in_database(self, protocol_id: str) -> bool:
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            return False
         return protocol_id in self.dataLogic.db.get_protocol_ids()
 
     def protocol_id_exists(self, protocol_id: str) -> bool:
-        return self.protocol_id_is_loaded(protocol_id) or protocol_id in self.dataLogic.db.get_protocol_ids() or protocol_id in self.new_protocol_ids
+        return self.protocol_id_is_loaded(protocol_id) or self.protocol_id_is_in_database(protocol_id) or self.protocol_id_is_new(protocol_id)
 
     def generate_unique_default_id(self) -> str:
         i = 1
