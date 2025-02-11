@@ -549,7 +549,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
         shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
-        shNode.AddObserver(shNode.SubjectHierarchyItemAboutToBeRemovedEvent, self.onSHNodeAboutToBeRemoved)
+        shNode.AddObserver(shNode.SubjectHierarchyItemAboutToBeRemovedEvent, self.onSHItemAboutToBeRemoved)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
@@ -1076,7 +1076,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.initializeParameterNode()
 
     @vtk.calldata_type(vtk.VTK_INT)
-    def onSHNodeAboutToBeRemoved(self, caller, event, removedItemID):
+    def onSHItemAboutToBeRemoved(self, caller, event, removedItemID):
         #If any SlicerOpenLIFUTransducer or Slicer OpenLIFUPhotoscan objects relied on the removed item, then we need to remove them
         # as they are now invalid.
         shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
@@ -1465,10 +1465,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        transducer_metadata_filepath = self.db.get_transducer_filename(session_openlifu.transducer_id)
+        transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
         newly_loaded_transducer = self.load_transducer_from_openlifu(
             transducer = self.db.load_transducer(session_openlifu.transducer_id),
-            parent_dir= Path(transducer_metadata_filepath).parent,
+            transducer_abspaths_info = transducer_abspaths_info,
             transducer_matrix = session_openlifu.array_transform.matrix,
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
@@ -1559,12 +1559,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
         transducer_parent_dir = Path(filepath).parent
-        self.load_transducer_from_openlifu(transducer, parent_dir = transducer_parent_dir)
+        transducer_abspaths_info = {}
+        if transducer.transducer_body_filename:
+            transducer_abspaths_info['transducer_body_abspath'] = transducer_parent_dir/transducer.transducer_body_filename
+        if transducer.registration_surface_filename:
+            transducer_abspaths_info['registration_surface_abspath'] = transducer_parent_dir/transducer.registration_surface_filename
+
+        self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
 
     def load_transducer_from_openlifu(
             self,
             transducer: "openlifu.Transducer",
-            parent_dir,
+            transducer_abspaths_info: Optional[dict] = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
             replace_confirmed: bool = False,
@@ -1574,7 +1580,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         Args:
             transducer: The openlifu Transducer object
-            parent_dir: Absolute path to the parent directory containing the oepnlifu transducer object
+            transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
@@ -1601,7 +1607,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         newly_loaded_transducer = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(
             transducer,
-            parent_dir,
+            transducer_abspaths_info,
             transducer_matrix=transducer_matrix,
             transducer_matrix_units=transducer_matrix_units,
         )
