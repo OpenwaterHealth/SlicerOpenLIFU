@@ -31,7 +31,7 @@ class SlicerOpenLIFUTransducer:
     @staticmethod
     def initialize_from_openlifu_transducer(
             transducer : "openlifu.Transducer",
-            parent_dir,
+            transducer_abspaths_info: Optional[dict] = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
             ) -> "SlicerOpenLIFUTransducer":
@@ -40,11 +40,10 @@ class SlicerOpenLIFUTransducer:
         Args:
             transducer: The openlifu Transducer object
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
+            transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
                 these units. If left as None then the transducer's native units (Transducer.units) will be assumed.
-            parent_dir: Path to the parent directory containing the transducer object and associated files. 
-
         Returns: the newly constructed SlicerOpenLIFUTransducer object
         """
 
@@ -82,7 +81,7 @@ class SlicerOpenLIFUTransducer:
         model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
         if transducer.transducer_body_filename:
-            body_model_node = slicer.util.loadModel(Path(parent_dir)/transducer.transducer_body_filename)
+            body_model_node = slicer.util.loadModel(transducer_abspaths_info['transducer_body_abspath'])
             body_model_node.SetName(f"{slicer_transducer_name}-body")
             body_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
             shNode.SetItemParent(shNode.GetItemByDataNode(body_model_node), parentFolderItem)
@@ -90,7 +89,7 @@ class SlicerOpenLIFUTransducer:
             body_model_node = None
 
         if transducer.registration_surface_filename:
-            surface_model_node = slicer.util.loadModel(Path(parent_dir)/transducer.registration_surface_filename)
+            surface_model_node = slicer.util.loadModel(transducer_abspaths_info['registration_surface_abspath'])
             shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
             surface_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
             surface_model_node.SetName(f"{slicer_transducer_name}-surface")
