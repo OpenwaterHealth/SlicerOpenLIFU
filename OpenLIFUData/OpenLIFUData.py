@@ -1465,9 +1465,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
+        transducer_openlifu = self.db.load_transducer(session_openlifu.transducer_id)
+        if transducer_openlifu.registration_surface_filename or transducer_openlifu.transducer_body_filename:
+            transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
+        else:
+            transducer_abspaths_info = {}
         newly_loaded_transducer = self.load_transducer_from_openlifu(
-            transducer = self.db.load_transducer(session_openlifu.transducer_id),
+            transducer = transducer_openlifu,
             transducer_abspaths_info = transducer_abspaths_info,
             transducer_matrix = session_openlifu.array_transform.matrix,
             transducer_matrix_units = session_openlifu.array_transform.units,
