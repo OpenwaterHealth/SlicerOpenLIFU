@@ -93,6 +93,13 @@ class SlicerOpenLIFUPhotoscanWrapper:
     def __init__(self, photoscan: "Optional[openlifu.Photoscan]" = None):
         self.photoscan = photoscan
 
+# For the same reason we have a thin wrapper around openlifu.User
+class SlicerOpenLIFUUser:
+    """Ultrathin wrapper of openlifu.User. This exists so that users can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, user: "Optional[openlifu.User]" = None):
+        self.user = user
+
 def SlicerOpenLIFUSerializerBaseMaker(
         serialized_type:type,
         default_args:Optional[list[Any]] = None,

@@ -34,6 +34,7 @@ __all__ = [
     "SlicerOpenLIFURun",
     "SlicerOpenLIFUSolutionAnalysis",
     "SlicerOpenLIFUPhotoscan",
+    "SlicerOpenLIFUUser",
     "get_openlifu_data_parameter_node",
     "BusyCursor",
     "get_target_candidates",
