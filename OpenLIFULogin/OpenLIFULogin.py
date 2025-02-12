@@ -20,6 +20,7 @@ from slicer import (
 
 from OpenLIFULib import (
     openlifu_lz,
+    SlicerOpenLIFUUser,
 )
 
 if TYPE_CHECKING:
@@ -30,6 +31,8 @@ if TYPE_CHECKING:
 # OpenLIFULogin
 #
 
+all_openlifu_modules = ['OpenLIFUData', 'OpenLIFUHome', 'OpenLIFUPrePlanning', 'OpenLIFUProtocolConfig', 'OpenLIFUSonicationControl', 'OpenLIFUSonicationPlanner', 'OpenLIFUTransducerTracker']
+
 class OpenLIFULogin(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
@@ -39,7 +42,7 @@ class OpenLIFULogin(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Login")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = all_openlifu_modules  # add here list of module names that this module requires
         self.parent.contributors = ["Andrew Howe (Kitware), Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -61,6 +64,49 @@ class OpenLIFULogin(ScriptedLoadableModule):
 @parameterNodeWrapper
 class OpenLIFULoginParameterNode:
     user_account_mode : bool
+    active_user : "SlicerOpenLIFUUser"
+    
+#
+# OpenLIFULoginDialogs
+#
+
+class UsernamePasswordDialog(qt.QDialog):
+    """ Login with Username and Password dialog """
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Login credentials")
+        self.setWindowModality(1)
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(200)
+
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
+
+        self.username = qt.QLineEdit()
+        formLayout.addRow(_("Username:"), self.username)
+
+        self.password = qt.QLineEdit()
+        formLayout.addRow(_("Password:"), self.password)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.accept)
+
+    def customexec_(self):
+
+        returncode = self.exec_()
+        subject_name = self.username.text
+        subject_id = self.password.text
+
+        return (returncode, subject_name, subject_id)
 
 #
 # OpenLIFULoginWidget
