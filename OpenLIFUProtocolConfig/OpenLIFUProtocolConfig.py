@@ -109,6 +109,67 @@ class OpenLIFUProtocolConfigParameterNode:
     """
 
 #
+# OpenLIFUProtocolConfigDialogs
+#
+
+class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
+    """ Create new protocol selection from database dialog """
+
+    def __init__(self, dataLogic, parent=None):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """ Args:
+                dataLogic: instance of the data logic, needed to access the loaded database
+        """
+
+        self.setWindowTitle("Select a Protocol")
+        self.setWindowModality(1)
+
+        self.dataLogic = dataLogic
+        self.selected_protocol = None
+
+        self.setup()
+
+    def setup(self):
+
+        self.boxLayout = qt.QVBoxLayout()
+        self.setLayout(self.boxLayout)
+
+        self.listWidget = qt.QListWidget(self)
+        self.boxLayout.addWidget(self.listWidget)
+
+        self.buttonBox = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
+            self
+        )
+        self.boxLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.accepted.connect(self.validateInputs)
+        self.buttonBox.rejected.connect(self.reject)
+
+        # load protocols from the database into the list widget
+
+        protocol_id_list = self.dataLogic.db.get_protocol_ids()
+        self.protocols = []  # Store protocols for selection reference
+
+        for protocol_id in protocol_id_list:
+            protocol = self.dataLogic.db.load_protocol(protocol_id)
+            display_text = f"{protocol.name} (ID: {protocol.id})"
+            self.protocols.append(protocol)
+            self.listWidget.addItem(display_text)
+
+
+    def validateInputs(self):
+
+        selected_idx = self.listWidget.currentRow
+        if selected_idx >= 0:
+            self.selected_protocol = self.protocols[selected_idx]
+        self.accept()
+
+    def get_selected_protocol(self):
+
+        return self.selected_protocol
+
+#
 # OpenLIFUProtocolConfigWidget
 #
 
@@ -184,6 +245,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.ui.protocolSelector.currentIndexChanged.connect(self.onProtocolSelectorIndexChanged)
         self.ui.loadProtocolFromFileButton.clicked.connect(self.onLoadProtocolFromFileClicked)
+        self.ui.loadProtocolFromDatabaseButton.clicked.connect(self.onLoadProtocolFromDatabaseClicked)
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
         self.ui.protocolEditButton.clicked.connect(self.onEditProtocolClicked)
@@ -242,9 +304,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onDataParameterNodeModified(self, caller = None, event = None):
 
         if not get_openlifu_data_parameter_node().database_is_loaded:
-            self.setDatabaseSaveAndDeleteEnabled(False)
+            self.setDatabaseButtonsEnabled(False)
         else:
-            self.setDatabaseSaveAndDeleteEnabled(True)
+            self.setDatabaseButtonsEnabled(True)
 
         # If there is a database loaded, then set up the available protocols and editing widgets
         prev_protocol = self.ui.protocolSelector.currentText
@@ -396,6 +458,22 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if filepath:
             self.logic.dataLogic.load_protocol_from_file(filepath)
 
+    @display_errors
+    def onLoadProtocolFromDatabaseClicked(self, checked:bool) -> None:
+        qsettings = qt.QSettings()
+
+        filepath: str = qsettings.value('OpenLIFU/databaseDirectory')  # No default value
+
+        if not filepath:
+            return  # TODO: should emit error?
+
+        # Open the protocol selection dialog
+        dialog = ProtocolSelectionFromDatabaseDialog(self.logic.dataLogic)
+        if dialog.exec_() == qt.QDialog.Accepted:
+            selected_protocol = dialog.get_selected_protocol()
+            if selected_protocol:
+                self.logic.dataLogic.load_protocol_from_openlifu(selected_protocol)
+
     def updateWidgetSaveState(self, state: SaveState):
         self._cur_save_state = state
         if state == SaveState.NO_CHANGES:
@@ -485,18 +563,32 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
         if enabled and get_openlifu_data_parameter_node().database_is_loaded:
-            self.setDatabaseSaveAndDeleteEnabled(True)
+            self.setDatabaseSaveAndDeleteButtonsEnabled(True)
         elif not enabled:
-            self.setDatabaseSaveAndDeleteEnabled(False)
+            self.setDatabaseSaveAndDeleteButtonsEnabled(False)
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditButton.setEnabled(enabled)
         if not enabled:
             self.setProtocolEditorEnabled(False)  # depends
 
-    def setDatabaseSaveAndDeleteEnabled(self, enabled: bool) -> None:
+    def setDatabaseSaveAndDeleteButtonsEnabled(self, enabled: bool) -> None:
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+
+    def setDatabaseButtonsEnabled(self, enabled: bool) -> None:
+        self.ui.loadProtocolFromDatabaseButton.setEnabled(enabled)
+        self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
+        self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+        if enabled:
+            self.ui.loadProtocolFromDatabaseButton.setToolTip("Load an openlifu protocol from database")
+            self.ui.protocolDatabaseSaveButton.setToolTip("Save the current openlifu protocol to the database")
+            self.ui.protocolDatabaseDeleteButton.setToolTip("Delete the current openlifu protocol from database")
+        else:
+            tooltip = "A database must be loaded to perform this action"
+            self.ui.loadProtocolFromDatabaseButton.setToolTip(tooltip)
+            self.ui.protocolDatabaseSaveButton.setToolTip(tooltip)
+            self.ui.protocolDatabaseDeleteButton.setToolTip(tooltip)
 
     def setCreateNewProtocolButtonEnabled(self, enabled: bool) -> None:
         self.ui.createNewProtocolButton.setEnabled(enabled)

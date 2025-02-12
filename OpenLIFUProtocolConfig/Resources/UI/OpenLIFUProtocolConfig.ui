@@ -15,14 +15,25 @@
         <widget class="ctkComboBox" name="protocolSelector" />
       </item>
       <item>
-        <widget class="QPushButton" name="loadProtocolFromFileButton">
-          <property name="toolTip">
-            <string>Load an openlifu protocol from json</string>
-          </property>
-          <property name="text">
-            <string>Load Protocol From File</string>
-          </property>
-        </widget>
+        <layout class="QHBoxLayout" name="protocolButtonsLayout">
+          <item>
+            <widget class="QPushButton" name="loadProtocolFromFileButton">
+              <property name="toolTip">
+                <string>Load an openlifu protocol from json</string>
+              </property>
+              <property name="text">
+                <string>Load Protocol From File</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="loadProtocolFromDatabaseButton">
+              <property name="text">
+                <string>Load Protocol From Database</string>
+              </property>
+            </widget>
+          </item>
+        </layout>
       </item>
       <item>
         <widget class="QPushButton" name="createNewProtocolButton">
