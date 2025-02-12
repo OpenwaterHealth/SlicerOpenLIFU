@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, TYPE_CHECKING
+from typing import Dict, Any, List, Callable, TYPE_CHECKING
 from dataclasses import dataclass
 import qt
 import slicer
@@ -215,3 +215,10 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             for input in self.inputs_dict.values()
         }
         return current_data_dict
+    
+    def connect_combobox_indexchanged_signal(self, function_call: Callable) -> None:
+        """Connect the `currentIndexChanged` signal on each input combobox to a callable function.
+        This is helpful for when changes to the input combo boxes need to trigger certain checks for
+        valid selections to run algorithms."""
+        for input in self.inputs_dict.values():
+            input.combo_box.currentIndexChanged.connect(function_call)
