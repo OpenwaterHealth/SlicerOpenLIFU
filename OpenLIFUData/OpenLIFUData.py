@@ -548,7 +548,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
-        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAboutToBeRemovedEvent, self.onNodeAboutToBeRemoved)
+        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+        shNode.AddObserver(shNode.SubjectHierarchyItemAboutToBeRemovedEvent, self.onSHItemAboutToBeRemoved)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
@@ -879,6 +880,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "Transducers (*.json);;All Files (*)", # file type filter
         )
         if filepath:
+
             self.logic.load_transducer_from_file(filepath)
 
     def onLoadVolumePressed(self) -> None:
@@ -1008,7 +1010,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
             protocol_openlifu : "openlifu.Protocol" = loaded_session.get_protocol().protocol
-            transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
+            
             self.ui.sessionStatusSubjectNameIdValueLabel.setText(
                 f"{subject_openlifu.name} (ID: {session_openlifu.subject_id})"
             )
@@ -1018,10 +1020,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sessionStatusProtocolValueLabel.setText(
                 f"{protocol_openlifu.name} (ID: {session_openlifu.protocol_id})"
             )
-            self.ui.sessionStatusTransducerValueLabel.setText(
-                f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
-            )
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
+            
+            # Add a validity check here since this function call is triggered after a transducer is removed but 
+            # before a session is invalidated. 
+            if loaded_session.transducer_is_valid():
+                transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
+                self.ui.sessionStatusTransducerValueLabel.setText(
+                    f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
+                )
 
             # Build the additional info message here; this is status text that conditionally displays.
             additional_info_messages : List[str] = []
@@ -1068,22 +1075,31 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self.parent.isEntered:
             self.initializeParameterNode()
 
-    @vtk.calldata_type(vtk.VTK_OBJECT)
-    def onNodeAboutToBeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+    @vtk.calldata_type(vtk.VTK_INT)
+    def onSHItemAboutToBeRemoved(self, caller, event, removedItemID):
+        #If any SlicerOpenLIFUTransducer or Slicer OpenLIFUPhotoscan objects relied on the removed item, then we need to remove them
+        # as they are now invalid.
+        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
 
-        # If any SlicerOpenLIFUTransducer objects relied on this transform node, then we need to remove them
-        # as they are now invalid.
-        if node.IsA('vtkMRMLTransformNode'):
-            self.logic.on_transducer_affiliated_node_about_to_be_removed(node.GetID(),'transform_node')
-        if node.IsA('vtkMRMLModelNode'):
-            self.logic.on_transducer_affiliated_node_about_to_be_removed(node.GetID(),'model_node')
-        
-        # If any SlicerOpenLIFUPhotoscan objects relied on this model or texture volume node, then we need to remove them
-        # as they are now invalid.
-        if node.IsA('vtkMRMLModelNode'):
-            self.logic.on_photoscan_affiliated_node_about_to_be_removed(node.GetID(),'model_node')
-        if node.IsA('vtkMRMLVectorVolumeNode'):
-            self.logic.on_photoscan_affiliated_node_about_to_be_removed(node.GetID(),'texture_node')
+        if shNode.GetItemLevel(removedItemID) == 'Folder':
+        # If the item being deleted is the parent folder of a SlicerOpenLIFUTransducer, then the affiliated
+        # nodes do not need to be manually removed, but the transducer needs to be removed from the
+        # loaded_transducers list. 
+            folder_transducer_id = shNode.GetItemAttribute(removedItemID,'transducer_id')
+            if folder_transducer_id:
+                self.logic.on_transducer_affiliated_folder_about_to_be_removed(folder_transducer_id)
+        else:
+            removed_node = shNode.GetItemDataNode(removedItemID)
+            
+            if removed_node.IsA('vtkMRMLTransformNode'):
+                self.logic.on_transducer_affiliated_node_about_to_be_removed(removed_node.GetID(),['transform_node'])
+
+            if removed_node.IsA('vtkMRMLModelNode'):
+                self.logic.on_transducer_affiliated_node_about_to_be_removed(removed_node.GetID(),['model_node', 'body_model_node','surface_model_node'])
+                self.logic.on_photoscan_affiliated_node_about_to_be_removed(removed_node.GetID(),['model_node'])
+            
+            if removed_node.IsA('vtkMRMLVectorVolumeNode'):
+                self.logic.on_photoscan_affiliated_node_about_to_be_removed(removed_node.GetID(),['texture_node'])
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -1167,7 +1183,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.db : Optional[openlifu.Database] = None
 
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
-
+        self._folder_deletion_in_progress = False
+        self._timer = None 
 
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
@@ -1195,7 +1212,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.getParameterNode().loaded_solution is not None
                 and loaded_session.last_generated_solution_id == self.getParameterNode().loaded_solution.solution.solution.id
             ):
-                self.clear_solution(clean_up_scene=True)
+                self.clear_solution(clean_up_scene=True)  
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -1448,8 +1465,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
+        transducer_openlifu = self.db.load_transducer(session_openlifu.transducer_id)
+        if transducer_openlifu.registration_surface_filename or transducer_openlifu.transducer_body_filename:
+            transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
+        else:
+            transducer_abspaths_info = {}
         newly_loaded_transducer = self.load_transducer_from_openlifu(
-            transducer = self.db.load_transducer(session_openlifu.transducer_id),
+            transducer = transducer_openlifu,
+            transducer_abspaths_info = transducer_abspaths_info,
             transducer_matrix = session_openlifu.array_transform.matrix,
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
@@ -1539,11 +1562,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
-        self.load_transducer_from_openlifu(transducer)
+        transducer_parent_dir = Path(filepath).parent
+        transducer_abspaths_info = {}
+        if transducer.transducer_body_filename:
+            transducer_abspaths_info['transducer_body_abspath'] = transducer_parent_dir/transducer.transducer_body_filename
+        if transducer.registration_surface_filename:
+            transducer_abspaths_info['registration_surface_abspath'] = transducer_parent_dir/transducer.registration_surface_filename
+
+        self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
 
     def load_transducer_from_openlifu(
             self,
             transducer: "openlifu.Transducer",
+            transducer_abspaths_info: Optional[dict] = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
             replace_confirmed: bool = False,
@@ -1553,6 +1584,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         Args:
             transducer: The openlifu Transducer object
+            transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
@@ -1579,6 +1611,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         newly_loaded_transducer = SlicerOpenLIFUTransducer.initialize_from_openlifu_transducer(
             transducer,
+            transducer_abspaths_info,
             transducer_matrix=transducer_matrix,
             transducer_matrix_units=transducer_matrix_units,
         )
@@ -1601,21 +1634,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if clean_up_scene:
             transducer.clear_nodes()
 
-    def on_transducer_affiliated_node_about_to_be_removed(self, node_mrml_id:str, affiliated_node_attribute_name:str) -> None:
-        """Handle cleanup on SlicerOpenLIFUTransducer objects when the mrml nodes they depend on get removed from the scene.
+    def on_transducer_affiliated_folder_about_to_be_removed(self, folder_transducer_id: str) -> None:
+        
+        # Set the folder deletion flag to true
+        self._folder_deletion_in_progress = True
 
-        Args:
-            node_mrml_id: The mrml scene ID of the node that was (or is about to be) removed
-            affiliated_node_attribute_name: The name of the affected vtkMRMLNode-valued SlicerOpenLIFUTransducerNode attribute
-                (so "transform_node" or "model_node")
-        """
         matching_transducer_openlifu_ids = [
             transducer_openlifu_id
-            for transducer_openlifu_id, transducer in self.getParameterNode().loaded_transducers.items()
-            if getattr(transducer,affiliated_node_attribute_name).GetID() == node_mrml_id
-        ]
+            for transducer_openlifu_id, _ in self.getParameterNode().loaded_transducers.items()
+            if transducer_openlifu_id == folder_transducer_id 
+            ]
 
-        # If this fails, then a single mrml node was shared across multiple loaded SlicerOpenLIFUTransducers, which
+        # If this fails, then  this folder was shared across multiple loaded SlicerOpenLIFUTransducers, which
         # should not be possible in the application logic.
         assert(len(matching_transducer_openlifu_ids) <= 1)
 
@@ -1624,15 +1654,67 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # by manual mrml scene manipulation, so we don't want to pull other nodes out from
             # under the user.
             transducer_openlifu_id = matching_transducer_openlifu_ids[0]
-            clean_up_scene = ObjectBeingUnloadedMessageBox(
-                message = f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
-                title="Transducer removed",
-                checkbox_tooltip = "Ensures cleanup of the model node and transform node affiliated with the transducer",
-            ).customexec_()
-            self.remove_transducer(transducer_openlifu_id, clean_up_scene=clean_up_scene)
+            slicer.util.warningDisplay(
+                text = f"The transducer with id {transducer_openlifu_id} will be unloaded because affiliated nodes were removed from the scene.",
+                windowTitle="Transducer removed", parent = slicer.util.mainWindow()
+            )
+            self.remove_transducer(transducer_openlifu_id, clean_up_scene=False)
 
             # If the transducer that was just removed was in use by an active session, invalidate that session
             self.validate_session()
+        
+        # Reset the flag back to false
+        self._folder_deletion_in_progress = False
+        self._timer = None
+
+    def on_transducer_affiliated_node_about_to_be_removed(self, node_mrml_id:str, affiliated_node_attribute_names: List[str]) -> None:
+        """Handle cleanup on SlicerOpenLIFUTransducer objects when the mrml nodes they depend on get removed from the scene.
+
+        Args:
+            node_mrml_id: The mrml scene ID of the node that was (or is about to be) removed
+            affiliated_node_attribute_name: List of the possible names of the affected vtkMRMLNode-valued SlicerOpenLIFUTransducerNode attribute
+                (so "transform_node" or "model_node" or "body_model_node" or "surface_model_node")
+        """
+        matching_transducer_openlifu_ids = [
+            transducer_openlifu_id
+            for transducer_openlifu_id, transducer in self.getParameterNode().loaded_transducers.items()
+            for attribute_name in affiliated_node_attribute_names 
+            if getattr(transducer,attribute_name) if getattr(transducer,attribute_name).GetID() == node_mrml_id 
+        ]
+
+        # If this fails, then a single mrml node was shared across multiple loaded SlicerOpenLIFUTransducers, which
+        # should not be possible in the application logic.
+        assert(len(matching_transducer_openlifu_ids) <= 1)
+
+        # After a delay, check if the flag indicating folder deletion has been set to True. 
+        # If False, then only the node was removed by manual manipulation and manual clean up of affiliated
+        # transform nodes can take place if wanted.  
+        def delayed_node_deletion():
+            if not self._folder_deletion_in_progress:
+                #Remove the transducer, but keep any other nodes under it. This transducer was removed
+                # by manual mrml scene manipulation, so we don't want to pull other nodes out from
+                # under the user.
+                transducer_openlifu_id = matching_transducer_openlifu_ids[0]
+                clean_up_scene = ObjectBeingUnloadedMessageBox(
+                    message = f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
+                    title="Transducer removed",
+                    checkbox_tooltip = "Ensures cleanup of the model node and transform node affiliated with the transducer",
+                ).customexec_()
+                self.remove_transducer(transducer_openlifu_id, clean_up_scene=clean_up_scene)
+
+                # If the transducer that was just removed was in use by an active session, invalidate that session
+                self.validate_session()
+
+        # When a folder is deleted, multiple calls to this function are triggered by each transducer affiliated node. 
+        # We include a check for an existing timer to prevent each transducer node from creating its own timer. 
+        if matching_transducer_openlifu_ids and self._timer is None:
+            # Wait before checking if the _folder_deletion_in_progress flag gets set to True. This indicates that 
+            # the node deletion is being triggered by a parent folder-level deletion and that manual node clean does not need
+            # to take place.
+            self._timer = qt.QTimer()
+            self._timer.timeout.connect(delayed_node_deletion)
+            self._timer.setSingleShot(True)
+            self._timer.start(500) 
 
     def set_solution(self, solution:SlicerOpenLIFUSolution):
         """Set a solution to be the currently active solution. If there is an active session, write that solution to the database."""
@@ -1824,18 +1906,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.getParameterNode().loaded_photoscans[photoscan_openlifu.id] = newly_loaded_photoscan
         return newly_loaded_photoscan
     
-    def on_photoscan_affiliated_node_about_to_be_removed(self, node_mrml_id:str, affiliated_node_attribute_name:str) -> None:
+    def on_photoscan_affiliated_node_about_to_be_removed(self, node_mrml_id:str, affiliated_node_attribute_names: List[str]) -> None:
         """Handle cleanup on SlicerOpenLIFUPhotoscan objects when the mrml nodes they depend on get removed from the scene.
 
         Args:
             node_mrml_id: The mrml scene ID of the node that was (or is about to be) removed
-            affiliated_node_attribute_name: The name of the affected vtkMRMLNode-valued SlicerOpenLIFUPhotoscanNode attribute
+            affiliated_node_attribute_name: List of the possible names of the affected vtkMRMLNode-valued SlicerOpenLIFUPhotoscanNode attribute
                 (so "texture_node" or "model_node")
         """
         matching_photoscan_openlifu_ids = [
             photoscan_openlifu_id
             for photoscan_openlifu_id, photoscan in self.getParameterNode().loaded_photoscans.items()
-            if getattr(photoscan,affiliated_node_attribute_name).GetID() == node_mrml_id
+            for attribute_name in affiliated_node_attribute_names 
+            if getattr(photoscan,attribute_name).GetID() == node_mrml_id
         ]
 
         # If this fails, then a single mrml node was shared across multiple loaded SlicerOpenLIFUPhotoscans, which
