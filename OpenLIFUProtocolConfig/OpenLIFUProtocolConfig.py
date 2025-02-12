@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from typing import Annotated, Optional, Dict, List, TYPE_CHECKING
 from enum import Enum
 
@@ -249,6 +250,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
         self.ui.protocolEditButton.clicked.connect(self.onEditProtocolClicked)
+        self.ui.protocolFileSaveButton.clicked.connect(self.onSaveProtocolToFileClicked)
         self.ui.protocolDatabaseSaveButton.clicked.connect(self.onSaveProtocolToDatabaseClicked)
         self.ui.protocolDatabaseDeleteButton.clicked.connect(self.onDeleteProtocolFromDatabaseClicked)
 
@@ -394,6 +396,41 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onEditProtocolClicked(self, checked: bool) -> None:
         if self._cur_protocol_id not in self.logic.new_protocol_ids:
             self.setProtocolEditorEnabled(True)
+
+    @display_errors
+    def onSaveProtocolToFileClicked(self, checked:bool) -> None:
+        initial_dir = slicer.app.defaultScenePath
+        protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI()
+
+        safe_protocol_id = "".join(c if c.isalnum() or c in (' ', '-', '_') else "_" for c in protocol.id)
+
+        initial_file = Path(initial_dir) / f'{safe_protocol_id}.json'
+        
+        # Open a QFileDialog for saving a file
+        filepath = qt.QFileDialog.getSaveFileName(
+            slicer.util.mainWindow(),  # parent
+            'Save Protocol',  # dialog title
+            initial_file,  # starting file
+            "Protocols (*.json);;All Files (*)"  # file type filter
+        )
+
+        if filepath:
+            protocol.to_file(filepath)  # save to file
+            self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
+
+            self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
+            if self._cur_protocol_id in self.logic.new_protocol_ids:
+                self.logic.new_protocol_ids.discard(self._cur_protocol_id)
+
+            self._is_saving_changes = True
+            self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
+            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # details might have changed
+            self._is_saving_changes = False
+            self._cur_protocol_id = protocol.id  # id might have changed
+
+            self.setProtocolEditorEnabled(False)
+        else:
+            raise RuntimeError(f'Cannot save protocol because the file path "{filepath}" is invalid')
 
     @display_errors
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
@@ -562,9 +599,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
-        if enabled and get_openlifu_data_parameter_node().database_is_loaded:
-            self.setDatabaseSaveAndDeleteButtonsEnabled(True)
-        elif not enabled:
+        self.setAllSaveAndDeleteButtonsEnabled(enabled)
+        if not get_openlifu_data_parameter_node().database_is_loaded:
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
@@ -575,6 +611,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def setDatabaseSaveAndDeleteButtonsEnabled(self, enabled: bool) -> None:
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
+
+    def setAllSaveAndDeleteButtonsEnabled(self, enabled: bool) -> None:
+        self.ui.protocolFileSaveButton.setEnabled(enabled)
+        self.setDatabaseSaveAndDeleteButtonsEnabled(enabled)
 
     def setDatabaseButtonsEnabled(self, enabled: bool) -> None:
         self.ui.loadProtocolFromDatabaseButton.setEnabled(enabled)
