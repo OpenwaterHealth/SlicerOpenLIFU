@@ -124,7 +124,8 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
         """
 
         self.setWindowTitle("Select a Protocol")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(600, 400)
 
         self.protocol_names_and_IDs : "List[Tuple[str,str]]" = protocol_names_and_IDs
         self.selected_protocol_id : str = None
@@ -137,6 +138,7 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
         self.setLayout(self.boxLayout)
 
         self.listWidget = qt.QListWidget(self)
+        self.listWidget.itemDoubleClicked.connect(self.onItemDoubleClicked)
         self.boxLayout.addWidget(self.listWidget)
 
         self.buttonBox = qt.QDialogButtonBox(
@@ -155,6 +157,9 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
             self.listWidget.addItem(display_text)
 
 
+    def onItemDoubleClicked(self, item):
+        self.validateInputs()
+
     def validateInputs(self):
 
         selected_idx = self.listWidget.currentRow
@@ -162,7 +167,7 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
             _, self.selected_protocol_id = self.protocol_names_and_IDs[selected_idx]
         self.accept()
 
-    def get_selected_protocol_id(self):
+    def get_selected_protocol_id(self) -> str:
 
         return self.selected_protocol_id
 
@@ -192,11 +197,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         }
 
     @property
-    def cur_protocol_id(self):
+    def cur_protocol_id(self) -> str:
         return self._cur_protocol_id
 
     @property
-    def cur_save_state(self):
+    def cur_save_state(self) -> SaveState:
         return self._cur_save_state
 
     def setup(self) -> None:
@@ -425,8 +430,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self._cur_protocol_id = protocol.id  # id might have changed
 
             self.setProtocolEditorEnabled(False)
-        else:
-            raise RuntimeError(f'Cannot save protocol because the file path "{filepath}" is invalid')
 
     @display_errors
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
@@ -493,15 +496,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onLoadProtocolFromDatabaseClicked(self, checked:bool) -> None:
-        qsettings = qt.QSettings()
-
-        filepath: str = qsettings.value('OpenLIFU/databaseDirectory')  # No default value
-
-        if not filepath:
-            return  # TODO: should emit error?
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            raise RuntimeError("Cannot load protocol from database because there is no database connection")
 
         # Open the protocol selection dialog
-        protocols : "List[SlicerOpenLIFUProtocol]" = self.logic.dataLogic.db.load_all_protocols()
+        protocols : "List[openlifu.plan.Protocol]" = self.logic.dataLogic.db.load_all_protocols()
         protocol_names_and_IDs = [(p.name, p.id) for p in protocols]
 
         dialog = ProtocolSelectionFromDatabaseDialog(protocol_names_and_IDs)
@@ -613,8 +612,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
 
     def setAllSaveAndDeleteButtonsEnabled(self, enabled: bool) -> None:
+        self.setDatabaseSaveAndDeleteButtonsEnabled(enabled)  # also updates tooltips
+
         self.ui.protocolFileSaveButton.setEnabled(enabled)
-        self.setDatabaseSaveAndDeleteButtonsEnabled(enabled)
+        if enabled:
+            self.ui.protocolFileSaveButton.setToolTip("Save the current openlifu protocol to a file")
+        else:
+            self.ui.protocolFileSaveButton.setToolTip("You must be editing a protocol to perform this action")
 
     def setDatabaseButtonsEnabled(self, enabled: bool) -> None:
         self.ui.loadProtocolFromDatabaseButton.setEnabled(enabled)
