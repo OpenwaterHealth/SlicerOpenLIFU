@@ -319,7 +319,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.protocolSelector.setProperty("defaultText", "No protocols to select.")  
             self.setProtocolEditButtonEnabled(False)
         else:
-            tooltip = "Select a protocol..."
+            tooltip = "Select among the currently loaded protocols"
             for protocol_id, protocol_w in get_openlifu_data_parameter_node().loaded_protocols.items():
                 self.ui.protocolSelector.addItem(f"{protocol_w.protocol.name} (ID: {protocol_id})", protocol_w.protocol)
             if total_num_protocols > 1:
