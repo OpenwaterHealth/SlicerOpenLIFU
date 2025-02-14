@@ -22,6 +22,7 @@ from OpenLIFULib import (
     openlifu_lz,
     bcrypt_lz,
     SlicerOpenLIFUUser,
+    get_openlifu_data_parameter_node,
 )
 
 from OpenLIFULib.util import (
@@ -155,11 +156,15 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFULoginLogic()
 
-        # Connections
+        # === Connections and UI setup =======
 
-        # Buttons
+        # Connect to the data parameter node for updates related to database
+
+        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+
+        # Connect the buttons
+
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
-
         self.ui.loginButton.clicked.connect(self.onLoginClicked)
 
         # ====================================
@@ -168,6 +173,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
 
         self.updateUserAccountModeButton()
+        self.updateLoginButton()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -195,6 +201,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+
+    def onDataParameterNodeModified(self, caller = None, event = None):
+        self.updateLoginButton()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -227,6 +236,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         else:
             set_user_account_mode_state(new_user_account_mode_state)
 
+        self.updateLoginButton()
+
     @display_errors
     def onLoginClicked(self, checked:bool):
         loginDlg = UsernamePasswordDialog()
@@ -236,6 +247,42 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return False
         
         print(f'username: {user_id}; password: {password_hash}')
+
+    def updateLoginButton(self):
+
+        # === Multiple things can block the login button ===
+
+        if not self._parameterNode.user_account_mode:
+            self.ui.loginButton.setEnabled(False)
+            self.ui.loginButton.setToolTip("The login feature is only available with user account mode turned on.")
+            return
+
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            self.ui.loginButton.setEnabled(False)
+            self.ui.loginButton.setToolTip("The login feature requires a database connection.")
+            return
+
+        # Now we see if there is an admin in the database
+        users = self.logic.dataLogic.db.load_all_users()
+        if not any('admin' in u.roles for u in users):
+            self.ui.loginButton.setEnabled(False)
+            self.ui.loginButton.setToolTip("The login feature requires at least one administrative user.")
+            # set the user to admin, go to home module
+            default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+                    id = "default_admin", 
+                    password_hash = "default_admin",
+                    roles = ['admin'],
+                    name = "default_admin",
+                    description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
+                    ))
+            self._parameterNode.active_user = default_admin_user
+            slicer.util.selectModule('OpenLIFUHome')
+            return
+
+        # === Otherwise, login works ===
+
+        self.ui.loginButton.setEnabled(True)
+        self.ui.loginButton.setToolTip("Login to an account in the database.")
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
@@ -264,6 +311,8 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
+        self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):

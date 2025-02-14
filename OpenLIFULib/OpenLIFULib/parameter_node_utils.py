@@ -97,7 +97,7 @@ class SlicerOpenLIFUPhotoscanWrapper:
 class SlicerOpenLIFUUser:
     """Ultrathin wrapper of openlifu.User. This exists so that users can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, user: "Optional[openlifu.User]" = None):
+    def __init__(self, user: "Optional[openlifu.db.User]" = None):
         self.user = user
 
 def SlicerOpenLIFUSerializerBaseMaker(
