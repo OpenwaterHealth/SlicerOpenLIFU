@@ -76,6 +76,9 @@ class LoginState(Enum):
 @parameterNodeWrapper
 class OpenLIFULoginParameterNode:
     user_account_mode : bool
+    # TODO: We should only serialize the user if the user selects some button
+    # like "remember me." Perhaps, we could unconditionally serialize the
+    # user_id, for ease of repeated login
     active_user : "Optional[SlicerOpenLIFUUser]"
     
 #
@@ -122,6 +125,7 @@ class UsernamePasswordDialog(qt.QDialog):
             id = self.username.text
             password_text = self.password.text
             # TODO: We should hash passwords with bcrypt.hashpw() and the gensalt, but then use checkpw against the stored hash
+            # TODO: This will be implemented with the ability to create new passwords, issue #173
             # salt = bcrypt_lz().gensalt()
             # password_hash = bcrypt_lz().hashpw(password_text, salt).decode('utf-8')  # convert bytestring back to string
             return (returncode, id, password_text)
@@ -182,6 +186,15 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.updateUserAccountModeButton()
         self.updateLoginButton()
+        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+        default_anonymous_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+                id = "anonymous", 
+                password_hash = "",
+                roles = [],
+                name = "Anonymous",
+                description = "This is the default anonymous role automatically assigned when the app opens, before anyone is logged in. It has no roles, and therefore is the most restricted."
+                ))
+        self._parameterNode.active_user = default_anonymous_user
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -267,6 +280,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self._parameterNode.active_user = SlicerOpenLIFUUser(matched_user)
         self.updateWidgetLoginState(LoginState.LOGGED_IN)
+        slicer.util.selectModule('OpenLIFUHome')
 
     def updateLoginButton(self):
 
@@ -286,7 +300,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         users = self.logic.dataLogic.db.load_all_users()
         if not any('admin' in u.roles for u in users):
             self.ui.loginButton.setEnabled(False)
-            self.ui.loginButton.setToolTip("The login feature requires at least one administrative user.")
+            self.ui.loginButton.setToolTip("The login feature requires at least one administrative user in the database.")
             # set the user to admin, go to home module
             default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
                     id = "default_admin", 
