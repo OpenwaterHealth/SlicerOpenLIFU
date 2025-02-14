@@ -17,6 +17,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/algorithm_input_widget.py
   OpenLIFULib/coordinate_system_utils.py
   OpenLIFULib/photoscan.py
+  OpenLIFULib/virtual_fit_results.py
 )
 
 set(MODULE_PYTHON_RESOURCES
