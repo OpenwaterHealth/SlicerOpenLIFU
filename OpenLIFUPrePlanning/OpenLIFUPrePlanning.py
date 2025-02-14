@@ -21,6 +21,8 @@ from OpenLIFULib import (
     SlicerOpenLIFUTransducer,
 )
 from OpenLIFULib.util import replace_widget
+from OpenLIFULib.virtual_fit_results import add_virtual_fit_result
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -155,7 +157,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.removeTargetButton.clicked.connect(self.onremoveTargetClicked)
         self.ui.lockButton.clicked.connect(self.onLockClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
-        self.ui.virtualfitButton.clicked.connect(self.onvirtualfitClicked)
+        self.ui.virtualfitButton.clicked.connect(self.onVirtualfitClicked)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -393,7 +395,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         else:
             self.ui.approvalStatusLabel.text = ""
 
-    def onvirtualfitClicked(self):
+    def onVirtualfitClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
         self.logic.virtual_fit(activeData["Protocol"],activeData["Transducer"], activeData["Volume"], activeData["Target"])
 
@@ -462,13 +464,26 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 text=(
                     "The automatic virtual fitting algorithm is not yet implemented."
                     " Use the interaction handles on the transducer to manually fit it."
-                    " You can click the Virtual fit button again to remove the interaction handles."
+                    " You can click the Virtual fit button again to remove the interaction handles,"
+                    " completing the manual virtual fit and recording the virtual fit transform."
                 ),
                 windowTitle="Not implemented"
             )
             transducer.transform_node.GetDisplayNode().SetEditorVisibility(True)
         else:
+            # "Complete" the virtual fit
             transducer.transform_node.GetDisplayNode().SetEditorVisibility(False)
+
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id : Optional[str] = session.get_session_id() if session is not None else None
+
+
+            add_virtual_fit_result(
+                transform_node = transducer.transform_node,
+                target_id = fiducial_to_openlifu_point_id(target),
+                session_id = session_id,
+                approval_status = False,
+            )
 
 #
 # OpenLIFUPrePlanningTest
