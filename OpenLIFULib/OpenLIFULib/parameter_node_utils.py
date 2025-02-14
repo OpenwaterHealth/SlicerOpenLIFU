@@ -284,6 +284,25 @@ class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLI
         return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().photoscan.Photoscan.from_json(json_string))
 
 @parameterNodeSerializer
+class OpenLIFUUserSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUUser)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUUser) -> None:
+        """
+        Writes the value to the parameterNode under the given name.
+        """
+        parameterNode.SetParameter(
+            name,
+            value.user.to_json(compact=True)
+        )
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUUser:
+        """
+        Reads and returns the value with the given name from the parameterNode.
+        """
+        json_string = parameterNode.GetParameter(name)    
+        return SlicerOpenLIFUUser(openlifu_lz().db.User.from_json(json_string))
+
+
+@parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
     def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUXADataset) -> None:
         """
