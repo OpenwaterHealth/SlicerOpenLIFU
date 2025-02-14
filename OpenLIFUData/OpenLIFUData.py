@@ -103,7 +103,7 @@ class CreateNewSessionDialog(qt.QDialog):
         """
 
         self.setWindowTitle("Create New Session")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.WindowModal)
         self.transducer_ids = transducer_ids
         self.protocol_ids = protocol_ids
         self.volume_ids = volume_ids
@@ -184,7 +184,7 @@ class AddNewVolumeDialog(qt.QDialog):
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Add New Volume")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
     def setup(self):
@@ -260,7 +260,7 @@ class AddNewPhotoscanDialog(qt.QDialog):
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Add New Photoscan")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
     def setup(self):
@@ -361,7 +361,7 @@ class AddNewSubjectDialog(qt.QDialog):
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Add New Subject")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
     def setup(self):
@@ -399,7 +399,7 @@ class LoadPhotoscanDialog(qt.QDialog):
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Load photoscan")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
     def setup(self):
