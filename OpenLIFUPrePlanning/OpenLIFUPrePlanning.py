@@ -21,7 +21,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUTransducer,
 )
 from OpenLIFULib.util import replace_widget
-from OpenLIFULib.virtual_fit_results import add_virtual_fit_result
+from OpenLIFULib.virtual_fit_results import add_virtual_fit_result, clear_virtual_fit_results
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 if TYPE_CHECKING:
@@ -477,10 +477,12 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             session = get_openlifu_data_parameter_node().loaded_session
             session_id : Optional[str] = session.get_session_id() if session is not None else None
 
+            target_id = fiducial_to_openlifu_point_id(target)
+            clear_virtual_fit_results(target_id=target_id,session_id=session_id)
 
             add_virtual_fit_result(
                 transform_node = transducer.transform_node,
-                target_id = fiducial_to_openlifu_point_id(target),
+                target_id = target_id,
                 session_id = session_id,
                 approval_status = False,
             )
