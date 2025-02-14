@@ -64,7 +64,7 @@ class OpenLIFULogin(ScriptedLoadableModule):
 @parameterNodeWrapper
 class OpenLIFULoginParameterNode:
     user_account_mode : bool
-    active_user : "SlicerOpenLIFUUser"
+    active_user : "Optional[SlicerOpenLIFUUser]"
     
 #
 # OpenLIFULoginDialogs

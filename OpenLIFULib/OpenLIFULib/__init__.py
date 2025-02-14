@@ -5,6 +5,7 @@ from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFURun,
     SlicerOpenLIFUSolutionAnalysis,
+    SlicerOpenLIFUUser,
 )
 from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
 from OpenLIFULib.photoscan import SlicerOpenLIFUPhotoscan
