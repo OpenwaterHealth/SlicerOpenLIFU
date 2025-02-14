@@ -20,7 +20,12 @@ from slicer import (
 
 from OpenLIFULib import (
     openlifu_lz,
+    bcrypt_lz,
     SlicerOpenLIFUUser,
+)
+
+from OpenLIFULib.util import (
+    display_errors,
 )
 
 if TYPE_CHECKING:
@@ -76,8 +81,10 @@ class UsernamePasswordDialog(qt.QDialog):
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Login credentials")
-        self.setWindowModality(1)
+        self.setWindowModality(qt.Qt.ApplicationModal)
         self.setup()
+
+        self.password_hash = None
 
     def setup(self):
 
@@ -90,6 +97,7 @@ class UsernamePasswordDialog(qt.QDialog):
         formLayout.addRow(_("Username:"), self.username)
 
         self.password = qt.QLineEdit()
+        self.password.setEchoMode(qt.QLineEdit.Password)
         formLayout.addRow(_("Password:"), self.password)
 
         self.buttonBox = qt.QDialogButtonBox()
@@ -103,10 +111,13 @@ class UsernamePasswordDialog(qt.QDialog):
     def customexec_(self):
 
         returncode = self.exec_()
-        subject_name = self.username.text
-        subject_id = self.password.text
-
-        return (returncode, subject_name, subject_id)
+        if returncode == qt.QDialog.Accepted:
+            id = self.username.text
+            password_text = self.password.text.encode('utf-8')
+            salt = bcrypt_lz().gensalt()
+            password_hash = bcrypt_lz().hashpw(password_text, salt)
+            return (returncode, id, password_hash)
+        return (returncode, None, None)
 
 #
 # OpenLIFULoginWidget
@@ -147,7 +158,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Connections
 
         # Buttons
-        self.ui.userAccountModePushButton.connect("clicked()", self.onUserAccountModeClicked)
+        self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
+
+        self.ui.loginButton.clicked.connect(self.onLoginClicked)
 
         # ====================================
         
@@ -213,6 +226,16 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.logic.start_user_account_mode()
         else:
             set_user_account_mode_state(new_user_account_mode_state)
+
+    @display_errors
+    def onLoginClicked(self, checked:bool):
+        loginDlg = UsernamePasswordDialog()
+        returncode, user_id, password_hash = loginDlg.customexec_()
+
+        if not returncode:
+            return False
+        
+        print(f'username: {user_id}; password: {password_hash}')
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
