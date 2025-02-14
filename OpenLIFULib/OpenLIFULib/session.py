@@ -21,6 +21,7 @@ from OpenLIFULib.coordinate_system_utils import (
     get_xxx2ras_matrix,
     linear_to_affine,
 )
+from OpenLIFULib.transducer import create_openlifu2slicer_matrix
 
 if TYPE_CHECKING:
     import openlifu
@@ -181,9 +182,7 @@ class SlicerOpenLIFUSession:
         transducer_openlifu = transducer.transducer.transducer
         transducer_transform_node : vtkMRMLTransformNode = transducer.transform_node
         transducer_transform_array = slicer.util.arrayFromTransformMatrix(transducer_transform_node, toWorld=True)
-        openlifu2slicer_matrix = linear_to_affine(
-            get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(transducer_openlifu.units)
-        )
+        openlifu2slicer_matrix = create_openlifu2slicer_matrix(transducer_openlifu.units)
         self.session.session.array_transform = openlifu_lz().db.session.ArrayTransform(
             matrix = np.linalg.inv(openlifu2slicer_matrix) @ transducer_transform_array,
             units = transducer_openlifu.units,
