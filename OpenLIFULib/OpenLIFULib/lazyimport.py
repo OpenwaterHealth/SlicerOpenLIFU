@@ -65,3 +65,11 @@ def xarray_lz() -> "xarray":
         check_and_install_python_requirements(prompt_if_found=False)
         import xarray
     return sys.modules["xarray"]
+
+def bcrypt_lz() -> "bcrypt":
+    """Import bcrypt and return the module, checking that it is installed along the way."""
+    if "bcrypt" not in sys.modules:
+        check_and_install_python_requirements(prompt_if_found=False)
+        with BusyCursor():
+            import bcrypt
+    return sys.modules["bcrypt"]
