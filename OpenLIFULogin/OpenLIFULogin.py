@@ -1,5 +1,6 @@
 from typing import Optional, TYPE_CHECKING
 import json
+from enum import Enum
 
 from OpenLIFULib.user_account_mode_util import set_user_account_mode_state
 import qt
@@ -63,6 +64,11 @@ class OpenLIFULogin(ScriptedLoadableModule):
             "and development."
         )
 
+class LoginState(Enum):
+    NOT_LOGGED_IN=0
+    UNSUCCESSFUL_LOGIN=1
+    LOGGED_IN=2
+
 #
 # OpenLIFULoginParameterNode
 #
@@ -114,10 +120,11 @@ class UsernamePasswordDialog(qt.QDialog):
         returncode = self.exec_()
         if returncode == qt.QDialog.Accepted:
             id = self.username.text
-            password_text = self.password.text.encode('utf-8')
-            salt = bcrypt_lz().gensalt()
-            password_hash = bcrypt_lz().hashpw(password_text, salt)
-            return (returncode, id, password_hash)
+            password_text = self.password.text
+            # TODO: We should hash passwords with bcrypt.hashpw() and the gensalt, but then use checkpw against the stored hash
+            # salt = bcrypt_lz().gensalt()
+            # password_hash = bcrypt_lz().hashpw(password_text, salt).decode('utf-8')  # convert bytestring back to string
+            return (returncode, id, password_text)
         return (returncode, None, None)
 
 #
@@ -134,6 +141,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
+        self._cur_login_state = LoginState.NOT_LOGGED_IN
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
@@ -183,6 +191,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateLoginStateLabel()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -241,12 +250,23 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     @display_errors
     def onLoginClicked(self, checked:bool):
         loginDlg = UsernamePasswordDialog()
-        returncode, user_id, password_hash = loginDlg.customexec_()
+        returncode, user_id, password_text = loginDlg.customexec_()
 
         if not returncode:
             return False
-        
-        print(f'username: {user_id}; password: {password_hash}')
+
+        users = self.logic.dataLogic.db.load_all_users()
+        verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
+
+        matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
+
+        if not matched_user:
+            self._parameterNode.active_user = None
+            self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
+            return
+
+        self._parameterNode.active_user = SlicerOpenLIFUUser(matched_user)
+        self.updateWidgetLoginState(LoginState.LOGGED_IN)
 
     def updateLoginButton(self):
 
@@ -283,6 +303,24 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.ui.loginButton.setEnabled(True)
         self.ui.loginButton.setToolTip("Login to an account in the database.")
+
+    def updateWidgetLoginState(self, state: LoginState):
+        self._cur_login_state = state
+        self.updateLoginStateLabel()
+
+    def updateLoginStateLabel(self):
+        if self._cur_login_state == LoginState.NOT_LOGGED_IN:
+            self.ui.loginStateLabel.setProperty("text", "")  
+            self.ui.loginStateLabel.setProperty("styleSheet", "border: none;")
+        elif self._cur_login_state == LoginState.UNSUCCESSFUL_LOGIN:
+            self.ui.loginStateLabel.setProperty("text", "Unsuccessful login. Please try again.")
+            self.ui.loginStateLabel.setProperty("styleSheet", "color: red; font-size: 16px; border: 1px solid red;")
+        elif self._cur_login_state == LoginState.LOGGED_IN:
+            # We want the regular text, night-mode agnostic
+            palette = qt.QApplication.instance().palette()
+            text_color = palette.color(qt.QPalette.WindowText).name()
+            self.ui.loginStateLabel.setProperty("text", f"Welcome, {self._parameterNode.active_user.user.name}!")
+            self.ui.loginStateLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
