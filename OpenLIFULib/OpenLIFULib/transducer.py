@@ -1,6 +1,5 @@
 from typing import Optional, TYPE_CHECKING, Callable, Any
 import numpy as np
-from pathlib import Path
 import vtk
 import slicer
 from slicer import (
@@ -9,26 +8,11 @@ from slicer import (
 )
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
-from OpenLIFULib.coordinate_system_utils import (
-    linear_to_affine,
-    get_xxx2ras_matrix,
-    get_xx2mm_scale_factor,
-    numpy_to_vtk_4x4
-) 
+from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
+from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
-
-def create_openlifu2slicer_matrix(transducer : "openlifu.Transducer") -> np.ndarray:
-    """
-    Returns a 4x4 affine transform matrix that maps LPS points in transducer units to RAS points in mm
-    """
-    # TODO: Instead of harcoding 'LPS' here, use something like a "dims" attribute that should be associated with
-    # the `transducer` object. There is no such attribute yet but it should exist eventually once this is done:
-    # https://github.com/OpenwaterHealth/opw_neuromod_sw/issues/3
-    return linear_to_affine(
-        get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(transducer.units)
-    )
 
 @parameterPack
 class SlicerOpenLIFUTransducer:

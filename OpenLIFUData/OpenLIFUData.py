@@ -1031,8 +1031,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             # Build the additional info message here; this is status text that conditionally displays.
             additional_info_messages : List[str] = []
-            if session_openlifu.virtual_fit_approval_for_target_id is not None:
-                additional_info_messages.append(f"Virtual fit approved for \"{session_openlifu.virtual_fit_approval_for_target_id}\"")
+            approved_vf_targets = self.logic.get_virtual_fit_approvals_in_session()
+            num_approved = len(approved_vf_targets)
+            if len(approved_vf_targets) > 0:
+                additional_info_messages.append(
+                    "Virtual fit approved for "
+                    + (f"{num_approved} targets" if num_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
+                )
             if loaded_session.transducer_tracking_is_approved():
                 additional_info_messages.append(f"Transducer tracking approved")
             self.ui.sessionStatusAdditionalInfoLabel.setText('\n'.join(additional_info_messages))
@@ -1524,19 +1529,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session.toggle_transducer_tracking_approval() # revoke approval
             self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
 
-        # Revoke any possible virtual fit approval if the transducer whose transform was just modified
-        # belongs to an active session
-        if (
-            session.session.session.virtual_fit_approval_for_target_id is not None
-            and session.get_transducer_id() == transducer.transducer.transducer.id
-        ):
-            slicer.util.infoDisplay(
-                text= "Virtual fit approval has been revoked because the transducer was moved.",
-                windowTitle="Approval revoked"
-            )
-            session.approve_virtual_fit_for_target(None) # revoke approval
-            self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
-
     def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
         self.load_protocol_from_openlifu(protocol)
@@ -1803,14 +1795,22 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.db.write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
-    def get_virtual_fit_approval_state(self) -> Optional[str]:
-        """Get the virtual fit approval state in the current session, i.e. the value of virtual_fit_approval_for_target_id.
+    def get_virtual_fit_approvals_in_session(self) -> List[str]:
+        """Get the virtual fit approval state in the current session object, a list of target IDs for which virtual fit
+        is approved.
         This does not first check whether there is an active session; make sure that one exists before using this.
         """
         session = self.getParameterNode().loaded_session
         if session is None:
             raise RuntimeError("No active session.")
-        return session.session.session.virtual_fit_approval_for_target_id
+        session_openlifu : "openlifu.db.Session" = session.session.session
+        approved_vf_targets = []
+        for target in session_openlifu.targets:
+            if target.id not in session_openlifu.virtual_fit_results:
+                continue
+            if session_openlifu.virtual_fit_results[target.id][0]:
+                approved_vf_targets.append(target.id)
+        return approved_vf_targets
 
     def load_volume_from_openlifu(self, volume_dir: Path, volume_metadata: Dict):
         """ Load a volume based on openlifu metadata and check for duplicate volumes in the scene.

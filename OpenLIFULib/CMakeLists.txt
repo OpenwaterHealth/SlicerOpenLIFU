@@ -18,6 +18,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/coordinate_system_utils.py
   OpenLIFULib/photoscan.py
   OpenLIFULib/virtual_fit_results.py
+  OpenLIFULib//transform_conversion.py
 )
 
 set(MODULE_PYTHON_RESOURCES
