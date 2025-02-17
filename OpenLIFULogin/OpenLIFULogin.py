@@ -40,6 +40,12 @@ if TYPE_CHECKING:
 
 all_openlifu_modules = ['OpenLIFUData', 'OpenLIFUHome', 'OpenLIFUPrePlanning', 'OpenLIFUProtocolConfig', 'OpenLIFUSonicationControl', 'OpenLIFUSonicationPlanner', 'OpenLIFUTransducerTracker']
 
+anonymous_permissions = []
+restricted_permissions = anonymous_permissions + []
+operator_permissions = restricted_permissions + ['create-session-and-add-data', 'set-target', 'virtual-fitting', 'transducer-tracking', 'create-solution', 'run-sonication']
+admin_permissions = operator_permissions + ['manage-users', 'configure-and-publish-protocol']
+root_permissions = admin_permissions + []
+
 class OpenLIFULogin(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
