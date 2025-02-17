@@ -1185,6 +1185,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
         self._folder_deletion_in_progress = False
         self._timer = None 
+        # Secondary flag incase the timer fails during folder deletion. Prevents two transducer deletio
+        self._transducer_node_deletion_in_progress = False 
 
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
@@ -1649,7 +1651,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # should not be possible in the application logic.
         assert(len(matching_transducer_openlifu_ids) <= 1)
 
-        if matching_transducer_openlifu_ids:
+        if matching_transducer_openlifu_ids and not self._transducer_node_deletion_in_progress:
             # Remove the transducer, but keep any other nodes under it. This transducer was removed
             # by manual mrml scene manipulation, so we don't want to pull other nodes out from
             # under the user.
@@ -1694,6 +1696,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 #Remove the transducer, but keep any other nodes under it. This transducer was removed
                 # by manual mrml scene manipulation, so we don't want to pull other nodes out from
                 # under the user.
+                self._transducer_node_deletionin_progress = True
+
                 transducer_openlifu_id = matching_transducer_openlifu_ids[0]
                 clean_up_scene = ObjectBeingUnloadedMessageBox(
                     message = f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
@@ -1704,6 +1708,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
                 # If the transducer that was just removed was in use by an active session, invalidate that session
                 self.validate_session()
+                
+                # Reset flags
+                self._timer = None
+                self._transducer_node_deletion_in_progress = False
 
         # When a folder is deleted, multiple calls to this function are triggered by each transducer affiliated node. 
         # We include a check for an existing timer to prevent each transducer node from creating its own timer. 
