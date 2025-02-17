@@ -179,6 +179,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
         self.ui.loginButton.clicked.connect(self.onLoginClicked)
+        self.ui.logoutButton.clicked.connect(self.onLogoutClicked)
 
         # ====================================
         
@@ -284,6 +285,11 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateWidgetLoginState(LoginState.LOGGED_IN)
         slicer.util.selectModule('OpenLIFUHome')
 
+    @display_errors
+    def onLogoutClicked(self, checked:bool):
+        self._parameterNode.active_user = None
+        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+
     def updateLoginButton(self):
 
         # === Multiple things can block the login button ===
@@ -321,9 +327,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loginButton.setEnabled(True)
         self.ui.loginButton.setToolTip("Login to an account in the database.")
 
+    def updateLogoutButton(self):
+
+        # === Can only logout when logged in ===
+
+        if self._cur_login_state == LoginState.LOGGED_IN:
+            self.ui.logoutButton.setEnabled(True)
+            self.ui.logoutButton.setToolTip("Logout to an account in the database.")
+        else:
+            self.ui.logoutButton.setEnabled(False)
+            self.ui.logoutButton.setToolTip("You must be logged in to logout")
+
     def updateWidgetLoginState(self, state: LoginState):
         self._cur_login_state = state
         self.updateLoginStateNotificationLabel()
+        self.updateLogoutButton()
 
     def updateLoginStateNotificationLabel(self):
         if self._cur_login_state == LoginState.NOT_LOGGED_IN:
