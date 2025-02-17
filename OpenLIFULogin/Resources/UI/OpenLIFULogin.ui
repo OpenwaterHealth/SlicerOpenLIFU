@@ -32,7 +32,7 @@
         </widget>
       </item>
       <item>
-        <widget class="QLabel" name="loginStateLabel">
+        <widget class="QLabel" name="loginStateNotificationLabel">
           <property name="alignment">
             <set>Qt::AlignCenter</set>
           </property>
