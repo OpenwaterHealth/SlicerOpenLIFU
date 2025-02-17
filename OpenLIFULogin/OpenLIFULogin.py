@@ -256,6 +256,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if new_user_account_mode_state:
             self.logic.start_user_account_mode()
         else:
+            self._parameterNode.active_user = None
+            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
             set_user_account_mode_state(new_user_account_mode_state)
 
         self.updateLoginButton()
