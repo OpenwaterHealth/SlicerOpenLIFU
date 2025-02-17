@@ -1,5 +1,4 @@
 from typing import List, TYPE_CHECKING, Optional, Tuple, Dict
-from pathlib import Path
 import numpy as np
 import slicer
 from slicer import (
@@ -14,14 +13,9 @@ from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, Slice
 from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
     fiducial_to_openlifu_point,
-    fiducial_to_openlifu_point_id,
 )
-from OpenLIFULib.coordinate_system_utils import (
-    get_xx2mm_scale_factor,
-    get_xxx2ras_matrix,
-    linear_to_affine,
-)
-from OpenLIFULib.transducer import create_openlifu2slicer_matrix
+from OpenLIFULib.transform_conversion import transform_node_to_openlifu
+from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
 
 if TYPE_CHECKING:
     import openlifu
@@ -149,7 +143,7 @@ class SlicerOpenLIFUSession:
 
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
-        
+
         return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
 
     def set_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
@@ -181,26 +175,15 @@ class SlicerOpenLIFUSession:
         transducer = get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]
         transducer_openlifu = transducer.transducer.transducer
         transducer_transform_node : vtkMRMLTransformNode = transducer.transform_node
-        transducer_transform_array = slicer.util.arrayFromTransformMatrix(transducer_transform_node, toWorld=True)
-        openlifu2slicer_matrix = create_openlifu2slicer_matrix(transducer_openlifu.units)
-        self.session.session.array_transform = openlifu_lz().db.session.ArrayTransform(
-            matrix = np.linalg.inv(openlifu2slicer_matrix) @ transducer_transform_array,
+        self.session.session.array_transform = transform_node_to_openlifu(transducer_transform_node, transducer_openlifu.units)
+
+        # Update virtual fit results
+        self.session.session.virtual_fit_results = get_virtual_fit_results_in_openlifu_session_format(
+            session_id=self.get_session_id(),
             units = transducer_openlifu.units,
         )
 
         return self.session.session
-
-    def approve_virtual_fit_for_target(self, target : Optional[vtkMRMLMarkupsFiducialNode] = None):
-        """Apply approval for the virtual fit of the given target. If no target is provided, then
-        any existing approval is revoked."""
-        target_id = None
-        if target is not None:
-            target_id = fiducial_to_openlifu_point_id(target)
-        self.session.session.virtual_fit_approval_for_target_id = target_id # apply the approval or lack thereof
-
-    def virtual_fit_is_approved_for_target(self, target : vtkMRMLMarkupsFiducialNode) -> bool:
-        """Return whether there is a virtual fit approval for the given target"""
-        return self.session.session.virtual_fit_approval_for_target_id == fiducial_to_openlifu_point_id(target)
 
     def toggle_transducer_tracking_approval(self) -> None:
         """Approve transducer tracking if it was not approved. Revoke approval if it was approved."""

@@ -35,7 +35,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         layout = qt.QFormLayout(self)
         self.setLayout(layout)
 
-        self.inputs_dict = {}
+        self.inputs_dict : Dict[str,AlgorithmInput] = {}
         for input_name in algorithm_input_names:
             if input_name not in ["Protocol", "Transducer", "Volume", "Target", "Photoscan"]:
                 raise ValueError("Invalid algorithm input specified.")
