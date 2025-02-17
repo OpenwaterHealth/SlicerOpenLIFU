@@ -204,7 +204,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-        self.updateLoginStateLabel()
+        self.updateLoginStateNotificationLabel()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -320,21 +320,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def updateWidgetLoginState(self, state: LoginState):
         self._cur_login_state = state
-        self.updateLoginStateLabel()
+        self.updateLoginStateNotificationLabel()
 
-    def updateLoginStateLabel(self):
+    def updateLoginStateNotificationLabel(self):
         if self._cur_login_state == LoginState.NOT_LOGGED_IN:
-            self.ui.loginStateLabel.setProperty("text", "")  
-            self.ui.loginStateLabel.setProperty("styleSheet", "border: none;")
+            self.ui.loginStateNotificationLabel.setProperty("text", "")  
+            self.ui.loginStateNotificationLabel.setProperty("styleSheet", "border: none;")
         elif self._cur_login_state == LoginState.UNSUCCESSFUL_LOGIN:
-            self.ui.loginStateLabel.setProperty("text", "Unsuccessful login. Please try again.")
-            self.ui.loginStateLabel.setProperty("styleSheet", "color: red; font-size: 16px; border: 1px solid red;")
+            self.ui.loginStateNotificationLabel.setProperty("text", "Unsuccessful login. Please try again.")
+            self.ui.loginStateNotificationLabel.setProperty("styleSheet", "color: red; font-size: 16px; border: 1px solid red;")
         elif self._cur_login_state == LoginState.LOGGED_IN:
             # We want the regular text, night-mode agnostic
             palette = qt.QApplication.instance().palette()
             text_color = palette.color(qt.QPalette.WindowText).name()
-            self.ui.loginStateLabel.setProperty("text", f"Welcome, {self._parameterNode.active_user.user.name}!")
-            self.ui.loginStateLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
+            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self._parameterNode.active_user.user.name}!")
+            self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
