@@ -68,6 +68,7 @@ class LoginState(Enum):
     NOT_LOGGED_IN=0
     UNSUCCESSFUL_LOGIN=1
     LOGGED_IN=2
+    DEFAULT_ADMIN=3
 
 #
 # OpenLIFULoginParameterNode
@@ -276,7 +277,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
 
         if not matched_user:
-            self._parameterNode.active_user = None
             self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
             return
 
@@ -312,6 +312,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
                     ))
             self._parameterNode.active_user = default_admin_user
+            self.updateWidgetLoginState(LoginState.DEFAULT_ADMIN)
             slicer.util.selectModule('OpenLIFUHome')
             return
 
@@ -337,6 +338,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             text_color = palette.color(qt.QPalette.WindowText).name()
             self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self._parameterNode.active_user.user.name}!")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
+        elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
+            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please create an admin account for user accounts to work.")
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
