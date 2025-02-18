@@ -398,4 +398,3 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
-        slicer.util.selectModule("OpenLIFULogin")
