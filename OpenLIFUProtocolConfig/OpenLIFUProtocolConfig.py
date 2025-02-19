@@ -15,7 +15,6 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 
-# TODO: somehow you need to observe the OpenLIFUData module logic so you can connect the button here to it.
 from OpenLIFULib import (
     openlifu_lz,
     get_openlifu_data_parameter_node,
@@ -117,17 +116,18 @@ class OpenLIFUProtocolConfigParameterNode:
 class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
     """ Create new protocol selection from database dialog """
 
-    def __init__(self, protocol_names_and_IDs : "List[Tuple[str,str]]", parent=None):
+    def __init__(self, protocol_names_and_IDs : List[Tuple[str,str]], parent=None):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         """ Args:
-                dataLogic: instance of the OpenLIFUData module logic, needed to access the loaded database
+                protocol_names_and_IDs: list of pairs containing the protocol
+                names and ids (name,id) that will populate the dialog
         """
 
         self.setWindowTitle("Select a Protocol")
         self.setWindowModality(qt.Qt.WindowModal)
         self.resize(600, 400)
 
-        self.protocol_names_and_IDs : "List[Tuple[str,str]]" = protocol_names_and_IDs
+        self.protocol_names_and_IDs : List[Tuple[str,str]] = protocol_names_and_IDs
         self.selected_protocol_id : str = None
 
         self.setup()
@@ -492,7 +492,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             "Protocols (*.json);;All Files (*)", # file type filter
         )
         if filepath:
-            self.logic.dataLogic.load_protocol_from_file(filepath)
+            protocol = openlifu_lz().Protocol.from_file(filepath)
+            self.logic.dataLogic.load_protocol_from_openlifu(protocol)  # load to memory
+            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
 
     @display_errors
     def onLoadProtocolFromDatabaseClicked(self, checked:bool) -> None:
@@ -508,7 +510,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             selected_protocol_id = dialog.get_selected_protocol_id()
             if selected_protocol_id:
                 protocol = self.logic.dataLogic.db.load_protocol(selected_protocol_id)
-                self.logic.dataLogic.load_protocol_from_openlifu(protocol)
+                self.logic.dataLogic.load_protocol_from_openlifu(protocol)  # load to memory
+                self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
 
     def updateWidgetSaveState(self, state: SaveState):
         self._cur_save_state = state
