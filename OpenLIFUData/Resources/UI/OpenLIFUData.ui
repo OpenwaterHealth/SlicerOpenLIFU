@@ -19,7 +19,7 @@
      <property name="collapsed">
       <bool>false</bool>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
+     <layout class="QVBoxLayout" name="verticalLayout_9">
       <item>
        <widget class="QLabel" name="databaseDirectoryLabel">
         <property name="text">
@@ -45,31 +45,55 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="newSubjectButton">
-        <property name="text">
-         <string>Add New Subject</string>
+       <widget class="QWidget" name="permissionsWidget2" native="true">
+        <property name="slicer.openlifu.allowed-roles" stdset="0">
+         <stringlist>
+          <string>admin</string>
+          <string>operator</string>
+         </stringlist>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="addVolumeToSubjectButton">
-        <property name="text">
-         <string>Add Volume to Subject</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="newSessionButton">
-        <property name="text">
-         <string>Create New Session</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="addPhotoscanToSessionButton">
-        <property name="text">
-         <string>Add Photoscan to Session</string>
-        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QPushButton" name="newSubjectButton">
+           <property name="text">
+            <string>Add New Subject</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="addVolumeToSubjectButton">
+           <property name="text">
+            <string>Add Volume to Subject</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="newSessionButton">
+           <property name="text">
+            <string>Create New Session</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="addPhotoscanToSessionButton">
+           <property name="text">
+            <string>Add Photoscan to Session</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
       <item>
@@ -104,7 +128,7 @@
      <property name="collapsed">
       <bool>true</bool>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_4">
+     <layout class="QVBoxLayout" name="verticalLayout_10">
       <item>
        <widget class="QScrollArea" name="scrollArea">
         <property name="sizePolicy">
@@ -262,10 +286,34 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="saveSessionButton">
-        <property name="text">
-         <string>Save Session</string>
+       <widget class="QWidget" name="permissionsWidget1" native="true">
+        <property name="slicer.openlifu.allowed-roles" stdset="0">
+         <stringlist>
+          <string>admin</string>
+          <string>operator</string>
+         </stringlist>
         </property>
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QPushButton" name="saveSessionButton">
+           <property name="text">
+            <string>Save Session</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
       <item>
