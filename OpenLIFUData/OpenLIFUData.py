@@ -995,8 +995,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is None:
+        if self._parameterNode is None or self._parameterNode.loaded_session is None:
             for label in self.session_status_field_widgets:
                 label.setText("") # Doing this before setCurrentIndex(0) results in the desired scrolling behavior
                 # (Doing it after makes Qt maintain the possibly larger size of page 1 of the stacked widget, providing unnecessary scroll bars)
@@ -1005,6 +1004,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 button.setEnabled(False)
                 button.setToolTip("There is no active session")
         else:
+            loaded_session = self._parameterNode.loaded_session
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
             protocol_openlifu : "openlifu.Protocol" = loaded_session.get_protocol().protocol
