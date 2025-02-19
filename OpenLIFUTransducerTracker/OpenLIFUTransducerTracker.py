@@ -72,53 +72,6 @@ class OpenLIFUTransducerTrackerParameterNode:
 #
 # OpenLIFUTransducerTrackerWidget
 #
-
-class ThreeDViewState():
-    def __init__(self):
-
-        self.layout : int
-        self.volume_rendering_display_node : vtkMRMLVolumeRenderingDisplayNode = None
-        self.visible_display_nodes : List[vtkMRMLDisplayNode] = []
-        self.visible_slice_nodes : List[vtkMRMLSliceNode] = []
-    
-    def clear_and_save_state(self):
-
-        # Save current slicer layout
-        self.layout = slicer.app.layoutManager().layout
-
-        # Displayable nodes
-        for display_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):
-            if display_node.IsA('vtkMRMLScalarVolumeNode'):
-                # Check for any volume renderings
-                vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(display_node)
-                if vrDisplayNode and vrDisplayNode.GetVisibility():
-                        self.volume_rendering_display_node = vrDisplayNode
-                        vrDisplayNode.SetVisibility(False)
-            else:
-                visibility = display_node.GetDisplayVisibility()
-                if visibility:
-                    self.visible_display_nodes.append(display_node)
-                    # Turn off visibility of all nodes except the loaded photoscan
-                    # This doesn't turn off volumes
-                    display_node.SetDisplayVisibility(0)
-        
-        # Red, Green and Yellow slice nodes
-        for slice_node in list(slicer.util.getNodesByClass('vtkMRMLSliceNode')):
-            if slice_node.GetSliceVisible():
-                self.visible_slice_nodes.append(slice_node)
-                slice_node.SetSliceVisible(False)
-
-    def restore_state(self):
-
-        slicer.app.layoutManager().setLayout(self.layout)
-        for display_node in self.visible_display_nodes:
-            display_node.SetDisplayVisibility(1)
-        
-        for slice_node in self.visible_slice_nodes:
-            slice_node.SetSliceVisible(True)
-
-        if self.volume_rendering_display_node:
-            self.volume_rendering_display_node.SetVisibility(True)
     
 class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
@@ -132,6 +85,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+        self.photoscanViewWidget = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -268,10 +222,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         selected_openlifu_photoscan = current_data['Photoscan']
         if session:
 
-            #Save and clear current display settings
-            current_threeDview_state = ThreeDViewState()
-            current_threeDview_state.clear_and_save_state()
-
             with BusyCursor():
                 (model_data, texture_data) = self.logic.load_photoscan_data_from_database(session, selected_openlifu_photoscan.id)
             
@@ -282,40 +232,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 model_data,
                 texture_data)
 
-            # Approach 1
-            #self.display_photoscan(slicer_photoscan)
-            # Approach 2
             self.display_photoscan_dialog(slicer_photoscan)
 
-            # For testing - Restore to original view  RestoreSavedScene()
-            self.timer = qt.QTimer()
-            self.timer.setSingleShot(True)
-            self.timer.timeout.connect(current_threeDview_state.restore_state)
-            self.timer.start(5000)
-
-    def _center_photoscan_display(self):
+    def _create_threeDview_widget(self):
         
-        layoutManager = slicer.app.layoutManager()
-
-        # Center and fit displayed photoscan in 3D view
-        for threeDViewIndex in range(layoutManager.threeDViewCount):
-            view = layoutManager.threeDWidget(threeDViewIndex).threeDView()
-            if view.mrmlViewNode().GetName() == 'ViewPhotoscan':
-                photoscanViewIndex = threeDViewIndex
-        
-        threeDWidget = layoutManager.threeDWidget(photoscanViewIndex)
-        threeDView = threeDWidget.threeDView() 
-        threeDView.rotateToViewAxis(3)  # look from anterior direction
-        threeDView.resetFocalPoint()  # reset the 3D view cube size and center it
-        threeDView.resetCamera()  # reset camera zoom
-        # Turn off bounding box and LPSAP./ change backgorund color. 
-
-    def display_photoscan_dialog(self,photoscan: SlicerOpenLIFUPhotoscan):
-
         # layout name is used to create and identify the underlying view node and  should be set to a value that is not used in any of the layouts owned by the layout manager
         layoutName = "PhotoscanPreview"
-        layoutLabel = "Photoscan"
-        layoutColor = [1.0, 1.0, 0.0]
+        layoutLabel = "Photoscan Preview"
+        layoutColor = [0.97, 0.54, 0.12] # Orange
         # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
         viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
 
@@ -330,61 +254,83 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             viewNode.SetLayoutColor(layoutColor)
             viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
 
+            # Customize view node. 
+            viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
+            viewNode.SetBackgroundColor2(0.98,0.58,0.4)
+            viewNode.SetBoxVisible(False) # Turn off bounding box visibility
+            viewNode.SetAxisLabelsVisible(False) # Turn off axis labels visibility
+
         # Create widget
         viewWidget = slicer.qMRMLThreeDWidget()
         viewWidget.setMRMLScene(slicer.mrmlScene)
         viewWidget.setMRMLViewNode(viewNode)
+    
+        return viewWidget
 
-        photoscan.toggle_model_display(True, viewNode) # Specify a view node for display
+    def display_photoscan_in_view(self, photoscan: SlicerOpenLIFUPhotoscan):
+
+        photoscan_view_node = self.photoscanViewWidget.mrmlViewNode()
+
+        # IDs of all the view nodes, excluding the photoscan widget's view node
+        views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetName() != photoscan_view_node.GetName()]
         
-        self._center_photoscan_display()
+        # Set the view nodes for all displayable nodes
+        for displayable_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):
+            if displayable_node.IsA('vtkMRMLScalarVolumeNode'):
+                # Check for any volume renderings
+                vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(displayable_node)
+                if vrDisplayNode and vrDisplayNode.GetVisibility():
+                        vrDisplayNode.SetViewNodeIDs(views_mainwindow)
+            elif displayable_node.GetDisplayVisibility():
+                displayable_node.GetDisplayNode().SetViewNodeIDs(views_mainwindow)
+        
+        # Set the view nodes for the Red, Green and Yellow slice nodes
+        for slice_node in list(slicer.util.getNodesByClass('vtkMRMLSliceNode')):
+            for view_nodeID in views_mainwindow:
+                slice_node.AddThreeDViewID(view_nodeID)
 
+        # Display the photoscan (and fiducials if previously placed)
+        photoscan.toggle_model_display(True, photoscan_view_node) # Specify a view node for display
+
+        # Center and fit displayed photoscan in 3D view
+        layoutManager = slicer.app.layoutManager()
+        for threeDViewIndex in range(layoutManager.threeDViewCount):
+            view = layoutManager.threeDWidget(threeDViewIndex).threeDView()
+            if view.mrmlViewNode().GetName() == photoscan_view_node.GetName():
+                photoscanViewIndex = threeDViewIndex
+        
+        threeDWidget = layoutManager.threeDWidget(photoscanViewIndex)
+        threeDView = threeDWidget.threeDView() 
+        threeDView.rotateToViewAxis(3)  # look from anterior direction
+        threeDView.resetFocalPoint()  # reset the 3D view cube size and center it
+        threeDView.resetCamera()  # reset camera zoom
+
+    def display_photoscan_dialog(self,photoscan: SlicerOpenLIFUPhotoscan):
+
+        # Create a threeD widget with its own viewNode for displaying the photoscan
+        if not self.photoscanViewWidget:
+            self.photoscanViewWidget = self._create_threeDview_widget()
+        
+        # Hide all displayable nodes from this view node except the photoscan
+        self.display_photoscan_in_view(photoscan)
+
+        # Open the dialog
         photoscanDialog = slicer.util.loadUI(self.resourcePath("UI/PhotoscanPreview.ui"))
         photoscanDialogUI = slicer.util.childWidgetVariables(photoscanDialog)
-        replace_widget(photoscanDialogUI.photoscanPlaceholderWidget, viewWidget, photoscanDialogUI)
+        replace_widget(photoscanDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, photoscanDialogUI)
         
-        w=slicer.qSlicerMarkupsPlaceWidget()
-        w.setMRMLScene(slicer.mrmlScene)
-        markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-        #TODO: Markups shouldn't be displayed in main window
-        #markupsNode.GetDisplayNode().SetViewNodeIDs()
-        w.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
-        # w.buttonsVisible=False
-        # w.placeButton().show()
+        # w=slicer.qSlicerMarkupsPlaceWidget()
+        # w.setMRMLScene(slicer.mrmlScene)
+        # markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+        # #TODO: Markups shouldn't be displayed in main window
+        # #markupsNode.GetDisplayNode().SetViewNodeIDs()
+        # w.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
+        # # w.buttonsVisible=False
+        # # w.placeButton().show()
 
-        photoscanDialogUI.layout.addWidget(w)
+        # photoscanDialogUI.layout.addWidget(w)
         photoscanDialog.exec_()
-        photoscanDialog.deleteLater()
-
-    def display_photoscan(self, photoscan: SlicerOpenLIFUPhotoscan):
-
-        # Create a custom layout with a single 3D view for displaying the photoscan
-        photoscanLayout = """
-        <layout type=\"horizontal\">"
-        <item>
-        <view class="vtkMRMLViewNode" singletontag="Photoscan">
-        <property name="PhotoscanView" action="default">"Photoscan"</property>
-        </view>
-        </item>
-        </layout>
-        """
-
-        # Built-in layout IDs are all below 100.This can be any large random number
-        photoscanLayoutId=501
-
-        layoutManager = slicer.app.layoutManager()
-        if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(photoscanLayoutId, photoscanLayout):
-            layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(photoscanLayoutId, photoscanLayout)
-
-        #Switch to the new custom layout
-        layoutManager.setLayout(photoscanLayoutId)
-
-        # Won't be in loaded objects but it shows up as model nodes in the scene. 
-        # Would a user toggle between photoscans/keep reloading?
-        photoscan_view_node = slicer.util.getNode('ViewPhotoscan')
-        photoscan.toggle_model_display(True, photoscan_view_node) # Specify a view node for display
-        
-        self._center_photoscan_display()
+        photoscanDialog.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
@@ -442,42 +388,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onApproveClicked(self):
         self.logic.toggleTransducerTrackingApproval()
-
-    def CreateVTKRenderWindow(self):
-
-        # Create a sphere source
-        sphere_source = vtk.vtkSphereSource()
-        sphere_source.SetRadius(1.0)
-        sphere_source.SetThetaResolution(20)
-        sphere_source.SetPhiResolution(20)
-        sphere_source.Update()
-
-        # Create a mapper
-        mapper = vtk.vtkPolyDataMapper()
-        mapper.SetInputData(sphere_source.GetOutput())
-
-        # Create an actor
-        actor = vtk.vtkActor()
-        actor.SetMapper(mapper)
-
-        # Create renderer and add actor
-        renderer = vtk.vtkRenderer()
-        renderer.AddActor(actor)
-        renderer.SetBackground(0.1, 0.2, 0.4)
-
-        # Create render window and interactor
-        render_window = vtk.vtkRenderWindow()
-        render_window.SetSize(600, 400)
-        render_window.AddRenderer(renderer)
-
-        interactor = vtk.vtkRenderWindowInteractor()
-        interactor.SetRenderWindow(render_window)
-
-        # Initialize and start interaction
-        render_window.Render()
-        interactor.Initialize()
-        interactor.Start()
-
 
 #
 # OpenLIFUTransducerTrackerLogic
