@@ -10,7 +10,7 @@
     <height>520</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_2">
+  <layout class="QVBoxLayout" name="verticalLayout_10">
    <item>
     <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
      <layout class="QVBoxLayout" name="verticalLayout">
@@ -150,43 +150,67 @@ analysis.</string>
     </spacer>
    </item>
    <item>
-    <widget class="QPushButton" name="solutionPushButton">
-     <property name="text">
-      <string>Compute sonication solution</string>
+    <widget class="QWidget" name="permissionsWidget" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+       <string>operator</string>
+      </stringlist>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QProgressBar" name="solutionProgressBar">
-     <property name="enabled">
-      <bool>true</bool>
-     </property>
-     <property name="maximum">
-      <number>1</number>
-     </property>
-     <property name="value">
-      <number>0</number>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QCheckBox" name="renderPNPCheckBox">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
-     <property name="text">
-      <string>Render peak negative pressure</string>
-     </property>
-     <property name="checkable">
-      <bool>true</bool>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QPushButton" name="approveButton">
-     <property name="text">
-      <string>Approve solution</string>
-     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="solutionPushButton">
+        <property name="text">
+         <string>Compute sonication solution</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="solutionProgressBar">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="maximum">
+         <number>1</number>
+        </property>
+        <property name="value">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="renderPNPCheckBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Render peak negative pressure</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="approveButton">
+        <property name="text">
+         <string>Approve solution</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
   </layout>
