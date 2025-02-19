@@ -123,9 +123,9 @@ class SlicerOpenLIFUPhotoscan:
         self.photoscan.photoscan.approved = not self.photoscan.photoscan.photoscan_approved 
     
     def toggle_model_display(self, visibility_on: bool = False, viewNode: vtkMRMLViewNode = None):
-        """ If a viewNode is not specified, the model is displayed in the default view"""
+        """ If a viewNode is not specified, the model is displayed in all views by default"""
         self.model_node.GetDisplayNode().SetVisibility(visibility_on)
         if viewNode:
-            self.model_node.GetDisplayNode().AddViewNodeID(viewNode.GetID())
+            self.model_node.GetDisplayNode().SetViewNodeIDs([viewNode.GetID()])
 
         
