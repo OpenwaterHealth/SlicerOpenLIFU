@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 import json
 from enum import Enum
 
@@ -34,17 +34,29 @@ if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
 
+all_modules = [
+            "OpenLIFUData",
+            "OpenLIFUHome",
+            "OpenLIFUPrePlanning",
+            "OpenLIFUProtocolConfig",
+            "OpenLIFUSonicationControl",
+            "OpenLIFUSonicationPlanner",
+            "OpenLIFUTransducerTracker",
+        ]
+
 #
 # OpenLIFULogin
 #
 
-all_openlifu_modules = ['OpenLIFUData', 'OpenLIFUHome', 'OpenLIFUPrePlanning', 'OpenLIFUProtocolConfig', 'OpenLIFUSonicationControl', 'OpenLIFUSonicationPlanner', 'OpenLIFUTransducerTracker']
-
-anonymous_permissions = []
-restricted_permissions = anonymous_permissions + []
-operator_permissions = restricted_permissions + ['create-session-and-add-data', 'set-target', 'virtual-fitting', 'transducer-tracking', 'create-solution', 'run-sonication']
-admin_permissions = operator_permissions + ['manage-users', 'configure-and-publish-protocol']
-root_permissions = admin_permissions + []
+all_openlifu_modules = [
+            "OpenLIFUData",
+            "OpenLIFUHome",
+            "OpenLIFUPrePlanning",
+            "OpenLIFUProtocolConfig",
+            "OpenLIFUSonicationControl",
+            "OpenLIFUSonicationPlanner",
+            "OpenLIFUTransducerTracker",
+        ]
 
 class OpenLIFULogin(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -149,6 +161,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._cur_login_state = LoginState.NOT_LOGGED_IN
+        self._cur_user_id_enforced : str = ""  # for caching enforced permissions
+        self._permissions_widgets : List[qt.QWidget] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
         self._default_anonymous_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
@@ -198,6 +212,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.logic.active_user = self._default_anonymous_user
 
+        self.cacheAllPermissionswidgets()
+
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
@@ -235,6 +251,12 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # so that when the scene is saved and reloaded, these settings are restored.
 
         self.setParameterNode(self.logic.getParameterNode())
+
+    def cacheAllPermissionswidgets(self) -> None:
+        for moduleName in all_openlifu_modules:
+            module = slicer.util.getModule(moduleName)
+            widgetRepresentation = module.widgetRepresentation()
+            self._permissions_widgets.extend(slicer.util.findChildren(widgetRepresentation, name="permissionsWidget*"))
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFULoginParameterNode]) -> None:
         """
@@ -344,6 +366,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._cur_login_state = state
         self.updateLoginStateNotificationLabel()
         self.updateLoginLogoutButton()
+        self.enforceUserPermissions()
 
     def updateLoginStateNotificationLabel(self):
         if self._cur_login_state == LoginState.NOT_LOGGED_IN:
@@ -372,6 +395,29 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateUserAccountModeButton()
+        self.enforceUserPermissions()
+
+    def enforceUserPermissions(self) -> None:
+        
+        # === Don't enforce if no user account mode ===
+
+        if not self._parameterNode.user_account_mode:
+            return
+
+        # === Check cache if there is an active user ===
+
+        if self.logic.active_user is not None:
+            if self._cur_user_id_enforced == self.logic.active_user.user.id:
+                return
+            else:
+                self._cur_user_id_enforced = self.logic.active_user.user.id
+
+        # === Enforce ===
+
+        for widget in self._permissions_widgets:
+            allowed_roles = widget.property("slicer.openlifu.allowed-roles")
+            user_roles = self.logic.active_user.user.roles
+            widget.setEnabled(any(role in allowed_roles for role in user_roles))
 
 # OpenLIFULoginLogic
 #

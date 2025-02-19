@@ -36,8 +36,8 @@
     </layout>
    </item>
    <item>
-    <widget class="QWidget" name="configureAndPublishProtocol" native="true">
-     <property name="allowed-roles" stdset="0">
+    <widget class="QWidget" name="permissionsWidget1" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
       <stringlist>
        <string>admin</string>
       </stringlist>
