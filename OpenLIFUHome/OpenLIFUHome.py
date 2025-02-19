@@ -197,6 +197,11 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             set_guided_mode_state(new_guided_mode_state)
 
     def updateGuidedModeButton(self):
+        if self._parameterNode is None:
+            # This case occurs briefly when trying to close the slicer scene
+            # It is an invalid state (e.g. guided mode is neither on nor off),
+            # but it's momentary until the scene clean up is done.
+            return
         if self._parameterNode.guided_mode:
             self.ui.guidedModePushButton.setText("Exit Guided Mode")
         else:
