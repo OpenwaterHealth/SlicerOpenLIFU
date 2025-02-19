@@ -217,26 +217,52 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             
     def onPreviewPhotoscanClicked(self):
 
-        session = get_openlifu_data_parameter_node().loaded_session
         current_data = self.algorithm_input_widget.get_current_data()
-        selected_openlifu_photoscan = current_data['Photoscan']
-        if session:
+        selected_photoscan_openlifu = current_data['Photoscan']
 
-            with BusyCursor():
-                (model_data, texture_data) = self.logic.load_photoscan_data_from_database(session, selected_openlifu_photoscan.id)
+        # Session-based workflow
+        if get_openlifu_data_parameter_node().loaded_session:
+            loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
+                selected_photoscan_openlifu,
+                load_from_database = True)
+        
+        # Manual workflow
+        else:
+            loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
             
-            # TODO: Keep track of previewed photoscans so they don't get reloaded everytime. This should be separate to
-            # loaded_photoscans? 
-            slicer_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(
-                selected_openlifu_photoscan,
-                model_data,
-                texture_data)
+        self.DisplayPhotoscanPreviewDialog(loaded_slicer_photoscan)
 
-            self.display_photoscan_dialog(slicer_photoscan)
+
+    def DisplayPhotoscanPreviewDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
+
+        # Create a threeD widget with its own viewNode for displaying the photoscan
+        if not self.photoscanViewWidget:
+            self.photoscanViewWidget = self._create_threeDview_widget()
+        
+        # Hide all displayable nodes from this view node except the photoscan
+        self._display_photoscan_in_view(photoscan)
+
+        # Open the dialog
+        photoscanDialog = slicer.util.loadUI(self.resourcePath("UI/PhotoscanPreview.ui"))
+        photoscanDialogUI = slicer.util.childWidgetVariables(photoscanDialog)
+        replace_widget(photoscanDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, photoscanDialogUI)
+        
+        # w=slicer.qSlicerMarkupsPlaceWidget()
+        # w.setMRMLScene(slicer.mrmlScene)
+        # markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+        # #TODO: Markups shouldn't be displayed in main window
+        # #markupsNode.GetDisplayNode().SetViewNodeIDs()
+        # w.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
+        # # w.buttonsVisible=False
+        # # w.placeButton().show()
+        # photoscanDialogUI.layout.addWidget(w)
+
+        photoscanDialog.exec_()
+        photoscanDialog.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
     def _create_threeDview_widget(self):
         
-        # layout name is used to create and identify the underlying view node and  should be set to a value that is not used in any of the layouts owned by the layout manager
+        # Layout name is used to create and identify the underlying view node 
         layoutName = "PhotoscanPreview"
         layoutLabel = "Photoscan Preview"
         layoutColor = [0.97, 0.54, 0.12] # Orange
@@ -267,7 +293,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     
         return viewWidget
 
-    def display_photoscan_in_view(self, photoscan: SlicerOpenLIFUPhotoscan):
+    def _display_photoscan_in_view(self, photoscan: SlicerOpenLIFUPhotoscan):
 
         photoscan_view_node = self.photoscanViewWidget.mrmlViewNode()
 
@@ -304,33 +330,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         threeDView.rotateToViewAxis(3)  # look from anterior direction
         threeDView.resetFocalPoint()  # reset the 3D view cube size and center it
         threeDView.resetCamera()  # reset camera zoom
-
-    def display_photoscan_dialog(self,photoscan: SlicerOpenLIFUPhotoscan):
-
-        # Create a threeD widget with its own viewNode for displaying the photoscan
-        if not self.photoscanViewWidget:
-            self.photoscanViewWidget = self._create_threeDview_widget()
-        
-        # Hide all displayable nodes from this view node except the photoscan
-        self.display_photoscan_in_view(photoscan)
-
-        # Open the dialog
-        photoscanDialog = slicer.util.loadUI(self.resourcePath("UI/PhotoscanPreview.ui"))
-        photoscanDialogUI = slicer.util.childWidgetVariables(photoscanDialog)
-        replace_widget(photoscanDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, photoscanDialogUI)
-        
-        # w=slicer.qSlicerMarkupsPlaceWidget()
-        # w.setMRMLScene(slicer.mrmlScene)
-        # markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-        # #TODO: Markups shouldn't be displayed in main window
-        # #markupsNode.GetDisplayNode().SetViewNodeIDs()
-        # w.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
-        # # w.buttonsVisible=False
-        # # w.placeButton().show()
-
-        # photoscanDialogUI.layout.addWidget(w)
-        photoscanDialog.exec_()
-        photoscanDialog.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected

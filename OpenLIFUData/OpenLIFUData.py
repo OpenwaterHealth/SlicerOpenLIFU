@@ -1939,24 +1939,33 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # If the user selects a json file,use the photoscan_metadata included in the json file to load the photoscan. 
         elif Path(model_or_json_filepath).suffix == '.json':
-            return self.load_photoscan_from_json(model_or_json_filepath)
-
+            photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(model_or_json_filepath)
+            return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = Path(model_or_json_filepath).parent)
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
 
-    def load_photoscan_from_json(self, json_filepath: str, replace_confirmed : bool = False) -> SlicerOpenLIFUPhotoscan:
+    def load_photoscan_from_openlifu(self, photoscan_openlifu, load_from_active_session: bool = False, parent_dir: str = None, replace_confirmed : bool = False) -> SlicerOpenLIFUPhotoscan:
         """Load an openlifu photoscan object into the scene as a SlicerOpenLIFUPhotoscan,
         adding it to the list of loaded openlifu objects.
 
         Args:
-            json_filepath: json file containing openlifu photoscan metadata
+            photoscan_openlifu: openlifu photoscan object
+            load_from_active_session (bool): If True, the photoscan is loaded based on the active session, from the openlifu database.
+            parent_dir (str): If load_from_active_session is False,then the absolute path to the parent directory containing the 
+                photoscan object and affiliated model and texture files needs to be specified. 
             replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Photoscan.
                 This could be used for example if we already know the user is okay with re-loading the photoscan.
 
         Returns: The newly loaded SlicerOpenLIFUPhotoscan.
         """
 
-        photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(json_filepath)
+        # Check for valid inputs
+        if not load_from_active_session:
+            if parent_dir is None:
+                raise RuntimeError("Cannot load photoscan because the parent_dir was not specified for the photoscan object.")
+        else:
+            if self.db is None: # This shouldn't happen
+                raise RuntimeError("Cannot load photoscan because there is a session but no database connection to load the data from.")
 
         if photoscan_openlifu.id in self.getParameterNode().loaded_photoscans:
             if not replace_confirmed:
@@ -1968,9 +1977,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             self.remove_photoscan(photoscan_openlifu.id) 
 
         with BusyCursor():
-            model_data, texture_data = openlifu_lz().photoscan.load_data_from_photoscan(
-                photoscan_openlifu,
-                parent_dir = Path(json_filepath).parent)
+            if load_from_active_session:
+                loaded_session = self.getParameterNode().loaded_session
+                _, (model_data, texture_data) = self.db.load_photoscan(loaded_session.get_subject_id(),loaded_session.get_session_id(),photoscan_openlifu.id, load_data = True)
+            else:
+                model_data, texture_data = openlifu_lz().photoscan.load_data_from_photoscan(photoscan_openlifu,parent_dir = parent_dir)
 
         newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(
             photoscan_openlifu,
