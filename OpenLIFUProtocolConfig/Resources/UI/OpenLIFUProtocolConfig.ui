@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>624</width>
+    <width>636</width>
     <height>695</height>
    </rect>
   </property>
@@ -36,222 +36,245 @@
     </layout>
    </item>
    <item>
-    <widget class="QPushButton" name="createNewProtocolButton">
-     <property name="toolTip">
-      <string>Create a new openlifu protocol</string>
+    <widget class="QWidget" name="configureAndPublishProtocol" native="true">
+     <property name="allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+      </stringlist>
      </property>
-     <property name="text">
-      <string>Create New Protocol</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QGroupBox" name="protocolEditorSectionGroupBox">
-     <property name="title">
-      <string>Protocol editor</string>
-     </property>
-     <layout class="QFormLayout" name="protocolEditorSectionLayout">
-      <item row="0" column="0">
-       <widget class="QLabel" name="protocolNameLabel">
-        <property name="text">
-         <string>Name</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="protocolNameLineEdit">
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="createNewProtocolButton">
         <property name="toolTip">
-         <string>Protocol name</string>
+         <string>Create a new openlifu protocol</string>
         </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="protocolIdLabel">
         <property name="text">
-         <string>Protocol ID</string>
+         <string>Create New Protocol</string>
         </property>
        </widget>
       </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="protocolIdLineEdit">
-        <property name="toolTip">
-         <string>Protocol ID</string>
+      <item>
+       <widget class="QGroupBox" name="protocolEditorSectionGroupBox">
+        <property name="title">
+         <string>Protocol editor</string>
         </property>
-       </widget>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="protocolDescriptionLabel">
-        <property name="text">
-         <string>Description</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QPlainTextEdit" name="protocolDescriptionTextEdit">
-        <property name="toolTip">
-         <string>Protocol description</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="pulseFrequencyLabel">
-        <property name="text">
-         <string>Pulse frequency</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1">
-       <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
-        <property name="toolTip">
-         <string>Frequency of the pulse in Hz</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="pulseDurationLabel">
-        <property name="text">
-         <string>Pulse duration</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <widget class="QDoubleSpinBox" name="pulseDurationSpinBox">
-        <property name="toolTip">
-         <string>Duration of the pulse in s</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0">
-       <widget class="QLabel" name="focalPatternLabel">
-        <property name="text">
-         <string>Focal pattern type</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="1">
-       <widget class="QComboBox" name="focalPatternComboBox">
-        <property name="toolTip">
-         <string>
-                    Type of pattern to use to determine target points
-                  </string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="0">
-       <widget class="QLabel" name="focalPatternOptionsLabel">
-        <property name="text">
-         <string>Focal pattern options</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="1">
-       <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
-        <property name="currentIndex">
-         <number>0</number>
-        </property>
-        <widget class="QWidget" name="noFocalPatternPage"/>
-        <widget class="QWidget" name="singlePointPage">
-         <layout class="QVBoxLayout" name="singlePointOptionsLayout">
-          <item>
-           <widget class="QLabel" name="singlePointOptionsLabel">
-            <property name="text">
-             <string>
-                            (No options for the single point pattern)
-                          </string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
+        <layout class="QFormLayout" name="protocolEditorSectionLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="protocolNameLabel">
+           <property name="text">
+            <string>Name</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="protocolNameLineEdit">
+           <property name="toolTip">
+            <string>Protocol name</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="protocolIdLabel">
+           <property name="text">
+            <string>Protocol ID</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="protocolIdLineEdit">
+           <property name="toolTip">
+            <string>Protocol ID</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="protocolDescriptionLabel">
+           <property name="text">
+            <string>Description</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QPlainTextEdit" name="protocolDescriptionTextEdit">
+           <property name="toolTip">
+            <string>Protocol description</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="pulseFrequencyLabel">
+           <property name="text">
+            <string>Pulse frequency</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
+           <property name="toolTip">
+            <string>Frequency of the pulse in Hz</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="pulseDurationLabel">
+           <property name="text">
+            <string>Pulse duration</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QDoubleSpinBox" name="pulseDurationSpinBox">
+           <property name="toolTip">
+            <string>Duration of the pulse in s</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="focalPatternLabel">
+           <property name="text">
+            <string>Focal pattern type</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QComboBox" name="focalPatternComboBox">
+           <property name="toolTip">
+            <string>
+                          Type of pattern to use to determine target points
+                        </string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="QLabel" name="focalPatternOptionsLabel">
+           <property name="text">
+            <string>Focal pattern options</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
+           <property name="currentIndex">
+            <number>0</number>
+           </property>
+           <widget class="QWidget" name="noFocalPatternPage"/>
+           <widget class="QWidget" name="singlePointPage">
+            <layout class="QVBoxLayout" name="singlePointOptionsLayout">
+             <item>
+              <widget class="QLabel" name="singlePointOptionsLabel">
+               <property name="text">
+                <string>
+                                  (No options for the single point pattern)
+                                </string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="wheelPage">
-         <layout class="QFormLayout" name="wheelOptionsLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="wheelCenterLabel">
-            <property name="text">
-             <string>Center?</string>
-            </property>
+           <widget class="QWidget" name="wheelPage">
+            <layout class="QFormLayout" name="wheelOptionsLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="wheelCenterLabel">
+               <property name="text">
+                <string>Center?</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QCheckBox" name="wheelCenterCheckBox">
+               <property name="toolTip">
+                <string>
+                                  Whether to include the center point of the wheel
+                                  pattern
+                                </string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="numSpokesLabel">
+               <property name="text">
+                <string>Spokes</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="numSpokesSpinBox"/>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="spokeRadiusLabel">
+               <property name="text">
+                <string>Spoke Radius</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QDoubleSpinBox" name="spokeRadiusSpinBox"/>
+             </item>
+            </layout>
            </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QCheckBox" name="wheelCenterCheckBox">
-            <property name="toolTip">
-             <string>
-                            Whether to include the center point of the wheel
-                            pattern
-                          </string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="numSpokesLabel">
-            <property name="text">
-             <string>Spokes</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QSpinBox" name="numSpokesSpinBox"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="spokeRadiusLabel">
-            <property name="text">
-             <string>Spoke Radius</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QDoubleSpinBox" name="spokeRadiusSpinBox"/>
-          </item>
-         </layout>
-        </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="saveStateLabel">
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="protocolSaveDeleteButtonsLayout">
+        <item>
+         <widget class="QPushButton" name="protocolFileSaveButton">
+          <property name="text">
+           <string>Save Protocol To File</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="protocolDatabaseSaveButton">
+          <property name="text">
+           <string>Save Protocol To Database</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="protocolDatabaseDeleteButton">
+          <property name="text">
+           <string>Delete Protocol From Database</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPushButton" name="protocolEditRevertDiscardButton">
+        <property name="text">
+         <string>Edit Protocol</string>
+        </property>
        </widget>
       </item>
      </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QLabel" name="saveStateLabel">
-     <property name="alignment">
-      <set>Qt::AlignCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="protocolSaveDeleteButtonsLayout">
-     <item>
-      <widget class="QPushButton" name="protocolFileSaveButton">
-       <property name="text">
-        <string>Save Protocol To File</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="protocolDatabaseSaveButton">
-       <property name="text">
-        <string>Save Protocol To Database</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="protocolDatabaseDeleteButton">
-       <property name="text">
-        <string>Delete Protocol From Database</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QPushButton" name="protocolEditRevertDiscardButton">
-     <property name="text">
-      <string>Edit Protocol</string>
-     </property>
     </widget>
    </item>
   </layout>
