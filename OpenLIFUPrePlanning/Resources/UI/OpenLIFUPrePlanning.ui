@@ -202,7 +202,7 @@ OpenLIFUAlgorithmInputWidget</string>
   <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
-   <header>ctkcollapsiblebutton.h</header>
+   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

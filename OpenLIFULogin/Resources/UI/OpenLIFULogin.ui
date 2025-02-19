@@ -32,6 +32,13 @@
     </widget>
    </item>
    <item>
+    <widget class="QPushButton" name="logoutButton">
+     <property name="text">
+      <string>Logout</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QLabel" name="loginStateNotificationLabel">
      <property name="alignment">
       <set>Qt::AlignCenter</set>
