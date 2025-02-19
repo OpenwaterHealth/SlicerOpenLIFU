@@ -224,7 +224,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if get_openlifu_data_parameter_node().loaded_session:
             loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
                 selected_photoscan_openlifu,
-                load_from_database = True)
+                load_from_active_session = True)
         
         # Manual workflow
         else:
@@ -242,11 +242,47 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Hide all displayable nodes from this view node except the photoscan
         self._display_photoscan_in_view(photoscan)
 
-        # Open the dialog
+        # Create dialog
         photoscanDialog = slicer.util.loadUI(self.resourcePath("UI/PhotoscanPreview.ui"))
         photoscanDialogUI = slicer.util.childWidgetVariables(photoscanDialog)
         replace_widget(photoscanDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, photoscanDialogUI)
         
+        def updatePhotoscanApproveButton():
+
+            loaded_session = get_openlifu_data_parameter_node().loaded_session
+            if photoscan.is_approved():
+                photoscanDialogUI.photoscanApprovalButton.setText("Unapprove photoscan")
+                photoscanDialogUI.photoscanApprovalButton.setToolTip(
+                        "Revoke approval that the current photoscan is of sufficient quality to be used for transducer tracking")
+            else:
+                photoscanDialogUI.photoscanApprovalButton.setText("Approve photoscan")
+                photoscanDialogUI.photoscanApprovalButton.setToolTip("Approve that the current photoscan can be used for transducer tracking")
+
+            if loaded_session is None:
+                photoscanDialogUI.photoscanApprovalButton.setEnabled(False)
+                photoscanDialogUI.photoscanApprovalButton.setToolTip("Cannot toggle photoscan approval because there is no active session to write the approval")
+
+        def updatePhotoscanApprovalStatusLabel():
+            loaded_session = get_openlifu_data_parameter_node().loaded_session
+            if loaded_session is not None:
+                if photoscan.is_approved():
+                    photoscanDialogUI.photoscanApprovalStatusLabel.text = "Photoscan is approved for transducer tracking"
+                else:
+                    photoscanDialogUI.photoscanApprovalStatusLabel.text = "Photoscan is not approved for transducer tracking"
+            else:
+                photoscanDialogUI.photoscanApprovalStatusLabel.text = f"Photoscan approval status: {photoscan.is_approved()}."
+            
+        updatePhotoscanApproveButton()
+        updatePhotoscanApprovalStatusLabel()
+
+        def onPhotoscanApproveClicked():
+            photoscan.toggle_approval()
+            # TODO: toggle photoscan approval in database.
+            updatePhotoscanApproveButton()
+            updatePhotoscanApprovalStatusLabel()
+
+        photoscanDialogUI.photoscanApprovalButton.clicked.connect(onPhotoscanApproveClicked)
+
         # w=slicer.qSlicerMarkupsPlaceWidget()
         # w.setMRMLScene(slicer.mrmlScene)
         # markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
@@ -257,6 +293,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # # w.placeButton().show()
         # photoscanDialogUI.layout.addWidget(w)
 
+        # Display dialog
         photoscanDialog.exec_()
         photoscanDialog.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
