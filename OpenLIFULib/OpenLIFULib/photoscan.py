@@ -120,7 +120,7 @@ class SlicerOpenLIFUPhotoscan:
         return self.photoscan.photoscan.photoscan_approved
                        
     def toggle_approval(self) -> None:
-        self.photoscan.photoscan.approved = not self.photoscan.photoscan.photoscan_approved 
+        self.photoscan.photoscan.photoscan_approved = not self.photoscan.photoscan.photoscan_approved 
     
     def toggle_model_display(self, visibility_on: bool = False, viewNode: vtkMRMLViewNode = None):
         """ If a viewNode is not specified, the model is displayed in all views by default"""
