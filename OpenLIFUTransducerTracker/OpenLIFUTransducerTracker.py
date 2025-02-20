@@ -256,14 +256,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updatePhotoscanApprovalStatusLabel(photoscan.is_approved())
 
         def onPlaceLandmarksClicked():
-            markupsWidget = photoscanDialogUI.photoscanMarkupsPlaceWidget
+            markupsWidget = self.photoscanPreviewDialogUI.photoscanMarkupsPlaceWidget
             markupsWidget.enabled = True
             markupsWidget.setMRMLScene(slicer.mrmlScene)
             markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-            #TODO: Markups shouldn't be displayed in main window
-            #markupsNode.GetDisplayNode().SetViewNodeIDs()
+            markupsNode.GetDisplayNode().SetViewNodeIDs([self.photoscanViewWidget.mrmlViewNode().GetID()])
             markupsWidget.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
-            # w.buttonsVisible=False
     
         # Connect buttons
         self.photoscanPreviewDialogUI.photoscanApprovalButton.clicked.connect(onPhotoscanApproveClicked)
