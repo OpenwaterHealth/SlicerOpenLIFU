@@ -31,7 +31,7 @@ class SlicerOpenLIFUTransducer:
     @staticmethod
     def initialize_from_openlifu_transducer(
             transducer : "openlifu.Transducer",
-            transducer_abspaths_info: Optional[dict] = {},
+            transducer_abspaths_info: dict = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
             ) -> "SlicerOpenLIFUTransducer":
@@ -41,6 +41,9 @@ class SlicerOpenLIFUTransducer:
             transducer: The openlifu Transducer object
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
+                This includes 'transducer_body_abspath' and 'registration_surface_abspath'. The registration surface model is required for
+                running the transducer tracking algorithm. If left as empty, the registration surface and transducer body models affiliated 
+                with the transducer will not be loaded.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
                 these units. If left as None then the transducer's native units (Transducer.units) will be assumed.
@@ -80,7 +83,9 @@ class SlicerOpenLIFUTransducer:
         shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
         model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
-        if transducer.transducer_body_filename:
+        if 'transducer_body_abspath' in transducer_abspaths_info:
+            if transducer.transducer_body_filename != transducer_abspaths_info['transducer_body_abspath'].name:
+                raise ValueError("The filename provided in 'transducer_body_abspath' does not match the file specified in the Transducer object")
             body_model_node = slicer.util.loadModel(transducer_abspaths_info['transducer_body_abspath'])
             body_model_node.SetName(f"{slicer_transducer_name}-body")
             body_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
@@ -88,7 +93,9 @@ class SlicerOpenLIFUTransducer:
         else:
             body_model_node = None
 
-        if transducer.registration_surface_filename:
+        if 'registration_surface_abspath' in transducer_abspaths_info:
+            if transducer.registration_surface_filename != transducer_abspaths_info['registration_surface_abspath'].name:
+                raise ValueError("The filename provided in 'registration_surface_abspath' does not match the file specified in the Transducer object")
             surface_model_node = slicer.util.loadModel(transducer_abspaths_info['registration_surface_abspath'])
             shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
             surface_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
