@@ -406,10 +406,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         elif self.ui.protocolEditRevertDiscardButton.text == "Discard New Protocol":
             self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
             self.logic.new_protocol_ids.discard(self._cur_protocol_id)
+
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
             self.reloadProtocols()
         elif self.ui.protocolEditRevertDiscardButton.text == "Revert Changes":
-            return
+            self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
+
+            self.updateWidgetSaveState(SaveState.NO_CHANGES)
+            prev_protocol = self.ui.protocolSelector.currentText
+            self.reloadProtocols()
+            self.ui.protocolSelector.setCurrentText(prev_protocol)
 
     @display_errors
     def onSaveProtocolToFileClicked(self, checked:bool) -> None:
