@@ -281,17 +281,19 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             updatePhotoscanApproveButton()
             updatePhotoscanApprovalStatusLabel()
 
+        def onPlaceLandmarksClicked():
+            markupsWidget = photoscanDialogUI.photoscanMarkupsPlaceWidget
+            markupsWidget.enabled = True
+            markupsWidget.setMRMLScene(slicer.mrmlScene)
+            markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+            #TODO: Markups shouldn't be displayed in main window
+            #markupsNode.GetDisplayNode().SetViewNodeIDs()
+            markupsWidget.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
+            # w.buttonsVisible=False
+    
         photoscanDialogUI.photoscanApprovalButton.clicked.connect(onPhotoscanApproveClicked)
 
-        # w=slicer.qSlicerMarkupsPlaceWidget()
-        # w.setMRMLScene(slicer.mrmlScene)
-        # markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-        # #TODO: Markups shouldn't be displayed in main window
-        # #markupsNode.GetDisplayNode().SetViewNodeIDs()
-        # w.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
-        # # w.buttonsVisible=False
-        # # w.placeButton().show()
-        # photoscanDialogUI.layout.addWidget(w)
+        photoscanDialogUI.placeLandmarksButton.clicked.connect(onPlaceLandmarksClicked)
 
         # Display dialog
         photoscanDialog.exec_()

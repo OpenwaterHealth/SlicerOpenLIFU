@@ -33,10 +33,37 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QPushButton" name="placeLandmarksButton">
+       <property name="text">
+        <string>Place Registration Landmarks</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="qSlicerMarkupsPlaceWidget" name="photoscanMarkupsPlaceWidget">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qSlicerWidget</class>
+   <extends>QWidget</extends>
+   <header>qSlicerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerMarkupsPlaceWidget</class>
+   <extends>qSlicerWidget</extends>
+   <header>qSlicerMarkupsPlaceWidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
