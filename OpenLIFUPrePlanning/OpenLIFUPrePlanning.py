@@ -260,13 +260,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateEditTargetEnabled()
 
     def revokeApprovalIfAny(self, target : vtkMRMLMarkupsFiducialNode, reason:str):
-        
+
         if self.logic.get_virtual_fit_approval(target):
             slicer.util.infoDisplay(
                 text= "Virtual fit approval has been revoked for the following reason:\n"+reason,
                 windowTitle="Approval revoked"
             )
             self.logic.revoke_virtual_fit_approval(target)
+            self.updateApproveButton()
+            self.updateApprovalStatusLabel()
 
 
     def updateTargetsListView(self):
@@ -396,9 +398,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approveButton.setText("Approve virtual fit")
             self.ui.approveButton.setToolTip("Please run virtual fit first")
             return
-        
+
         approved : bool = get_approval_from_virtual_fit_result_node(virtual_fit_result_node)
-        
+
         self.ui.approveButton.setEnabled(True)
         if not approved:
             self.ui.approveButton.setText("Approve virtual fit")
@@ -441,7 +443,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         else:
             self.ui.approvalStatusLabel.text = (
                 "Virtual fit is approved for the following targets:\n- "
-                "\n- ".join(approved_target_ids)
+                + "\n- ".join(approved_target_ids)
             )
 
     def onVirtualfitClicked(self):
@@ -449,20 +451,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         virtual_fit_result : Optional[vtkMRMLTransformNode] = self.logic.virtual_fit(
             activeData["Protocol"],activeData["Transducer"], activeData["Volume"], activeData["Target"]
         )
-        
+
         if virtual_fit_result is None:
             return
-        
+
         self.addObserver(
             virtual_fit_result,
             slicer.vtkMRMLTransformNode.TransformModifiedEvent,
-            self.revokeApprovalIfAny(activeData["Target"], "The virtual fit transform was modified."),
+            lambda caller, event: self.revokeApprovalIfAny(activeData["Target"], "The virtual fit transform was modified."),
         )
-        self.addObserver(
-            virtual_fit_result,
-            slicer.vtkMRMLTransformNode.TransformModifiedEvent,
-            self.updateApproveButton,
-        )
+        self.updateApproveButton()
+        self.updateApprovalStatusLabel()
 
 
 #
@@ -497,7 +496,9 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             target_id=target_id,
             session_id=session_id
         )
-    
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic.update_underlying_openlifu_session()
+
     def get_virtual_fit_approval(self, target : vtkMRMLMarkupsFiducialNode) -> bool:
         """Return whether there is a virtual fit approval for the target. In case there is not even a virtual
         fit result for the target, this returns False."""
@@ -514,6 +515,8 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session_id = None if session is None else session.get_session_id()
         target_id = fiducial_to_openlifu_point_id(target)
         set_virtual_fit_approval_for_target(False, target_id=target_id, session_id=session_id)
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic.update_underlying_openlifu_session()
 
     def virtual_fit(
             self,

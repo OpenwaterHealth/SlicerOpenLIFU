@@ -1237,14 +1237,24 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if not self.validate_session():
             raise RuntimeError("Cannot save session because there is no active session, or the active session was invalid.")
 
-        parameter_node = self.getParameterNode()
-        session : SlicerOpenLIFUSession = parameter_node.loaded_session
-        targets = get_target_candidates() # future TODO: ask the user which targets they want to include in the session
-        session_openlifu = session.update_underlying_openlifu_session(targets)
-        parameter_node.loaded_session = session # remember to write the updated session to the parameter node
+        session_openlifu = self.update_underlying_openlifu_session()
 
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         self.db.write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
+
+    def update_underlying_openlifu_session(self) -> "openlifu.db.Session":
+        """Update the underlying openlifu session of the currently loaded session, if there is one.
+        Returns the newly updated openlifu Session object."""
+        parameter_node = self.getParameterNode()
+        session : SlicerOpenLIFUSession = parameter_node.loaded_session
+        if session is not None:
+            targets = get_target_candidates()
+            # TODO: I think instead of getting all 1-point fiducial nodes as targets, we should attribute-tag targets with
+            # the session ID, and have a tool that adds and retrieves targets by session ID similar to what we do for virtual fit results
+            session_openlifu = session.update_underlying_openlifu_session(targets)
+            parameter_node.loaded_session = session # remember to write the updated session into the parameter node
+            return session_openlifu
+
 
     def validate_session(self) -> bool:
         """Check to ensure that the currently active session is in a valid state, clearing out the session
