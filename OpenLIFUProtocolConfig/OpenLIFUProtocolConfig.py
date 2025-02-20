@@ -542,6 +542,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=False)  # load to memory
 
             self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
+            self.setProtocolEditorEnabled(False)
 
     @display_errors
     def onLoadProtocolFromDatabaseClicked(self, checked:bool) -> None:
@@ -583,6 +584,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                     self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=False)  # load to memory
 
                 self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
+                self.setProtocolEditorEnabled(False)
 
     def updateWidgetSaveState(self, state: SaveState):
         self._cur_save_state = state
