@@ -250,7 +250,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.loadProtocolFromDatabaseButton.clicked.connect(self.onLoadProtocolFromDatabaseClicked)
         self.ui.createNewProtocolButton.clicked.connect(self.onNewProtocolClicked)
 
-        self.ui.protocolEditButton.clicked.connect(self.onEditProtocolClicked)
+        self.ui.protocolEditRevertButton.clicked.connect(self.onEditRevertProtocolClicked)
         self.ui.protocolFileSaveButton.clicked.connect(self.onSaveProtocolToFileClicked)
         self.ui.protocolDatabaseSaveButton.clicked.connect(self.onSaveProtocolToDatabaseClicked)
         self.ui.protocolDatabaseDeleteButton.clicked.connect(self.onDeleteProtocolFromDatabaseClicked)
@@ -394,7 +394,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
 
     @display_errors
-    def onEditProtocolClicked(self, checked: bool) -> None:
+    def onEditRevertProtocolClicked(self, checked: bool) -> None:
         if self._cur_protocol_id not in self.logic.new_protocol_ids:
             self.setProtocolEditorEnabled(True)
 
@@ -518,12 +518,18 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if state == SaveState.NO_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "")  
             self.ui.saveStateLabel.setProperty("styleSheet", "border: none;")
+            self.ui.protocolEditRevertButton.setText("Edit Protocol")
+            self.ui.protocolEditRevertButton.setToolTip("Edit the currently selected protocol.")
         elif state == SaveState.UNSAVED_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "You have unsaved changes!")
             self.ui.saveStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
+            self.ui.protocolEditRevertButton.setText("Revert Changes")
+            self.ui.protocolEditRevertButton.setToolTip("Revert changes in currently selected protocol.")
         elif state == SaveState.SAVED_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "Changes saved.")
             self.ui.saveStateLabel.setProperty("styleSheet", "color: green; font-size: 16px; border: 2px solid green; padding: 30px;")
+            self.ui.protocolEditRevertButton.setText("Edit Protocol")
+            self.ui.protocolEditRevertButton.setToolTip("Edit the currently selected protocol.")
 
     def updateProtocolDisplayFromProtocol(self, protocol: "openlifu.plan.Protocol"):
         # Set the main fields
@@ -606,7 +612,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
-        self.ui.protocolEditButton.setEnabled(enabled)
+        self.ui.protocolEditRevertButton.setEnabled(enabled)
         if not enabled:
             self.setProtocolEditorEnabled(False)  # depends
 
@@ -649,7 +655,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
-        self.ui.protocolEditButton.setEnabled(enabled)
+        self.ui.protocolEditRevertButton.setEnabled(enabled)
 
     def cache_protocol(self, protocol_changes: "openlifu.plan.Protocol") -> None:
         self.logic.cached_protocols[self._cur_protocol_id] = protocol_changes

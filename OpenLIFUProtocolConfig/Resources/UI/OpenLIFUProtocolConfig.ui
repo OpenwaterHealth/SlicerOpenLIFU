@@ -248,7 +248,7 @@
         </layout>
       </item>
       <item>
-        <widget class="QPushButton" name="protocolEditButton">
+        <widget class="QPushButton" name="protocolEditRevertButton">
           <property name="text">
             <string>Edit Protocol</string>
           </property>
