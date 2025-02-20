@@ -548,8 +548,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # This ensures that we properly handle SlicerOpenLIFU objects that become invalid when their nodes are deleted
-        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
-        shNode.AddObserver(shNode.SubjectHierarchyItemAboutToBeRemovedEvent, self.onSHItemAboutToBeRemoved)
+        self.setupSHNodeObserver()
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
@@ -1074,6 +1073,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+        self.setupSHNodeObserver()
 
     @vtk.calldata_type(vtk.VTK_INT)
     def onSHItemAboutToBeRemoved(self, caller, event, removedItemID):
@@ -1122,7 +1122,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.setParameterNode(self.logic.getParameterNode())
         self.updateParametersFromSettings()
-
+    
+    def setupSHNodeObserver(self) -> None:
+        """Set and observe the subject hierarchy node.
+        Observation is needed so that certain actions can take place when an openlifu affiliated node or folder is removed from the scene.
+        """
+        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+        shNode.AddObserver(shNode.SubjectHierarchyItemAboutToBeRemovedEvent, self.onSHItemAboutToBeRemoved)
 
     def updateParametersFromSettings(self):
         parameterNode : vtkMRMLScriptedModuleNode = self._parameterNode.parameterNode
