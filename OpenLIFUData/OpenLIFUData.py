@@ -1185,8 +1185,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
         self._folder_deletion_in_progress = False
         self._timer = None 
-        # Secondary flag incase the timer fails during folder deletion. Prevents two transducer deletio
-        self._transducer_node_deletion_in_progress = False 
 
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
@@ -1565,18 +1563,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
         transducer_parent_dir = Path(filepath).parent
-        transducer_abspaths_info = {}
-        if transducer.transducer_body_filename:
-            transducer_abspaths_info['transducer_body_abspath'] = transducer_parent_dir/transducer.transducer_body_filename
-        if transducer.registration_surface_filename:
-            transducer_abspaths_info['registration_surface_abspath'] = transducer_parent_dir/transducer.registration_surface_filename
 
+        transducer_abspaths_info = {key: transducer_parent_dir.joinpath(filename) 
+                                    for key, filename in {
+                                        'transducer_body_abspath': transducer.transducer_body_filename,
+                                        'registration_surface_abspath': transducer.registration_surface_filename
+                                    }.items() if filename
+                                    }
+        
         self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
 
     def load_transducer_from_openlifu(
             self,
             transducer: "openlifu.Transducer",
-            transducer_abspaths_info: Optional[dict] = {},
+            transducer_abspaths_info: dict = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
             replace_confirmed: bool = False,
@@ -1587,6 +1587,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         Args:
             transducer: The openlifu Transducer object
             transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
+                This includes 'transducer_body_abspath' and 'registration_surface_abspath'. The registration surface model is required for
+                running the transducer tracking algorithm. If left as empty, the registration surface and transducer body models affiliated 
+                with the transducer will not be loaded.
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to
@@ -1637,6 +1640,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer.clear_nodes()
 
     def on_transducer_affiliated_folder_about_to_be_removed(self, folder_transducer_id: str) -> None:
+        """Handle cleanup on SlicerOpenLIFUTransducer objects when the mrml nodes they depend on get removed from the scene. 
+        A folder level deletion by manual mrml scene manipulation automatically clears all of the nodes under the folder.
+
+        Args:
+            folder_transducer_id: Transducer affiliated folders have a 'transudcer_id' attribute that matches the 
+                ID of the affiliated transducer object.
+        """
         
         # Set the folder deletion flag to true
         self._folder_deletion_in_progress = True
@@ -1651,10 +1661,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # should not be possible in the application logic.
         assert(len(matching_transducer_openlifu_ids) <= 1)
 
-        if matching_transducer_openlifu_ids and not self._transducer_node_deletion_in_progress:
-            # Remove the transducer, but keep any other nodes under it. This transducer was removed
-            # by manual mrml scene manipulation, so we don't want to pull other nodes out from
-            # under the user.
+        if matching_transducer_openlifu_ids:
+
             transducer_openlifu_id = matching_transducer_openlifu_ids[0]
             slicer.util.warningDisplay(
                 text = f"The transducer with id {transducer_openlifu_id} will be unloaded because affiliated nodes were removed from the scene.",
@@ -1696,8 +1704,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 #Remove the transducer, but keep any other nodes under it. This transducer was removed
                 # by manual mrml scene manipulation, so we don't want to pull other nodes out from
                 # under the user.
-                self._transducer_node_deletionin_progress = True
-
                 transducer_openlifu_id = matching_transducer_openlifu_ids[0]
                 clean_up_scene = ObjectBeingUnloadedMessageBox(
                     message = f"The transducer with id {transducer_openlifu_id} will be unloaded because an affiliated node was removed from the scene.",
@@ -1711,7 +1717,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 
                 # Reset flags
                 self._timer = None
-                self._transducer_node_deletion_in_progress = False
 
         # When a folder is deleted, multiple calls to this function are triggered by each transducer affiliated node. 
         # We include a check for an existing timer to prevent each transducer node from creating its own timer. 
