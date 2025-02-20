@@ -38,7 +38,7 @@ from OpenLIFULib.util import (
     BusyCursor,
 )
 
-from OpenLIFULib.guided_mode_util import get_guided_mode_state
+from OpenLIFULib.virtual_fit_results import clear_virtual_fit_results
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -1223,7 +1223,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.getParameterNode().loaded_solution is not None
                 and loaded_session.last_generated_solution_id == self.getParameterNode().loaded_solution.solution.solution.id
             ):
-                self.clear_solution(clean_up_scene=True)  
+                self.clear_solution(clean_up_scene=True)
+            clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.

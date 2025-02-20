@@ -189,13 +189,14 @@ def get_best_virtual_fit_result_node(
     return vf_result_node
 
 def clear_virtual_fit_results(
-    target_id: str,
+    target_id: Optional[str],
     session_id: Optional[str],
 ) -> None:
     """Remove all virtual fit results nodes from the scene that match the given target and session id.
 
     Args:
-        target_id: target ID that needs to match for a virtual fit result to be removed.
+        target_id: target ID that needs to match for a virtual fit result to be removed. If None
+            then *all* targets for the given session ID are cleared out.
         session_id: session ID. If None then **only virtual fit results with no session ID are removed**!
     """
 
