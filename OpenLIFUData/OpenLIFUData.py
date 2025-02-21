@@ -38,7 +38,10 @@ from OpenLIFULib.util import (
     BusyCursor,
 )
 
-from OpenLIFULib.virtual_fit_results import clear_virtual_fit_results
+from OpenLIFULib.virtual_fit_results import (
+    clear_virtual_fit_results,
+    add_virtual_fit_results_from_openlifu_session_format,
+)
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -1506,6 +1509,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.load_protocol_from_openlifu(
             self.db.load_protocol(session_openlifu.protocol_id),
             replace_confirmed = True,
+        )
+
+        # === Load virtual fit results ===
+
+        add_virtual_fit_results_from_openlifu_session_format(
+            vf_results_openlifu = session_openlifu.virtual_fit_results,
+            session_id = session_openlifu.id,
+            transducer = newly_loaded_transducer.transducer.transducer,
         )
 
         # === Toggle slice visibility and center slices on first target ===
