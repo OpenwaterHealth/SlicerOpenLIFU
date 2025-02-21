@@ -9,7 +9,7 @@ from slicer import (
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
-from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix
+from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix, transform_node_from_openlifu
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
@@ -30,7 +30,7 @@ class SlicerOpenLIFUTransducer:
             transducer_abspaths_info: dict = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
-            ) -> "SlicerOpenLIFUTransducer":
+    ) -> "SlicerOpenLIFUTransducer":
         """Initialize object with needed scene nodes from just the openlifu object.
 
         Args:
@@ -51,20 +51,20 @@ class SlicerOpenLIFUTransducer:
         parentFolderItem = shNode.CreateFolderItem(shNode.GetSceneItemID(), slicer_transducer_name)
         shNode.SetItemAttribute(parentFolderItem, 'transducer_id', transducer.id)
 
-        transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transform_node.SetName(f"{slicer_transducer_name}-matrix")
 
-        openlifu2slicer_matrix = create_openlifu2slicer_matrix(transducer.units)
         if transducer_matrix is None:
             transducer_matrix = np.eye(4)
         if transducer_matrix_units is None:
             transducer_matrix_units = transducer.units
-        transform_in_native_transducer_coordinates = transducer.convert_transform(transducer_matrix, transducer_matrix_units)
-        transform_matrix_numpy = openlifu2slicer_matrix @ transform_in_native_transducer_coordinates
 
-        transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
-        transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+        transform_node = transform_node_from_openlifu(
+            openlifu_transform_matrix = transducer_matrix,
+            transform_units = transducer_matrix_units,
+            transducer = transducer,
+        )
+
         shNode.SetItemParent(shNode.GetItemByDataNode(transform_node), parentFolderItem)
+        transform_node.SetName(f"{slicer_transducer_name}-matrix")
 
         #Model nodes
         model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")

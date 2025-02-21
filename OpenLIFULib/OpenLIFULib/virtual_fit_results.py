@@ -1,10 +1,12 @@
 import slicer
 from slicer import vtkMRMLTransformNode
-from typing import Optional, Iterable, List, Tuple, Dict, TYPE_CHECKING
-from OpenLIFULib.transform_conversion import transform_node_to_openlifu
+from typing import Optional, Iterable, List, Tuple, Dict, TYPE_CHECKING, Union
+from OpenLIFULib.transform_conversion import transform_node_to_openlifu, transform_node_from_openlifu
+from OpenLIFULib.lazyimport import openlifu_lz
 
 if TYPE_CHECKING:
     from openlifu.db.session import ArrayTransform
+    from openlifu import Transducer
 
 def add_virtual_fit_result(
     transform_node: vtkMRMLTransformNode,
@@ -13,16 +15,17 @@ def add_virtual_fit_result(
     approval_status: bool = False,
     rank: int = 1,
     replace = False,
+    clone_node = False,
 ) -> vtkMRMLTransformNode:
-    """Clone a transform node and set it to be a "virtual fit result".
-    This means the transform node clone will be named appropriately
+    """Add a "virtual fit result" by cloning or creating a transform node and giving it appropriate attributes.
+
+    This means the transform node will be named appropriately
     and will have a bunch of attributes set on it so that we can identify it
     later as a virtual fit result.
 
     Args:
-        transform_node: The transform node to clone in order to create this virtual
-            fit result. Probably this is the transducer transform node after a transducer
-            got sent through the virtual fit process.
+        transform_node: The transform node to create this virtual fit result. Will be
+            either cloned or stolen depending on the choice of `clone_node`.
         target_id: The ID of the target for which the virtual fit was computed.
             For example in a session-based workflow this should be the id of the
             target openlifu.Point.
@@ -39,6 +42,9 @@ def add_virtual_fit_result(
         replace: Whether to replace any existing virtual fit results that have the
             same session ID, target ID, and rank. If this is off, then an error is raised
             in the event that there is already a matching virtual fit result in the scene.
+        clone_node: Whether to clone or to take the `transform_node`. If True, then the node is cloned
+            to create the virtual fit result node, and the passed in `transform_node` is left unharmed.
+            If False then the node is taken and turned into a virtual fit result node (renamed, given attributes, etc.).
 
     Returns: The newly created virtual fit result transform node
     """
@@ -60,10 +66,13 @@ def add_virtual_fit_result(
     if approval_status and rank != 1:
         raise ValueError("Only the rank 1 (best) virtual fit result can be approved")
 
-    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-    itemIDToClone = shNode.GetItemByDataNode(transform_node)
-    clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-    virtual_fit_result : vtkMRMLTransformNode = shNode.GetItemDataNode(clonedItemID)
+    if clone_node:
+        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+        itemIDToClone = shNode.GetItemByDataNode(transform_node)
+        clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+        virtual_fit_result : vtkMRMLTransformNode = shNode.GetItemDataNode(clonedItemID)
+    else:
+        virtual_fit_result = transform_node
 
     virtual_fit_result.SetName(f"VF {target_id} {rank}")
     virtual_fit_result.SetAttribute("isVirtualFitResult", "1")
@@ -124,7 +133,7 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
 
     Returns the virtual fit results in openlifu Session format. To understand this format, see the documentation of
     openlifu.db.Session.virtual_fit_results.
-    
+
     See also the reverse function `add_virtual_fit_results_from_openlifu_session_format`.
     """
     vf_nodes_for_session = get_virtual_fit_result_nodes(session_id=session_id)
@@ -147,6 +156,38 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
             ],
         )
     return virtual_fit_results_openlifu
+
+def add_virtual_fit_results_from_openlifu_session_format(
+    vf_results_openlifu : "Dict[str,Tuple[bool,List[ArrayTransform]]]",
+    session_id:str,
+    transducer:"Transducer",
+) -> None:
+    """Read the openlifu session format and load the data into the slicer scene as virtual fit result nodes.
+
+    Args:
+        vf_results_openlifu: Virtual fit results in the openlifu session format. To understand this format,
+            see the documentation of openlifu.db.Session.virtual_fit_results.
+        session_id: The ID of the session with which to tag these virtual fit result nodes.
+        transducer_units: The units of the transducer used in this session. It needs to be known so that we can build
+            the conversion into Slicer's units (mm) directly into the transforms.
+
+    See also the reverse function `get_virtual_fit_results_in_openlifu_session_format`
+    """
+    for target_id, (is_approved, array_transforms) in vf_results_openlifu.items():
+        for i, array_transform in enumerate(array_transforms):
+            virtual_fit_result_transform = transform_node_from_openlifu(
+                openlifu_transform_matrix = array_transform.matrix,
+                transform_units = array_transform.units,
+                transducer = transducer,
+            )
+            add_virtual_fit_result(
+                transform_node = virtual_fit_result_transform,
+                target_id = target_id,
+                session_id = session_id,
+                approval_status = is_approved if i==0 else False, # Only label approval on the top transform
+                rank = i+1,
+                clone_node=False,
+            )
 
 def get_best_virtual_fit_result_node(
     target_id : str,

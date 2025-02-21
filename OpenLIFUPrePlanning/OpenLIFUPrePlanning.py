@@ -556,6 +556,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 target_id = target_id,
                 session_id = session_id,
                 approval_status = False,
+                clone_node=True,
             )
 
 #
