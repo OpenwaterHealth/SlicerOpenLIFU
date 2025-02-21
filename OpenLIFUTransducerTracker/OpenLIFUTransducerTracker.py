@@ -242,6 +242,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Create dialog for photoscan preview and add threeD view widget to dialog
         self.photoscanPreviewDialog = slicer.util.loadUI(self.resourcePath("UI/PhotoscanPreview.ui"))
         self.photoscanPreviewDialogUI = slicer.util.childWidgetVariables(self.photoscanPreviewDialog)
+        self.photoscanPreviewDialog.setWindowTitle("Photoscan Preview")
         replace_widget(self.photoscanPreviewDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, self.photoscanPreviewDialogUI)
         
         self.updatePhotoscanApproveButton(photoscan.is_approved())
