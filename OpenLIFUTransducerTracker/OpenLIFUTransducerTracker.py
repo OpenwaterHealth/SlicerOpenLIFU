@@ -129,7 +129,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
-        self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking)
+        self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking) # Temporary functionality
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
         self.updateApproveButton()
@@ -211,6 +211,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Determine whether transducer tracking can be run based on the status of combo boxes
         self.checkCanRunTracking()
+
+        # Determine whether a photoscan can be previewed based on the status of the photoscan combo box
+        self.checkCanPreviewPhotoscan()
             
     def onPreviewPhotoscanClicked(self):
 
@@ -368,6 +371,16 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.photoscanPreviewDialogUI.photoscanApprovalStatusLabel.text = "Photoscan is not approved for transducer tracking"
         else:
             self.photoscanPreviewDialogUI.photoscanApprovalStatusLabel.text = f"Photoscan approval status: {photoscan_is_approved}."
+
+    def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
+        # If the photoscan combo box has valid data selected then enable the preview photoscan button
+        current_data = self.algorithm_input_widget.get_current_data()
+        if current_data['Photoscan'] is None:
+            self.ui.previewPhotoscanButton.enabled = False
+            self.ui.previewPhotoscanButton.setToolTip("Please specify a photoscan to preview")
+        else:
+            self.ui.previewPhotoscanButton.enabled = True
+            self.ui.previewPhotoscanButton.setToolTip("Preview and toggle approval of the selected photoscan before registration")
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
