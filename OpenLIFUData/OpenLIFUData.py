@@ -46,6 +46,7 @@ from OpenLIFULib.virtual_fit_results import (
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
+    from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
 
 #
 # OpenLIFUData
@@ -1513,11 +1514,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load virtual fit results ===
 
-        add_virtual_fit_results_from_openlifu_session_format(
+        newly_added_vf_result_nodes = add_virtual_fit_results_from_openlifu_session_format(
             vf_results_openlifu = session_openlifu.virtual_fit_results,
             session_id = session_openlifu.id,
             transducer = newly_loaded_transducer.transducer.transducer,
         )
+        for vf_node in newly_added_vf_result_nodes:
+            preplanning_widget : OpenLIFUPrePlanningWidget = slicer.modules.OpenLIFUPrePlanningWidget
+            preplanning_widget.watchVirtualFit(vf_node)
 
         # === Toggle slice visibility and center slices on first target ===
 
