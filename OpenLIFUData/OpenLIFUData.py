@@ -1518,6 +1518,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             vf_results_openlifu = session_openlifu.virtual_fit_results,
             session_id = session_openlifu.id,
             transducer = newly_loaded_transducer.transducer.transducer,
+            replace=True, # If there happen to already be some virtual fit result nodes that clash, loading a session will silently overwrite them.
         )
         for vf_node in newly_added_vf_result_nodes:
             preplanning_widget : OpenLIFUPrePlanningWidget = slicer.modules.OpenLIFUPrePlanningWidget
