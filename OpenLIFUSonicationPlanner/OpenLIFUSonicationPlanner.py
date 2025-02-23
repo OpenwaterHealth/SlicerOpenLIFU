@@ -308,11 +308,14 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateVirtualFitApprovalStatus(self) -> None:
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if data_logic.validate_session():
-            target_id = data_logic.get_virtual_fit_approval_state()
-            if target_id is None:
+            target_ids = data_logic.get_virtual_fit_approvals_in_session()
+            if len(target_ids) == 0:
                 self.ui.virtualFitApprovalStatusLabel.text = ""
             else:
-                self.ui.virtualFitApprovalStatusLabel.text = f"(Virtual fit was approved for target \"{target_id}\")"
+                self.ui.virtualFitApprovalStatusLabel.text = (
+                    "Virtual fit is approved for the following targets:\n- "
+                    + "\n- ".join(target_ids)
+                )
         else:
             self.ui.virtualFitApprovalStatusLabel.text = ""
 

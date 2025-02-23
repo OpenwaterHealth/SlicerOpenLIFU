@@ -435,9 +435,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApprovalStatusLabel()
 
     def updateApprovalStatusLabel(self):
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        session_id = None if not data_logic.validate_session() else data_logic.getParameterNode().loaded_session.get_session_id()
-        approved_target_ids = get_approved_target_ids(session_id=session_id)
+        approved_target_ids = self.logic.get_approved_target_ids()
         if len(approved_target_ids) == 0:
             self.ui.approvalStatusLabel.text = "There are currently no virtual fit approvals."
         else:
@@ -486,6 +484,13 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUPrePlanningParameterNode(super().getParameterNode())
 
+    def get_approved_target_ids(self) -> List[str]:
+        """Return a list of target IDs that have approved virtual fit, for the currently active session.
+        Or if there is no session, then sessionless approved target IDs are returned."""
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        session_id = None if not data_logic.validate_session() else data_logic.getParameterNode().loaded_session.get_session_id()
+        approved_target_ids = get_approved_target_ids(session_id=session_id)
+        return approved_target_ids
 
     def toggle_virtual_fit_approval(self, target_id: str, session_id: Optional[str]):
         """Toggle approval for the virtual fit of the given target and session. If the session_id is provided
