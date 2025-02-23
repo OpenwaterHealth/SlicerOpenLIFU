@@ -161,6 +161,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
     vf_results_openlifu : "Dict[str,Tuple[bool,List[ArrayTransform]]]",
     session_id:str,
     transducer:"Transducer",
+    replace = False,
 ) -> List[vtkMRMLTransformNode]:
     """Read the openlifu session format and load the data into the slicer scene as virtual fit result nodes.
 
@@ -170,6 +171,9 @@ def add_virtual_fit_results_from_openlifu_session_format(
         session_id: The ID of the session with which to tag these virtual fit result nodes.
         transducer_units: The units of the transducer used in this session. It needs to be known so that we can build
             the conversion into Slicer's units (mm) directly into the transforms.
+        replace: Whether to replace any existing virtual fit results that have the
+            same session ID, target ID, and rank. If this is off, then an error is raised
+            in the event that there is already a matching virtual fit result in the scene.
 
     Returns a list of the nodes that were added.
 
@@ -190,6 +194,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
                 approval_status = is_approved if i==0 else False, # Only label approval on the top transform
                 rank = i+1,
                 clone_node=False,
+                replace=replace,
             )
             nodes_that_have_been_added.append(node)
     return nodes_that_have_been_added
