@@ -161,7 +161,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
     vf_results_openlifu : "Dict[str,Tuple[bool,List[ArrayTransform]]]",
     session_id:str,
     transducer:"Transducer",
-) -> None:
+) -> List[vtkMRMLTransformNode]:
     """Read the openlifu session format and load the data into the slicer scene as virtual fit result nodes.
 
     Args:
@@ -171,8 +171,11 @@ def add_virtual_fit_results_from_openlifu_session_format(
         transducer_units: The units of the transducer used in this session. It needs to be known so that we can build
             the conversion into Slicer's units (mm) directly into the transforms.
 
+    Returns a list of the nodes that were added.
+
     See also the reverse function `get_virtual_fit_results_in_openlifu_session_format`
     """
+    nodes_that_have_been_added = []
     for target_id, (is_approved, array_transforms) in vf_results_openlifu.items():
         for i, array_transform in enumerate(array_transforms):
             virtual_fit_result_transform = transform_node_from_openlifu(
@@ -180,7 +183,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
                 transform_units = array_transform.units,
                 transducer = transducer,
             )
-            add_virtual_fit_result(
+            node = add_virtual_fit_result(
                 transform_node = virtual_fit_result_transform,
                 target_id = target_id,
                 session_id = session_id,
@@ -188,6 +191,8 @@ def add_virtual_fit_results_from_openlifu_session_format(
                 rank = i+1,
                 clone_node=False,
             )
+            nodes_that_have_been_added.append(node)
+    return nodes_that_have_been_added
 
 def get_best_virtual_fit_result_node(
     target_id : str,
@@ -310,3 +315,8 @@ def get_approval_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> bo
     if node.GetAttribute("VF:approvalStatus") is None:
         raise RuntimeError("Node does not have a virtual fit approval status.")
     return node.GetAttribute("VF:approvalStatus") == "1"
+
+def get_target_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> str:
+    if node.GetAttribute("VF:targetID") is None:
+        raise RuntimeError("Node does not have a target ID.")
+    return node.GetAttribute("VF:targetID")
