@@ -46,7 +46,7 @@ class SlicerOpenLIFUSession:
     in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
-    affiliated_photoscans : Optional[Dict[str,SlicerOpenLIFUPhotoscanWrapper]] = None
+    affiliated_photoscans : Dict[str,SlicerOpenLIFUPhotoscanWrapper] = {}
     """Dictionary containing photoscan_id: SlicerOpenLIFUPhotoscanWrapper for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
     transducer tracking as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan."""
@@ -108,11 +108,11 @@ class SlicerOpenLIFUSession:
         return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
 
     def get_affiliated_photoscan_ids(self):
-        return self.affiliated_photoscans.keys() if self.affiliated_photoscans else []
+        return list(self.affiliated_photoscans.keys())
     
     def get_affiliated_photoscans(self):
         """Returns a list of openlifu photoscans associated with this session"""
-        return [photoscan.photoscan for photoscan in self.affiliated_photoscans.values()] if self.affiliated_photoscans else []
+        return [photoscan.photoscan for photoscan in self.affiliated_photoscans.values()]
 
     def clear_volume_and_target_nodes(self) -> None:
         """Clear the session's affiliated volume and target nodes from the scene."""
@@ -151,7 +151,7 @@ class SlicerOpenLIFUSession:
         
         return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
 
-    def update_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
+    def set_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
         
         # Wrap the list of affiliated openlifu photoscans using the SlicerOpenLIFUPhotoscanWrapper for 
         # compatability with the SlicerOpenLIFUSession parameter pack. 

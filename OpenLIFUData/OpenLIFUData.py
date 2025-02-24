@@ -1396,7 +1396,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # Keep track of any photoscans associated with the session
         affiliated_photoscans = {id:self.db.load_photoscan(subject_id, session_id, id) for id in self.db.get_photoscan_ids(subject_id, session_id)}
         if affiliated_photoscans:
-            loaded_session.update_affiliated_photoscans(affiliated_photoscans)
+            loaded_session.set_affiliated_photoscans(affiliated_photoscans)
 
     def load_session(self, subject_id, session_id) -> None:
 
