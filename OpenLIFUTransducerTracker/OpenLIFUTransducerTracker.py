@@ -268,9 +268,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             markupsNode.GetDisplayNode().SetViewNodeIDs([self.photoscanViewWidget.mrmlViewNode().GetID()])
             markupsWidget.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
     
-        # Connect buttons
+        def onDialogFinished():
+            # Turn off model visibility
+            photoscan.toggle_model_display(False)
+
+        # Connect buttons and signals
         self.photoscanPreviewDialogUI.photoscanApprovalButton.clicked.connect(onPhotoscanApproveClicked)
-        self.photoscanPreviewDialogUI.placeLandmarksButton.clicked.connect(onPlaceLandmarksClicked)
+        self.photoscanPreviewDialogUI.placeLandmarksButton.clicked.connect(onPlaceLandmarksClicked) 
+        self.photoscanPreviewDialog.finished.connect(onDialogFinished)
 
         # Display dialog
         self.photoscanPreviewDialog.exec_()
@@ -316,7 +321,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # IDs of all the view nodes in the main Window. This excludes the photoscan widget's view node
         views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetName() != photoscan_view_node.GetName()]
         
-        # Set the view nodes for all displayable nodes
+        # Set the view nodes for all displayable nodes.
         for displayable_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):
             if displayable_node.IsA('vtkMRMLScalarVolumeNode'):
                 # Check for any volume renderings
