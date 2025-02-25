@@ -72,14 +72,14 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def _clear_input_options(self):
         """Clear out input options, remembering what was most recently selected in order to be able to set that again later"""
         for input in self.inputs_dict.values():
-            input.most_recent_selection = input.combo_box.currentData
+            input.most_recent_selection = input.combo_box.currentText 
             input.combo_box.clear()
 
     def _set_most_recent_selections(self):
         """Set input options to their most recent selections when possible."""
         for input in self.inputs_dict.values():
             if input.most_recent_selection is not None:
-                most_recent_selection_index = input.combo_box.findData(input.most_recent_selection)
+                most_recent_selection_index = input.combo_box.findText(input.most_recent_selection)
                 if most_recent_selection_index != -1:
                     input.combo_box.setCurrentIndex(most_recent_selection_index)
 
