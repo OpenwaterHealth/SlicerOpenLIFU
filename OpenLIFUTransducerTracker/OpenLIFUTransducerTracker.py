@@ -399,6 +399,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             elif transducer.surface_model_node is None and self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode():
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
+            else:
+                # transducer surface model is None and skin segmentation model is None
+                self.ui.runTrackingButton.enabled = False
+                self.ui.runTrackingButton.setToolTip(
+                    "The selected transducer does not have an affiliated registration surface model, which is needed to run tracking. Please also specify a skin segmentation model.")
         else:
             self.ui.runTrackingButton.enabled = False
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
