@@ -1476,6 +1476,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 # Remove the volume already in the scene
                 idx = loaded_volume_ids.index(session_openlifu.volume_id)
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
+            
+        session_affiliated_photoscans = self.db.get_photoscan_ids(subject_id, session_id)
+        conflicting_loaded_photoscans =  [photoscan for photoscan in session_affiliated_photoscans if photoscan in self.getParameterNode().loaded_photoscans]
+        if (
+            conflicting_loaded_photoscans
+        ):
+            if not slicer.util.confirmYesNoDisplay(
+                f"Loading this session will replace the already loaded photoscan(s) with ID(s) {conflicting_loaded_photoscans}. Proceed?",
+                "Confirm replace photoscan"
+            ):
+                return
 
         # === Proceed with loading session ===
 
@@ -1543,6 +1554,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Set the newly created session as the currently active session ===
 
         self.getParameterNode().loaded_session = new_session
+
+        # === Keep track of affiliated photoscans and unload any conflicting photoscans that have been previously loaded ===
+        for photoscan_id in conflicting_loaded_photoscans:
+            self.remove_photoscan(photoscan_id) 
         self.update_photoscans_affiliated_with_loaded_session()
 
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:

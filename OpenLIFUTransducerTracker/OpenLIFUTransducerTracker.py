@@ -220,16 +220,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
 
-        # Session-based workflow
-        if get_openlifu_data_parameter_node().loaded_session:
-            loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
-                selected_photoscan_openlifu,
-                load_from_active_session = True)
-        
-        # Manual workflow
-        else:
+        # In the manual workflow or if the photoscan has been previously loaded as part of a session
+        if selected_photoscan_openlifu.id in get_openlifu_data_parameter_node().loaded_photoscans:
             loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
-            
+        elif get_openlifu_data_parameter_node().loaded_session:
+            loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
+                    selected_photoscan_openlifu,
+                    load_from_active_session = True)
+        # This shouldn't happen - can't click the Preview button without a loaded photoscan or session
+        else:
+            raise RuntimeError("No photoscans found to preview.") 
+        
         self.DisplayPhotoscanPreviewDialog(loaded_slicer_photoscan)
 
     def DisplayPhotoscanPreviewDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
