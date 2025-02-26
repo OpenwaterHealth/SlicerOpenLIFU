@@ -186,8 +186,21 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic: Optional[OpenLIFUProtocolConfigLogic] = None
+
+        # Flag for keeping "saved changes" box intuitive. When saving changes,
+        # the protocol is loaded/reloaded, which triggers an update to the
+        # combo box. However, during this update, we should not treat the
+        # re-selected protocol as no changes, because we want a special display
+        # of saved changes.
         self._is_saving_changes: bool = False
+
+        # Flag for preventing update of widget save state when programmatically
+        # changing fields. When a user edits a protocol, a callback is triggered
+        # to update the save state to UNSAVED_CHANGES. However, sometimes, we
+        # programmatically changing those fields, and we don't want to
+        # trigger a display update.
         self._is_updating_display: bool = False
+
         self._cur_protocol_id: str = ""  # important if WIPs change the ID
         self._cur_save_state = SaveState.NO_CHANGES
         self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
@@ -371,7 +384,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             else:
                 self.updateWidgetSaveState(SaveState.NO_CHANGES)
 
-        # You can't delete new protocols from db
+        # You can't delete new protocols from db, so make sure the widgets reflect that
         if self._cur_protocol_id in self.logic.new_protocol_ids:
             self.setNewProtocolWidgets()
 
