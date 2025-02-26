@@ -116,7 +116,7 @@ class OpenLIFUProtocolConfigParameterNode:
 class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
     """ Create new protocol selection from database dialog """
 
-    def __init__(self, protocol_names_and_IDs : List[Tuple[str,str]], parent=None):
+    def __init__(self, protocol_names_and_IDs : List[Tuple[str,str]], parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         """ Args:
                 protocol_names_and_IDs: list of pairs containing the protocol
