@@ -533,29 +533,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             qsettings.value('OpenLIFU/databaseDirectory','.'), # starting dir, with default of '.'
             "Protocols (*.json);;All Files (*)", # file type filter
         )
-        if filepath:
-            protocol = openlifu_lz().Protocol.from_file(filepath)
+        if not filepath:
+            return
 
-            if protocol.id in self.logic.cached_protocols:
-                if not slicer.util.confirmYesNoDisplay(
-                    text = f"You have a unsaved changes in a protocol with the same ID. Discard and load the new one?",
-                    windowTitle = "Discard Changes Confirmation",
-                ):
-                    return
+        protocol = openlifu_lz().Protocol.from_file(filepath)
 
-                #  This does same as revert changes, but for an arbitrary id
-                self.logic.cached_protocols.pop(protocol.id, None)  # remove from cache
-                if protocol.id in self.logic.new_protocol_ids:
-                    self.logic.new_protocol_ids.discard(protocol.id)
-                self.updateWidgetSaveState(SaveState.NO_CHANGES)
-                self.reloadProtocols()
+        if not self.load_protocol_from_openlifu(protocol):
+            return
 
-                self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
-            else:
-                self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=False)  # load to memory
-
-            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
-            self.setProtocolEditorEnabled(False)
+        self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # Update UI
+        self.setProtocolEditorEnabled(False)
 
     @display_errors
     def onLoadProtocolFromDatabaseClicked(self, checked:bool) -> None:
@@ -575,29 +562,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         dialog = ProtocolSelectionFromDatabaseDialog(protocol_names_and_IDs)
         if dialog.exec_() == qt.QDialog.Accepted:
             selected_protocol_id = dialog.get_selected_protocol_id()
-            if selected_protocol_id:
-                protocol = self.logic.dataLogic.db.load_protocol(selected_protocol_id)
+            if not selected_protocol_id:
+                return
 
-                if protocol.id in self.logic.cached_protocols:
-                    if not slicer.util.confirmYesNoDisplay(
-                        text = f"You have a unsaved changes in a protocol with the same ID. Discard and load the new one?",
-                        windowTitle = "Discard Changes Confirmation",
-                    ):
-                        return
+            protocol = self.logic.dataLogic.db.load_protocol(selected_protocol_id)
 
-                    #  This does same as revert changes, but for an arbitrary id
-                    self.logic.cached_protocols.pop(protocol.id, None)  # remove from cache
-                    if protocol.id in self.logic.new_protocol_ids:
-                        self.logic.new_protocol_ids.discard(protocol.id)
-                    self.updateWidgetSaveState(SaveState.NO_CHANGES)
-                    self.reloadProtocols()
+            if not self.load_protocol_from_openlifu(protocol):
+                return
 
-                    self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load to memory
-                else:
-                    self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=False)  # load to memory
-
-                self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # select the protocol
-                self.setProtocolEditorEnabled(False)
+            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # Update UI
+            self.setProtocolEditorEnabled(False)
 
     def updateWidgetSaveState(self, state: SaveState):
         self._cur_save_state = state
@@ -756,6 +730,34 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def cache_protocol(self, protocol_changes: "openlifu.plan.Protocol") -> None:
         self.logic.cached_protocols[self._cur_protocol_id] = protocol_changes
+
+    def load_protocol_from_openlifu(self, protocol, check_cache=True):
+
+        """
+        Handles loading a protocol, checking the cache for conflicts, and updating UI state.
+        """
+        if check_cache and protocol.id in self.logic.cached_protocols:
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"You have unsaved changes in a protocol with the same ID. Discard and load the new one?",
+                windowTitle="Discard Changes Confirmation",
+            ):
+                return False  # User canceled the load process
+
+            # Remove from cache
+            self.logic.cached_protocols.pop(protocol.id, None)
+            if protocol.id in self.logic.new_protocol_ids:
+                self.logic.new_protocol_ids.discard(protocol.id)
+
+            self.updateWidgetSaveState(SaveState.NO_CHANGES)
+            self.reloadProtocols()
+
+            replace_confirmed = True
+        else:
+            replace_confirmed = False
+
+        # Load the protocol
+        self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=replace_confirmed)
+        return True
 
 #
 # OpenLIFUProtocolConfigLogic
