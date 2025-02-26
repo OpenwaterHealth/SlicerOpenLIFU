@@ -149,6 +149,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._cur_login_state = LoginState.NOT_LOGGED_IN
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+        self._default_anonymous_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+                id = "anonymous", 
+                password_hash = "",
+                roles = [],
+                name = "Anonymous",
+                description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
+        ))
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -189,14 +196,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateUserAccountModeButton()
         self.updateLoginButton()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-        default_anonymous_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
-                id = "anonymous", 
-                password_hash = "",
-                roles = [],
-                name = "Anonymous",
-                description = "This is the default anonymous role automatically assigned when the app opens, before anyone is logged in. It has no roles, and therefore is the most restricted."
-                ))
-        self._parameterNode.active_user = default_anonymous_user
+        self._parameterNode.active_user = self._default_anonymous_user
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -258,7 +258,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if new_user_account_mode_state:
             self.logic.start_user_account_mode()
         else:
-            self._parameterNode.active_user = None
+            self._parameterNode.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
             set_user_account_mode_state(new_user_account_mode_state)
 
@@ -287,7 +287,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def onLogoutClicked(self, checked:bool):
-        self._parameterNode.active_user = None
+        self._parameterNode.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     def updateLoginButton(self):

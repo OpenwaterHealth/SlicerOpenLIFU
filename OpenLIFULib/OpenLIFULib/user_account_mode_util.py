@@ -8,7 +8,9 @@ if TYPE_CHECKING:
     import openlifu.db
 
 def get_current_user() -> "Optional[openlifu.db.User]":
-    """Get the active openlifu user"""
+    """Get the active openlifu user. If no user is logged in or user account
+    mode is off, a default user is returned, with the intention of being the most
+    restricted"""
     return get_openlifu_login_parameter_node().active_user.user
 
 def get_user_account_mode_state() -> bool:
