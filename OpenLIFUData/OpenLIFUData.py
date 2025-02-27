@@ -1566,7 +1566,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_protocol_from_openlifu(self, protocol:"openlifu.Protocol", replace_confirmed: bool = False) -> None:
         """Load an openlifu protocol object into the scene as a SlicerOpenLIFUProtocol,
-        adding it to the list of loaded openlifu objects.
+        adding it to the list of loaded openlifu objects. If there are
+        changes in the protocol config, also confirms user wants to discard
+        changes.
 
         Args:
             protocol: The openlifu Protocol object
@@ -1580,14 +1582,45 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 "Protocol already loaded",
             ):
                 return
+
+        # check if user wants to overwrite WIPs
+        if not self.confirm_and_overwrite_protocol_cache(protocol.id):
+            return
+
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
 
     def remove_protocol(self, protocol_id:str) -> None:
-        """Remove a protocol from the list of loaded protocols."""
+        """Remove a protocol from the list of loaded protocols. If there are
+        changes in the protocol config, also confirms user wants to discard
+        changes."""
         loaded_protocols = self.getParameterNode().loaded_protocols
         if not protocol_id in loaded_protocols:
             raise IndexError(f"No protocol with ID {protocol_id} appears to be loaded; cannot remove it.")
+
+        # check if user wants to overwrite WIPs
+        if not self.confirm_and_overwrite_protocol_cache(protocol_id):
+            return
+
         loaded_protocols.pop(protocol_id)
+
+    def confirm_and_overwrite_protocol_cache(self, protocol_id: str) -> bool:
+        """
+        Checks if the protocol ID exists in the protocol config cache. If so,
+        prompts the user to confirm overwriting it. Returns False if the user
+        cancels, otherwise updates the cache and returns True.
+        """
+        # Check protocol config for a WIP
+        protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
+
+        if protocolConfigLogic.protocol_id_is_in_cache(protocol_id):
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"You have unsaved changes in a protocol with the same ID. Are you sure you want to discard changes?",
+                windowTitle="Discard Changes Confirmation",
+            ):
+                return False # User canceled discarding unsaved protocol changes
+
+            self.logic.delete_protocol_from_cache(protocol_id)
+        return True
 
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)

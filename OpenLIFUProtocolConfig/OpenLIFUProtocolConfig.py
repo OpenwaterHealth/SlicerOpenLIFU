@@ -302,6 +302,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+
+        # Cache a WIP (other modules might load one)
+        if self._cur_save_state == SaveState.UNSAVED_CHANGES:
+            protocol_changed = self.getProtocolFromGUI()
+            self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
+
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
