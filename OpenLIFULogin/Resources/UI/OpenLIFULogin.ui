@@ -25,16 +25,9 @@
         </widget>
       </item>
       <item>
-        <widget class="QPushButton" name="loginButton">
+        <widget class="QPushButton" name="loginLogoutButton">
           <property name="text">
             <string>Login</string>
-          </property>
-        </widget>
-      </item>
-      <item>
-        <widget class="QPushButton" name="logoutButton">
-          <property name="text">
-            <string>Logout</string>
           </property>
         </widget>
       </item>
