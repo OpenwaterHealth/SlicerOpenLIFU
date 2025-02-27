@@ -362,7 +362,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onProtocolSelectorIndexChanged(self):
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
             protocol_changed = self.getProtocolFromGUI()
-            self.cache_protocol(protocol_changed)
+            self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         protocol = self.ui.protocolSelector.currentData
         if protocol is None:
@@ -405,7 +405,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateProtocolDisplayFromProtocol(protocol)
 
         self._cur_protocol_id = protocol.id
-        self.cache_protocol(protocol)
+        self.logic.cache_protocol(self._cur_protocol_id, protocol)
         self.logic.new_protocol_ids.add(protocol.id)
 
         # Set the text of the protocolSelector
@@ -421,12 +421,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if self.ui.protocolEditRevertDiscardButton.text == "Edit Protocol":
             self.setProtocolEditorEnabled(True)
         elif self.ui.protocolEditRevertDiscardButton.text == "Discard New Protocol":
-            self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
-            self.logic.new_protocol_ids.discard(self._cur_protocol_id)
+            self.logic.delete_protocol_from_cache(self._cur_protocol_id)
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
             self.reloadProtocols()
         elif self.ui.protocolEditRevertDiscardButton.text == "Revert Changes":
-            self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
+            self.logic.delete_protocol_from_cache(self._cur_protocol_id)
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
             prev_protocol = self.ui.protocolSelector.currentText
             self.reloadProtocols()
@@ -453,9 +452,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             protocol.to_file(filepath)  # save to file
             self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
-            self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
-            if self._cur_protocol_id in self.logic.new_protocol_ids:
-                self.logic.new_protocol_ids.discard(self._cur_protocol_id)
+            self.logic.delete_protocol_from_cache(self._cur_protocol_id)
 
             self._is_saving_changes = True
             self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
@@ -485,9 +482,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseDeleteButton.setEnabled(True)  # can delete now
         self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
-        self.logic.cached_protocols.pop(self._cur_protocol_id, None)  # remove from cache
-        if self._cur_protocol_id in self.logic.new_protocol_ids:
-            self.logic.new_protocol_ids.discard(self._cur_protocol_id)
+        self.logic.delete_protocol_from_cache(self._cur_protocol_id)
 
         self._is_saving_changes = True
         self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
@@ -523,7 +518,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
             protocol_changed = self.getProtocolFromGUI()
-            self.cache_protocol(protocol_changed)
+            self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         qsettings = qt.QSettings()
 
@@ -550,7 +545,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
             protocol_changed = self.getProtocolFromGUI()
-            self.cache_protocol(protocol_changed)
+            self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         if not get_openlifu_data_parameter_node().database_is_loaded:
             raise RuntimeError("Cannot load protocol from database because there is no database connection")
@@ -728,25 +723,14 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
         self.ui.protocolEditRevertDiscardButton.setEnabled(enabled)
 
-    def cache_protocol(self, protocol_changes: "openlifu.plan.Protocol") -> None:
-        self.logic.cached_protocols[self._cur_protocol_id] = protocol_changes
-
-    def load_protocol_from_openlifu(self, protocol, check_cache=True):
+    def load_protocol_from_openlifu(self, protocol: "openlifu.plan.Protocol", check_cache: bool = True) -> bool:
 
         """
         Handles loading a protocol, checking the cache for conflicts, and updating UI state.
         """
-        if check_cache and protocol.id in self.logic.cached_protocols:
-            if not slicer.util.confirmYesNoDisplay(
-                text=f"You have unsaved changes in a protocol with the same ID. Discard and load the new one?",
-                windowTitle="Discard Changes Confirmation",
-            ):
-                return False  # User canceled the load process
-
-            # Remove from cache
-            self.logic.cached_protocols.pop(protocol.id, None)
-            if protocol.id in self.logic.new_protocol_ids:
-                self.logic.new_protocol_ids.discard(protocol.id)
+        if check_cache:
+            if not self.confirm_and_overwrite_protocol_cache(protocol):
+                return False
 
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
             self.reloadProtocols()
@@ -758,6 +742,23 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Load the protocol
         self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=replace_confirmed)
         return True
+
+    def confirm_and_overwrite_protocol_cache(self, protocol: "openlifu.plan.Protocol") -> bool:
+        """
+        Checks if the protocol ID exists in the cache. If so, prompts the user to confirm overwriting it.
+        Returns False if the user cancels, otherwise updates the cache and returns True.
+        """
+        if self.logic.protocol_id_is_in_cache(protocol.id):
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"You have unsaved changes in a protocol with the same ID. Discard and load the new one?",
+                windowTitle="Discard Changes Confirmation",
+            ):
+                return False  # User canceled the load process
+
+            self.logic.delete_protocol_from_cache(protocol.id)
+            return True
+        else:
+            return True
 
 #
 # OpenLIFUProtocolConfigLogic
@@ -804,6 +805,9 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUProtocolConfigParameterNode(super().getParameterNode())  # pyright: ignore[reportCallIssue]
 
+    def protocol_id_is_in_cache(self, protocol_id: str) -> bool:
+        return protocol_id in self.cached_protocols
+
     def protocol_id_is_new(self, protocol_id: str) -> bool:
         return protocol_id in self.new_protocol_ids
 
@@ -816,7 +820,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return protocol_id in self.dataLogic.db.get_protocol_ids()
 
     def protocol_id_exists(self, protocol_id: str) -> bool:
-        return self.protocol_id_is_loaded(protocol_id) or self.protocol_id_is_in_database(protocol_id) or self.protocol_id_is_new(protocol_id)
+        return self.protocol_id_is_loaded(protocol_id) or self.protocol_id_is_in_database(protocol_id) or self.protocol_id_is_new(protocol_id) or self.protocol_id_is_in_cache(protocol_id)
 
     def generate_unique_default_id(self) -> str:
         i = 1
@@ -835,6 +839,13 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Cannot delete protocol because there is no database connection")
         self.dataLogic.db.delete_protocol(protocol_id, openlifu_lz().db.database.OnConflictOpts.ERROR)
 
+    def cache_protocol(self, protocol_id: str, protocol: "openlifu.plan.Protocol") -> None:
+        self.cached_protocols[protocol_id] = protocol
+
+    def delete_protocol_from_cache(self, protocol_id: str) -> None:
+        self.cached_protocols.pop(protocol_id, None)  # remove from cache
+        if protocol_id in self.new_protocol_ids:
+            self.new_protocol_ids.discard(protocol_id)
 
 #
 # OpenLIFUProtocolConfigTest
