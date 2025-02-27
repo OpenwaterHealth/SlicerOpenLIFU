@@ -185,8 +185,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Connect the buttons
 
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
-        self.ui.loginButton.clicked.connect(self.onLoginClicked)
-        self.ui.logoutButton.clicked.connect(self.onLogoutClicked)
+        self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
 
         # ====================================
         
@@ -194,7 +193,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
 
         self.updateUserAccountModeButton()
-        self.updateLoginButton()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self._parameterNode.active_user = self._default_anonymous_user
 
@@ -227,7 +225,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.initializeParameterNode()
 
     def onDataParameterNodeModified(self, caller = None, event = None):
-        self.updateLoginButton()
+        self.updateLoginLogoutButton()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -257,58 +255,56 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         new_user_account_mode_state = not self._parameterNode.user_account_mode
         if new_user_account_mode_state:
             self.logic.start_user_account_mode()
+            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         else:
             self._parameterNode.active_user = self._default_anonymous_user
-            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
             set_user_account_mode_state(new_user_account_mode_state)
-
-        self.updateLoginButton()
-
-    @display_errors
-    def onLoginClicked(self, checked:bool):
-        loginDlg = UsernamePasswordDialog()
-        returncode, user_id, password_text = loginDlg.customexec_()
-
-        if not returncode:
-            return False
-
-        users = self.logic.dataLogic.db.load_all_users()
-        verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
-
-        matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
-
-        if not matched_user:
-            self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
-            return
-
-        self._parameterNode.active_user = SlicerOpenLIFUUser(matched_user)
-        self.updateWidgetLoginState(LoginState.LOGGED_IN)
-        slicer.util.selectModule('OpenLIFUHome')
+            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     @display_errors
-    def onLogoutClicked(self, checked:bool):
-        self._parameterNode.active_user = self._default_anonymous_user
-        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+    def onLoginLogoutClicked(self, checked: bool) -> None:
+        if self.ui.loginLogoutButton.text == "Logout":
+            self._parameterNode.active_user = self._default_anonymous_user
+            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+        elif self.ui.loginLogoutButton.text == "Login":
+            loginDlg = UsernamePasswordDialog()
+            returncode, user_id, password_text = loginDlg.customexec_()
 
-    def updateLoginButton(self):
+            if not returncode:
+                return
+
+            users = self.logic.dataLogic.db.load_all_users()
+            verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
+
+            matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
+
+            if not matched_user:
+                self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
+                return
+
+            self._parameterNode.active_user = SlicerOpenLIFUUser(matched_user)
+            self.updateWidgetLoginState(LoginState.LOGGED_IN)
+            slicer.util.selectModule('OpenLIFUHome')
+
+    def updateLoginLogoutButtonAsLoginButton(self):
 
         # === Multiple things can block the login button ===
 
         if not self._parameterNode.user_account_mode:
-            self.ui.loginButton.setEnabled(False)
-            self.ui.loginButton.setToolTip("The login feature is only available with user account mode turned on.")
+            self.ui.loginLogoutButton.setEnabled(False)
+            self.ui.loginLogoutButton.setToolTip("The login feature is only available with user account mode turned on.")
             return
 
         if not get_openlifu_data_parameter_node().database_is_loaded:
-            self.ui.loginButton.setEnabled(False)
-            self.ui.loginButton.setToolTip("The login feature requires a database connection.")
+            self.ui.loginLogoutButton.setEnabled(False)
+            self.ui.loginLogoutButton.setToolTip("The login feature requires a database connection.")
             return
 
         # Now we see if there is an admin in the database
         users = self.logic.dataLogic.db.load_all_users()
         if not any('admin' in u.roles for u in users):
-            self.ui.loginButton.setEnabled(False)
-            self.ui.loginButton.setToolTip("The login feature requires at least one administrative user in the database.")
+            self.ui.loginLogoutButton.setEnabled(False)
+            self.ui.loginLogoutButton.setToolTip("The login feature requires at least one administrative user in the database.")
             # set the user to admin, go to home module
             default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
                     id = "default_admin", 
@@ -324,24 +320,30 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # === Otherwise, login works ===
 
-        self.ui.loginButton.setEnabled(True)
-        self.ui.loginButton.setToolTip("Login to an account in the database.")
+        self.ui.loginLogoutButton.setEnabled(True)
+        self.ui.loginLogoutButton.setToolTip("Login to an account in the database.")
 
-    def updateLogoutButton(self):
 
-        # === Can only logout when logged in ===
+    def updateLoginLogoutButton(self):
+        if self._cur_login_state == LoginState.NOT_LOGGED_IN:
+            self.ui.loginLogoutButton.setText("Login")
+        elif self._cur_login_state == LoginState.UNSUCCESSFUL_LOGIN:
+            self.ui.loginLogoutButton.setText("Login")
+        elif self._cur_login_state == LoginState.LOGGED_IN:
+            self.ui.loginLogoutButton.setText("Logout")
+        elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
+            self.ui.loginLogoutButton.setText("Login")
 
-        if self._cur_login_state == LoginState.LOGGED_IN:
-            self.ui.logoutButton.setEnabled(True)
-            self.ui.logoutButton.setToolTip("Logout to an account in the database.")
-        else:
-            self.ui.logoutButton.setEnabled(False)
-            self.ui.logoutButton.setToolTip("You must be logged in to logout")
+        if self.ui.loginLogoutButton.text == "Logout":
+            self.ui.loginLogoutButton.setEnabled(True)
+            self.ui.loginLogoutButton.setToolTip("Logout to an account in the database.")
+        elif self.ui.loginLogoutButton.text == "Login":
+            self.updateLoginLogoutButtonAsLoginButton()
 
     def updateWidgetLoginState(self, state: LoginState):
         self._cur_login_state = state
         self.updateLoginStateNotificationLabel()
-        self.updateLogoutButton()
+        self.updateLoginLogoutButton()
 
     def updateLoginStateNotificationLabel(self):
         if self._cur_login_state == LoginState.NOT_LOGGED_IN:
