@@ -49,6 +49,10 @@ from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_results_from_openlifu_session_format,
 )
 
+from OpenLIFULib.transducer_tracking_results import (
+    add_transducer_tracking_results_from_openlifu_session_format
+)
+
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
@@ -1167,14 +1171,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Build the additional info message here; this is status text that conditionally displays.
             additional_info_messages : List[str] = []
             approved_vf_targets = self.logic.get_virtual_fit_approvals_in_session()
-            num_approved = len(approved_vf_targets)
-            if num_approved > 0:
+            num_vf_approved = len(approved_vf_targets)
+            if num_vf_approved > 0:
                 additional_info_messages.append(
                     "Virtual fit approved for "
-                    + (f"{num_approved} targets" if num_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
+                    + (f"{num_vf_approved} targets" if num_vf_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
                 )
-            if loaded_session.transducer_tracking_is_approved():
-                additional_info_messages.append(f"Transducer tracking approved")
+
+            # TODO: Fix this later.
+            approved_tt_photoscans = self.logic.get_transducer_tracking_approvals_in_session()
+            num_tt_approved = 0
+            if num_tt_approved > 0:
+                additional_info_messages.append(
+                    "Transducer tracking approved for "
+                    + (f"{num_tt_approved} photoscans" if num_tt_approved > 1 else f"photoscan \"{approved_tt_photoscans[0]}\"")
+                )
             self.ui.sessionStatusAdditionalInfoLabel.setText('\n'.join(additional_info_messages))
 
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
@@ -1366,6 +1377,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
                 if photoscan_id in self.getParameterNode().loaded_photoscans:
                     self.remove_photoscan(photoscan_id)
+
+            #TODO:  clear_transducer_tracking_results
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -1678,7 +1691,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
         )
-        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
 
         # === Load protocol ===
 
@@ -1705,6 +1717,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             # Place virtual fit results under the transducer folder
             shNode.SetItemParent(shNode.GetItemByDataNode(vf_node), transducer_parent_folder_id)
+
+        # === Load transducer tracking results ===
+
+        newly_added_tt_result_nodes = add_transducer_tracking_results_from_openlifu_session_format(
+            tt_results_openlifu = session_openlifu.transducer_tracking_results,
+            session_id = session_openlifu.id,
+            transducer = newly_loaded_transducer.transducer.transducer,
+            replace=True, # If there happen to already be some virtual fit result nodes that clash, loading a session will silently overwrite them.
+        )
+
+        for (transducer_to_photoscan_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
+            shNode.SetItemParent(shNode.GetItemByDataNode(transducer_to_photoscan_node), transducer_parent_folder_id)
+            shNode.SetItemParent(shNode.GetItemByDataNode(photoscan_to_volume_node), transducer_parent_folder_id)
 
         # === Toggle slice visibility and center slices on first target ===
 
@@ -1738,20 +1763,21 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             self.remove_photocollection(photocollection_reference_number) 
         self.update_photocollections_affiliated_with_loaded_session()
 
-    def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
-        session = self.getParameterNode().loaded_session
+    # TODO: Don't Need this anymore? Observation should be on the specific TT transforms.
+    # def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
+    #     session = self.getParameterNode().loaded_session
 
-        if session is None:
-            return
+    #     if session is None:
+    #         return
 
-        # Revoke transducer tracking approval if there was any
-        if session.transducer_tracking_is_approved():
-            slicer.util.infoDisplay(
-                text= "Transducer tracking approval has been revoked because the transducer was moved.",
-                windowTitle="Approval revoked"
-            )
-            session.toggle_transducer_tracking_approval() # revoke approval
-            self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
+    #     # Revoke transducer tracking approval if there was any
+    #     if session.transducer_tracking_is_approved():
+    #         slicer.util.infoDisplay(
+    #             text= "Transducer tracking approval has been revoked because the transducer was moved.",
+    #             windowTitle="Approval revoked"
+    #         )
+    #         session.toggle_transducer_tracking_approval() # revoke approval
+    #         self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
 
     def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
@@ -2059,6 +2085,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             if session_openlifu.virtual_fit_results[target.id][0]:
                 approved_vf_targets.append(target.id)
         return approved_vf_targets
+    
+    def get_transducer_tracking_approvals_in_session(self) -> List[str]:
+        """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
+        transducer tracking is approved.
+        This does not first check whether there is an active session; make sure that one exists before using this.
+        """
+        session = self.getParameterNode().loaded_session
+        if session is None:
+            raise RuntimeError("No active session.")
+        approved_tt_photoscans = session.get_transducer_tracking_approvals()
+
+        return approved_tt_photoscans
 
     def load_volume_from_openlifu(self, volume_dir: Path, volume_metadata: Dict):
         """ Load a volume based on openlifu metadata and check for duplicate volumes in the scene.

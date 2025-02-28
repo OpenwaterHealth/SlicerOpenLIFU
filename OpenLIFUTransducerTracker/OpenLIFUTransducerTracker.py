@@ -23,6 +23,14 @@ from OpenLIFULib import (
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUPhotoscan
 )
+from OpenLIFULib.util import replace_widget
+
+from OpenLIFULib.transducer_tracking_results import (
+    add_transducer_tracking_result,
+    get_photoscan_id_from_transducer_tracking_result,
+    set_transducer_tracking_approval_for_node,
+    get_approved_photoscan_ids
+)
 
 if TYPE_CHECKING:
     import openlifu
@@ -511,7 +519,41 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onRunTrackingClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
         self.skinSurfaceModel = self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode()
-        self.logic.runTransducerTracking(activeData["Protocol"], activeData["Transducer"], self.skinSurfaceModel, activeData["Photoscan"])
+        (transducer_to_photoscan_transform, photoscan_to_volume_transform)  = self.logic.run_transducer_tracking(
+            activeData["Protocol"], activeData["Transducer"],self.skinSurfaceModel, activeData["Photoscan"])
+        
+        self.watchTransducerTrackingNode(transducer_to_photoscan_transform)
+        self.watchTransducerTrackingNode(photoscan_to_volume_transform)
+        
+        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+        transducer_parent_folder_id = shNode.GetItemParent(shNode.GetItemByDataNode(activeData["Transducer"].transform_node))
+        shNode.SetItemParent(shNode.GetItemByDataNode(transducer_to_photoscan_transform), transducer_parent_folder_id)
+        shNode.SetItemParent(shNode.GetItemByDataNode(photoscan_to_volume_transform), transducer_parent_folder_id)
+
+        self.updateApprovalStatusLabel()
+
+    def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
+        """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
+
+        self.addObserver(
+            transducer_tracking_transform_node,
+            slicer.vtkMRMLTransformNode.TransformModifiedEvent,
+            lambda caller, event: self.revokeApprovalIfAny(
+                transducer_tracking_transform_node,
+                reason="The transducer tracking transform was modified."),
+        )
+
+    def revokeApprovalIfAny(self, transform_node: vtkMRMLTransformNode, reason:str):
+        """Revoke transducer tracking approval for the transform node if there was an approval, and show a message dialog to that effect.
+        """
+        photoscan_id = get_photoscan_id_from_transducer_tracking_result(transform_node)
+        if self.logic.get_transducer_tracking_approval(photoscan_id):
+            slicer.util.infoDisplay(
+                text= "Transducer tracking approval has been revoked for the following reason:\n"+reason,
+                windowTitle="Approval revoked"
+            )
+            self.updateApprovalStatusLabel()
+        set_transducer_tracking_approval_for_node(False, transform_node)
 
     def updateAddPhotocollectionToSessionButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -556,14 +598,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 )
 
     def updateApprovalStatusLabel(self):
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        if loaded_session is not None:
-            if loaded_session.transducer_tracking_is_approved():
-                self.ui.approvalStatusLabel.text = "Transducer tracking is approved."
-            else:
-                self.ui.approvalStatusLabel.text = "Transducer tracking is currently unapproved."
+        
+        approved_photoscan_ids = self.logic.get_approved_photoscan_ids()
+        if len(approved_photoscan_ids) == 0:
+            self.ui.approvalStatusLabel.text = "There are currently no transducer tracking approvals."
         else:
-            self.ui.approvalStatusLabel.text = ""
+            self.ui.approvalStatusLabel.text = (
+                "Transducer tracking is approved for the following photoscans:\n- "
+                + "\n- ".join(approved_photoscan_ids)
+            )
 
     def onApproveClicked(self):
         self.logic.toggleTransducerTrackingApproval()
@@ -613,16 +656,48 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Cannot toggle photoscan approval because there is a session but no database connection to write the approval.")
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         loaded_db.write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
-
-    def runTransducerTracking(self,
+    def run_transducer_tracking(self,
                               inputProtocol: SlicerOpenLIFUProtocol,
                               inputTransducer : SlicerOpenLIFUTransducer,
                               inputSkinSegmentation: vtkMRMLModelNode,
-                              inputPhotoscan: vtkMRMLModelNode
+                              inputPhotoscan: "openlifu.Photoscan"
                               ) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
         ## Need to integrate with transducer tracking library here
         slicer.util.infoDisplay(
             text="This run button is a placeholder. The transducer tracking algorithm is under development.",
             windowTitle="Not implemented"
         )
-        return None, None
+
+        transducer_to_photoscan_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        photoscan_to_volume_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id : Optional[str] = session.get_session_id() if session is not None else None
+
+        transducer_to_photoscan_result, photoscan_to_volume_result = add_transducer_tracking_result(
+            transducer_to_photoscan_transform_node,
+            photoscan_to_volume_transform_node,
+            photoscan_id = inputPhotoscan.id,
+            session_id = session_id, 
+            transducer_to_photoscan_approval_status = True,
+            photoscan_to_volume_approval_status = False,
+            replace = True, # make this True
+            )
+        
+        return (transducer_to_photoscan_result, photoscan_to_volume_result)
+    
+    def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
+        """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
+        tracking result for the photoscan, this returns False."""
+        
+        approved_photoscan_ids = self.get_approved_photoscan_ids()
+        return photoscan_id in approved_photoscan_ids
+    
+    def get_approved_photoscan_ids(self) -> List[str]:
+        """Return a list of photoscan IDs that have approved transducer_tracking, for the currently active session.
+        Or if there is no session, then sessionless approved photoscan IDs are returned."""
+        
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        approved_photoscan_ids = get_approved_photoscan_ids(session_id=session_id)
+        return approved_photoscan_ids
