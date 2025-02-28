@@ -108,7 +108,7 @@ class SlicerOpenLIFUTransducer:
         where the transform would be in openlifu conventions.
         """
 
-        # Convert transform matrix from whaetver units it came with into transducer units
+        # Convert transform matrix from whatever units it came with into transducer units
         if transform_matrix_units is None:
             transform_matrix_units = self.transducer.transducer.units
         transform_in_native_transducer_coordinates = self.transducer.transducer.convert_transform(transform_matrix, transform_matrix_units)
