@@ -315,26 +315,31 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         return viewWidget
 
     def _display_photoscan_in_widget(self, photoscan: SlicerOpenLIFUPhotoscan, viewWidget: qMRMLThreeDWidget) -> None:
+        """ When a display node is created, by default, no viewIDs are set. When GetViewNodeIDs is null, the node is displayed
+        in all views. Therefore, to restrict nodes from being displayed in the photoscan preview widget, we need to set the 
+        viewNodeIDs of any displayed nodes to IDs of all viewNodes in the scene, excluding the photoscan widget."""
 
         photoscan_view_node = viewWidget.mrmlViewNode()
 
         # IDs of all the view nodes in the main Window. This excludes the photoscan widget's view node
-        views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetName() != photoscan_view_node.GetName()]
+        views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetID() != photoscan_view_node.GetID()]
         
         # Set the view nodes for all displayable nodes.
+        # If GetViewNodeIDs() is (), the node is displayed in all views so we need to exclude the photoscan view
         for displayable_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):
             if displayable_node.IsA('vtkMRMLScalarVolumeNode'):
                 # Check for any volume renderings
                 vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(displayable_node)
-                if vrDisplayNode and vrDisplayNode.GetVisibility():
+                if vrDisplayNode and vrDisplayNode.GetVisibility() and not vrDisplayNode.GetViewNodeIDs():
                         vrDisplayNode.SetViewNodeIDs(views_mainwindow)
-            elif displayable_node.GetDisplayVisibility():
+            elif displayable_node.GetDisplayVisibility() and not displayable_node.GetDisplayNode().GetViewNodeIDs():
                 displayable_node.GetDisplayNode().SetViewNodeIDs(views_mainwindow)
         
-        # Set the view nodes for the Red, Green and Yellow slice nodes
+        # Set the view nodes for the Red, Green and Yellow slice nodes if empty
         for slice_node in list(slicer.util.getNodesByClass('vtkMRMLSliceNode')):
-            for view_nodeID in views_mainwindow:
-                slice_node.AddThreeDViewID(view_nodeID)
+            if slice_node.GetNumberOfThreeDViewIDs() == 0:
+                for view_nodeID in views_mainwindow:
+                    slice_node.AddThreeDViewID(view_nodeID)
 
         # Display the photoscan (TODO: and fiducials if previously placed)
         photoscan.toggle_model_display(True, photoscan_view_node) # Specify a view node for display
@@ -343,7 +348,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         layoutManager = slicer.app.layoutManager()
         for threeDViewIndex in range(layoutManager.threeDViewCount):
             view = layoutManager.threeDWidget(threeDViewIndex).threeDView()
-            if view.mrmlViewNode().GetName() == photoscan_view_node.GetName():
+            if view.mrmlViewNode().GetID() == photoscan_view_node.GetID():
                 photoscanViewIndex = threeDViewIndex
         
         threeDWidget = layoutManager.threeDWidget(photoscanViewIndex)
@@ -356,7 +361,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         if photoscan_is_approved:
-            self.photoscanPreviewDialogUI.photoscanApprovalButton.setText("Unapprove photoscan")
+            self.photoscanPreviewDialogUI.photoscanApprovalButton.setText("Revoke photoscan approval")
             self.photoscanPreviewDialogUI.photoscanApprovalButton.setToolTip(
                     "Revoke approval that the current photoscan is of sufficient quality to be used for transducer tracking")
         else:
@@ -490,11 +495,11 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Cannot toggle photoscan approval because there is no active session.")
         photoscan.toggle_approval()
         # Write changes to the database
-        self._loaded_db = slicer.util.getModuleLogic('OpenLIFUData').db
-        if self._loaded_db is None: # This shouldn't happen
+        loaded_db = slicer.util.getModuleLogic('OpenLIFUData').db
+        if loaded_db is None: # This shouldn't happen
             raise RuntimeError("Cannot toggle photoscan approval because there is a session but no database connection to write the approval.")
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
-        self._loaded_db.write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
+        loaded_db.write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
 
     def runTransducerTracking(self,
                               inputProtocol: SlicerOpenLIFUProtocol,
