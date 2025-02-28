@@ -5,6 +5,7 @@ import slicer
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginParameterNode
+    from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginLogic
 
 class BusyCursor:
     """
@@ -26,6 +27,10 @@ def get_openlifu_data_parameter_node() -> "OpenLIFUDataParameterNode":
 def get_openlifu_login_parameter_node() -> "OpenLIFULoginParameterNode":
     """Get the parameter node of the OpenLIFU Login module"""
     return slicer.util.getModuleLogic('OpenLIFULogin').getParameterNode()
+
+def get_openlifu_login_logic() -> "OpenLIFULoginLogic":
+    """Get the logic of the OpenLIFU Login module"""
+    return slicer.util.getModuleLogic('OpenLIFULogin')
 
 def display_errors(f):
     """Decorator to make functions forward their python exceptions along as slicer error displays"""

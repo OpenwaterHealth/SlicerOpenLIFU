@@ -77,10 +77,6 @@ class LoginState(Enum):
 @parameterNodeWrapper
 class OpenLIFULoginParameterNode:
     user_account_mode : bool
-    # TODO: We should only serialize the user if the user selects some button
-    # like "remember me." Perhaps, we could unconditionally serialize the
-    # user_id, for ease of repeated login
-    active_user : "Optional[SlicerOpenLIFUUser]"
     
 #
 # OpenLIFULoginDialogs
@@ -194,7 +190,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.updateUserAccountModeButton()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-        self._parameterNode.active_user = self._default_anonymous_user
+        self.logic.active_user = self._default_anonymous_user
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -250,21 +246,19 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
-
     def onUserAccountModeClicked(self):
+        # toggle and propagate to parameter node
         new_user_account_mode_state = not self._parameterNode.user_account_mode
-        if new_user_account_mode_state:
-            self.logic.start_user_account_mode()
-            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-        else:
-            self._parameterNode.active_user = self._default_anonymous_user
-            set_user_account_mode_state(new_user_account_mode_state)
-            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+        set_user_account_mode_state(new_user_account_mode_state)
+
+        # reset user state
+        self.logic.active_user = self._default_anonymous_user
+        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     @display_errors
     def onLoginLogoutClicked(self, checked: bool) -> None:
         if self.ui.loginLogoutButton.text == "Logout":
-            self._parameterNode.active_user = self._default_anonymous_user
+            self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         elif self.ui.loginLogoutButton.text == "Login":
             loginDlg = UsernamePasswordDialog()
@@ -282,7 +276,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
                 return
 
-            self._parameterNode.active_user = SlicerOpenLIFUUser(matched_user)
+            self.logic.active_user = SlicerOpenLIFUUser(matched_user)
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
             slicer.util.selectModule('OpenLIFUHome')
 
@@ -313,7 +307,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     name = "default_admin",
                     description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
                     ))
-            self._parameterNode.active_user = default_admin_user
+            self.logic.active_user = default_admin_user
             self.updateWidgetLoginState(LoginState.DEFAULT_ADMIN)
             slicer.util.selectModule('OpenLIFUHome')
             return
@@ -353,10 +347,10 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.loginStateNotificationLabel.setProperty("text", "Unsuccessful login. Please try again.")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", "color: red; font-size: 16px; border: 1px solid red;")
         elif self._cur_login_state == LoginState.LOGGED_IN:
-            # We want the regular text, night-mode agnostic
+            # We want the standard text color to make sense if in night-mode
             palette = qt.QApplication.instance().palette()
             text_color = palette.color(qt.QPalette.WindowText).name()
-            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self._parameterNode.active_user.user.name}!")
+            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.user.name}!")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
         elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
             self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please create an admin account for user accounts to work.")
@@ -386,6 +380,8 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
+    active_user : "Optional[SlicerOpenLIFUUser]"
+
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
@@ -397,6 +393,3 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def clear_session(self) -> None:
         self.current_session = None
-
-    def start_user_account_mode(self):
-        set_user_account_mode_state(True)
