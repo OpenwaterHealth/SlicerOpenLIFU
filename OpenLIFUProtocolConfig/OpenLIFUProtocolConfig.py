@@ -853,6 +853,23 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         if protocol_id in self.new_protocol_ids:
             self.new_protocol_ids.discard(protocol_id)
 
+    def confirm_and_overwrite_protocol_cache(self, protocol: "openlifu.plan.Protocol") -> bool:
+        """
+        Checks if the protocol ID exists in the cache. If so, prompts the user to confirm overwriting it.
+        Returns False if the user cancels, otherwise updates the cache and returns True.
+        """
+        if self.protocol_id_is_in_cache(protocol.id):
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"You have unsaved changes in a protocol with the same ID. Discard and load the new one?",
+                windowTitle="Discard Changes Confirmation",
+            ):
+                return False  # User canceled the load process
+
+            self.delete_protocol_from_cache(protocol.id)
+            return True
+        else:
+            return True
+
 #
 # OpenLIFUProtocolConfigTest
 #
