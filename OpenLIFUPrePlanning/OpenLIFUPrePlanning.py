@@ -462,8 +462,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             activeData["Protocol"],activeData["Transducer"], activeData["Volume"], activeData["Target"]
         )
 
-        if virtual_fit_result is None:
+        if virtual_fit_result is None: # Temporary behavior!
+            # None indicates for now that the user activated the transform handles to do the placeholder manual virtual fitting.
+            # It will not be possible to get None once the algorithm is implemented, or at least it wouldn't mean the same thing.
+            target_id = fiducial_to_openlifu_point_id(activeData["Target"])
+            self.algorithm_input_widget.inputs_dict["Target"].disable_with_tooltip(f"VF for {target_id} in progress...") # Disable target selector during manual VF
             return
+        self.algorithm_input_widget.update() # Re-enable target-selector now that manual VF is completed. Again, temporary behavior.
 
         self.watchVirtualFit(virtual_fit_result)
         self.updateApproveButton()

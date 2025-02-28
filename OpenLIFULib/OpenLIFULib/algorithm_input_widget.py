@@ -18,6 +18,10 @@ class AlgorithmInput:
     combo_box : qt.QComboBox
     most_recent_selection : Any = None
 
+    def disable_with_tooltip(self, tooltip_message:str) -> None:
+        self.combo_box.setDisabled(True)
+        self.combo_box.setToolTip(tooltip_message)
+
     def indicate_no_options(self):
         """Disable and set a message indicating that there are no objects"""
         self.combo_box.addItem(f"No {self.name} objects")
