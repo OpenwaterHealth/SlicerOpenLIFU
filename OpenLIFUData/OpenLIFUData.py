@@ -1492,10 +1492,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Load transducer ===
 
         transducer_openlifu = self.db.load_transducer(session_openlifu.transducer_id)
-        if transducer_openlifu.registration_surface_filename or transducer_openlifu.transducer_body_filename:
-            transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
-        else:
-            transducer_abspaths_info = {}
+        transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
         newly_loaded_transducer = self.load_transducer_from_openlifu(
             transducer = transducer_openlifu,
             transducer_abspaths_info = transducer_abspaths_info,
@@ -1596,12 +1593,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         transducer = openlifu_lz().Transducer.from_file(filepath)
         transducer_parent_dir = Path(filepath).parent
 
-        transducer_abspaths_info = {key: transducer_parent_dir.joinpath(filename) 
-                                    for key, filename in {
-                                        'transducer_body_abspath': transducer.transducer_body_filename,
-                                        'registration_surface_abspath': transducer.registration_surface_filename
-                                    }.items() if filename
-                                    }
+        transducer_abspaths_info = {
+            key: transducer_parent_dir.joinpath(filename) if filename else None
+            for key, filename in [
+                ('transducer_body_abspath', transducer.transducer_body_filename),
+                ('registration_surface_abspath', transducer.registration_surface_filename),
+            ]
+        }
         
         self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
 

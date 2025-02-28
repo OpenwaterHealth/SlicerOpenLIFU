@@ -1,5 +1,6 @@
 from typing import Optional, TYPE_CHECKING, Callable, Any
 import numpy as np
+from pathlib import Path
 import vtk
 import slicer
 from slicer import (
@@ -74,8 +75,8 @@ class SlicerOpenLIFUTransducer:
         shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
         model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
-        if 'transducer_body_abspath' in transducer_abspaths_info:
-            if transducer.transducer_body_filename != transducer_abspaths_info['transducer_body_abspath'].name:
+        if transducer_abspaths_info['transducer_body_abspath'] is not None:
+            if transducer.transducer_body_filename != Path(transducer_abspaths_info['transducer_body_abspath']).name:
                 raise ValueError("The filename provided in 'transducer_body_abspath' does not match the file specified in the Transducer object")
             body_model_node = slicer.util.loadModel(transducer_abspaths_info['transducer_body_abspath'])
             body_model_node.SetName(f"{slicer_transducer_name}-body")
@@ -84,8 +85,8 @@ class SlicerOpenLIFUTransducer:
         else:
             body_model_node = None
 
-        if 'registration_surface_abspath' in transducer_abspaths_info:
-            if transducer.registration_surface_filename != transducer_abspaths_info['registration_surface_abspath'].name:
+        if transducer_abspaths_info['registration_surface_abspath'] is not None:
+            if transducer.registration_surface_filename != Path(transducer_abspaths_info['registration_surface_abspath']).name:
                 raise ValueError("The filename provided in 'registration_surface_abspath' does not match the file specified in the Transducer object")
             surface_model_node = slicer.util.loadModel(transducer_abspaths_info['registration_surface_abspath'])
             shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
