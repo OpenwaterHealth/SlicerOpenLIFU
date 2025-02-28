@@ -1520,9 +1520,16 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer = newly_loaded_transducer.transducer.transducer,
             replace=True, # If there happen to already be some virtual fit result nodes that clash, loading a session will silently overwrite them.
         )
+
+        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+        transducer_parent_folder_id = shNode.GetItemParent(shNode.GetItemByDataNode(newly_loaded_transducer.transform_node))
+        
         for vf_node in newly_added_vf_result_nodes:
             preplanning_widget : OpenLIFUPrePlanningWidget = slicer.modules.OpenLIFUPrePlanningWidget
             preplanning_widget.watchVirtualFit(vf_node)
+
+            # Place virtual fit results under the transducer folder
+            shNode.SetItemParent(shNode.GetItemByDataNode(vf_node), transducer_parent_folder_id)
 
         # === Toggle slice visibility and center slices on first target ===
 
