@@ -1037,7 +1037,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             additional_info_messages : List[str] = []
             approved_vf_targets = self.logic.get_virtual_fit_approvals_in_session()
             num_approved = len(approved_vf_targets)
-            if len(approved_vf_targets) > 0:
+            if num_approved > 0:
                 additional_info_messages.append(
                     "Virtual fit approved for "
                     + (f"{num_approved} targets" if num_approved > 1 else f"target \"{approved_vf_targets[0]}\"")

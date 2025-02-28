@@ -45,6 +45,8 @@ def add_virtual_fit_result(
         clone_node: Whether to clone or to take the `transform_node`. If True, then the node is cloned
             to create the virtual fit result node, and the passed in `transform_node` is left unharmed.
             If False then the node is taken and turned into a virtual fit result node (renamed, given attributes, etc.).
+            Set clone_node to False if you no longer need the original `transform_node`; set it to True if you want to
+            preserve the integrity of the original `transform_node`
 
     Returns: The newly created virtual fit result transform node
     """
@@ -169,8 +171,8 @@ def add_virtual_fit_results_from_openlifu_session_format(
         vf_results_openlifu: Virtual fit results in the openlifu session format. To understand this format,
             see the documentation of openlifu.db.Session.virtual_fit_results.
         session_id: The ID of the session with which to tag these virtual fit result nodes.
-        transducer_units: The units of the transducer used in this session. It needs to be known so that we can build
-            the conversion into Slicer's units (mm) directly into the transforms.
+        transducer: The openlifu Transducer of the session. It is needed to configure transforms to be
+            in the correct units.
         replace: Whether to replace any existing virtual fit results that have the
             same session ID, target ID, and rank. If this is off, then an error is raised
             in the event that there is already a matching virtual fit result in the scene.

@@ -231,7 +231,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.unwatch_fiducial_node(node)
-            self.revokeApprovalIfAny(node, reason="The target was modified.")
+            self.revokeApprovalIfAny(node, reason="The target was removed.")
         self.updateTargetsListView()
         self.updateInputOptions()
 
