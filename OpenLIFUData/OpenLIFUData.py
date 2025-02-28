@@ -1533,7 +1533,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # check if user wants to overwrite WIPs
         protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
-        if not protocolConfigLogic.confirm_and_overwrite_protocol_cache(protocol.id):
+        if not protocolConfigLogic.confirm_and_overwrite_protocol_cache(protocol):
             return
 
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
@@ -1546,7 +1546,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if not protocol_id in loaded_protocols:
             raise IndexError(f"No protocol with ID {protocol_id} appears to be loaded; cannot remove it.")
 
-        # check if user wants to save changes if cached
+        # check if user wants to save changes
         protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
         if protocolConfigLogic.protocol_id_is_in_cache(protocol_id):
             if slicer.util.confirmYesNoDisplay(
@@ -1555,10 +1555,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 protocolConfigLogic.save_protocol_to_database(protocolConfigLogic.cached_protocols[protocol_id])
 
-            # Regardless of save, we must delete from cache
-            self.delete_protocol_from_cache(protocol.id)
 
         loaded_protocols.pop(protocol_id)
+        # We must delete from cache after because parameter node update might add it back to cache
+        protocolConfigLogic.delete_protocol_from_cache(protocol_id)
 
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
