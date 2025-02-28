@@ -735,7 +735,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         Handles loading a protocol, checking the cache for conflicts, and updating UI state.
         """
         if check_cache:
-            if not self.confirm_and_overwrite_protocol_cache(protocol):
+            if not self.logic.confirm_and_overwrite_protocol_cache(protocol):
                 return False
 
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
@@ -748,23 +748,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Load the protocol
         self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=replace_confirmed)
         return True
-
-    def confirm_and_overwrite_protocol_cache(self, protocol: "openlifu.plan.Protocol") -> bool:
-        """
-        Checks if the protocol ID exists in the cache. If so, prompts the user to confirm overwriting it.
-        Returns False if the user cancels, otherwise updates the cache and returns True.
-        """
-        if self.logic.protocol_id_is_in_cache(protocol.id):
-            if not slicer.util.confirmYesNoDisplay(
-                text=f"You have unsaved changes in a protocol with the same ID. Discard and load the new one?",
-                windowTitle="Discard Changes Confirmation",
-            ):
-                return False  # User canceled the load process
-
-            self.logic.delete_protocol_from_cache(protocol.id)
-            return True
-        else:
-            return True
 
 #
 # OpenLIFUProtocolConfigLogic
@@ -860,7 +843,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         """
         if self.protocol_id_is_in_cache(protocol.id):
             if not slicer.util.confirmYesNoDisplay(
-                text=f"You have unsaved changes in a protocol with the same ID. Discard and load the new one?",
+                text=f"You have unsaved changes in a protocol with the same ID as the protocol you are trying to load. Discard and load the new one?",
                 windowTitle="Discard Changes Confirmation",
             ):
                 return False  # User canceled the load process
