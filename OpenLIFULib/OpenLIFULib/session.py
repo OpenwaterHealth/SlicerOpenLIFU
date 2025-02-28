@@ -197,10 +197,15 @@ class SlicerOpenLIFUSession:
 
         return self.session.session
 
-    def toggle_transducer_tracking_approval(self) -> None:
-        """Approve transducer tracking if it was not approved. Revoke approval if it was approved."""
-        self.session.session.transducer_tracking_approved = not self.session.session.transducer_tracking_approved
+    def get_transducer_tracking_approvals(self):
+        """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
+        transducer tracking is approved.
+        """
+        session_openlifu = self.session.session
+        approved_tt_photoscans = [
+            photoscan_id for photoscan_id in self.get_affiliated_photoscan_ids()
+            for tt_result in session_openlifu.transducer_tracking_results
+            if photoscan_id == tt_result.photoscan_id and tt_result.transducer_tracking_approved
+        ]
 
-    def transducer_tracking_is_approved(self) -> bool:
-        """Return whether transducer tracking has been approved"""
-        return self.session.session.transducer_tracking_approved
+        return approved_tt_photoscans
