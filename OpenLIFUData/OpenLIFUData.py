@@ -1532,7 +1532,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 return
 
         # check if user wants to overwrite WIPs
-        if not self.confirm_and_overwrite_protocol_cache(protocol.id):
+        protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
+        if not protocolConfigLogic.confirm_and_overwrite_protocol_cache(protocol.id):
             return
 
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
@@ -1546,29 +1547,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             raise IndexError(f"No protocol with ID {protocol_id} appears to be loaded; cannot remove it.")
 
         # check if user wants to overwrite WIPs
-        if not self.confirm_and_overwrite_protocol_cache(protocol_id):
+        protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
+        if not protocolConfigLogic.confirm_and_overwrite_protocol_cache(protocol_id):
             return
 
         loaded_protocols.pop(protocol_id)
-
-    def confirm_and_overwrite_protocol_cache(self, protocol_id: str) -> bool:
-        """
-        Checks if the protocol ID exists in the protocol config cache. If so,
-        prompts the user to confirm overwriting it. Returns False if the user
-        cancels, otherwise updates the cache and returns True.
-        """
-        # Check protocol config for a WIP
-        protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
-
-        if protocolConfigLogic.protocol_id_is_in_cache(protocol_id):
-            if not slicer.util.confirmYesNoDisplay(
-                text=f"You have unsaved changes in a protocol with the same ID. Are you sure you want to discard changes?",
-                windowTitle="Discard Changes Confirmation",
-            ):
-                return False # User canceled discarding unsaved protocol changes
-
-            self.logic.delete_protocol_from_cache(protocol_id)
-        return True
 
     def load_transducer_from_file(self, filepath:str) -> None:
         transducer = openlifu_lz().Transducer.from_file(filepath)
