@@ -1229,6 +1229,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 self.clear_solution(clean_up_scene=True)
             clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
+            for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
+                if photoscan_id in self.getParameterNode().loaded_photoscans:
+                    self.remove_photoscan(photoscan_id)
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -1955,11 +1958,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # If the user selects a json file,use the photoscan_metadata included in the json file to load the photoscan. 
         elif Path(model_or_json_filepath).suffix == '.json':
             photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(model_or_json_filepath)
-            return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = Path(model_or_json_filepath).parent)
+            return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = str(Path(model_or_json_filepath).parent))
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
 
-    def load_photoscan_from_openlifu(self, photoscan_openlifu, load_from_active_session: bool = False, parent_dir: str = None, replace_confirmed : bool = False) -> SlicerOpenLIFUPhotoscan:
+    def load_photoscan_from_openlifu(self, photoscan_openlifu, load_from_active_session: bool = False, parent_dir: Optional[str] = None, replace_confirmed : bool = False) -> SlicerOpenLIFUPhotoscan:
         """Load an openlifu photoscan object into the scene as a SlicerOpenLIFUPhotoscan,
         adding it to the list of loaded openlifu objects.
 
