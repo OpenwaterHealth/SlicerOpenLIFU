@@ -363,21 +363,14 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             else:
                 self.ui.runProgressBar.value = 100
 
-    def setRunPushButtonEnabled(self, enabled: bool) -> None:
-        self.ui.runPushButton.setEnabled(enabled)
-        if enabled:
-            self.ui.runPushButton.setToolTip("Run the sonication solution on connected hardware.")
-        else:
-            self.ui.runPushButton.setToolTip("You must send a sonication solution to the hardware to run it.")
-
     def setSendSonicationSolutionToDevicePushButtonEnabled(self, enabled: bool) -> None:
         self.ui.sendSonicationSolutionToDevicePushButton.setEnabled(enabled)
         if enabled:
             self.ui.sendSonicationSolutionToDevicePushButton.setToolTip("Send the sonication solution to the connected hardware.")
         else:
-            self.ui.sendSonicationSolutionToDevicePushButton.setToolTip("This feature requires a set sonication solution.")
+            self.ui.sendSonicationSolutionToDevicePushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
 
-        self.setRunPushButtonEnabled(enabled)  # must propagate to run button
+        self.ui.runPushButton.setEnabled(enabled)  # must propagate to run button
 
     def updateSendSonicationSolutionToDevicePushButton(self):
         if get_openlifu_data_parameter_node().loaded_solution is None:
@@ -389,15 +382,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateWidgetSolutionHardwareState(self, state: SolutionHardwareState):
         self._cur_solution_hardware_state = state
         if state == SolutionHardwareState.SUCCESSFUL_SEND:
-            self.setRunPushButtonEnabled(True)
+            self.ui.runPushButton.setEnabled(True)
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
         elif state == SolutionHardwareState.FAILED_SEND:
-            self.setRunPushButtonEnabled(False)
+            self.ui.runPushButton.setEnabled(False)
             self.ui.solutionStateLabel.setProperty("text", "Send to device failed!")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
         elif state == SolutionHardwareState.NOT_SENT:
-            self.setRunPushButtonEnabled(False)
+            self.ui.runPushButton.setEnabled(False)
             self.ui.solutionStateLabel.setProperty("text", "")  
             self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
 
