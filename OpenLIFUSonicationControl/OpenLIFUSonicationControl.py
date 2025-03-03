@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Dict, List
+from typing import Optional, Callable, Dict, List, TYPE_CHECKING
 from enum import Enum
 
 import qt
@@ -15,10 +15,13 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from OpenLIFULib import (get_openlifu_data_parameter_node, 
                          SlicerOpenLIFUSolution,
                          openlifu_lz,
-                         SlicerOpenLIFURun
+                         SlicerOpenLIFURun,
 )
 
 from OpenLIFULib.util import display_errors
+
+if TYPE_CHECKING:
+    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
 
 #
 # OpenLIFUSonicationControl
@@ -308,9 +311,21 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
-        success = True
-        if not success:
+
+        try:
+            interface = openlifu_lz().io.LIFUInterface.LIFUInterface(test_mode=True)
+            interface.txdevice.enum_tx7332_devices(num_devices=2)
+            interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
+
+            self.logic._lifu_interface = interface
+
+            if interface.get_status() != openlifu_lz().io.LIFUInterface.STATUS_READY:
+                raise RuntimeError("Interface not ready")
+                
+        except Exception:
+            self.logic._lifu_interface = None
             self.updateWidgetSolutionHardwareState(SolutionHardwareState.FAILED_SEND)
+            return
 
         self.updateWidgetSolutionHardwareState(SolutionHardwareState.SUCCESSFUL_SEND)
 
@@ -411,6 +426,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         self._on_run_progress_updated_callbacks: List[Callable[[int],None]] = []
         """List of functions to call when `run_progress` property is changed."""
+
+        self._lifu_interface: "Optional[openlifu.io.LIFUInterface]" = None
+        """The active LIFUInterface object to the ultrasound hardware."""
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
