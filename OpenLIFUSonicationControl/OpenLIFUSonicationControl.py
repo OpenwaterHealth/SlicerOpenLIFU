@@ -225,6 +225,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
+        # Update module from data parameter node
+        self.onDataParameterNodeModified()
+
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
@@ -275,7 +278,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
-    def onDataParameterNodeModified(self,caller, event) -> None:
+    def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         self.updateSendSonicationSolutionToDevicePushButton()
         self.updateRunEnabled()
         self.updateRunProgressBar()
