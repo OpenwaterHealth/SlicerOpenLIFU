@@ -273,6 +273,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self,caller, event) -> None:
+        self.updateSendSonicationSolutionToDevicePushButton()
         self.updateRunEnabled()
         self.updateRunProgressBar()
 
@@ -350,6 +351,22 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runPushButton.setToolTip("Run the sonication solution on connected hardware.")
         else:
             self.ui.runPushButton.setToolTip("You must send a sonication solution to the hardware to run it.")
+
+    def setSendSonicationSolutionToDevicePushButtonEnabled(self, enabled: bool) -> None:
+        self.ui.sendSonicationSolutionToDevicePushButton.setEnabled(enabled)
+        if enabled:
+            self.ui.sendSonicationSolutionToDevicePushButton.setToolTip("Send the sonication solution to the connected hardware.")
+        else:
+            self.ui.sendSonicationSolutionToDevicePushButton.setToolTip("This feature requires a set sonication solution.")
+
+        self.setRunPushButtonEnabled(enabled)  # must propagate to run button
+
+    def updateSendSonicationSolutionToDevicePushButton(self):
+        if get_openlifu_data_parameter_node().loaded_solution is None:
+            self.setSendSonicationSolutionToDevicePushButtonEnabled(False)
+            return
+
+        self.setSendSonicationSolutionToDevicePushButtonEnabled(True)
 
     def updateWidgetSolutionHardwareState(self, state: SolutionHardwareState):
         self._cur_solution_hardware_state = state
