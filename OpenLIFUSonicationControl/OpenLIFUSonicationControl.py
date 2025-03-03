@@ -288,6 +288,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         if solution is None:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
+        elif not self._cur_solution_hardware_state == SolutionHardwareState.SUCCESSFUL_SEND:
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("To run a sonication, you must send an approved solution to the hardware device.")
         elif self.logic.running:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("Currently running...")
