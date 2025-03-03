@@ -1,4 +1,5 @@
 from typing import Optional, Callable, Dict, List
+from enum import Enum
 
 import qt
 import vtk
@@ -34,7 +35,7 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
         self.parent.title = _("OpenLIFU Sonication Control")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
-        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
+        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Andrew Howe (Kitware) Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
@@ -47,6 +48,11 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
+
+class SolutionHardwareState(Enum):
+    SUCCESSFUL_SEND=0
+    FAILED_SEND=1
+    NOT_SENT=2
 
 #
 # OpenLIFUSonicationControlParameterNode
@@ -161,8 +167,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
+        self._cur_solution_hardware_state = SolutionHardwareState.NOT_SENT
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+
+    @property
+    def cur_solution_hardware_state(self) -> SolutionHardwareState:
+        return self._cur_solution_hardware_state
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -188,6 +199,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
+        self.ui.sendSonicationSolutionToDevicePushButton.clicked.connect(self.onSendSonicationSolutionToDevicePushButtonClicked)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
         self.updateRunEnabled()
@@ -198,6 +210,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Initialize UI
         self.updateRunProgressBar()
+        self.updateWidgetSolutionHardwareState(SolutionHardwareState.NOT_SENT)
 
         # Add an observer on the Data module's parameter node
         self.addObserver(
@@ -292,6 +305,14 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
 
+    @display_errors
+    def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
+        success = True
+        if not success:
+            self.updateWidgetSolutionHardwareState(SolutionHardwareState.FAILED_SEND)
+
+        self.updateWidgetSolutionHardwareState(SolutionHardwareState.SUCCESSFUL_SEND)
+
     def onRunningChanged(self, new_running_state:bool):
         self.updateRunEnabled()
         self.updateAbortEnabled()
@@ -322,6 +343,28 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.runProgressBar.value = 0
             else:
                 self.ui.runProgressBar.value = 100
+
+    def setRunPushButtonEnabled(self, enabled: bool) -> None:
+        self.ui.runPushButton.setEnabled(enabled)
+        if enabled:
+            self.ui.runPushButton.setToolTip("Run the sonication solution on connected hardware.")
+        else:
+            self.ui.runPushButton.setToolTip("You must send a sonication solution to the hardware to run it.")
+
+    def updateWidgetSolutionHardwareState(self, state: SolutionHardwareState):
+        self._cur_solution_hardware_state = state
+        if state == SolutionHardwareState.SUCCESSFUL_SEND:
+            self.setRunPushButtonEnabled(True)
+            self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
+            self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
+        elif state == SolutionHardwareState.FAILED_SEND:
+            self.setRunPushButtonEnabled(False)
+            self.ui.solutionStateLabel.setProperty("text", "Send to device failed!")
+            self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
+        elif state == SolutionHardwareState.NOT_SENT:
+            self.setRunPushButtonEnabled(False)
+            self.ui.solutionStateLabel.setProperty("text", "")  
+            self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
 
 # OpenLIFUSonicationControlLogic
 #
