@@ -393,3 +393,6 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def clear_session(self) -> None:
         self.current_session = None
+
+    def start_user_account_mode(self):
+        set_user_account_mode_state(True)
