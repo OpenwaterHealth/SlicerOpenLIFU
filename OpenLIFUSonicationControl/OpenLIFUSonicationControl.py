@@ -319,16 +319,19 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
 
         try:
-            interface = openlifu_lz().io.LIFUInterface.LIFUInterface(test_mode=True)
-            interface.txdevice.enum_tx7332_devices(num_devices=2)
+            interface = openlifu_lz().io.LIFUInterface(test_mode=True)
+            interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
             interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
 
             self.logic._lifu_interface = interface
 
-            if interface.get_status() != openlifu_lz().io.LIFUInterface.STATUS_READY:
+            if interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
                 
-        except Exception:
+        except Exception as e:
+            print("Exception thrown:", e)
+            import traceback
+            traceback.print_exc()
             self.logic._lifu_interface = None
             self.updateWidgetSolutionHardwareState(SolutionHardwareState.FAILED_SEND)
             return
@@ -343,6 +346,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
         solution = get_openlifu_data_parameter_node().loaded_solution
+
+        if solution is None:
+            raise RuntimeError("No solution loaded; cannot run sonication.")
 
         self.ui.runProgressBar.value = 0
         self.logic.run(solution) 
