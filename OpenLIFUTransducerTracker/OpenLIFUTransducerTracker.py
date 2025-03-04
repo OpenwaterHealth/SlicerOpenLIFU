@@ -505,8 +505,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                               inputProtocol: SlicerOpenLIFUProtocol,
                               inputTransducer : SlicerOpenLIFUTransducer,
                               inputSkinSegmentation: vtkMRMLModelNode,
-                              inputPhotoscan: vtkMRMLModelNode,
-                              inputTRS: vtkMRMLModelNode
+                              inputPhotoscan: vtkMRMLModelNode
                               ) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
         ## Need to integrate with transducer tracking library here
         slicer.util.infoDisplay(
