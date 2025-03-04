@@ -87,13 +87,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="manuallyGetDeviceStatusLabel">
-     <property name="text">
-      <string/>
-     </property>
-    </widget>
-   </item>
-   <item>
     <widget class="QFrame" name="runStatusFrame">
      <property name="frameShape">
       <enum>QFrame::Box</enum>
