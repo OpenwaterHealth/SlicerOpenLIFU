@@ -402,6 +402,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # === Don't enforce if no user account mode ===
 
         if not self._parameterNode.user_account_mode:
+            for widget in self._permissions_widgets:
+                widget.setEnabled(True)
             return
 
         # === Check cache if there is an active user ===
