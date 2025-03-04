@@ -170,7 +170,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
-        self._cur_solution_hardware_state = SolutionHardwareState.NOT_SENT
+        self._cur_solution_hardware_state : SolutionHardwareState = SolutionHardwareState.NOT_SENT
         self._cur_solution_id: str | None = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
@@ -349,7 +349,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
             interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
 
-            self.logic._lifu_interface = interface
+            self.logic.cur_lifu_interface = interface
 
             if interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
@@ -358,10 +358,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             print("Exception thrown:", e)
             import traceback
             traceback.print_exc()
-            self.logic._lifu_interface = None
+            self.logic.cur_lifu_interface = None
             self.updateWidgetSolutionHardwareState(SolutionHardwareState.FAILED_SEND)
             return
-
+        
+        self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
         self.updateWidgetSolutionHardwareState(SolutionHardwareState.SUCCESSFUL_SEND)
 
     def onRunningChanged(self, new_running_state:bool):
@@ -438,8 +439,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._on_run_progress_updated_callbacks: List[Callable[[int],None]] = []
         """List of functions to call when `run_progress` property is changed."""
 
-        self._lifu_interface: "Optional[openlifu.io.LIFUInterface]" = None
+        self.cur_lifu_interface: Optional[openlifu.io.LIFUInterface] = None
         """The active LIFUInterface object to the ultrasound hardware."""
+
+        self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
+        """The active Solution object last sent to the ultrasound hardware."""
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
@@ -506,7 +510,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         slicer.util.infoDisplay(
             text=(
                 "The run sonication button is a placeholder. Sonication control is not yet implemented."
-                f" Here the solution that would have been run is {get_openlifu_data_parameter_node().loaded_solution.solution.solution.id}."
+                f" Here the solution that would have been run is {self.cur_solution_on_hardware.id}."
                 " The fake \"run\" will start after you close this dialog and end after three seconds."
             ),
             windowTitle="Not implemented"
