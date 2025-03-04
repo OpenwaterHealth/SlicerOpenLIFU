@@ -213,6 +213,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.sendSonicationSolutionToDevicePushButton.clicked.connect(self.onSendSonicationSolutionToDevicePushButtonClicked)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
+        self.ui.manuallyGetDeviceStatusPushButton.clicked.connect(self.onManuallyGetDeviceStatusPushButtonClicked)
         self.updateRunEnabled()
         self.updateAbortEnabled()
         self.logic.call_on_running_changed(self.onRunningChanged)
@@ -376,6 +377,23 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateWidgetSolutionHardwareState(SolutionHardwareState.SUCCESSFUL_SEND)
 
         self.updateWorkflowControls()
+
+    def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
+
+        try:
+            interface = openlifu_lz().io.LIFUInterface(test_mode=True)
+            interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
+            self.logic.cur_lifu_interface = interface
+                
+        except Exception as e:
+            print("Could not initialize LIFUInterface because an exception was thrown:", e)
+            import traceback
+            traceback.print_exc()
+            self.logic.cur_lifu_interface = None
+            self.ui.manuallyGetDeviceStatusLabel.setProperty("text", "Operation failed.")
+            return
+
+        self.ui.manuallyGetDeviceStatusLabel.setProperty("text", f"{self.logic.cur_lifu_interface.get_status()}")
 
     def onRunningChanged(self, new_running_state:bool):
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
