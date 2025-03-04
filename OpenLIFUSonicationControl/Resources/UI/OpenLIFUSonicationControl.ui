@@ -12,6 +12,16 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
+    <widget class="QPushButton" name="manuallyGetDeviceStatusPushButton">
+     <property name="toolTip">
+      <string>This button retrieves the current status of the hardware device and prints the status below.</string>
+     </property>
+     <property name="text">
+      <string>Get Device Status</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QPushButton" name="sendSonicationSolutionToDevicePushButton">
      <property name="text">
       <string>Send Sonication Solution To Device</string>
@@ -75,16 +85,6 @@
       </size>
      </property>
     </spacer>
-   </item>
-   <item>
-    <widget class="QPushButton" name="manuallyGetDeviceStatusPushButton">
-     <property name="toolTip">
-      <string>This button retrieves the current status of the hardware device and prints the status below.</string>
-     </property>
-     <property name="text">
-      <string>Get Device Status</string>
-     </property>
-    </widget>
    </item>
    <item>
     <widget class="QFrame" name="runStatusFrame">
