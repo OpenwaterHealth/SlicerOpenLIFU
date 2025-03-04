@@ -393,7 +393,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             slicer.util.infoDisplay(text=f"Operation failed.", windowTitle="Device Status")
             return
 
-        slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status()}", windowTitle="Device Status")
+        slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
 
     def onRunningChanged(self, new_running_state:bool):
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
@@ -433,7 +433,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateRunHardwareStatusLabel(self, new_run_hardware_status_value=None):
         """Update the label indicating the hardware status of the running hardware."""
         if self.logic.running:
-            self.ui.runHardwareStatusLabel.setProperty("text", f"Hardware status: {new_run_hardware_status_value}")
+            if new_run_hardware_status_value is not None:
+                self.ui.runHardwareStatusLabel.setProperty("text", f"Hardware status: {new_run_hardware_status_value.name}")
         else: # not running
             self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
 
