@@ -288,15 +288,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         if solution is None:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
+        elif not solution.is_approved():
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("Cannot run because the currently active solution is not approved. It can be approved in the sonication planning module.")
         elif not self._cur_solution_hardware_state == SolutionHardwareState.SUCCESSFUL_SEND:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, you must send an approved solution to the hardware device.")
         elif self.logic.running:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("Currently running...")
-        elif not solution.is_approved():
-            self.ui.runPushButton.enabled = False
-            self.ui.runPushButton.setToolTip("Cannot run because the currently active solution is not approved. It can be approved in the sonication planning module.")
         else:
             self.ui.runPushButton.enabled = True
             self.ui.runPushButton.setToolTip("Run sonication")
@@ -391,17 +391,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateWidgetSolutionHardwareState(self, state: SolutionHardwareState):
         self._cur_solution_hardware_state = state
         if state == SolutionHardwareState.SUCCESSFUL_SEND:
-            self.ui.runPushButton.setEnabled(True)
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
+            self.updateRunEnabled()
         elif state == SolutionHardwareState.FAILED_SEND:
-            self.ui.runPushButton.setEnabled(False)
             self.ui.solutionStateLabel.setProperty("text", "Send to device failed!")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
+            self.updateRunEnabled()
         elif state == SolutionHardwareState.NOT_SENT:
-            self.ui.runPushButton.setEnabled(False)
             self.ui.solutionStateLabel.setProperty("text", "")  
             self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
+            self.updateRunEnabled()
 
 # OpenLIFUSonicationControlLogic
 #
