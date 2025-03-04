@@ -372,13 +372,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onRunClicked(self):
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
-        solution = get_openlifu_data_parameter_node().loaded_solution
-
-        if solution is None:
-            raise RuntimeError("No solution loaded; cannot run sonication.")
-
         self.ui.runProgressBar.value = 0
-        self.logic.run(solution) 
+        self.logic.run() 
         
     def onAbortClicked(self):
         self.logic.abort()
@@ -501,13 +496,17 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_run_progress_updated_callbacks:
             f(self._run_progress)
 
-    def run(self, solution:SlicerOpenLIFUSolution):
+    def run(self):
         " Returns True when the sonication control algorithm is done"
+
+        if get_openlifu_data_parameter_node().loaded_solution is None:
+            raise RuntimeError("No solution loaded; cannot run sonication.")
+
         self.running = True
         slicer.util.infoDisplay(
             text=(
                 "The run sonication button is a placeholder. Sonication control is not yet implemented."
-                f" Here the solution that would have been run is {solution.solution.solution.id}."
+                f" Here the solution that would have been run is {get_openlifu_data_parameter_node().loaded_solution.solution.solution.id}."
                 " The fake \"run\" will start after you close this dialog and end after three seconds."
             ),
             windowTitle="Not implemented"
