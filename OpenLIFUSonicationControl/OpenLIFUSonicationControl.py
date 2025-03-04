@@ -211,6 +211,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.call_on_running_changed(self.onRunningChanged)
         self.logic.call_on_sonication_complete(self.onRunCompleted)
         self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
+        self.logic.call_on_run_hardware_status_updated(self.updateRunHardwareStatusLabel)
 
         # Initialize UI
         self.updateRunProgressBar()
@@ -369,6 +370,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
+        self.updateRunHardwareStatusLabel()
 
     def onRunClicked(self):
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
@@ -395,7 +397,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             else:
                 self.ui.runProgressBar.value = 100
 
+    def updateRunHardwareStatusLabel(self, new_run_hardware_status_value=None):
+        """Update the label indicating the hardware status of the running hardware."""
+        if self.logic.running:
+            self.ui.runHardwareStatusLabel.setProperty("text", f"Hardware status: {new_run_hardware_status_value}")
+        else: # not running
+            self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
+
     def updateWidgetSolutionHardwareState(self, solution_state: SolutionHardwareState):
+        self._cur_solution_hardware_state = solution_state
         if solution_state == SolutionHardwareState.SUCCESSFUL_SEND:
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
@@ -439,6 +449,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._on_run_progress_updated_callbacks: List[Callable[[int],None]] = []
         """List of functions to call when `run_progress` property is changed."""
 
+        self._run_hardware_status = -1
+        """ The live status of the hardware device as returned during the sonication run."""
+
+        self._on_run_hardware_status_updated_callbacks = []
+        """List of functions to call when `run_hardware_status` property is changed."""
+
         self.cur_lifu_interface: Optional[openlifu.io.LIFUInterface] = None
         """The active LIFUInterface object to the ultrasound hardware."""
 
@@ -466,6 +482,13 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         of progress made by the sonication control algorithm.
         """
         self._on_run_progress_updated_callbacks.append(f)
+
+    def call_on_run_hardware_status_updated(self, f) -> None:
+        """Set a function to be called whenever the `run_hardware_status` property is changed.
+        The provided callback should accept a single int value (from a status enum) which will indicate status
+        of the running openlifu harware device.
+        """
+        self._on_run_hardware_status_updated_callbacks.append(f)
 
     @property
     def running(self) -> bool:
@@ -500,6 +523,17 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_run_progress_updated_callbacks:
             f(self._run_progress)
 
+    @property
+    def run_hardware_status(self):
+        """The amount of progress made by the sonication algorithm on a scale of 0-100"""
+        return self._run_hardware_status
+    
+    @run_hardware_status.setter
+    def run_hardware_status(self, run_hardware_status_value):
+        self._run_hardware_status = run_hardware_status_value
+        for f in self._on_run_hardware_status_updated_callbacks:
+            f(self._run_hardware_status)
+
     def run(self):
         " Returns True when the sonication control algorithm is done"
 
@@ -507,29 +541,26 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("No solution loaded; cannot run sonication.")
 
         self.running = True
-        slicer.util.infoDisplay(
-            text=(
-                "The run sonication button is a placeholder. Sonication control is not yet implemented."
-                f" Here the solution that would have been run is {self.cur_solution_on_hardware.id}."
-                " The fake \"run\" will start after you close this dialog and end after three seconds."
-            ),
-            windowTitle="Not implemented"
-        )
+        self.run_progress = 0
+        self.sonication_run_complete = False
 
-        def end_run():
-            """Placeholder function that represents a sonication ending"""
-            self.running = False
-            self.run_progress = 100
-            self.sonication_run_complete = True
+        def poll():
+            self.run_hardware_status = self.cur_lifu_interface.get_status()
+            # ---- TODO ----
+            # The following functions mock the run, as the status is never updated to finished.
+            self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
+            self.sonication_run_complete = self.run_progress >= 99
+            # Replace above with functions that look something like this
+            # self.run_progress = self.cur_lifu_interface.get_progress_percent_as_int()
+            # self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
+            # --------------
+            if self.sonication_run_complete:
+                self.timer.stop()
+                self.running = False
 
         self.timer = qt.QTimer()
-        self.timer.timeout.connect(end_run) # Assumes that the sonication algorithm can be connected to a function
-        self.timer.setSingleShot(True)
-        self.timer.start(3000)
-
-        # Dummy code to test updating run progress.
-        # TODO: This value should be set based on progress updates provided by the sonication algorithm
-        self.run_progress = 50
+        self.timer.timeout.connect(poll)
+        self.timer.start(500)
 
     def abort(self) -> None:
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
