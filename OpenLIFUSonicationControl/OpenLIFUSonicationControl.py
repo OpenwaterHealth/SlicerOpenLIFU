@@ -390,10 +390,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             import traceback
             traceback.print_exc()
             self.logic.cur_lifu_interface = None
-            self.ui.manuallyGetDeviceStatusLabel.setProperty("text", "Operation failed.")
+            slicer.util.infoDisplay(text=f"Operation failed.", windowTitle="Device Status")
             return
 
-        self.ui.manuallyGetDeviceStatusLabel.setProperty("text", f"{self.logic.cur_lifu_interface.get_status()}")
+        slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status()}", windowTitle="Device Status")
 
     def onRunningChanged(self, new_running_state:bool):
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
