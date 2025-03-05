@@ -205,12 +205,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.checkCanRunTracking)
 
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
-        self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking) # Temporary functionality
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
         self.updatePhotoscanGenerationButtons()
-        self.updateApproveButton()
         self.updateApprovalStatusLabel()
 
     def cleanup(self) -> None:
@@ -263,7 +261,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updatePhotoscanGenerationButtons()
-        # self.updateApproveButton()
         # self.updateApprovalStatusLabel()
         self.updateInputOptions()
         
@@ -610,25 +607,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateAddPhotocollectionToSessionButton()
         self.updateStartPhotoscanGenerationButton()
 
-    def updateApproveButton(self):
-        if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.approveButton.setEnabled(False)
-            self.ui.approveButton.setToolTip("There is no active session to write the approval")
-            self.ui.approveButton.setText("Approve transducer tracking")
-        else:
-            self.ui.approveButton.setEnabled(True)
-            session_openlifu = get_openlifu_data_parameter_node().loaded_session.session.session
-            if session_openlifu.transducer_tracking_approved:
-                self.ui.approveButton.setText("Unapprove transducer tracking")
-                self.ui.approveButton.setToolTip(
-                    "Revoke approval that the current transducer positioning is accurately tracking the real transducer configuration relative to the subject"
-                )
-            else:
-                self.ui.approveButton.setText("Approve transducer tracking")
-                self.ui.approveButton.setToolTip(
-                    "Approve the current transducer positioning as accurately tracking the real transducer configuration relative to the subject"
-                )
-
     def updateApprovalStatusLabel(self):
         
         approved_photoscan_ids = self.logic.get_approved_photoscan_ids()
@@ -640,8 +618,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 + "\n- ".join(approved_photoscan_ids)
             )
 
-    def onApproveClicked(self):
-        self.logic.toggleTransducerTrackingApproval()
 
 #
 # OpenLIFUTransducerTrackerLogic
