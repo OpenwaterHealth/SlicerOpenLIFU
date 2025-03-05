@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Optional
 import vtk
 from pathlib import Path
 import slicer
-from slicer import vtkMRMLVectorVolumeNode, vtkMRMLModelNode, vtkMRMLViewNode
+from slicer import vtkMRMLVectorVolumeNode, vtkMRMLModelNode, vtkMRMLViewNode, vtkMRMLMarkupsFiducialNode
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPhotoscanWrapper,
@@ -26,6 +26,10 @@ class SlicerOpenLIFUPhotoscan:
 
     texture_node : vtkMRMLVectorVolumeNode
     """Texture volume node"""
+
+    tracking_fiducial_node : vtkMRMLMarkupsFiducialNode = None
+    """Fiducial node containing the control points required for photoscan-volume registration when
+     running transducer tracking. The control points mark the left ear, right ear and nasion."""
 
     @staticmethod
     def _create_nodes(model_data, texture_data, node_name_prefix: str):
@@ -125,7 +129,20 @@ class SlicerOpenLIFUPhotoscan:
     def toggle_model_display(self, visibility_on: bool = False, viewNode: vtkMRMLViewNode = None):
         """ If a viewNode is not specified, the model is displayed in all views by default"""
         self.model_node.GetDisplayNode().SetVisibility(visibility_on)
-        if viewNode:
-            self.model_node.GetDisplayNode().SetViewNodeIDs([viewNode.GetID()])
+        self.model_node.GetDisplayNode().SetViewNodeIDs([viewNode.GetID()] if viewNode else [])
+        
+        if self.tracking_fiducial_node:
+            self.tracking_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
+            self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([viewNode.GetID()] if viewNode else [])
+                        
+    def create_tracking_fiducial_node(self):
+        """Nodes are created by default at the origin"""
+
+        self.tracking_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+        self.tracking_fiducial_node.SetMaximumNumberOfControlPoints(3)
+        self.tracking_fiducial_node.SetName(slicer.mrmlScene.GenerateUniqueName("Photoscan-TrackingFiducials"))
+        self.tracking_fiducial_node.SetMarkupLabelFormat("%N")
+        for label in ["Right Ear", "Left Ear","Nasion"]:
+            self.tracking_fiducial_node.AddControlPoint(0,0,0,label)
 
         
