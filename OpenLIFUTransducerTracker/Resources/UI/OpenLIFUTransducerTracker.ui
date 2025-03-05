@@ -145,13 +145,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="approveButton">
-        <property name="text">
-         <string>Approve transducer tracking</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QLabel" name="approvalStatusLabel">
         <property name="text">
          <string>(approval status label)</string>
