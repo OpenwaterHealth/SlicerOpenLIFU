@@ -205,7 +205,21 @@ class SlicerOpenLIFUSession:
         approved_tt_photoscans = [
             photoscan_id for photoscan_id in self.get_affiliated_photoscan_ids()
             for tt_result in session_openlifu.transducer_tracking_results
-            if photoscan_id == tt_result.photoscan_id and tt_result.transducer_tracking_approved
+            if photoscan_id == tt_result.photoscan_id 
+            and tt_result.transducer_to_photoscan_tracking_approved 
+            and tt_result.photoscan_to_volume_tracking_approved 
         ]
 
         return approved_tt_photoscans
+    
+    def get_virtual_fit_approvals(self):
+
+        session_openlifu = self.session.session
+        approved_vf_targets = []
+        for target in session_openlifu.targets:
+            if target.id not in session_openlifu.virtual_fit_results:
+                continue
+            if session_openlifu.virtual_fit_results[target.id][0]:
+                approved_vf_targets.append(target.id)
+        
+        return approved_vf_targets

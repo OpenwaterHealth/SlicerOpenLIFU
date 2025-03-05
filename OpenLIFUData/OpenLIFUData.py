@@ -50,7 +50,8 @@ from OpenLIFULib.virtual_fit_results import (
 )
 
 from OpenLIFULib.transducer_tracking_results import (
-    add_transducer_tracking_results_from_openlifu_session_format
+    add_transducer_tracking_results_from_openlifu_session_format,
+    clear_transducer_tracking_results
 )
 
 if TYPE_CHECKING:
@@ -1180,7 +1181,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             # TODO: Fix this later.
             approved_tt_photoscans = self.logic.get_transducer_tracking_approvals_in_session()
-            num_tt_approved = 0
+            num_tt_approved = len(approved_tt_photoscans)
             if num_tt_approved > 0:
                 additional_info_messages.append(
                     "Transducer tracking approved for "
@@ -1378,7 +1379,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 if photoscan_id in self.getParameterNode().loaded_photoscans:
                     self.remove_photoscan(photoscan_id)
 
-            #TODO:  clear_transducer_tracking_results
+            clear_transducer_tracking_results
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -2077,13 +2078,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session = self.getParameterNode().loaded_session
         if session is None:
             raise RuntimeError("No active session.")
-        session_openlifu : "openlifu.db.Session" = session.session.session
-        approved_vf_targets = []
-        for target in session_openlifu.targets:
-            if target.id not in session_openlifu.virtual_fit_results:
-                continue
-            if session_openlifu.virtual_fit_results[target.id][0]:
-                approved_vf_targets.append(target.id)
+        approved_vf_targets = session.get_virtual_fit_approvals()
+        
         return approved_vf_targets
     
     def get_transducer_tracking_approvals_in_session(self) -> List[str]:
