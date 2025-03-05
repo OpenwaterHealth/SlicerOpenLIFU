@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>526</width>
+    <width>520</width>
     <height>384</height>
    </rect>
   </property>
@@ -16,9 +16,6 @@
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QVBoxLayout" name="verticalLayout_2">
-     <item alignment="Qt::AlignHCenter|Qt::AlignTop">
-      <widget class="QWidget" name="photoscanPlaceholderWidget" native="true"/>
-     </item>
      <item>
       <widget class="QLabel" name="photoscanApprovalStatusLabel">
        <property name="text">
@@ -26,25 +23,76 @@
        </property>
       </widget>
      </item>
-     <item>
-      <widget class="QPushButton" name="photoscanApprovalButton">
-       <property name="text">
-        <string>Approve Photoscan</string>
+     <item alignment="Qt::AlignHCenter|Qt::AlignTop">
+      <widget class="QWidget" name="photoscanPlaceholderWidget" native="true">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="placeLandmarksButton">
-       <property name="text">
-        <string>Place Registration Landmarks</string>
+      <widget class="QStackedWidget" name="dialogControls">
+       <property name="currentIndex">
+        <number>0</number>
        </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="qSlicerMarkupsPlaceWidget" name="photoscanMarkupsPlaceWidget">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
+       <widget class="QWidget" name="photoscanPreview">
+        <layout class="QVBoxLayout" name="verticalLayout_3">
+         <item>
+          <widget class="QPushButton" name="photoscanApprovalButton">
+           <property name="text">
+            <string>Approve Photoscan</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="verticalSpacer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>40</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="photoscanMarkup">
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <widget class="QPushButton" name="placeLandmarksButton">
+           <property name="text">
+            <string>Place Registration Landmarks</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="qSlicerMarkupsPlaceWidget" name="photoscanMarkupsPlaceWidget">
+           <property name="enabled">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="verticalSpacer2">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>40</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
       </widget>
      </item>
     </layout>
