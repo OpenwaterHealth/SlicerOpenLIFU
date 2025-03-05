@@ -281,7 +281,6 @@ class AddNewPhotocollectionDialog(qt.QDialog):
         temp_dir = tempfile.gettempdir()
         self.temp_photocollection_path = os.path.join(temp_dir, self.reference_number)
         os.makedirs(self.temp_photocollection_path, exist_ok=True)
-        print(f"Made temp dir: {self.temp_photocollection_path}")
 
         self.setup()
 
@@ -343,7 +342,6 @@ class AddNewPhotocollectionDialog(qt.QDialog):
                 ["adb", "pull", f"{android_dir}/{filename}", dest_path]
             )
             self.pulled_files.append(dest_path)
-            print(f"Pulled {filename} to {self.temp_photocollection_path}")  # TODO: remove
 
         self.accept()
 
