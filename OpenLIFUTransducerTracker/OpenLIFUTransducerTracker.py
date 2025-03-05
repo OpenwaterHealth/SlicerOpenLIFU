@@ -263,8 +263,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updatePhotoscanGenerationButtons()
-        self.updateApproveButton()
-        self.updateApprovalStatusLabel()
+        # self.updateApproveButton()
+        # self.updateApprovalStatusLabel()
         self.updateInputOptions()
         
     @vtk.calldata_type(vtk.VTK_OBJECT)
@@ -317,18 +317,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
+        loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
 
-        # In the manual workflow or if the photoscan has been previously loaded as part of a session
-        if selected_photoscan_openlifu.id in get_openlifu_data_parameter_node().loaded_photoscans:
-            loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
-        elif get_openlifu_data_parameter_node().loaded_session:
-            loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
-                    selected_photoscan_openlifu,
-                    load_from_active_session = True)
-        # This shouldn't happen - can't click the Preview button without a loaded photoscan or session
-        else:
-            raise RuntimeError("No photoscans found to preview.") 
-        
         self.DisplayPhotoscanPreviewDialog(loaded_slicer_photoscan)
 
     def DisplayPhotoscanPreviewDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
@@ -346,6 +336,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.photoscanPreviewDialogUI = slicer.util.childWidgetVariables(self.photoscanPreviewDialog)
         self.photoscanPreviewDialog.setWindowTitle("Photoscan Preview")
         replace_widget(self.photoscanPreviewDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, self.photoscanPreviewDialogUI)
+
+        # Approve button 
+        self.photoscanPreviewDialogUI.dialogControls.setCurrentIndex(0)
         
         self.updatePhotoscanApproveButton(photoscan.is_approved())
         self.updatePhotoscanApprovalStatusLabel(photoscan.is_approved())
@@ -358,21 +351,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updatePhotoscanApproveButton(photoscan.is_approved())
             self.updatePhotoscanApprovalStatusLabel(photoscan.is_approved())
 
-        def onPlaceLandmarksClicked():
-            markupsWidget = self.photoscanPreviewDialogUI.photoscanMarkupsPlaceWidget
-            markupsWidget.enabled = True
-            markupsWidget.setMRMLScene(slicer.mrmlScene)
-            markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-            markupsNode.GetDisplayNode().SetViewNodeIDs([self.photoscanViewWidget.mrmlViewNode().GetID()])
-            markupsWidget.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
-    
         def onDialogFinished():
             # Turn off model visibility
             photoscan.toggle_model_display(False)
 
         # Connect buttons and signals
         self.photoscanPreviewDialogUI.photoscanApprovalButton.clicked.connect(onPhotoscanApproveClicked)
-        self.photoscanPreviewDialogUI.placeLandmarksButton.clicked.connect(onPlaceLandmarksClicked) 
         self.photoscanPreviewDialog.finished.connect(onDialogFinished)
 
         # Display dialog
@@ -516,21 +500,69 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runTrackingButton.enabled = False
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
 
+    def DisplayPhotoscanMarkupDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
+        """ Creates and displays a pop-up, blocking dialog for previewing a SlicerOpenLIFUPhotoscan object"""
+
+        # Create a threeD widget with its own viewNode for displaying the photoscan
+        if not self.photoscanViewWidget:
+            self.photoscanViewWidget = self._create_threeDview_widget()
+        
+        # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
+        self._display_photoscan_in_widget(photoscan, self.photoscanViewWidget)
+
+        # Create dialog for photoscan preview and add threeD view widget to dialog.
+        # This dialog gets destroyed when closed so we need to re-define it each time it is used. 
+        self.photoscanPreviewDialog = slicer.util.loadUI(self.resourcePath("UI/PhotoscanPreview.ui"))
+        self.photoscanPreviewDialogUI = slicer.util.childWidgetVariables(self.photoscanPreviewDialog)
+        self.photoscanPreviewDialog.setWindowTitle("Transducer Tracking")
+        replace_widget(self.photoscanPreviewDialogUI.photoscanPlaceholderWidget, self.photoscanViewWidget, self.photoscanPreviewDialogUI)
+
+        # Initial controls dialog - photoscan markups dialog
+        self.photoscanPreviewDialogUI.dialogControls.setCurrentIndex(1)
+        
+        self.updatePhotoscanApprovalStatusLabel(photoscan.is_approved())
+
+        def onPlaceLandmarksClicked():
+            markupsWidget = self.photoscanPreviewDialogUI.photoscanMarkupsPlaceWidget
+            markupsWidget.enabled = True
+            markupsWidget.setMRMLScene(slicer.mrmlScene)
+            markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+            markupsNode.GetDisplayNode().SetViewNodeIDs([self.photoscanViewWidget.mrmlViewNode().GetID()])
+            markupsWidget.setCurrentNode(slicer.mrmlScene.GetNodeByID(markupsNode.GetID()))
+    
+        def onDialogFinished():
+            # Turn off model visibility
+            photoscan.toggle_model_display(False)
+
+        # Connect buttons and signals
+        # self.photoscanPreviewDialogUI.photoscanApprovalButton.clicked.connect(onPhotoscanApproveClicked)
+        self.photoscanPreviewDialogUI.placeLandmarksButton.clicked.connect(onPlaceLandmarksClicked) 
+        self.photoscanPreviewDialog.finished.connect(onDialogFinished)
+
+        # Display dialog
+        self.photoscanPreviewDialog.exec_()
+        self.photoscanPreviewDialog.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
+
     def onRunTrackingClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
         self.skinSurfaceModel = self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode()
-        (transducer_to_photoscan_transform, photoscan_to_volume_transform)  = self.logic.run_transducer_tracking(
-            activeData["Protocol"], activeData["Transducer"],self.skinSurfaceModel, activeData["Photoscan"])
-        
-        self.watchTransducerTrackingNode(transducer_to_photoscan_transform)
-        self.watchTransducerTrackingNode(photoscan_to_volume_transform)
-        
-        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
-        transducer_parent_folder_id = shNode.GetItemParent(shNode.GetItemByDataNode(activeData["Transducer"].transform_node))
-        shNode.SetItemParent(shNode.GetItemByDataNode(transducer_to_photoscan_transform), transducer_parent_folder_id)
-        shNode.SetItemParent(shNode.GetItemByDataNode(photoscan_to_volume_transform), transducer_parent_folder_id)
 
-        self.updateApprovalStatusLabel()
+        selected_photoscan_openlifu = activeData["Photoscan"]
+        loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
+        self.DisplayPhotoscanMarkupDialog(loaded_slicer_photoscan)
+
+        # (transducer_to_photoscan_transform, photoscan_to_volume_transform)  = self.logic.run_transducer_tracking(
+        #     activeData["Protocol"], activeData["Transducer"],self.skinSurfaceModel, activeData["Photoscan"])
+        
+        # self.watchTransducerTrackingNode(transducer_to_photoscan_transform)
+        # self.watchTransducerTrackingNode(photoscan_to_volume_transform)
+        
+        # shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
+        # transducer_parent_folder_id = shNode.GetItemParent(shNode.GetItemByDataNode(activeData["Transducer"].transform_node))
+        # shNode.SetItemParent(shNode.GetItemByDataNode(transducer_to_photoscan_transform), transducer_parent_folder_id)
+        # shNode.SetItemParent(shNode.GetItemByDataNode(photoscan_to_volume_transform), transducer_parent_folder_id)
+
+        # self.updateApprovalStatusLabel()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
@@ -650,12 +682,15 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         if session is None: # We should never be calling togglePhotoscanApproval if there's no active session.
             raise RuntimeError("Cannot toggle photoscan approval because there is no active session.")
         photoscan.toggle_approval()
+        data_parameter_node.loaded_photoscans[photoscan.photoscan.photoscan.id] = photoscan # remember to write the updated photoscan into the parameter node
+        
         # Write changes to the database
         loaded_db = slicer.util.getModuleLogic('OpenLIFUData').db
         if loaded_db is None: # This shouldn't happen
             raise RuntimeError("Cannot toggle photoscan approval because there is a session but no database connection to write the approval.")
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         loaded_db.write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
+
     def run_transducer_tracking(self,
                               inputProtocol: SlicerOpenLIFUProtocol,
                               inputTransducer : SlicerOpenLIFUTransducer,
@@ -701,3 +736,18 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session_id = None if session is None else session.get_session_id()
         approved_photoscan_ids = get_approved_photoscan_ids(session_id=session_id)
         return approved_photoscan_ids
+    
+    def load_openlifu_photoscan(self, photoscan: "openlifu.Photoscan") -> SlicerOpenLIFUPhotoscan:
+
+        # In the manual workflow or if the photoscan has been previously loaded as part of a session
+        if photoscan.id in get_openlifu_data_parameter_node().loaded_photoscans:
+            loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[photoscan.id]
+        elif get_openlifu_data_parameter_node().loaded_session:
+            loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
+                    photoscan,
+                    load_from_active_session = True)
+        # This shouldn't happen - can't click the Preview button without a loaded photoscan or session
+        else:
+            raise RuntimeError("No photoscans found to preview.") 
+        
+        return loaded_slicer_photoscan
