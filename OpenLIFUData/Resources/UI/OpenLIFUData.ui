@@ -30,7 +30,7 @@
       <item>
        <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
         <property name="filters">
-         <string>ctkPathLineEdit::Dirs</string>
+         <set>ctkPathLineEdit::Dirs</set>
         </property>
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
@@ -83,6 +83,13 @@
           <widget class="QPushButton" name="newSessionButton">
            <property name="text">
             <string>Create New Session</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="addPhotostackToSessionButton">
+           <property name="text">
+            <string>Add Photostack To Session</string>
            </property>
           </widget>
          </item>
@@ -154,8 +161,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>299</width>
-           <height>198</height>
+           <width>272</width>
+           <height>230</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_7">
