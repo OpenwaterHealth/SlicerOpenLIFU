@@ -41,6 +41,10 @@ class SlicerOpenLIFUSession:
     in order to have the option of unloading them when unloading the session. In SlicerOpenLIFU, all
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
+    affiliated_photocollections : List[str] = []
+    """List containing photocollection_reference_numbers for any photocollections associated with the session. We keep track of any
+    photocollections associated with the session here so that they can be loaded into slicer during transducer tracking as required."""
+
     affiliated_photoscans : Dict[str,SlicerOpenLIFUPhotoscanWrapper] = {}
     """Dictionary containing photoscan_id: SlicerOpenLIFUPhotoscanWrapper for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
@@ -102,6 +106,9 @@ class SlicerOpenLIFUSession:
         """
         return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
 
+    def get_affiliated_photocollection_reference_numbers(self):
+        return self.affiliated_photocollections
+
     def get_affiliated_photoscan_ids(self):
         return list(self.affiliated_photoscans.keys())
     
@@ -145,6 +152,11 @@ class SlicerOpenLIFUSession:
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
 
         return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
+
+    def set_affiliated_photocollections(self, affiliated_photocollections : List[str]):
+        
+        self.affiliated_photocollections = affiliated_photocollections
+
 
     def set_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
         
