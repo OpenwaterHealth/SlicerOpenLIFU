@@ -87,9 +87,9 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="addPhotostackToSessionButton">
+          <widget class="QPushButton" name="addPhotocollectionToSessionButton">
            <property name="text">
-            <string>Add Photostack To Session</string>
+            <string>Add Photocollection To Session</string>
            </property>
           </widget>
          </item>
