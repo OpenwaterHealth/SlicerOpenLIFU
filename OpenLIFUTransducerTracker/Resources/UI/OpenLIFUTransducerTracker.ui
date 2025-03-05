@@ -45,12 +45,12 @@
          <item>
           <layout class="QHBoxLayout" name="photoscanGeneratorButtons">
            <item>
-            <widget class="QPushButton" name="addPhotostackToSessionButton">
+            <widget class="QPushButton" name="addPhotocollectionToSessionButton">
              <property name="toolTip">
               <string>Load an openlifu protocol from json</string>
              </property>
              <property name="text">
-              <string>Add Photostack To Session</string>
+              <string>Add Photocollection To Session</string>
              </property>
             </widget>
            </item>
