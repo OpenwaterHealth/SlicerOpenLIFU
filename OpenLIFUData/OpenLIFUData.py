@@ -1,6 +1,12 @@
 from pathlib import Path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
 import json
+import os
+import random
+import shutil
+import string
+import subprocess
+import tempfile
 
 import qt
 import ctk
@@ -257,6 +263,93 @@ class AddNewVolumeDialog(qt.QDialog):
         volume_filepath = self.volumeFilePath.currentPath
 
         return (returncode, volume_filepath,volume_name, volume_id)
+
+class AddNewPhotostackDialog(qt.QDialog):
+    """ Add new photostack dialog """
+
+    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN=20
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Add New Photostack")
+        self.setWindowModality(qt.Qt.WindowModal)
+
+        self.reference_number = 'qwerty' # TODO: should be "".join(random.choices(string.ascii_letters + string.digits, k=8))
+
+        temp_dir = tempfile.gettempdir()
+        self.temp_photostack_path = os.path.join(temp_dir, self.reference_number)
+        os.makedirs(self.temp_photostack_path, exist_ok=True)
+        print(f"Made temp dir: {self.temp_photostack_path}")
+
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
+
+        self.directionLabel1 = qt.QLabel(f"Please create a 3D Open Water photostack with the following reference number: {self.reference_number}")
+        formLayout.addRow(self.directionLabel1)
+
+        self.photostackName = qt.QLineEdit()
+        formLayout.addRow(_("Photostack Name:"), self.photostackName)
+
+        self.directionLabel2 = qt.QLabel(f"Click \"OK\" when the Android device has finished and is plugged into the computer.")
+        formLayout.addRow(self.directionLabel2)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        We need to make sure that the android file system has the files
+        associated with the reference id in the right location.
+        """
+        photostack_name = self.photostackName.text
+        
+        # The path /sdcard/DCIM/Camera/ is the standard internal storage path
+        # from the Android device’s perspective when accessed via adb, not the
+        # computer’s mounted file system like with Android File Transfer.
+        android_dir = "/sdcard/DCIM/Camera"
+        result = subprocess.run(
+            ["adb", "shell", "ls", f"{android_dir}/{self.reference_number}_*.jpeg"],
+            capture_output=True, text=True
+        )
+        
+        if result.returncode != 0:
+            slicer.util.errorDisplay(f"Error finding files on Android device.", parent = self)
+            return
+        
+        files = [f for f in result.stdout.strip().split('\n') if f]
+
+        if not files or len(files) < self.MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN:
+            slicer.util.errorDisplay(f"Not enough photos were found in the photostack.", parent = self)
+            return
+        
+        for file in files:
+            filename = os.path.basename(file)
+            subprocess.run(
+                ["adb", "pull", f"{android_dir}/{filename}", os.path.join(self.temp_photostack_path, filename)]
+            )
+            print(f"Pulled {filename} to {self.temp_photostack_path}")  # TODO: remove
+
+        self.accept()
+
+    def customexec_(self):
+
+        returncode = self.exec_()
+        photostack_dict = {
+            "name": self.photostackName.text,
+            "photostack_reference_number" : self.reference_number,
+        }
+        return (returncode, photostack_dict, self.temp_photostack_path)
 
 class AddNewPhotoscanDialog(qt.QDialog):
     """ Add new photoscan dialog """
@@ -574,6 +667,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.newSessionButton.clicked.connect(self.onCreateNewSessionClicked)
         self.update_subjectLevelButtons_enabled()
 
+        # Add new photostack to session
+        self.ui.addPhotostackToSessionButton.clicked.connect(self.onAddPhotostackToSessionClicked)
+        self.update_sessionLevelButtons_enabled()
+
         # Add new photoscan to session
         self.ui.addPhotoscanToSessionButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
         self.update_sessionLevelButtons_enabled()
@@ -711,13 +808,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.newSessionButton.toolTip = 'Requires a loaded database and subject to be selected'
     
     def update_sessionLevelButtons_enabled(self):
-        """ Update whether the add photoscan button is enabled based on whether a database has been loaded
-        and a session has been selected in the tree view"""
+        """ Update whether the add photoscan and photostack buttons are enabled
+        based on whether a database has been loaded and a session has been
+        selected in the tree view"""
 
         if self.logic.db and self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
+            self.ui.addPhotostackToSessionButton.setEnabled(True)
+            self.ui.addPhotostackToSessionButton.toolTip = 'Add new photostack to selected session'
             self.ui.addPhotoscanToSessionButton.setEnabled(True)
             self.ui.addPhotoscanToSessionButton.toolTip = 'Add new photoscan to selected session'
         else:
+            self.ui.addPhotostackToSessionButton.setEnabled(False)
+            self.ui.addPhotostackToSessionButton.toolTip = 'Requires a loaded database and session to be selected'
             self.ui.addPhotoscanToSessionButton.setEnabled(False)
             self.ui.addPhotoscanToSessionButton.toolTip = 'Requires a loaded database and session to be selected'
 
@@ -807,6 +909,31 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.addSessionsToSubjectSessionSelector(currentIndex, session_parameters['name'], session_parameters['id'])
             self.ui.subjectSessionView.expand(self.ui.subjectSessionView.currentIndex())
             self.logic.load_session(subject_id, session_parameters['id'])
+
+    @display_errors
+    def onAddPhotostackToSessionClicked(self, checked:bool):
+        photostackdlg = AddNewPhotostackDialog()
+        returncode, photostack_dict, photostack_filepath = photostackdlg.customexec_()
+        if not returncode:
+            return False
+
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        _, session_id = self.getSubjectSessionAtIndex(currentIndex)
+        _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
+
+        # TODO: add the stuff to the database when it's made in python
+
+        # self.logic.add_photostack_to_database(subject_id, session_id, photostack_dict)
+        # 
+        # # If the photostack is being added to a currently active session,
+        # # update the session and the transducer tracking module to reflect the added photostack.
+        # loaded_session = self._parameterNode.loaded_session
+        # if loaded_session is not None and session_id == loaded_session.get_session_id():
+        #     self.logic.update_photostacks_affiliated_with_loaded_session()
+        #     # Update the transducer tracking drop down to reflect new photostacks 
+        #     transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerTracker').widgetRepresentation()
+        #     transducer_tracking_widget.self().algorithm_input_widget.update()
+
 
     @display_errors
     def onAddPhotoscanToSessionClicked(self, checked:bool) -> None:
