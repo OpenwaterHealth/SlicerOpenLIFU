@@ -923,11 +923,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         currentIndex = self.ui.subjectSessionView.currentIndex()
         _, session_id = self.getSubjectSessionAtIndex(currentIndex)
         _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
-
+        self._parameterNode.loaded_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
         self.logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
         
         # If the photocollection is being added to a currently active session,
-        # update the session and the transducer tracking module to reflect the added photocollection.
+        # update the session 
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is not None and session_id == loaded_session.get_session_id():
             self.logic.update_photocollections_affiliated_with_loaded_session()
