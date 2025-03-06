@@ -275,7 +275,7 @@ class AddNewPhotocollectionDialog(qt.QDialog):
         self.setWindowTitle("Add New Photocollection")
         self.setWindowModality(qt.Qt.WindowModal)
 
-        self.reference_number = 'qwerty' # TODO: should be "".join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.reference_number = "".join(random.choices(string.digits, k=8))
         self.pulled_files = []
 
         temp_dir = tempfile.gettempdir()
