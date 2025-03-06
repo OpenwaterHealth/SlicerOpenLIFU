@@ -67,6 +67,69 @@ class OpenLIFUTransducerTrackerParameterNode:
     pass
 
 #
+# OpenLIFUTransducerTrackerDialogs
+#
+
+class PhotoscanFromPhotocollectionDialog(qt.QDialog):
+    """ Create new photoscan from photocollection dialog. Only displayed if
+    there are multiple photocollections. """
+
+    def __init__(self, reference_numbers : List[str], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """ Args:
+                reference_numbers: list of reference numbers for
+                photocollections from which to choose to generate a photoscan
+        """
+
+        self.setWindowTitle("Select a Photocollection")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(600, 400)
+
+        self.reference_numbers : List[str] = reference_numbers
+        self.selected_reference_number : str = None
+
+        self.setup()
+
+    def setup(self):
+
+        self.boxLayout = qt.QVBoxLayout()
+        self.setLayout(self.boxLayout)
+
+        self.listWidget = qt.QListWidget(self)
+        self.listWidget.itemDoubleClicked.connect(self.onItemDoubleClicked)
+        self.boxLayout.addWidget(self.listWidget)
+
+        self.buttonBox = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
+            self
+        )
+        self.boxLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.accepted.connect(self.validateInputs)
+        self.buttonBox.rejected.connect(self.reject)
+
+        # display the reference_numbers
+
+        for num in self.reference_numbers:
+            display_text = f"Photocollection (Reference Number: {num})"
+            self.listWidget.addItem(display_text)
+
+
+    def onItemDoubleClicked(self, item):
+        self.validateInputs()
+
+    def validateInputs(self):
+
+        selected_idx = self.listWidget.currentRow
+        if selected_idx >= 0:
+            self.selected_reference_number = self.reference_numbers[selected_idx]
+        self.accept()
+
+    def get_selected_reference_number(self) -> str:
+
+        return self.selected_reference_number
+
+#
 # OpenLIFUTransducerTrackerWidget
 #
     
@@ -123,6 +186,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ---- Photoscan generation connections ----
         data_module = slicer.util.getModuleWidget('OpenLIFUData')
         self.ui.addPhotocollectionToSessionButton.clicked.connect(data_module.onAddPhotocollectionToSessionClicked)
+        self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
@@ -221,6 +285,25 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Determine whether a photoscan can be previewed based on the status of the photoscan combo box
         self.checkCanPreviewPhotoscan()
+
+    def onStartPhotoscanGenerationButtonClicked(self):
+        reference_numbers = get_openlifu_data_parameter_node().loaded_photocollections
+        if len(reference_numbers) > 1:
+            dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
+            if dialog.exec_() == qt.QDialog.Accepted:
+                selected_reference_number = dialog.get_selected_reference_number()
+                if not selected_reference_number:
+                    return
+            else:
+                return
+        else:
+            selected_reference_number = reference_numbers[0]
+
+        print(selected_reference_number)
+
+        # TODO: Pass the reference number to the photocollection to a function
+        # that generates the photoscan from the photocollection. I guess this
+        # would then add the photoscan to the database here
             
     def onPreviewPhotoscanClicked(self):
 
