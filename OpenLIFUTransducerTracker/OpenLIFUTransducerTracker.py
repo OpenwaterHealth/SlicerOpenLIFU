@@ -41,7 +41,7 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Transducer Tracking")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ['OpenLIFUData']  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -65,6 +65,69 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
 @parameterNodeWrapper
 class OpenLIFUTransducerTrackerParameterNode:
     pass
+
+#
+# OpenLIFUTransducerTrackerDialogs
+#
+
+class PhotoscanFromPhotocollectionDialog(qt.QDialog):
+    """ Create new photoscan from photocollection dialog. Only displayed if
+    there are multiple photocollections. """
+
+    def __init__(self, reference_numbers : List[str], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """ Args:
+                reference_numbers: list of reference numbers for
+                photocollections from which to choose to generate a photoscan
+        """
+
+        self.setWindowTitle("Select a Photocollection")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(600, 400)
+
+        self.reference_numbers : List[str] = reference_numbers
+        self.selected_reference_number : str = None
+
+        self.setup()
+
+    def setup(self):
+
+        self.boxLayout = qt.QVBoxLayout()
+        self.setLayout(self.boxLayout)
+
+        self.listWidget = qt.QListWidget(self)
+        self.listWidget.itemDoubleClicked.connect(self.onItemDoubleClicked)
+        self.boxLayout.addWidget(self.listWidget)
+
+        self.buttonBox = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
+            self
+        )
+        self.boxLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.accepted.connect(self.validateInputs)
+        self.buttonBox.rejected.connect(self.reject)
+
+        # display the reference_numbers
+
+        for num in self.reference_numbers:
+            display_text = f"Photocollection (Reference Number: {num})"
+            self.listWidget.addItem(display_text)
+
+
+    def onItemDoubleClicked(self, item):
+        self.validateInputs()
+
+    def validateInputs(self):
+
+        selected_idx = self.listWidget.currentRow
+        if selected_idx >= 0:
+            self.selected_reference_number = self.reference_numbers[selected_idx]
+        self.accept()
+
+    def get_selected_reference_number(self) -> str:
+
+        return self.selected_reference_number
 
 #
 # OpenLIFUTransducerTrackerWidget
@@ -120,6 +183,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
+        # ---- Photoscan generation connections ----
+        data_module = slicer.util.getModuleWidget('OpenLIFUData')
+        self.ui.addPhotocollectionToSessionButton.clicked.connect(data_module.onAddPhotocollectionToSessionClicked)
+        self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
+        # ------------------------------------------
+
         # Replace the placeholder algorithm input widget by the actual one
         algorithm_input_names = ["Protocol","Volume","Transducer", "Photoscan"]
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names)
@@ -132,6 +201,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking) # Temporary functionality
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
+        self.updatePhotoscanGenerationButtons()
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
 
@@ -184,6 +254,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self, caller, event) -> None:
+        self.updatePhotoscanGenerationButtons()
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateInputOptions()
@@ -214,6 +285,25 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Determine whether a photoscan can be previewed based on the status of the photoscan combo box
         self.checkCanPreviewPhotoscan()
+
+    def onStartPhotoscanGenerationButtonClicked(self):
+        reference_numbers = get_openlifu_data_parameter_node().loaded_photocollections
+        if len(reference_numbers) > 1:
+            dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
+            if dialog.exec_() == qt.QDialog.Accepted:
+                selected_reference_number = dialog.get_selected_reference_number()
+                if not selected_reference_number:
+                    return
+            else:
+                return
+        else:
+            selected_reference_number = reference_numbers[0]
+
+        print(selected_reference_number)
+
+        # TODO: Pass the reference number to the photocollection to a function
+        # that generates the photoscan from the photocollection. I guess this
+        # would then add the photoscan to the database here
             
     def onPreviewPhotoscanClicked(self):
 
@@ -422,6 +512,29 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeData = self.algorithm_input_widget.get_current_data()
         self.skinSurfaceModel = self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode()
         self.logic.runTransducerTracking(activeData["Protocol"], activeData["Transducer"], self.skinSurfaceModel, activeData["Photoscan"])
+
+    def updateAddPhotocollectionToSessionButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.addPhotocollectionToSessionButton.setEnabled(False)
+            self.ui.addPhotocollectionToSessionButton.setToolTip("Adding a photocollection requires an active session.")
+        else:
+            self.ui.addPhotocollectionToSessionButton.setEnabled(True)
+            self.ui.addPhotocollectionToSessionButton.setToolTip("Add a photocollection to the active session.")
+
+    def updateStartPhotoscanGenerationButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.startPhotoscanGenerationButton.setEnabled(False)
+            self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires an active session.")
+        elif len(get_openlifu_data_parameter_node().loaded_photocollections) == 0:
+            self.ui.startPhotoscanGenerationButton.setEnabled(False)
+            self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires at least one photocollection.")
+        else:
+            self.ui.startPhotoscanGenerationButton.setEnabled(True)
+            self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
+
+    def updatePhotoscanGenerationButtons(self):
+        self.updateAddPhotocollectionToSessionButton()
+        self.updateStartPhotoscanGenerationButton()
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
