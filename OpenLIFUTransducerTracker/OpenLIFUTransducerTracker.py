@@ -37,12 +37,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     create_dialog_with_viewnode
 )
 
-from openlifu.seg.skinseg import (
-    compute_foreground_mask,
-    vtk_img_from_array_and_affine,
-    create_closed_surface_from_labelmap,
-)
-from OpenLIFULib.coordinate_system_utils import get_RAS2IJK
+from OpenLIFULib.skinseg import generate_skin_mesh
 
 if TYPE_CHECKING:
     import openlifu
@@ -479,18 +474,26 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             elif self.photoscanPreviewDialogUI.placeLandmarksButton.text == "Done Placing Landmarks":
                 photoscan.tracking_fiducial_node.SetLocked(True)
                 self.photoscanPreviewDialogUI.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
-    
+
         def onDialogFinished():
             # Turn off model visibility
             photoscan.toggle_model_display(False)
 
         # Connect buttons and signals
         self.photoscanPreviewDialogUI.placeLandmarksButton.clicked.connect(onPlaceLandmarksClicked) 
+        self.photoscanPreviewDialogUI.nextStepButton.clicked.connect(self.DisplaySkinSegmentationMarkupDialog) 
         dialog.finished.connect(onDialogFinished)
 
         # Display dialog
         dialog.exec_()
         dialog.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
+
+    def DisplaySkinSegmentationMarkupDialog(self):
+        
+        activeData = self.algorithm_input_widget.get_current_data()
+        skin_mesh_node = self.logic.compute_skin_segmentation(activeData["Volume"])
+        skin_mesh_node.CreateDefaultDisplayNodes()
+        skin_mesh_node.GetDisplayNode().SetVisibility(True)
 
     def onRunTrackingClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
@@ -657,3 +660,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("No photoscans found to preview.") 
         
         return loaded_slicer_photoscan
+    
+    def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtk.vtkPolyData:
+
+        skin_mesh = generate_skin_mesh(volume)
+
+        return skin_mesh
