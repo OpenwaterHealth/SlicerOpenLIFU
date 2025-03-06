@@ -41,7 +41,7 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Transducer Tracking")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ['OpenLIFUData']  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -120,6 +120,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
+        # ---- Photoscan generation connections ----
+        data_module = slicer.util.getModuleWidget('OpenLIFUData')
+        self.ui.addPhotocollectionToSessionButton.clicked.connect(data_module.onAddPhotocollectionToSessionClicked)
+        # ------------------------------------------
+
         # Replace the placeholder algorithm input widget by the actual one
         algorithm_input_names = ["Protocol","Volume","Transducer", "Photoscan"]
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names)
@@ -132,6 +137,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking) # Temporary functionality
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
+        self.updatePhotoscanGenerationButtons()
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
 
@@ -184,6 +190,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self, caller, event) -> None:
+        self.updatePhotoscanGenerationButtons()
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateInputOptions()
@@ -422,6 +429,29 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeData = self.algorithm_input_widget.get_current_data()
         self.skinSurfaceModel = self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode()
         self.logic.runTransducerTracking(activeData["Protocol"], activeData["Transducer"], self.skinSurfaceModel, activeData["Photoscan"])
+
+    def updateAddPhotocollectionToSessionButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.addPhotocollectionToSessionButton.setEnabled(False)
+            self.ui.addPhotocollectionToSessionButton.setToolTip("Adding a photocollection requires an active session.")
+        else:
+            self.ui.addPhotocollectionToSessionButton.setEnabled(True)
+            self.ui.addPhotocollectionToSessionButton.setToolTip("Add a photocollection to the active session.")
+
+    def updateStartPhotoscanGenerationButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.startPhotoscanGenerationButton.setEnabled(False)
+            self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires an active session.")
+        elif len(get_openlifu_data_parameter_node().loaded_photocollections) == 0:
+            self.ui.startPhotoscanGenerationButton.setEnabled(False)
+            self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires at least one photocollection.")
+        else:
+            self.ui.startPhotoscanGenerationButton.setEnabled(True)
+            self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
+
+    def updatePhotoscanGenerationButtons(self):
+        self.updateAddPhotocollectionToSessionButton()
+        self.updateStartPhotoscanGenerationButton()
 
     def updateApproveButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
