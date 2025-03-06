@@ -93,7 +93,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="pushButton">
+        <widget class="QPushButton" name="nextStepButton">
          <property name="text">
           <string>Next</string>
          </property>
