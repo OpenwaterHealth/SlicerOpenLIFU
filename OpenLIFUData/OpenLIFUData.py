@@ -931,11 +931,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is not None and session_id == loaded_session.get_session_id():
             self.logic.update_photocollections_affiliated_with_loaded_session()
-            # TODO: We will probably want to update TT to let them know we added a photocollection for the photoscan generation
-            # # Update the transducer tracking drop down to reflect new photocollections 
-            # transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerTracker').widgetRepresentation()
-            # transducer_tracking_widget.self().algorithm_input_widget.update()
-
 
     @display_errors
     def onAddPhotoscanToSessionClicked(self, checked:bool) -> None:
@@ -1712,15 +1707,21 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.getParameterNode().loaded_session = new_session
 
-        # === Keep track of affiliated photocollections and unload any conflicting photocollections that have been previously loaded ===
-        for photocollection_reference_number in conflicting_loaded_photocollections:
-            self.remove_photocollection(photocollection_reference_number) 
-        self.update_photocollections_affiliated_with_loaded_session()
-
         # === Keep track of affiliated photoscans and unload any conflicting photoscans that have been previously loaded ===
         for photoscan_id in conflicting_loaded_photoscans:
             self.remove_photoscan(photoscan_id) 
         self.update_photoscans_affiliated_with_loaded_session()
+
+        # === Load photocollections as all reference_numbers ===
+        # There is no openlifu object for photocollections, so we just add them to the list!
+
+        session_affiliated_photocollections = self.db.get_photocollection_reference_numbers(subject_id, session_id)
+        self.getParameterNode().loaded_photocollections.extend(session_affiliated_photocollections)
+
+        # === Also keep track of affiliated photocollections and unload any conflicting photocollections that have been previously loaded ===
+        for photocollection_reference_number in conflicting_loaded_photocollections:
+            self.remove_photocollection(photocollection_reference_number) 
+        self.update_photocollections_affiliated_with_loaded_session()
 
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
         session = self.getParameterNode().loaded_session
