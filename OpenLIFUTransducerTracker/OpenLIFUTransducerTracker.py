@@ -559,15 +559,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
 
-    def toggleTransducerTrackingApproval(self) -> None:
-        """Approve transducer tracking for the currently active session if it was not approved. Revoke approval if it was approved."""
-        data_parameter_node = get_openlifu_data_parameter_node()
-        session = data_parameter_node.loaded_session
-        if session is None: # We should never be calling toggleTransducerTrackingApproval if there's no active session.
-            raise RuntimeError("Cannot toggle tracking approval because there is no active session.")
-        session.toggle_transducer_tracking_approval() # apply the approval or lack thereof
-        data_parameter_node.loaded_session = session # remember to write the updated session object into the parameter node
-    
     def togglePhotoscanApproval(self, photoscan: SlicerOpenLIFUPhotoscan) -> None:
         """Approve the specified photoscan if it was not approved. Revoke approval if it was approved. Write changes
         to the underlying openlifu photoscan object to the database. """
