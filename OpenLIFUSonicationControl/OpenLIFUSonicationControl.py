@@ -53,7 +53,7 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
             "and development."
         )
 
-class SolutionHardwareState(Enum):
+class SolutionOnHardwareState(Enum):
     SUCCESSFUL_SEND=0
     FAILED_SEND=1
     NOT_SENT=2
@@ -171,14 +171,14 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
-        self._cur_solution_hardware_state : SolutionHardwareState = SolutionHardwareState.NOT_SENT
+        self._cur_solution_on_hardware_state : SolutionOnHardwareState = SolutionOnHardwareState.NOT_SENT
         self._cur_solution_id: str | None = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
     @property
-    def cur_solution_hardware_state(self) -> SolutionHardwareState:
-        return self._cur_solution_hardware_state
+    def cur_solution_on_hardware_state(self) -> SolutionOnHardwareState:
+        return self._cur_solution_on_hardware_state
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -223,7 +223,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Initialize UI
         self.updateRunProgressBar()
-        self.updateWidgetSolutionHardwareState(SolutionHardwareState.NOT_SENT)
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
         # Add an observer on the Data module's parameter node
         self.addObserver(
@@ -296,10 +296,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunProgressBar()
         if (solution_parameter_pack := get_openlifu_data_parameter_node().loaded_solution) is None:
             self._cur_solution_id = None
-            self.updateWidgetSolutionHardwareState(SolutionHardwareState.NOT_SENT)
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         elif solution_parameter_pack.solution.solution.id != self._cur_solution_id:
             self._cur_solution_id = solution_parameter_pack.solution.solution.id
-            self.updateWidgetSolutionHardwareState(SolutionHardwareState.NOT_SENT)
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
     def updateSendSonicationSolutionToDevicePushButtonEnabled(self):
         solution = get_openlifu_data_parameter_node().loaded_solution
@@ -328,7 +328,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         elif not solution.is_approved():
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("Cannot run because the currently active solution is not approved. It can be approved in the sonication planning module.")
-        elif not self._cur_solution_hardware_state == SolutionHardwareState.SUCCESSFUL_SEND:
+        elif not self._cur_solution_on_hardware_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, you must send an approved solution to the hardware device.")
         elif self.logic.running:
@@ -370,11 +370,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             import traceback
             traceback.print_exc()
             self.logic.cur_lifu_interface = None
-            self.updateWidgetSolutionHardwareState(SolutionHardwareState.FAILED_SEND)
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND)
             return
         
         self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
-        self.updateWidgetSolutionHardwareState(SolutionHardwareState.SUCCESSFUL_SEND)
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
 
         self.updateWorkflowControls()
 
@@ -438,18 +438,18 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         else: # not running
             self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
 
-    def updateWidgetSolutionHardwareState(self, solution_state: SolutionHardwareState):
-        self._cur_solution_hardware_state = solution_state
-        if solution_state == SolutionHardwareState.SUCCESSFUL_SEND:
+    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState):
+        self._cur_solution_on_hardware_state = solution_state
+        if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
             self.updateRunEnabled()
-        elif solution_state == SolutionHardwareState.FAILED_SEND:
+        elif solution_state == SolutionOnHardwareState.FAILED_SEND:
             # TODO: In the event of a failed send, you should add the printout
             self.ui.solutionStateLabel.setProperty("text", "Send to device failed!")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
             self.updateRunEnabled()
-        elif solution_state == SolutionHardwareState.NOT_SENT:
+        elif solution_state == SolutionOnHardwareState.NOT_SENT:
             self.ui.solutionStateLabel.setProperty("text", "")  
             self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
             self.updateRunEnabled()
