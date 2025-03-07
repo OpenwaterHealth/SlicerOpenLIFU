@@ -324,19 +324,151 @@ class ManageAccountsDialog(qt.QDialog):
             self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(user.description))
 
     def onCreateNewUserClicked(self):
-        return
+        slicer.util.getModuleWidget("OpenLIFULogin").onCreateNewAccountClicked()
+        self.updateUsersList()
 
     def onDeleteUserClicked(self):
-        selected_idx = self.tableWidget.currentRow
-        if selected_idx >= 0:
-            # TODO: we need to do this differently
-            #_, self.selected_user_id = self.user_names_and_IDs[selected_idx]
+
+        # Get item and delete user
+
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a user to delete.")
             return
-        return
+
+        selected_row = selected_items[0].row()
+        user_id = self.tableWidget.item(selected_row, 0).text()
+
+        if not slicer.util.confirmYesNoDisplay(
+            text=f"Are you sure you want to delete the user with id '{user_id}'?",
+            windowTitle="User Delete Confirmation",
+        ):
+            return
+
+        self.db.delete_user(user_id)
+
+        # TODO: If the user chooses to delete their own account, they must be
+        # asked for double confirmation and then it must log them out
+
+        # Update GUI
+
+        self.updateUsersList()
+        slicer.util.infoDisplay(f"User deleted: \'{user_id}\'")
 
     def onChangePasswordClicked(self):
-        return
 
+        # Get item and change user password
+
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a user to change password.")
+            return
+
+        selected_row = selected_items[0].row()
+        user_id = self.tableWidget.item(selected_row, 0).text()
+        user = self.db.load_user(user_id)
+
+        change_password_dlg = ChangePasswordDialog(user)
+        returncode, user_dict = change_password_dlg.customexec_()
+        if not returncode or user_dict is None:
+            return
+
+        modifiedUser = openlifu_lz().db.User.from_dict(user_dict)
+        self.db.write_user(modifiedUser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+
+        # Update GUI
+
+        self.updateUsersList()
+        slicer.util.infoDisplay(f"Password changed for: \'{user_id}\'")
+
+class ChangePasswordDialog(qt.QDialog):
+    """ Change password dialog """
+
+    def __init__(self, user: "openlifu.db.User", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Change password")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.user = user
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+        self.setContentsMargins(20, 20, 20, 20)
+
+        mainLayout = qt.QVBoxLayout()
+        mainLayout.setSpacing(15)
+        self.setLayout(mainLayout)
+
+        self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
+        self.infoLabel.setWordWrap(True)
+        mainLayout.addWidget(self.infoLabel)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(12)
+        formLayout.setFormAlignment(qt.Qt.AlignTop)
+        mainLayout.addLayout(formLayout)
+
+        # ---- Password fields ----
+
+        self.createPasswordField = qt.QLineEdit()
+        self.createPasswordField.setEchoMode(qt.QLineEdit.Password)
+        createPasswordLabel = qt.QLabel(_('Create Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(createPasswordLabel, self.createPasswordField)
+
+        self.confirmPasswordField = qt.QLineEdit()
+        self.confirmPasswordField.setEchoMode(qt.QLineEdit.Password)
+        confirmPasswordLabel = qt.QLabel(_('Confirm Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(confirmPasswordLabel, self.confirmPasswordField)
+
+        # ---- Field restrictions ----
+
+        self.createPasswordField.setMaxLength(50)
+        self.confirmPasswordField.setMaxLength(50)
+
+        # ---- Closing buttons ----
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        mainLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        Ensure the password is valid and the passwords match
+        """
+        create_password_text = self.createPasswordField.text
+        confirm_password_text = self.confirmPasswordField.text
+
+        if not create_password_text or len(create_password_text) < 6:
+            slicer.util.errorDisplay("Password must be at least 6 characters.", parent=self)
+            return
+        if create_password_text != confirm_password_text:
+            slicer.util.errorDisplay("Passwords do not match.", parent=self)
+            return
+
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            password_text = self.createPasswordField.text
+            salt = bcrypt_lz().gensalt()
+            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+
+            user_dict = {
+                "id": self.user.id,
+                "password_hash": password_hash,
+                "roles": self.user.roles,
+                "name": self.user.name,
+                "description": self.user.description
+            }
+            return (returncode, user_dict)
+        return (returncode, None)
 #
 # OpenLIFULoginWidget
 #
@@ -519,7 +651,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.util.selectModule('OpenLIFUHome')
 
     @display_errors
-    def onCreateNewAccountClicked(self, checked:bool) -> None:
+    def onCreateNewAccountClicked(self, checked:bool = False) -> None:
         new_account_dlg = CreateNewAccountDialog(self.logic.dataLogic.db.load_all_users())
         returncode, user_dict = new_account_dlg.customexec_()
         if not returncode or user_dict is None:
