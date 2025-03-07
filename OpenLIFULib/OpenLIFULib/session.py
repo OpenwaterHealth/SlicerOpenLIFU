@@ -16,6 +16,7 @@ from OpenLIFULib.targets import (
 )
 from OpenLIFULib.transform_conversion import transform_node_to_openlifu
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
+from OpenLIFULib.transducer_tracking_results import get_transducer_tracking_results_in_openlifu_session_format
 
 if TYPE_CHECKING:
     import openlifu
@@ -191,6 +192,12 @@ class SlicerOpenLIFUSession:
 
         # Update virtual fit results
         self.session.session.virtual_fit_results = get_virtual_fit_results_in_openlifu_session_format(
+            session_id=self.get_session_id(),
+            units = transducer_openlifu.units,
+        )
+
+        #Update transducer tracking results
+        self.session.session.transducer_tracking_results = get_transducer_tracking_results_in_openlifu_session_format(
             session_id=self.get_session_id(),
             units = transducer_openlifu.units,
         )
