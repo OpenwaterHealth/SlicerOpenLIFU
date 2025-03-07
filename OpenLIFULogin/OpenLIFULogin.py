@@ -738,6 +738,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._cur_login_state = state
         self.updateLoginStateNotificationLabel()
         self.updateLoginLogoutButton()
+        self.updateAccountManagementButtons()
         self.enforceUserPermissions()
 
     def updateLoginStateNotificationLabel(self):
@@ -767,6 +768,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateUserAccountModeButton()
+        self.updateAccountManagementButtons()
         self.enforceUserPermissions()
 
     def enforceUserPermissions(self) -> None:
