@@ -20,6 +20,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/virtual_fit_results.py
   OpenLIFULib/transform_conversion.py
   OpenLIFULib/transducer_tracking_results.py
+  OpenLIFULib/skinseg.py
   OpenLIFULib/transducer_tracking_wizard_utils.py
 )
 

@@ -48,15 +48,14 @@ def linear_to_affine(matrix, translation=None):
         axis=0,
     )
 
-def get_RAS2IJK(volume_node: vtkMRMLScalarVolumeNode):
-    """Get the _world_ RAS to volume IJK affine matrix for a given volume node.
-
+def get_IJK2RAS(volume_node: vtkMRMLScalarVolumeNode):
+    """Get the trasnfrom from IJK to the _world_ RAS for a given volume node.
     This takes into account any transforms that the volume node may be subject to.
 
     Returns a numpy array of shape (4,4).
     """
     IJK_to_volumeRAS_vtk = vtk.vtkMatrix4x4()
-    volume_node.GetRASToIJKMatrix(IJK_to_volumeRAS_vtk)
+    volume_node.GetIJKToRASMatrix(IJK_to_volumeRAS_vtk)
     IJK_to_volumeRAS = slicer.util.arrayFromVTKMatrix(IJK_to_volumeRAS_vtk)
     if volume_node.GetParentTransformNode():
         volumeRAS_to_worldRAS_vtk = vtk.vtkMatrix4x4()
