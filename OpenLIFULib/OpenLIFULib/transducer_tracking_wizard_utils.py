@@ -23,26 +23,28 @@ def create_dialog_with_viewnode(dialog_title : str, view_node: vtkMRMLViewNode, 
 
     return dialog 
 
-def create_threeD_photoscan_view_node(layout_name = "PhotoscanCoordinates"):
+def create_threeD_photoscan_view_node(photoscan_id: str):
     """Creates view node for displaying the photoscan model. Before transducer tracking registration,
      a subject's photoscan lives in a different coordinate space than their volume. Therefore we need to create
-    a separate view node for visualizing the photoscan before registration"""
+    a separate view node for visualizing the photoscan before registration
+    
+    Args: photoscan_id This is used to set the name of the view node"""
     
     # Layout name is used to create and identify the underlying view node 
-    layoutName = layout_name
+    layoutName = f"PhotoscanCoordinates-{photoscan_id}"
     layoutLabel = "Photoscan Co-ordinate Space"
     layoutColor = [0.97, 0.54, 0.12] # Orange background
     # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
     viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
 
-    viewNode = slicer.util.getFirstNodeByClassByName('vtkMRMLViewNode',f'view{layout_name}')
+    viewNode = slicer.util.getFirstNodeByClassByName('vtkMRMLViewNode',f'view-{photoscan_id}')
     if not viewNode:
         viewLogic = slicer.vtkMRMLViewLogic()
         viewLogic.SetMRMLScene(slicer.mrmlScene)
         viewNode = viewLogic.AddViewNode(layoutName)
-        viewNode.SetName(f'view{layout_name}')
         viewNode.SetLayoutLabel(layoutLabel)
         viewNode.SetLayoutColor(layoutColor)
+        viewNode.SetName(f'view-{photoscan_id}')
         viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
 
     # Customize view node. 

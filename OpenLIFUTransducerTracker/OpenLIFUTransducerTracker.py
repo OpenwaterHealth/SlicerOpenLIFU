@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, TYPE_CHECKING, List
+from typing import Optional, Tuple, TYPE_CHECKING, List, Dict
 import numpy as np
 import vtk
 import qt
@@ -11,7 +11,8 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import (
     vtkMRMLModelNode,
     vtkMRMLTransformNode,
-    vtkMRMLScalarVolumeNode
+    vtkMRMLScalarVolumeNode,
+    vtkMRMLViewNode,
     )
 
 from OpenLIFULib.util import replace_widget
@@ -160,7 +161,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self.photoscanViewNode = None
+        self.photoscanViewNode : Dict[str, vtkMRMLViewNode] = {}
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -322,27 +323,30 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
         loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
-
         self.DisplayPhotoscanPreviewDialog(loaded_slicer_photoscan)
 
     def DisplayPhotoscanPreviewDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
         """ Creates and displays a pop-up, blocking dialog for previewing a SlicerOpenLIFUPhotoscan object.
         This dialog is used for approving/revoking approval of the photoscan"""
 
+        photoscan_id = photoscan.photoscan.photoscan.id
         # Create a viewNode for displaying the photoscan if it hasn't been created
-        if not self.photoscanViewNode:
-            self.photoscanViewNode = create_threeD_photoscan_view_node()
+        if photoscan_id not in self.photoscanViewNode:
+            view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
+            self.photoscanViewNode[photoscan_id] = view_node
             reset_camera_view = True
-            # TODO: We also need to reset the camera view if a different photoscan is being
-            # displayed compared to what was beng displayed before
         else:
             reset_camera_view = False
 
-        dialog = create_dialog_with_viewnode(dialog_title = "Photoscan Preview", view_node = self.photoscanViewNode, ui_path = self.resourcePath("UI/PhotoscanPreview.ui"))
+        dialog = create_dialog_with_viewnode(
+            dialog_title = "Photoscan Preview",
+            view_node = self.photoscanViewNode[photoscan_id],
+            ui_path = self.resourcePath("UI/PhotoscanPreview.ui")
+            )
         self.photoscanPreviewDialogUI = slicer.util.childWidgetVariables(dialog)
         
         # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
-        display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode, reset_camera_view = reset_camera_view)
+        display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode[photoscan_id], reset_camera_view = reset_camera_view)
 
         # Specify photoscan preview specific controls
         self.photoscanPreviewDialogUI.dialogControls.setCurrentIndex(0)
@@ -435,18 +439,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         semi-automated transducer tracking. This guided takes the user through a guided workflow
         for performing transducer tracking. """
 
-         # Create a viewNode for displaying the photoscan if it hasn't been created
-        if not self.photoscanViewNode:
-            self.photoscanViewNode = create_threeD_photoscan_view_node()
+        photoscan_id = photoscan.photoscan.photoscan.id
+        # Create a viewNode for displaying the photoscan if it hasn't been created
+        if photoscan_id not in self.photoscanViewNode:
+            view_node = create_threeD_photoscan_view_node(photoscan_id)
+            self.photoscanViewNode[photoscan_id] = view_node
             reset_camera_view = True
         else:
             reset_camera_view = False
         
-        dialog = create_dialog_with_viewnode(dialog_title = "Transducer Tracking", view_node = self.photoscanViewNode, ui_path = self.resourcePath("UI/PhotoscanPreview.ui"))
+        dialog = create_dialog_with_viewnode(dialog_title = "Transducer Tracking", view_node = self.photoscanViewNode[photoscan_id], ui_path = self.resourcePath("UI/PhotoscanPreview.ui"))
         self.photoscanPreviewDialogUI = slicer.util.childWidgetVariables(dialog)
 
         # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
-        display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode, reset_camera_view = reset_camera_view)
+        display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode[photoscan_id], reset_camera_view = reset_camera_view)
 
         # Specify controls for adding markups to the dialog
         self.photoscanPreviewDialogUI.dialogControls.setCurrentIndex(1)
