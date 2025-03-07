@@ -150,12 +150,19 @@ class CreateNewAccountDialog(qt.QDialog):
         formLayout.setFormAlignment(qt.Qt.AlignTop)
         self.setLayout(formLayout)
 
+        # ---- User account fields ----
+
         self.idField = qt.QLineEdit()
-        formLayout.addRow(_("Username:"), self.idField)
+        usernameLabel = qt.QLabel(_('Username:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(usernameLabel, self.idField)
+        self.idHintLabel = qt.QLabel(_("(use letters, #s, and _)"))
+        self.idHintLabel.setStyleSheet("color: gray; font-size: small;")
+        formLayout.addRow("", self.idHintLabel)
 
         self.passwordField = qt.QLineEdit()
         self.passwordField.setEchoMode(qt.QLineEdit.Password)
-        formLayout.addRow(_("Password:"), self.passwordField)
+        passwordLabel = qt.QLabel(_('Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(passwordLabel, self.passwordField)
 
         self.nameField = qt.QLineEdit()
         formLayout.addRow(_("Name:"), self.nameField)
@@ -164,8 +171,17 @@ class CreateNewAccountDialog(qt.QDialog):
         formLayout.addRow(_("Description:"), self.descriptionField)
 
         self.roleField = qt.QComboBox()
-        self.roleField.addItems(["admin", "operator"])
+        self.roleField.addItems(["operator", "admin"])
         formLayout.addRow(_("Role:"), self.roleField)
+
+        # ---- Field restrictions ----
+
+        self.idField.setMaxLength(20)
+        self.passwordField.setMaxLength(50)
+        self.nameField.setMaxLength(50)
+        self.descriptionField.setMaxLength(100)
+
+        # ---- Closing buttons ----
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(
@@ -178,13 +194,28 @@ class CreateNewAccountDialog(qt.QDialog):
 
     def validateInputs(self):
         """
-        Ensure a user account does not exist with that ID
+        Ensure a user account does not exist with that ID and inputs are valid
         """
         user_id = self.idField.text
+        password_text = self.passwordField.text
+
+        if not user_id:
+            slicer.util.errorDisplay("Username cannot be empty.", parent=self)
+            return
+        if len(user_id) < 3:
+            slicer.util.errorDisplay("Username must be at least 3 characters.", parent=self)
+            return
+        if not all(c.isalnum() or c == '_' for c in user_id):
+            slicer.util.errorDisplay("Username can only contain letters, numbers, and underscores.", parent=self)
+            return
         if any(u.id == user_id for u in self.existing_users):
             slicer.util.errorDisplay("An account with that name already exists.", parent=self)
-        else:
-            self.accept()
+            return
+        if not password_text or len(password_text) < 6:
+            slicer.util.errorDisplay("Password must be at least 6 characters.", parent=self)
+            return
+
+        self.accept()
 
     def customexec_(self):
         returncode = self.exec_()
@@ -207,6 +238,7 @@ class CreateNewAccountDialog(qt.QDialog):
             }
             return (returncode, user_dict)
         return (returncode, None)
+
 #
 # OpenLIFULoginWidget
 #
