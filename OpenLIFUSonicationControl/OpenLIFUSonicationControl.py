@@ -369,8 +369,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             print("Exception thrown:", e)
             import traceback
             traceback.print_exc()
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND, self.logic.cur_lifu_interface.get_status())
             self.logic.cur_lifu_interface = None
-            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND)
             return
         
         self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
@@ -438,15 +438,20 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         else: # not running
             self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
 
-    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState):
+    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu.io.LIFUInterfaceStatus | None" = None):
         self._cur_solution_on_hardware_state = solution_state
         if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
             self.updateRunEnabled()
         elif solution_state == SolutionOnHardwareState.FAILED_SEND:
-            # TODO: In the event of a failed send, you should add the printout
-            self.ui.solutionStateLabel.setProperty("text", "Send to device failed!")
+            # If we have information from the hardware, display that too.
+            if hardware_state is not None:
+                text = f"Send to device failed! (Hardware status: {hardware_state.name})"
+            else:
+                text = "Send to device failed!"
+
+            self.ui.solutionStateLabel.setProperty("text", text)
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
             self.updateRunEnabled()
         elif solution_state == SolutionOnHardwareState.NOT_SENT:
