@@ -399,17 +399,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             else:
                 self.ui.runProgressBar.value = 100
 
-    def updateWidgetSolutionHardwareState(self, state: SolutionHardwareState):
-        self._cur_solution_hardware_state = state
-        if state == SolutionHardwareState.SUCCESSFUL_SEND:
+    def updateWidgetSolutionHardwareState(self, solution_state: SolutionHardwareState):
+        if solution_state == SolutionHardwareState.SUCCESSFUL_SEND:
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
             self.updateRunEnabled()
-        elif state == SolutionHardwareState.FAILED_SEND:
+        elif solution_state == SolutionHardwareState.FAILED_SEND:
+            # TODO: In the event of a failed send, you should add the printout
             self.ui.solutionStateLabel.setProperty("text", "Send to device failed!")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
             self.updateRunEnabled()
-        elif state == SolutionHardwareState.NOT_SENT:
+        elif solution_state == SolutionHardwareState.NOT_SENT:
             self.ui.solutionStateLabel.setProperty("text", "")  
             self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
             self.updateRunEnabled()
