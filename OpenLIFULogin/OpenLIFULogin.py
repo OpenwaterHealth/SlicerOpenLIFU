@@ -239,6 +239,81 @@ class CreateNewAccountDialog(qt.QDialog):
             return (returncode, user_dict)
         return (returncode, None)
 
+class ManageAccountsDialog(qt.QDialog):
+    """ Interface for managing user accounts """
+
+    def __init__(self, db : "openlifu.db.Database", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """ Args:
+                existing_users: openlifu.db.User objects
+        """
+
+        self.setWindowTitle("Select a user account to manage")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(600, 400)
+
+        self.db = db # Needed for all database interaction
+
+        self.selected_user_id : str = None
+        self.setup()
+
+    def setup(self):
+
+        self.boxLayout = qt.QVBoxLayout()
+        self.setLayout(self.boxLayout)
+
+        cols = ["ID", "Name", "Roles", "Description"]
+        self.tableWidget = qt.QTableWidget(self)
+        self.tableWidget.setColumnCount(len(cols))
+        self.tableWidget.setHorizontalHeaderLabels(cols)
+        self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.tableWidget.horizontalHeader().setSectionResizeMode(qt.QHeaderView.Stretch) # style
+        self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding) # style
+        self.tableWidget.verticalHeader().setDefaultSectionSize(24) # style
+
+        self.boxLayout.addWidget(self.tableWidget)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
+        )
+        self.boxLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+
+        self.updateUsersList()
+
+    def updateUsersList(self):
+        users = self.db.load_all_users()
+
+        # Reset the table
+        self.tableWidget.clearContents()
+        self.tableWidget.setRowCount(0)
+
+        # Reload the table
+        self.tableWidget.setRowCount(len(users))
+        for row, user in enumerate(users):
+            self.tableWidget.setItem(row, 0, qt.QTableWidgetItem(user.id))
+            self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(user.name))
+            self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(", ".join(user.roles)))
+            self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(user.description))
+
+    def onCreateNewUserClicked(self):
+        return
+
+    def onDeleteUserClicked(self):
+        selected_idx = self.tableWidget.currentRow
+        if selected_idx >= 0:
+            # TODO: we need to do this differently
+            #_, self.selected_user_id = self.user_names_and_IDs[selected_idx]
+            return
+        return
+
+    def onResetPasswordClicked(self):
+        return
+
 #
 # OpenLIFULoginWidget
 #
@@ -299,6 +374,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Account management
         
         self.ui.createNewAccountButton.clicked.connect(self.onCreateNewAccountClicked)
+        self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
         # ====================================
         
@@ -427,6 +503,11 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return
 
         self.logic.add_user_to_database(user_dict)
+
+    @display_errors
+    def onManageAccountsButtonclicked(self, checked:bool) -> None:
+        new_account_dlg = ManageAccountsDialog(self.logic.dataLogic.db)
+        new_account_dlg.exec_()
 
     def updateLoginLogoutButtonAsLoginButton(self):
 
