@@ -171,6 +171,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._cur_solution_hardware_state = SolutionHardwareState.NOT_SENT
+        self._cur_solution_id: str | None = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
@@ -225,7 +226,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        # Update module from data parameter node
+        # After setup, update the module state from the data parameter node
         self.onDataParameterNodeModified()
 
     def cleanup(self) -> None:
@@ -282,6 +283,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateRunProgressBar()
+        if (solution_parameter_pack := get_openlifu_data_parameter_node().loaded_solution) is None:
+            self._cur_solution_id = None
+            self.updateWidgetSolutionHardwareState(SolutionHardwareState.NOT_SENT)
+        elif solution_parameter_pack.solution.solution.id != self._cur_solution_id:
+            self._cur_solution_id = solution_parameter_pack.solution.solution.id
+            self.updateWidgetSolutionHardwareState(SolutionHardwareState.NOT_SENT)
 
     def updateSendSonicationSolutionToDevicePushButtonEnabled(self):
         solution = get_openlifu_data_parameter_node().loaded_solution
