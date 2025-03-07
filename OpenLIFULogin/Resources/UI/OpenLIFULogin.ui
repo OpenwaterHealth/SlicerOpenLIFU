@@ -10,7 +10,7 @@
     <height>347</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+  <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
     <widget class="QPushButton" name="userAccountModePushButton">
      <property name="text">
@@ -52,22 +52,45 @@
     </spacer>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="manageAccountButtonsLayout">
-     <item>
-      <widget class="QPushButton" name="createNewAccountButton">
-       <property name="text">
-        <string>Create New Account</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="manageAccountsButton">
-       <property name="text">
-        <string>Manage Accounts</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+    <widget class="QWidget" name="permissionsWidget1" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+      </stringlist>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <layout class="QHBoxLayout" name="manageAccountButtonsLayout">
+        <item>
+         <widget class="QPushButton" name="createNewAccountButton">
+          <property name="text">
+           <string>Create New Account</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="manageAccountsButton">
+          <property name="text">
+           <string>Manage Accounts</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>
