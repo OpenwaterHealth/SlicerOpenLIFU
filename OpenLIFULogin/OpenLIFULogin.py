@@ -1,4 +1,4 @@
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING
 import json
 from enum import Enum
 
@@ -127,13 +127,86 @@ class UsernamePasswordDialog(qt.QDialog):
         if returncode == qt.QDialog.Accepted:
             id = self.username.text
             password_text = self.password.text
-            # TODO: We should hash passwords with bcrypt.hashpw() and the gensalt, but then use checkpw against the stored hash
-            # TODO: This will be implemented with the ability to create new passwords, issue #173
-            # salt = bcrypt_lz().gensalt()
-            # password_hash = bcrypt_lz().hashpw(password_text, salt).decode('utf-8')  # convert bytestring back to string
             return (returncode, id, password_text)
         return (returncode, None, None)
 
+class CreateNewAccountDialog(qt.QDialog):
+    """ Create a new account dialog """
+
+    def __init__(self, existing_users: List["openlifu.db.User"], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Create an account")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.existing_users = existing_users
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+        self.setContentsMargins(15, 15, 15, 15)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(10)
+        formLayout.setFormAlignment(qt.Qt.AlignTop)
+        self.setLayout(formLayout)
+
+        self.idField = qt.QLineEdit()
+        formLayout.addRow(_("Username:"), self.idField)
+
+        self.passwordField = qt.QLineEdit()
+        self.passwordField.setEchoMode(qt.QLineEdit.Password)
+        formLayout.addRow(_("Password:"), self.passwordField)
+
+        self.nameField = qt.QLineEdit()
+        formLayout.addRow(_("Name:"), self.nameField)
+
+        self.descriptionField = qt.QLineEdit()
+        formLayout.addRow(_("Description:"), self.descriptionField)
+
+        self.roleField = qt.QComboBox()
+        self.roleField.addItems(["admin", "operator"])
+        formLayout.addRow(_("Role:"), self.roleField)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        Ensure a user account does not exist with that ID
+        """
+        user_id = self.idField.text
+        if any(u.id == user_id for u in self.existing_users):
+            slicer.util.errorDisplay("An account with that name already exists.", parent=self)
+        else:
+            self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            user_id = self.idField.text
+            password_text = self.passwordField.text
+            name = self.nameField.text
+            description = self.descriptionField.text
+            role = self.roleField.currentText
+
+            salt = bcrypt_lz().gensalt()
+            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+
+            user_dict = {
+                "id": user_id,
+                "password_hash": password_hash,
+                "roles": [role],
+                "name": name,
+                "description": description
+            }
+            return (returncode, user_dict)
+        return (returncode, None)
 #
 # OpenLIFULoginWidget
 #
@@ -186,10 +259,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
-        # Connect the buttons
+        # Login
 
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
         self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
+
+        # Account management
+        
+        self.ui.createNewAccountButton.clicked.connect(self.onCreateNewAccountClicked)
 
         # ====================================
         
@@ -306,6 +383,15 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.logic.active_user = SlicerOpenLIFUUser(matched_user)
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
             slicer.util.selectModule('OpenLIFUHome')
+
+    @display_errors
+    def onCreateNewAccountClicked(self, checked:bool) -> None:
+        new_account_dlg = CreateNewAccountDialog(self.logic.dataLogic.db.load_all_users())
+        returncode, user_dict = new_account_dlg.customexec_()
+        if not returncode or user_dict is None:
+            return
+
+        self.logic.add_user_to_database(user_dict)
 
     def updateLoginLogoutButtonAsLoginButton(self):
 
@@ -449,3 +535,19 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
+
+    def add_user_to_database(self, user_parameters: Dict[str, str]) -> None:
+        """ Add user to selected subject/session in the loaded openlifu database
+        Args:
+            user_parameters: Dictionary containing the required parameters for adding a user to database
+        """
+        user_ids = self.dataLogic.db.get_user_ids()
+        if user_parameters['id'] in user_ids:
+            if not slicer.util.confirmYesNoDisplay(
+                f"user ID {user_parameters['id']} already exists in the database. Overwrite user?",
+                "user already exists"
+            ):
+                return
+
+        newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
+        self.dataLogic.db.write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
