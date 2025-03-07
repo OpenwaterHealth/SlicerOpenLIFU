@@ -28,7 +28,7 @@ from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_result,
     get_photoscan_id_from_transducer_tracking_result,
     set_transducer_tracking_approval_for_node,
-    get_approved_photoscan_ids
+    get_photoscan_ids_with_results,
 )
 
 from OpenLIFULib.transducer_tracking_wizard_utils import (
@@ -645,7 +645,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
-        approved_photoscan_ids = get_approved_photoscan_ids(session_id=session_id)
+        approved_photoscan_ids = get_photoscan_ids_with_results(session_id=session_id, approved_only = True)
         return approved_photoscan_ids
     
     def load_openlifu_photoscan(self, photoscan: "openlifu.Photoscan") -> SlicerOpenLIFUPhotoscan:
