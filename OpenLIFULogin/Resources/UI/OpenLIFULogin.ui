@@ -72,7 +72,7 @@
        <number>0</number>
       </property>
       <item>
-       <layout class="QHBoxLayout" name="manageAccountButtonsLayout">
+       <layout class="QHBoxLayout" name="accountManagementButtonsLayout">
         <item>
          <widget class="QPushButton" name="createNewAccountButton">
           <property name="text">
