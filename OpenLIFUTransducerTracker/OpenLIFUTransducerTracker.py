@@ -326,12 +326,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.DisplayPhotoscanPreviewDialog(loaded_slicer_photoscan)
 
     def DisplayPhotoscanPreviewDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
-        """ Creates and displays a pop-up, blocking dialog for previewing a SlicerOpenLIFUPhotoscan object"""
+        """ Creates and displays a pop-up, blocking dialog for previewing a SlicerOpenLIFUPhotoscan object.
+        This dialog is used for approving/revoking approval of the photoscan"""
 
         # Create a viewNode for displaying the photoscan if it hasn't been created
         if not self.photoscanViewNode:
             self.photoscanViewNode = create_threeD_photoscan_view_node()
             reset_camera_view = True
+            # TODO: We also need to reset the camera view if a different photoscan is being
+            # displayed compared to what was beng displayed before
         else:
             reset_camera_view = False
 
@@ -341,7 +344,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
         display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode, reset_camera_view = reset_camera_view)
 
-        # Approve button 
+        # Specify photoscan preview specific controls
         self.photoscanPreviewDialogUI.dialogControls.setCurrentIndex(0)
         self.updatePhotoscanApproveButton(photoscan.is_approved())
         self.updatePhotoscanApprovalStatusLabel(photoscan.is_approved())
@@ -427,8 +430,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runTrackingButton.enabled = False
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
 
-    def DisplayPhotoscanMarkupDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
-        """ Creates and displays a pop-up, blocking dialog for previewing a SlicerOpenLIFUPhotoscan object"""
+    def DisplayTransducerTrackingWizardDialog(self,photoscan: SlicerOpenLIFUPhotoscan):
+        """ Creates and displays a pop-up, blocking dialog for performing 
+        semi-automated transducer tracking. This guided takes the user through a guided workflow
+        for performing transducer tracking. """
 
          # Create a viewNode for displaying the photoscan if it hasn't been created
         if not self.photoscanViewNode:
@@ -443,7 +448,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
         display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode, reset_camera_view = reset_camera_view)
 
-        # Initial controls dialog - photoscan markups dialog
+        # Specify controls for adding markups to the dialog
         self.photoscanPreviewDialogUI.dialogControls.setCurrentIndex(1)
         if photoscan.tracking_fiducial_node:
             self.photoscanPreviewDialogUI.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
@@ -456,23 +461,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updatePhotoscanApprovalStatusLabel(photoscan.is_approved())
 
         def onPlaceLandmarksClicked():
-            
             markupsWidget = self.photoscanPreviewDialogUI.photoscanMarkupsWidget
             if self.photoscanPreviewDialogUI.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
                 if photoscan.tracking_fiducial_node is None:
-                    photoscan.create_tracking_fiducial_node()
-                    # remember to write the updated photoscan into the parameter node
-                    get_openlifu_data_parameter_node().loaded_photoscans[photoscan.photoscan.photoscan.id] = photoscan 
+                    tracking_fiducial_node = self.logic.initialize_photoscan_tracking_fiducials(photoscan)
                     markupsWidget.setMRMLScene(slicer.mrmlScene)
-                    markupsWidget.setCurrentNode(photoscan.tracking_fiducial_node)
+                    markupsWidget.setCurrentNode(tracking_fiducial_node)
                     self.photoscanPreviewDialogUI.photoscanMarkupsWidget.show()
                     self.photoscanPreviewDialogUI.photoscanMarkupsWidget.enabled = False
                 
-                photoscan.tracking_fiducial_node.SetLocked(False)
+                tracking_fiducial_node.SetLocked(False)
                 self.photoscanPreviewDialogUI.placeLandmarksButton.setText("Done Placing Landmarks")
             
             elif self.photoscanPreviewDialogUI.placeLandmarksButton.text == "Done Placing Landmarks":
-                photoscan.tracking_fiducial_node.SetLocked(True)
+                tracking_fiducial_node.SetLocked(True)
                 self.photoscanPreviewDialogUI.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
 
         def onDialogFinished():
@@ -501,7 +503,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         selected_photoscan_openlifu = activeData["Photoscan"]
         loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
-        self.DisplayPhotoscanMarkupDialog(loaded_slicer_photoscan)
+        self.DisplayTransducerTrackingWizardDialog(loaded_slicer_photoscan)
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
@@ -661,8 +663,17 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         return loaded_slicer_photoscan
     
-    def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtk.vtkPolyData:
+    def initialize_photoscan_tracking_fiducials(self, photoscan: SlicerOpenLIFUPhotoscan):
+        """This is a placeholder function for calling the algorithm for detecting
+        initial registration landmarks positions on the photoscan surface. For now, 
+        the landmarks are initialized at the origin by default.
+        """
+        fiducial_node = photoscan.create_tracking_fiducial_node()
+        # remember to write the updated photoscan into the parameter node
+        get_openlifu_data_parameter_node().loaded_photoscans[photoscan.photoscan.photoscan.id] = photoscan 
 
+        return fiducial_node
+        
+    def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
         skin_mesh = generate_skin_mesh(volume)
-
         return skin_mesh
