@@ -1,4 +1,4 @@
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING
 import json
 from enum import Enum
 
@@ -24,6 +24,7 @@ from OpenLIFULib import (
     bcrypt_lz,
     SlicerOpenLIFUUser,
     get_openlifu_data_parameter_node,
+    get_current_user,
 )
 
 from OpenLIFULib.util import (
@@ -34,29 +35,9 @@ if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
 
-all_modules = [
-            "OpenLIFUData",
-            "OpenLIFUHome",
-            "OpenLIFUPrePlanning",
-            "OpenLIFUProtocolConfig",
-            "OpenLIFUSonicationControl",
-            "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerTracker",
-        ]
-
 #
 # OpenLIFULogin
 #
-
-all_openlifu_modules = [
-            "OpenLIFUData",
-            "OpenLIFUHome",
-            "OpenLIFUPrePlanning",
-            "OpenLIFUProtocolConfig",
-            "OpenLIFUSonicationControl",
-            "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerTracker",
-        ]
 
 class OpenLIFULogin(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -67,7 +48,15 @@ class OpenLIFULogin(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Login")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = all_openlifu_modules  # add here list of module names that this module requires
+        self.parent.dependencies = [
+            "OpenLIFUData",
+            "OpenLIFUHome",
+            "OpenLIFUPrePlanning",
+            "OpenLIFUProtocolConfig",
+            "OpenLIFUSonicationControl",
+            "OpenLIFUSonicationPlanner",
+            "OpenLIFUTransducerTracker",
+        ]  # add here list of module names that this module requires
         self.parent.contributors = ["Andrew Howe (Kitware), Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -113,9 +102,11 @@ class UsernamePasswordDialog(qt.QDialog):
 
     def setup(self):
 
-        self.setMinimumWidth(200)
+        self.setMinimumWidth(300)
+        self.setContentsMargins(15, 15, 15, 15)
 
         formLayout = qt.QFormLayout()
+        formLayout.setSpacing(10)
         self.setLayout(formLayout)
 
         self.username = qt.QLineEdit()
@@ -139,13 +130,375 @@ class UsernamePasswordDialog(qt.QDialog):
         if returncode == qt.QDialog.Accepted:
             id = self.username.text
             password_text = self.password.text
-            # TODO: We should hash passwords with bcrypt.hashpw() and the gensalt, but then use checkpw against the stored hash
-            # TODO: This will be implemented with the ability to create new passwords, issue #173
-            # salt = bcrypt_lz().gensalt()
-            # password_hash = bcrypt_lz().hashpw(password_text, salt).decode('utf-8')  # convert bytestring back to string
             return (returncode, id, password_text)
         return (returncode, None, None)
 
+class CreateNewAccountDialog(qt.QDialog):
+    """ Create a new account dialog """
+
+    def __init__(self, existing_users: List["openlifu.db.User"], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Create an account")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.existing_users = existing_users
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+        self.setContentsMargins(15, 15, 15, 15)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(10)
+        formLayout.setFormAlignment(qt.Qt.AlignTop)
+        self.setLayout(formLayout)
+
+        # ---- User account fields ----
+
+        self.idField = qt.QLineEdit()
+        usernameLabel = qt.QLabel(_('Username:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(usernameLabel, self.idField)
+        self.idHintLabel = qt.QLabel(_("(use letters, #s, and _)"))
+        self.idHintLabel.setStyleSheet("color: gray; font-size: small;")
+        formLayout.addRow("", self.idHintLabel)
+
+        self.passwordField = qt.QLineEdit()
+        self.passwordField.setEchoMode(qt.QLineEdit.Password)
+        passwordLabel = qt.QLabel(_('Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(passwordLabel, self.passwordField)
+
+        self.nameField = qt.QLineEdit()
+        formLayout.addRow(_("Name:"), self.nameField)
+
+        self.descriptionField = qt.QLineEdit()
+        formLayout.addRow(_("Description:"), self.descriptionField)
+
+        self.roleField = qt.QComboBox()
+        self.roleField.addItems(["operator", "admin"])
+        formLayout.addRow(_("Role:"), self.roleField)
+
+        # ---- Field restrictions ----
+
+        self.idField.setMaxLength(20)
+        self.passwordField.setMaxLength(50)
+        self.nameField.setMaxLength(50)
+        self.descriptionField.setMaxLength(100)
+
+        # ---- Closing buttons ----
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        Ensure a user account does not exist with that ID and inputs are valid
+        """
+        user_id = self.idField.text
+        password_text = self.passwordField.text
+
+        if not user_id:
+            slicer.util.errorDisplay("Username cannot be empty.", parent=self)
+            return
+        if len(user_id) < 3:
+            slicer.util.errorDisplay("Username must be at least 3 characters.", parent=self)
+            return
+        if not all(c.isalnum() or c == '_' for c in user_id):
+            slicer.util.errorDisplay("Username can only contain letters, numbers, and underscores.", parent=self)
+            return
+        if any(u.id == user_id for u in self.existing_users):
+            slicer.util.errorDisplay("An account with that name already exists.", parent=self)
+            return
+        if not password_text or len(password_text) < 6:
+            slicer.util.errorDisplay("Password must be at least 6 characters.", parent=self)
+            return
+
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            user_id = self.idField.text
+            password_text = self.passwordField.text
+            name = self.nameField.text
+            description = self.descriptionField.text
+            role = self.roleField.currentText
+
+            salt = bcrypt_lz().gensalt()
+            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+
+            user_dict = {
+                "id": user_id,
+                "password_hash": password_hash,
+                "roles": [role],
+                "name": name,
+                "description": description
+            }
+            return (returncode, user_dict)
+        return (returncode, None)
+
+class ManageAccountsDialog(qt.QDialog):
+    """ Interface for managing user accounts """
+
+    def __init__(self, db : "openlifu.db.Database", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        """ Args:
+                existing_users: openlifu.db.User objects
+        """
+
+        self.setWindowTitle("Select a user account to manage")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(600, 400)
+
+        self.db = db # Needed for all database interaction
+
+        self.selected_user_id : str = None
+        self.setup()
+
+    def setup(self):
+
+        self.boxLayout = qt.QVBoxLayout()
+        self.setLayout(self.boxLayout)
+        self.setMinimumSize(600, 400)
+        self.setMaximumSize(1000, 700)
+
+        # ---- Users table ----
+
+        cols = ["ID", "Name", "Roles", "Description"]
+        self.tableWidget = qt.QTableWidget(self)
+        self.tableWidget.setColumnCount(len(cols))
+        self.tableWidget.setHorizontalHeaderLabels(cols)
+        self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.tableWidget.setAlternatingRowColors(True)  # style
+        self.tableWidget.setWordWrap(True) # style
+        self.tableWidget.setShowGrid(True)  # style
+        self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)  # style
+        self.tableWidget.verticalHeader().setDefaultSectionSize(24)  # style
+
+        header = self.tableWidget.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)  # ID
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)  # Name
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)  # Roles
+        header.setSectionResizeMode(3, qt.QHeaderView.Stretch)           # Description
+
+        self.boxLayout.addWidget(self.tableWidget)
+
+        # ---- User management buttons ----
+
+        buttonsLayout = qt.QHBoxLayout()
+
+        self.createUserButton = qt.QPushButton("Create New User")
+        self.deleteUserButton = qt.QPushButton("Delete User")
+        self.changePasswordButton = qt.QPushButton("Change User Password")
+
+        for button in [self.createUserButton, self.deleteUserButton, self.changePasswordButton]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            buttonsLayout.addWidget(button)
+
+        self.boxLayout.addLayout(buttonsLayout)
+
+        self.createUserButton.clicked.connect(self.onCreateNewUserClicked)
+        self.deleteUserButton.clicked.connect(self.onDeleteUserClicked)
+        self.changePasswordButton.clicked.connect(self.onChangePasswordClicked)
+
+        # ---- Ok button ----
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok,
+        )
+        self.boxLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.accepted.connect(self.accept)
+
+        # ----
+
+        self.updateUsersList()
+
+    def updateUsersList(self):
+        users = self.db.load_all_users()
+
+        # Reset the table
+        self.tableWidget.clearContents()
+        self.tableWidget.setRowCount(0)
+
+        # Reload the table
+        self.tableWidget.setRowCount(len(users))
+        for row, user in enumerate(users):
+            self.tableWidget.setItem(row, 0, qt.QTableWidgetItem(user.id))
+            self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(user.name))
+            self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(", ".join(user.roles)))
+            self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(user.description))
+
+        for row in range(self.tableWidget.rowCount):
+            self.tableWidget.setRowHeight(row, 48) # help wrap
+
+    def onCreateNewUserClicked(self):
+        slicer.util.getModuleWidget("OpenLIFULogin").onCreateNewAccountClicked()
+        self.updateUsersList()
+
+    def onDeleteUserClicked(self):
+
+        # Get item and delete user
+
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a user to delete.")
+            return
+
+        selected_row = selected_items[0].row()
+        user_id = self.tableWidget.item(selected_row, 0).text()
+
+        if get_current_user().id == user_id:
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"You are currently logged into the user {user_id}. Deleting this user will log you out. Are you sure you want to delete?",
+                windowTitle="User Delete Confirmation",
+            ):
+                return
+            self.db.delete_user(user_id)
+            slicer.util.getModuleWidget("OpenLIFULogin").onLoginLogoutClicked()
+            self.accept()
+        else:
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"Are you sure you want to delete the user with id '{user_id}'?",
+                windowTitle="User Delete Confirmation",
+            ):
+                return
+
+            self.db.delete_user(user_id)
+
+            # Update GUI
+
+            self.updateUsersList()
+
+        slicer.util.infoDisplay(f"User deleted: \'{user_id}\'")
+
+    def onChangePasswordClicked(self):
+
+        # Get item and change user password
+
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a user to change password.")
+            return
+
+        selected_row = selected_items[0].row()
+        user_id = self.tableWidget.item(selected_row, 0).text()
+        user = self.db.load_user(user_id)
+
+        change_password_dlg = ChangePasswordDialog(user)
+        returncode, user_dict = change_password_dlg.customexec_()
+        if not returncode or user_dict is None:
+            return
+
+        modifiedUser = openlifu_lz().db.User.from_dict(user_dict)
+        self.db.write_user(modifiedUser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+
+        # Update GUI
+
+        self.updateUsersList()
+        slicer.util.infoDisplay(f"Password changed for: \'{user_id}\'")
+
+class ChangePasswordDialog(qt.QDialog):
+    """ Change password dialog """
+
+    def __init__(self, user: "openlifu.db.User", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Change password")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.user = user
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+        self.setContentsMargins(20, 20, 20, 20)
+
+        mainLayout = qt.QVBoxLayout()
+        mainLayout.setSpacing(15)
+        self.setLayout(mainLayout)
+
+        self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
+        self.infoLabel.setWordWrap(True)
+        self.infoLabel.setStyleSheet("""
+            font-size: 14pt;
+            font-weight: bold;
+            padding: 5px 0;
+        """)
+        self.infoLabel.setWordWrap(True)
+        mainLayout.addWidget(self.infoLabel)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(12)
+        formLayout.setFormAlignment(qt.Qt.AlignTop)
+        mainLayout.addLayout(formLayout)
+
+        # ---- Password fields ----
+
+        self.createPasswordField = qt.QLineEdit()
+        self.createPasswordField.setEchoMode(qt.QLineEdit.Password)
+        createPasswordLabel = qt.QLabel(_('Create Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(createPasswordLabel, self.createPasswordField)
+
+        self.confirmPasswordField = qt.QLineEdit()
+        self.confirmPasswordField.setEchoMode(qt.QLineEdit.Password)
+        confirmPasswordLabel = qt.QLabel(_('Confirm Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(confirmPasswordLabel, self.confirmPasswordField)
+
+        # ---- Field restrictions ----
+
+        self.createPasswordField.setMaxLength(50)
+        self.confirmPasswordField.setMaxLength(50)
+
+        # ---- Closing buttons ----
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        mainLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        Ensure the password is valid and the passwords match
+        """
+        create_password_text = self.createPasswordField.text
+        confirm_password_text = self.confirmPasswordField.text
+
+        if not create_password_text or len(create_password_text) < 6:
+            slicer.util.errorDisplay("Password must be at least 6 characters.", parent=self)
+            return
+        if create_password_text != confirm_password_text:
+            slicer.util.errorDisplay("Passwords do not match.", parent=self)
+            return
+
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            password_text = self.createPasswordField.text
+            salt = bcrypt_lz().gensalt()
+            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+
+            user_dict = {
+                "id": self.user.id,
+                "password_hash": password_hash,
+                "roles": self.user.roles,
+                "name": self.user.name,
+                "description": self.user.description
+            }
+            return (returncode, user_dict)
+        return (returncode, None)
 #
 # OpenLIFULoginWidget
 #
@@ -198,21 +551,28 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
-        # Connect the buttons
+        # Login
 
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
         self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
+
+        # Account management
+        
+        self.ui.createNewAccountButton.clicked.connect(self.onCreateNewAccountClicked)
+        self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
         # ====================================
         
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        self.updateUserAccountModeButton()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.logic.active_user = self._default_anonymous_user
 
         self.cacheAllPermissionswidgets()
+
+        # Call the routine to update from data parameter node
+        self.onDataParameterNodeModified()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -244,6 +604,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onDataParameterNodeModified(self, caller = None, event = None):
         self.updateLoginLogoutButton()
+        self.updateAccountManagementButtons()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -253,10 +614,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.setParameterNode(self.logic.getParameterNode())
 
     def cacheAllPermissionswidgets(self) -> None:
+        all_openlifu_modules = [
+            "OpenLIFUData",
+            "OpenLIFUHome",
+            "OpenLIFUPrePlanning",
+            "OpenLIFUProtocolConfig",
+            "OpenLIFUSonicationControl",
+            "OpenLIFUSonicationPlanner",
+            "OpenLIFUTransducerTracker",
+            ]
         for moduleName in all_openlifu_modules:
             module = slicer.util.getModule(moduleName)
             widgetRepresentation = module.widgetRepresentation()
             self._permissions_widgets.extend(slicer.util.findChildren(widgetRepresentation, name="permissionsWidget*"))
+
+        self._permissions_widgets.extend([self.ui.permissionsWidget1])
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFULoginParameterNode]) -> None:
         """
@@ -284,7 +656,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     @display_errors
-    def onLoginLogoutClicked(self, checked: bool) -> None:
+    def onLoginLogoutClicked(self, checked: bool = False) -> None:
         if self.ui.loginLogoutButton.text == "Logout":
             self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
@@ -307,6 +679,20 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.logic.active_user = SlicerOpenLIFUUser(matched_user)
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
             slicer.util.selectModule('OpenLIFUHome')
+
+    @display_errors
+    def onCreateNewAccountClicked(self, checked:bool = False) -> None:
+        new_account_dlg = CreateNewAccountDialog(self.logic.dataLogic.db.load_all_users())
+        returncode, user_dict = new_account_dlg.customexec_()
+        if not returncode or user_dict is None:
+            return
+
+        self.logic.add_user_to_database(user_dict)
+
+    @display_errors
+    def onManageAccountsButtonclicked(self, checked:bool) -> None:
+        new_account_dlg = ManageAccountsDialog(self.logic.dataLogic.db)
+        new_account_dlg.exec_()
 
     def updateLoginLogoutButtonAsLoginButton(self):
 
@@ -362,10 +748,27 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         elif self.ui.loginLogoutButton.text == "Login":
             self.updateLoginLogoutButtonAsLoginButton()
 
+    def updateAccountManagementButtons(self):
+        # You only need a database loaded to be able to do this. User account
+        # mode can be off. If user account mode is on, only admins can interact
+        # with the button.
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            self.ui.createNewAccountButton.setEnabled(False)
+            self.ui.createNewAccountButton.setToolTip("The login feature requires a database connection.")
+            self.ui.manageAccountsButton.setEnabled(False)
+            self.ui.manageAccountsButton.setToolTip("The login feature requires a database connection.")
+            return
+        self.ui.createNewAccountButton.setEnabled(True)
+        self.ui.createNewAccountButton.setToolTip("Create a new account")
+        self.ui.manageAccountsButton.setEnabled(True)
+        self.ui.manageAccountsButton.setToolTip("Manage accounts")
+
+
     def updateWidgetLoginState(self, state: LoginState):
         self._cur_login_state = state
         self.updateLoginStateNotificationLabel()
         self.updateLoginLogoutButton()
+        self.updateAccountManagementButtons()
         self.enforceUserPermissions()
 
     def updateLoginStateNotificationLabel(self):
@@ -395,6 +798,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateUserAccountModeButton()
+        self.updateAccountManagementButtons()
         self.enforceUserPermissions()
 
     def enforceUserPermissions(self) -> None:
@@ -450,3 +854,19 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
+
+    def add_user_to_database(self, user_parameters: Dict[str, str]) -> None:
+        """ Add user to selected subject/session in the loaded openlifu database
+        Args:
+            user_parameters: Dictionary containing the required parameters for adding a user to database
+        """
+        user_ids = self.dataLogic.db.get_user_ids()
+        if user_parameters['id'] in user_ids:
+            if not slicer.util.confirmYesNoDisplay(
+                f"user ID {user_parameters['id']} already exists in the database. Overwrite user?",
+                "user already exists"
+            ):
+                return
+
+        newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
+        self.dataLogic.db.write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
