@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>298</width>
+    <width>428</width>
     <height>347</height>
    </rect>
   </property>
@@ -50,6 +50,24 @@
       </size>
      </property>
     </spacer>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="manageAccountButtonsLayout">
+     <item>
+      <widget class="QPushButton" name="createNewAccountButton">
+       <property name="text">
+        <string>Create New Account</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="manageAccountsButton">
+       <property name="text">
+        <string>Manage Accounts</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>
