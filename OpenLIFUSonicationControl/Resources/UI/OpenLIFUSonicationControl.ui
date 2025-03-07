@@ -10,7 +10,14 @@
     <height>311</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_2">
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QPushButton" name="sendSonicationSolutionToDevicePushButton">
+     <property name="text">
+      <string>Send Sonication Solution To Device</string>
+     </property>
+    </widget>
+   </item>
    <item>
     <widget class="QWidget" name="permissionsWidget" native="true">
      <property name="slicer.openlifu.allowed-roles" stdset="0">
@@ -46,6 +53,13 @@
     <widget class="QPushButton" name="abortPushButton">
      <property name="text">
       <string>Abort</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="solutionStateLabel">
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
      </property>
     </widget>
    </item>
