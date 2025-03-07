@@ -322,12 +322,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateTrackingApprovalStatus(self) -> None:
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         if loaded_session is not None:
-            if loaded_session.transducer_tracking_is_approved():
-                self.ui.trackingApprovalStatusLabel.text = f"(Transducer tracking is approved)"
-                self.ui.trackingApprovalStatusLabel.styleSheet = ""
-            else:
-                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is currently unapproved!"
+            photoscan_ids = loaded_session.get_transducer_tracking_approvals()
+            if len(photoscan_ids) == 0:
+                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is not approved for any photoscans!"
                 self.ui.trackingApprovalStatusLabel.styleSheet = "color:red;"
+            else:
+                self.ui.trackingApprovalStatusLabel.text = (
+                    "Transducer tracking is approved for the following photoscans:\n- "
+                    + "\n- ".join(photoscan_ids)
+                )
+                self.ui.trackingApprovalStatusLabel.styleSheet = ""
         else:
             self.ui.trackingApprovalStatusLabel.text = ""
 
