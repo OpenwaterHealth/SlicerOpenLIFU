@@ -1,61 +1,65 @@
 import slicer
 import qt
-from typing import Tuple, Optional
-from slicer import qMRMLThreeDWidget, vtkMRMLViewNode
+from typing import Tuple
+from slicer import vtkMRMLViewNode
 from OpenLIFULib.util import replace_widget
 from OpenLIFULib import SlicerOpenLIFUPhotoscan
 
 
 def create_dialog_with_viewnode(dialog_title : str, view_node: vtkMRMLViewNode, ui_path: str) -> Tuple[slicer.qMRMLThreeDWidget, qt.QDialog]:
-        
-    # Create a threeD widget with the viewNode for displaying the photoscan
+    """ Creates the transducer tracking wizard dialog and replaces the place holder widget 
+     with a threeD view widget containing the specified view node.""" 
+      
     # This widget gets destroyed with the dialog so needs to be created each time
-    photoscanViewWidget = slicer.qMRMLThreeDWidget()
-    photoscanViewWidget.setMRMLScene(slicer.mrmlScene)
-    photoscanViewWidget.setMRMLViewNode(view_node)
+    viewWidget = slicer.qMRMLThreeDWidget()
+    viewWidget.setMRMLScene(slicer.mrmlScene)
+    viewWidget.setMRMLViewNode(view_node)
     
     # Create dialog for photoscan preview and add threeD view widget to dialog
     dialog = slicer.util.loadUI(ui_path)
     ui = slicer.util.childWidgetVariables(dialog)
     dialog.setWindowTitle(dialog_title)
-    replace_widget(ui.photoscanPlaceholderWidget, photoscanViewWidget, ui)
+    replace_widget(ui.photoscanPlaceholderWidget, viewWidget, ui)
 
     return dialog 
 
-def create_threeD_photoscan_view_node():
+def create_threeD_photoscan_view_node(layout_name = "PhotoscanCoordinates"):
+    """Creates view node for displaying the photoscan model. Before transducer tracking registration,
+     a subject's photoscan lives in a different coordinate space than their volume. Therefore we need to create
+    a separate view node for visualizing the photoscan before registration"""
     
     # Layout name is used to create and identify the underlying view node 
-    layoutName = "PhotoscanCoordinates"
+    layoutName = layout_name
     layoutLabel = "Photoscan Co-ordinate Space"
-    layoutColor = [0.97, 0.54, 0.12] # Orange
+    layoutColor = [0.97, 0.54, 0.12] # Orange background
     # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
     viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
 
-    # Create a view node if it hasn't been previously created
-    viewNode = slicer.util.getFirstNodeByClassByName('vtkMRMLViewNode','ViewPhotoscan')
+    viewNode = slicer.util.getFirstNodeByClassByName('vtkMRMLViewNode',f'view{layout_name}')
     if not viewNode:
         viewLogic = slicer.vtkMRMLViewLogic()
         viewLogic.SetMRMLScene(slicer.mrmlScene)
         viewNode = viewLogic.AddViewNode(layoutName)
-        viewNode.SetName('ViewPhotoscan')
+        viewNode.SetName(f'view{layout_name}')
         viewNode.SetLayoutLabel(layoutLabel)
         viewNode.SetLayoutColor(layoutColor)
         viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
 
-        # Customize view node. 
-        viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
-        viewNode.SetBackgroundColor2(0.98,0.58,0.4)
-        viewNode.SetBoxVisible(False) # Turn off bounding box visibility
-        viewNode.SetAxisLabelsVisible(False) # Turn off axis labels visibility
+    # Customize view node. 
+    viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
+    viewNode.SetBackgroundColor2(0.98,0.58,0.4)
+    viewNode.SetBoxVisible(False) # Turn off bounding box visibility
+    viewNode.SetAxisLabelsVisible(False) # Turn off axis labels visibility
 
     return viewNode
 
 def display_photoscan_in_viewnode(photoscan: SlicerOpenLIFUPhotoscan, view_node: vtkMRMLViewNode, reset_camera_view: bool = False) -> None:
-    """ When a display node is created, by default, no viewIDs are set. When GetViewNodeIDs is null, the node is displayed
-    in all views. Therefore, to restrict nodes from being displayed in the photoscan preview widget, we need to set the 
-    viewNodeIDs of any displayed nodes to IDs of all viewNodes in the scene, excluding the photoscan widget."""
+    """ Displays the photoscan model node and associated fiducial nodes (if created) within the specified view node, while ensuring
+    that all other displayable nodes in the scene are not included in the view node. When a display node is created, by default, no viewIDs are set.
+    When GetViewNodeIDs is null, the node is displayed in all views. Therefore, to restrict non-photoscan nodes from being displayed in the photoscan preview widget, 
+    we need to set the viewNodeIDs of any displayed nodes to IDs of all viewNodes in the scene, excluding the photoscan viewnode."""
 
-    # IDs of all the view nodes in the main Window. This excludes the photoscan widget's view node
+    # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
     views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetID() != view_node.GetID()]
     
     # Set the view nodes for all displayable nodes.
