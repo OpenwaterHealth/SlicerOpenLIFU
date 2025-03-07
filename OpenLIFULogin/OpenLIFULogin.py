@@ -273,11 +273,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        self.updateUserAccountModeButton()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.logic.active_user = self._default_anonymous_user
 
         self.cacheAllPermissionswidgets()
+
+        # Call the routine to update from data parameter node
+        self.onDataParameterNodeModified()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -309,6 +311,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onDataParameterNodeModified(self, caller = None, event = None):
         self.updateLoginLogoutButton()
+        self.updateAccountManagementButtons()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -446,6 +449,22 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.loginLogoutButton.setToolTip("Logout to an account in the database.")
         elif self.ui.loginLogoutButton.text == "Login":
             self.updateLoginLogoutButtonAsLoginButton()
+
+    def updateAccountManagementButtons(self):
+        # You only need a database loaded to be able to do this. User account
+        # mode can be off. If user account mode is on, only admins can interact
+        # with the button.
+        if not get_openlifu_data_parameter_node().database_is_loaded:
+            self.ui.createNewAccountButton.setEnabled(False)
+            self.ui.createNewAccountButton.setToolTip("The login feature requires a database connection.")
+            self.ui.manageAccountsButton.setEnabled(False)
+            self.ui.manageAccountsButton.setToolTip("The login feature requires a database connection.")
+            return
+        self.ui.createNewAccountButton.setEnabled(True)
+        self.ui.createNewAccountButton.setToolTip("Create a new account")
+        self.ui.manageAccountsButton.setEnabled(True)
+        self.ui.manageAccountsButton.setToolTip("Manage accounts")
+
 
     def updateWidgetLoginState(self, state: LoginState):
         self._cur_login_state = state
