@@ -24,6 +24,7 @@ from OpenLIFULib import (
     bcrypt_lz,
     SlicerOpenLIFUUser,
     get_openlifu_data_parameter_node,
+    get_current_user,
 )
 
 from OpenLIFULib.util import (
@@ -339,20 +340,28 @@ class ManageAccountsDialog(qt.QDialog):
         selected_row = selected_items[0].row()
         user_id = self.tableWidget.item(selected_row, 0).text()
 
-        if not slicer.util.confirmYesNoDisplay(
-            text=f"Are you sure you want to delete the user with id '{user_id}'?",
-            windowTitle="User Delete Confirmation",
-        ):
-            return
+        if get_current_user().id == user_id:
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"You are currently logged into the user {user_id}. Deleting this user will log you out. Are you sure you want to delete?",
+                windowTitle="User Delete Confirmation",
+            ):
+                return
+            self.db.delete_user(user_id)
+            slicer.util.getModuleWidget("OpenLIFULogin").onLoginLogoutClicked()
+            self.accept()
+        else:
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"Are you sure you want to delete the user with id '{user_id}'?",
+                windowTitle="User Delete Confirmation",
+            ):
+                return
 
-        self.db.delete_user(user_id)
+            self.db.delete_user(user_id)
 
-        # TODO: If the user chooses to delete their own account, they must be
-        # asked for double confirmation and then it must log them out
+            # Update GUI
 
-        # Update GUI
+            self.updateUsersList()
 
-        self.updateUsersList()
         slicer.util.infoDisplay(f"User deleted: \'{user_id}\'")
 
     def onChangePasswordClicked(self):
@@ -626,7 +635,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     @display_errors
-    def onLoginLogoutClicked(self, checked: bool) -> None:
+    def onLoginLogoutClicked(self, checked: bool = False) -> None:
         if self.ui.loginLogoutButton.text == "Logout":
             self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
