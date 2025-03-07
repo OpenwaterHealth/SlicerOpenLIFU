@@ -4,6 +4,7 @@ from collections import defaultdict
 
 import qt
 import vtk
+import numpy as np
 
 import slicer
 from slicer.i18n import tr as _
@@ -14,6 +15,7 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode, vtkMRMLTransformNode
 
 from OpenLIFULib import (
+    openlifu_lz,
     get_target_candidates,
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
@@ -32,9 +34,13 @@ from OpenLIFULib.virtual_fit_results import (
     get_target_id_from_virtual_fit_result_node,
 )
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
+from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
+from OpenLIFULib.transform_conversion import transform_node_from_openlifu
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
+    import openlifu
+    import openlifu.geo
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
 
@@ -462,12 +468,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             activeData["Protocol"],activeData["Transducer"], activeData["Volume"], activeData["Target"]
         )
 
-        if virtual_fit_result is None: # Temporary behavior!
-            # None indicates for now that the user activated the transform handles to do the placeholder manual virtual fitting.
-            # It will not be possible to get None once the algorithm is implemented, or at least it wouldn't mean the same thing.
-            target_id = fiducial_to_openlifu_point_id(activeData["Target"])
-            self.algorithm_input_widget.inputs_dict["Target"].disable_with_tooltip(f"VF for {target_id} in progress...") # Disable target selector during manual VF
+        if virtual_fit_result is None:
+            slicer.util.errorDisplay("Virtual fit failed. No viable transducer positions found.")
             return
+        else: # ALSO TEMPORARY -- what is the right way to do this?
+            activeData["Transducer"].model_node.SetAndObserveTransformNodeID(virtual_fit_result.GetID())
         self.algorithm_input_widget.update() # Re-enable target-selector now that manual VF is completed. Again, temporary behavior.
 
         self.watchVirtualFit(virtual_fit_result)
@@ -549,39 +554,54 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             volume: vtkMRMLScalarVolumeNode,
             target: vtkMRMLMarkupsFiducialNode,
         ) -> Optional[vtkMRMLTransformNode]:
-        # Temporary measure of "manual" virtual fitting. See https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/153
-        transducer.transform_node.CreateDefaultDisplayNodes()
-        if not transducer.transform_node.GetDisplayNode().GetEditorVisibility():
-            slicer.util.infoDisplay(
-                text=(
-                    "The automatic virtual fitting algorithm is not yet implemented."
-                    " Use the interaction handles on the transducer to manually fit it."
-                    " You can click the Virtual fit button again to remove the interaction handles,"
-                    " completing the manual virtual fit and recording the virtual fit transform."
-                ),
-                windowTitle="Not implemented"
-            )
-            transducer.transform_node.GetDisplayNode().SetEditorVisibility(True)
-            return None # we would also return this in the event of failure to do virtual fitting
-        else:
-            # "Complete" the virtual fit
-            transducer.transform_node.GetDisplayNode().SetEditorVisibility(False)
 
-            session = get_openlifu_data_parameter_node().loaded_session
-            session_id : Optional[str] = session.get_session_id() if session is not None else None
+        # TODO: Many quantities are hard-coded here will not have to be when these two issues are done:
+        # https://github.com/OpenwaterHealth/OpenLIFU-python/issues/166
+        # https://github.com/OpenwaterHealth/OpenLIFU-python/issues/165
+        vf_transforms = openlifu_lz().virtual_fit(
+            standoff_transform = openlifu_lz().geo.create_standoff_transform(
+                z_offset = 13.55,
+                dzdy = 0.15
+            ),
+            volume_array = slicer.util.arrayFromVolume(volume),
+            volume_affine_RAS = get_IJK2RAS(volume),
+            target_RAS = target.GetNthControlPointPosition(0),
+            pitch_range = (-10,100),
+            pitch_step = (5),
+            yaw_range = (-5, 35),
+            yaw_step = 5,
+            transducer_steering_center_distance = 50,
+            steering_limits = (
+                (-100, 100), # lat
+                (-100, 100), # ele
+                (-100, 100), # ax
+            ),
+        )
+        # TODO: add log handler for this
 
-            target_id = fiducial_to_openlifu_point_id(target)
-            clear_virtual_fit_results(target_id=target_id,session_id=session_id)
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id : Optional[str] = session.get_session_id() if session is not None else None
 
-            # When actually running the real virtual fit algorithm, there will be more virtual fit results to add
-            # but we would only return the best one.
-            return add_virtual_fit_result(
-                transform_node = transducer.transform_node,
+        target_id = fiducial_to_openlifu_point_id(target)
+        clear_virtual_fit_results(target_id=target_id,session_id=session_id)
+
+        # When actually running the real virtual fit algorithm, there will be more virtual fit results to add
+        # but we would only return the best one.
+        vf_result_nodes = []
+
+        for i,vf_transform in enumerate(vf_transforms):
+            node = add_virtual_fit_result(
+                transform_node = transform_node_from_openlifu(vf_transform, transducer.transducer.transducer, "mm"),
                 target_id = target_id,
                 session_id = session_id,
                 approval_status = False,
-                clone_node=True,
+                clone_node=False,
+                rank = i+1,
             )
+            vf_result_nodes.append(node)
+        if len(vf_result_nodes)==0:
+            return None
+        return vf_result_nodes[0]
 
 #
 # OpenLIFUPrePlanningTest

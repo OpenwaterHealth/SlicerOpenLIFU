@@ -19,6 +19,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/photoscan.py
   OpenLIFULib/virtual_fit_results.py
   OpenLIFULib//transform_conversion.py
+  OpenLIFULib/skinseg.py
 )
 
 set(MODULE_PYTHON_RESOURCES
