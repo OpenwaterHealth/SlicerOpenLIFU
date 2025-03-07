@@ -102,9 +102,11 @@ class UsernamePasswordDialog(qt.QDialog):
 
     def setup(self):
 
-        self.setMinimumWidth(200)
+        self.setMinimumWidth(300)
+        self.setContentsMargins(15, 15, 15, 15)
 
         formLayout = qt.QFormLayout()
+        formLayout.setSpacing(10)
         self.setLayout(formLayout)
 
         self.username = qt.QLineEdit()
@@ -262,6 +264,8 @@ class ManageAccountsDialog(qt.QDialog):
 
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
+        self.setMinimumSize(600, 400)
+        self.setMaximumSize(1000, 700)
 
         # ---- Users table ----
 
@@ -271,9 +275,17 @@ class ManageAccountsDialog(qt.QDialog):
         self.tableWidget.setHorizontalHeaderLabels(cols)
         self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
-        self.tableWidget.horizontalHeader().setSectionResizeMode(qt.QHeaderView.Stretch) # style
-        self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding) # style
-        self.tableWidget.verticalHeader().setDefaultSectionSize(24) # style
+        self.tableWidget.setAlternatingRowColors(True)  # style
+        self.tableWidget.setWordWrap(True) # style
+        self.tableWidget.setShowGrid(True)  # style
+        self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)  # style
+        self.tableWidget.verticalHeader().setDefaultSectionSize(24)  # style
+
+        header = self.tableWidget.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)  # ID
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)  # Name
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)  # Roles
+        header.setSectionResizeMode(3, qt.QHeaderView.Stretch)           # Description
 
         self.boxLayout.addWidget(self.tableWidget)
 
@@ -323,6 +335,9 @@ class ManageAccountsDialog(qt.QDialog):
             self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(user.name))
             self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(", ".join(user.roles)))
             self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(user.description))
+
+        for row in range(self.tableWidget.rowCount):
+            self.tableWidget.setRowHeight(row, 48) # help wrap
 
     def onCreateNewUserClicked(self):
         slicer.util.getModuleWidget("OpenLIFULogin").onCreateNewAccountClicked()
@@ -410,6 +425,12 @@ class ChangePasswordDialog(qt.QDialog):
         self.setLayout(mainLayout)
 
         self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
+        self.infoLabel.setWordWrap(True)
+        self.infoLabel.setStyleSheet("""
+            font-size: 14pt;
+            font-weight: bold;
+            padding: 5px 0;
+        """)
         self.infoLabel.setWordWrap(True)
         mainLayout.addWidget(self.infoLabel)
 
