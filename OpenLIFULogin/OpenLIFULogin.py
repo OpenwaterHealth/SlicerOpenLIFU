@@ -294,18 +294,17 @@ class ManageAccountsDialog(qt.QDialog):
         self.deleteUserButton.clicked.connect(self.onDeleteUserClicked)
         self.changePasswordButton.clicked.connect(self.onChangePasswordClicked)
 
-        # ---- OK/Cancel buttons ----
+        # ---- Ok button ----
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
+            qt.QDialogButtonBox.Ok,
         )
         self.boxLayout.addWidget(self.buttonBox)
 
         self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
 
-        # ---------------------------
+        # ----
 
         self.updateUsersList()
 
