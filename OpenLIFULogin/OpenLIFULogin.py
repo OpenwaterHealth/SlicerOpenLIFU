@@ -262,6 +262,8 @@ class ManageAccountsDialog(qt.QDialog):
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
 
+        # ---- Users table ----
+
         cols = ["ID", "Name", "Roles", "Description"]
         self.tableWidget = qt.QTableWidget(self)
         self.tableWidget.setColumnCount(len(cols))
@@ -274,6 +276,26 @@ class ManageAccountsDialog(qt.QDialog):
 
         self.boxLayout.addWidget(self.tableWidget)
 
+        # ---- User management buttons ----
+
+        buttonsLayout = qt.QHBoxLayout()
+
+        self.createUserButton = qt.QPushButton("Create New User")
+        self.deleteUserButton = qt.QPushButton("Delete User")
+        self.changePasswordButton = qt.QPushButton("Change User Password")
+
+        for button in [self.createUserButton, self.deleteUserButton, self.changePasswordButton]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            buttonsLayout.addWidget(button)
+
+        self.boxLayout.addLayout(buttonsLayout)
+
+        self.createUserButton.clicked.connect(self.onCreateNewUserClicked)
+        self.deleteUserButton.clicked.connect(self.onDeleteUserClicked)
+        self.changePasswordButton.clicked.connect(self.onChangePasswordClicked)
+
+        # ---- OK/Cancel buttons ----
+
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(
             qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
@@ -282,6 +304,8 @@ class ManageAccountsDialog(qt.QDialog):
 
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
+
+        # ---------------------------
 
         self.updateUsersList()
 
@@ -311,7 +335,7 @@ class ManageAccountsDialog(qt.QDialog):
             return
         return
 
-    def onResetPasswordClicked(self):
+    def onChangePasswordClicked(self):
         return
 
 #
