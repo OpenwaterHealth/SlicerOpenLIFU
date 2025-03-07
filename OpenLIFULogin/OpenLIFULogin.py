@@ -34,29 +34,9 @@ if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
 
-all_modules = [
-            "OpenLIFUData",
-            "OpenLIFUHome",
-            "OpenLIFUPrePlanning",
-            "OpenLIFUProtocolConfig",
-            "OpenLIFUSonicationControl",
-            "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerTracker",
-        ]
-
 #
 # OpenLIFULogin
 #
-
-all_openlifu_modules = [
-            "OpenLIFUData",
-            "OpenLIFUHome",
-            "OpenLIFUPrePlanning",
-            "OpenLIFUProtocolConfig",
-            "OpenLIFUSonicationControl",
-            "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerTracker",
-        ]
 
 class OpenLIFULogin(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -67,7 +47,15 @@ class OpenLIFULogin(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Login")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = all_openlifu_modules  # add here list of module names that this module requires
+        self.parent.dependencies = [
+            "OpenLIFUData",
+            "OpenLIFUHome",
+            "OpenLIFUPrePlanning",
+            "OpenLIFUProtocolConfig",
+            "OpenLIFUSonicationControl",
+            "OpenLIFUSonicationPlanner",
+            "OpenLIFUTransducerTracker",
+        ]  # add here list of module names that this module requires
         self.parent.contributors = ["Andrew Howe (Kitware), Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -253,10 +241,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.setParameterNode(self.logic.getParameterNode())
 
     def cacheAllPermissionswidgets(self) -> None:
+        all_openlifu_modules = [
+            "OpenLIFUData",
+            "OpenLIFUHome",
+            "OpenLIFUPrePlanning",
+            "OpenLIFUProtocolConfig",
+            "OpenLIFUSonicationControl",
+            "OpenLIFUSonicationPlanner",
+            "OpenLIFUTransducerTracker",
+            ]
         for moduleName in all_openlifu_modules:
             module = slicer.util.getModule(moduleName)
             widgetRepresentation = module.widgetRepresentation()
             self._permissions_widgets.extend(slicer.util.findChildren(widgetRepresentation, name="permissionsWidget*"))
+
+        self._permissions_widgets.extend([self.ui.permissionsWidget1])
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFULoginParameterNode]) -> None:
         """
