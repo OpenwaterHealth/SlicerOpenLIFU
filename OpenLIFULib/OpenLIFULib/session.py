@@ -16,6 +16,7 @@ from OpenLIFULib.targets import (
 )
 from OpenLIFULib.transform_conversion import transform_node_to_openlifu
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
+from OpenLIFULib.transducer_tracking_results import get_transducer_tracking_results_in_openlifu_session_format
 
 if TYPE_CHECKING:
     import openlifu
@@ -183,12 +184,37 @@ class SlicerOpenLIFUSession:
             units = transducer_openlifu.units,
         )
 
+        #Update transducer tracking results
+        self.session.session.transducer_tracking_results = get_transducer_tracking_results_in_openlifu_session_format(
+            session_id=self.get_session_id(),
+            units = transducer_openlifu.units,
+        )
+
         return self.session.session
 
-    def toggle_transducer_tracking_approval(self) -> None:
-        """Approve transducer tracking if it was not approved. Revoke approval if it was approved."""
-        self.session.session.transducer_tracking_approved = not self.session.session.transducer_tracking_approved
+    def get_transducer_tracking_approvals(self):
+        """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
+        transducer tracking is approved.
+        """
+        session_openlifu = self.session.session
+        approved_tt_photoscans = [
+            photoscan_id for photoscan_id in self.get_affiliated_photoscan_ids()
+            for tt_result in session_openlifu.transducer_tracking_results
+            if photoscan_id == tt_result.photoscan_id 
+            and tt_result.transducer_to_photoscan_tracking_approved 
+            and tt_result.photoscan_to_volume_tracking_approved 
+        ]
 
-    def transducer_tracking_is_approved(self) -> bool:
-        """Return whether transducer tracking has been approved"""
-        return self.session.session.transducer_tracking_approved
+        return approved_tt_photoscans
+    
+    def get_virtual_fit_approvals(self):
+
+        session_openlifu = self.session.session
+        approved_vf_targets = []
+        for target in session_openlifu.targets:
+            if target.id not in session_openlifu.virtual_fit_results:
+                continue
+            if session_openlifu.virtual_fit_results[target.id][0]:
+                approved_vf_targets.append(target.id)
+        
+        return approved_vf_targets
