@@ -24,7 +24,7 @@ from OpenLIFULib import (
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUSolutionAnalysis,
 )
-from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem
+from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -306,9 +306,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.hide_pnp()
 
     def updateVirtualFitApprovalStatus(self) -> None:
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if data_logic.validate_session():
-            target_ids = data_logic.get_virtual_fit_approvals_in_session()
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is not None:
+            target_ids = loaded_session.get_virtual_fit_approvals()
             if len(target_ids) == 0:
                 self.ui.virtualFitApprovalStatusLabel.text = ""
             else:
@@ -322,14 +322,18 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateTrackingApprovalStatus(self) -> None:
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         if loaded_session is not None:
-            if loaded_session.transducer_tracking_is_approved():
-                self.ui.trackingApprovalStatusLabel.text = f"(Transducer tracking is approved)"
-                self.ui.trackingApprovalStatusLabel.styleSheet = ""
-            else:
-                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is currently unapproved!"
+            photoscan_ids = loaded_session.get_transducer_tracking_approvals()
+            if len(photoscan_ids) == 0:
+                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is not approved for any photoscans!"
                 self.ui.trackingApprovalStatusLabel.styleSheet = "color:red;"
+            else:
+                self.ui.trackingApprovalStatusLabel.text = (
+                    "Transducer tracking is approved for the following photoscans:\n- "
+                    + "\n- ".join(photoscan_ids)
+                )
+                self.ui.trackingApprovalStatusLabel.styleSheet = ""
         else:
-            self.ui.virtualFitApprovalStatusLabel.text = ""
+            self.ui.trackingApprovalStatusLabel.text = ""
 
     def updateApproveButton(self):
         data_parameter_node = get_openlifu_data_parameter_node()

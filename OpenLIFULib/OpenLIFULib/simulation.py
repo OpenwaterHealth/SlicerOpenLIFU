@@ -5,7 +5,7 @@ import vtk
 from vtk.util import numpy_support
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
-from OpenLIFULib.coordinate_system_utils import get_RAS2IJK
+from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.lazyimport import xarray_lz
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolume
     # IJK : the volume node's underlying data array indices
     ijk2xyz = np.concatenate([np.concatenate([np.diag(spacing),origin.reshape(3,1)], axis=1), np.array([0,0,0,1],dtype=origin.dtype).reshape(1,4)])
     xyz2ras = slicer.util.arrayFromTransformMatrix(transducer.transform_node)
-    ras2IJK = get_RAS2IJK(volume_node)
+    ras2IJK = np.linalg.inv(get_IJK2RAS(volume_node))
     ijk2IJK = ras2IJK @ xyz2ras @ ijk2xyz
     volume_resampled_array = affine_transform(
         slicer.util.arrayFromVolume(volume_node).transpose((2,1,0)), # the array indices come in KJI rather than IJK so we permute them
