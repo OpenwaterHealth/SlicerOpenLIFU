@@ -609,20 +609,25 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if get_openlifu_data_parameter_node().loaded_solution is None:
             raise RuntimeError("No solution loaded; cannot run sonication.")
 
-        self.running = True
         self.run_progress = 0
         self.sonication_run_complete = False
 
+        # ---- Start the run ----
+        self.running = True
+        self.cur_lifu_interface.start_sonication()
+        # -----------------------
+
         def poll():
             self.run_hardware_status = self.cur_lifu_interface.get_status()
-            # ---- TODO ----
-            # The following functions mock the run, as the status is never updated to finished.
-            self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
-            self.sonication_run_complete = self.run_progress >= 99
-            # Replace above with functions that look something like this
-            # self.run_progress = self.cur_lifu_interface.get_progress_percent_as_int()
-            # self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
-            # --------------
+
+            # In non-test mode we simulate the run bars
+            if self.cur_lifu_interface._test_mode:
+                self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
+                self.sonication_run_complete = self.run_progress >= 99
+            else:
+                # self.run_progress = self.cur_lifu_interface.get_progress_percent_as_int() TODO: figure out
+                self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
+
             if self.sonication_run_complete:
                 self.timer.stop()
                 self.running = False
@@ -635,8 +640,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
         # that callback can be called here. 
         self.timer.stop()
-        self.running = False
         self.sonication_run_complete = False
+
+        # ---- Stop the run ----
+        self.running = False
+        self.cur_lifu_interface.stop_sonication()
+        # -----------------------
 
     def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
 
