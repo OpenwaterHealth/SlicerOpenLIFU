@@ -203,12 +203,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
+        self.ui.connectLIFUDevicePushButton.clicked.connect(self.onconnectLIFUDevicePushButtonClicked)
         self.ui.sendSonicationSolutionToDevicePushButton.clicked.connect(self.onSendSonicationSolutionToDevicePushButtonClicked)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
         self.ui.manuallyGetDeviceStatusPushButton.clicked.connect(self.onManuallyGetDeviceStatusPushButtonClicked)
-        self.updateRunEnabled()
-        self.updateAbortEnabled()
         self.logic.call_on_running_changed(self.onRunningChanged)
         self.logic.call_on_sonication_complete(self.onRunCompleted)
         self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
@@ -230,6 +229,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # After setup, update the module state from the data parameter node
         self.onDataParameterNodeModified()
+
+        # Update the state of any buttons that may not yet have been updated
+        self.updateAllButtonsEnabled()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -282,9 +284,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
-        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
-        self.updateRunEnabled()
-        self.updateRunProgressBar()
+        self.updateAllButtonsEnabled()
         if (solution_parameter_pack := get_openlifu_data_parameter_node().loaded_solution) is None:
             self._cur_solution_id = None
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
@@ -292,12 +292,38 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._cur_solution_id = solution_parameter_pack.solution.solution.id
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
+    def updateConnectLIFUDevicePushButtonEnabled(self):
+        if self.logic.running:
+            enabled = False
+            tooltip = "Cannot reset connection while a sonication is running."
+        else:
+            enabled = True
+            tooltip = "Connect or reconnect to the connected hardware."
+
+        self.ui.connectLIFUDevicePushButton.setEnabled(enabled)
+        self.ui.connectLIFUDevicePushButton.setToolTip(tooltip)
+
+    @display_errors
+    def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
+        if self.logic.cur_lifu_interface is None:
+            enabled = False
+            tooltip = "To get the device status you must first initiate a LIFU device connection."
+        else:
+            enabled = True
+            tooltip = "Get the current state of the hardware device."
+
+        self.ui.manuallyGetDeviceStatusPushButton.setEnabled(enabled)
+        self.ui.manuallyGetDeviceStatusPushButton.setToolTip(tooltip)
+
     def updateSendSonicationSolutionToDevicePushButtonEnabled(self):
         solution = get_openlifu_data_parameter_node().loaded_solution
 
         if solution is None:
             enabled = False
             tooltip = "To run a sonication, first generate and approve a solution in the sonication planning module."
+        elif self.logic.cur_lifu_interface is None:
+            enabled = False
+            tooltip = "To send a sonication solution to the device, you must first initiate a LIFU device connection."
         elif not solution.is_approved():
             enabled = False
             tooltip = "Cannot send to device because the currently active solution is not approved. Approve it in the sonication planning module."
@@ -332,6 +358,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateAbortEnabled(self):
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
+    def updateAllButtonsEnabled(self):
+        self.updateConnectLIFUDevicePushButtonEnabled()
+        self.updateManuallyGetDeviceStatusPushButtonEnabled()
+        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
+        self.updateRunEnabled()
+        self.updateAbortEnabled()
+
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
         """If the soniction_run_complete variable changes from False to True, then open the RunComplete 
@@ -343,49 +376,60 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
 
+    def onconnectLIFUDevicePushButtonClicked(self, checked=False):
+        self.logic.cur_lifu_interface = None  # reset
+
+        if self.ui.testModeCheckBox.isChecked():
+            slicer.util.infoDisplay(text="LIFUInterface connected in test_mode")
+            interface = openlifu_lz().io.LIFUInterface(test_mode=True)
+            interface.txdevice.enum_tx7332_devices(2)
+            if interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
+                raise RuntimeError("Interface not ready")
+
+            self.logic.cur_lifu_interface = interface
+
+        else:
+            try:
+                interface = openlifu_lz().io.LIFUInterface()
+                interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
+                self.logic.cur_lifu_interface = interface
+                    
+            except Exception as e:
+                print("Exception thrown:", e)
+                import traceback
+                traceback.print_exc()
+                return
+
+            slicer.util.infoDisplay(text="LIFUInterface connected")
+
+        self.updateManuallyGetDeviceStatusPushButtonEnabled()
+        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
+
+        # From now on, you can only reset the connection
+        self.ui.connectLIFUDevicePushButton.setText("Reset Connection")
+
     @display_errors
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
 
         try:
-            interface = openlifu_lz().io.LIFUInterface(test_mode=True)
-            interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
-            interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
-
-            self.logic.cur_lifu_interface = interface
-
-            if interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
+            self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
+            if self.logic.cur_lifu_interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
+            self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
                 
         except Exception as e:
             print("Exception thrown:", e)
             import traceback
             traceback.print_exc()
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND, self.logic.cur_lifu_interface.get_status())
-            self.logic.cur_lifu_interface = None
-            return
-        
-        self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
-        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
 
     @display_errors
     def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
-
-        try:
-            interface = openlifu_lz().io.LIFUInterface(test_mode=True)
-            interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
-            self.logic.cur_lifu_interface = interface
-                
-        except Exception as e:
-            print("Could not initialize LIFUInterface because an exception was thrown:", e)
-            import traceback
-            traceback.print_exc()
-            self.logic.cur_lifu_interface = None
-            slicer.util.infoDisplay(text=f"Operation failed.", windowTitle="Device Status")
-            return
-
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
 
     def onRunningChanged(self, new_running_state:bool):
+        self.updateConnectLIFUDevicePushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
