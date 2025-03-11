@@ -213,7 +213,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.checkCanRunTracking)
 
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
-        self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNodeChanged.connect(self.checkCanRunTracking) # Temporary functionality
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
         self.updatePhotoscanGenerationButtons()
@@ -285,13 +284,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateInputOptions(self):
         """Update the algorithm input options"""
         self.algorithm_input_widget.update()
-
-        # Temporary code to include skin segmentation model as input
-        loaded_models = slicer.util.getNodesByClass('vtkMRMLModelNode')
-        if len(loaded_models) == 3:
-            self.ui.skinSegmentationModelqMRMLNodeComboBox.enabled = False
-        else:
-            self.ui.skinSegmentationModelqMRMLNodeComboBox.enabled = True
 
         # Determine whether transducer tracking can be run based on the status of combo boxes
         self.checkCanRunTracking()
@@ -415,21 +407,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             current_data = self.algorithm_input_widget.get_current_data()
             transducer = current_data['Transducer']
             # Check that the selected transducer has an affiliated registration surface model
-            if transducer.surface_model_node and self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode() is not None:
+            if transducer.surface_model_node:
                 self.ui.runTrackingButton.enabled = True
                 self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
-            elif transducer.surface_model_node and self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode() is None:
-                # This is temporary behavior until skin segmentation is offloaded to an openlifu algorithm
-                self.ui.runTrackingButton.enabled = False
-                self.ui.runTrackingButton.setToolTip("For now, please also specify a skin segmentation model.")
-            elif transducer.surface_model_node is None and self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode():
+            else:
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
-            else:
-                # transducer surface model is None and skin segmentation model is None
-                self.ui.runTrackingButton.enabled = False
-                self.ui.runTrackingButton.setToolTip(
-                    "The selected transducer does not have an affiliated registration surface model, which is needed to run tracking. Please also specify a skin segmentation model.")
         else:
             self.ui.runTrackingButton.enabled = False
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
@@ -508,8 +491,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onRunTrackingClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
-        self.skinSurfaceModel = self.ui.skinSegmentationModelqMRMLNodeComboBox.currentNode()
-
         selected_photoscan_openlifu = activeData["Photoscan"]
         loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
         self.displayTransducerTrackingWizardDialog(loaded_slicer_photoscan)
