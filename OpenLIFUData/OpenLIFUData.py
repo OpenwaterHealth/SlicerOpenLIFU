@@ -319,14 +319,21 @@ class AddNewPhotocollectionDialog(qt.QDialog):
         # The path /sdcard/DCIM/Camera/ is the standard internal storage path
         # from the Android device’s perspective when accessed via adb, not the
         # computer’s mounted file system like with Android File Transfer.
-        android_dir = "/sdcard/DCIM/Camera"
+        android_dir = Path("/sdcard/DCIM/Camera")
         result = subprocess.run(
-            ["adb", "shell", "ls", f"{android_dir}/{self.reference_number}_*.jpeg"],
+            ["adb", "shell", "ls", android_dir/f"{self.reference_number}_*.jpeg"],
             capture_output=True, text=True
-        )
-        
+        ) 
+
         if result.returncode != 0:
-            slicer.util.errorDisplay(f"Error finding files on Android device.", parent = self)
+            slicer.util.errorDisplay(
+              "Error finding files on Android device."
+              " Please make sure the device is connected,"
+              " you have installed android platform tools on this machine,"
+              " you have enabled developer mode on the device,"
+              " and you have enabled USB debugging on the device.",
+              parent = self
+            )
             return
         
         files = [f for f in result.stdout.strip().split('\n') if f]
