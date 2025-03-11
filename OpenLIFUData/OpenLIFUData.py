@@ -1375,11 +1375,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             for photocollection_reference_number in loaded_session.get_affiliated_photocollection_reference_numbers():
                 if photocollection_reference_number in self.getParameterNode().session_photocollections:
                     self.remove_photocollection(photocollection_reference_number)
+            
             for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
                 if photoscan_id in self.getParameterNode().loaded_photoscans:
                     self.remove_photoscan(photoscan_id)
 
-            clear_transducer_tracking_results
+            clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -1659,7 +1660,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 return
             
         session_affiliated_photoscans = self.db.get_photoscan_ids(subject_id, session_id)
-        conflicting_loaded_photoscans =  [photoscan for photoscan in session_affiliated_photoscans if photoscan in self.getParameterNode().loaded_photoscans]
+        if loaded_session is not None:
+            # (we are okay reloading photoscans if they are just the one affiliated with the session, since user already decided to replace the session)
+            loaded_session_affiliated_photoscans = self.db.get_photoscan_ids(loaded_session.get_subject_id(), loaded_session.get_session_id())
+            conflicting_loaded_photoscans =  [photoscan for photoscan in session_affiliated_photoscans 
+                                              if photoscan in self.getParameterNode().loaded_photoscans and 
+                                              photoscan not in loaded_session_affiliated_photoscans]
+        else:
+            conflicting_loaded_photoscans =  [photoscan for photoscan in session_affiliated_photoscans if photoscan in self.getParameterNode().loaded_photoscans]
         if (
             conflicting_loaded_photoscans
         ):
@@ -1668,7 +1676,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 "Confirm replace photoscan"
             ):
                 return
-
+        
         # === Proceed with loading session ===
 
         self.clear_session()
@@ -1746,8 +1754,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.getParameterNode().loaded_session = new_session
 
         # === Keep track of affiliated photoscans and unload any conflicting photoscans that have been previously loaded ===
-        for photoscan_id in conflicting_loaded_photoscans:
-            self.remove_photoscan(photoscan_id) 
         self.update_photoscans_affiliated_with_loaded_session()
 
         # === Load photocollections as all reference_numbers ===
