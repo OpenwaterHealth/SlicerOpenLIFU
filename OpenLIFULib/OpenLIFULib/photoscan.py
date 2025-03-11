@@ -92,6 +92,8 @@ class SlicerOpenLIFUPhotoscan:
         """Clear associated mrml nodes from the scene."""
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.texture_node)
+        if self.tracking_fiducial_node:
+            slicer.mrmlScene.RemoveNode(self.tracking_fiducial_node)
 
     def apply_texture_to_model(self):
         """Apply the texture image to the model node"""
