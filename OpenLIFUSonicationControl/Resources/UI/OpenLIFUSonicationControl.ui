@@ -7,10 +7,57 @@
     <x>0</x>
     <y>0</y>
     <width>325</width>
-    <height>311</height>
+    <height>357</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QPushButton" name="connectLIFUDevicePushButton">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>Connect LIFU Device</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="testModeCheckBox">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>Test Mode</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="manuallyGetDeviceStatusPushButton">
+     <property name="toolTip">
+      <string>This button retrieves the current status of the hardware device and prints the status below.</string>
+     </property>
+     <property name="text">
+      <string>Get Device Status</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="sendSonicationSolutionToDevicePushButton">
+     <property name="text">
+      <string>Send Sonication Solution To Device</string>
+     </property>
+    </widget>
+   </item>
    <item>
     <widget class="QWidget" name="permissionsWidget" native="true">
      <property name="slicer.openlifu.allowed-roles" stdset="0">
@@ -50,9 +97,9 @@
     </widget>
    </item>
    <item>
-    <widget class="QProgressBar" name="runProgressBar">
-     <property name="value">
-      <number>24</number>
+    <widget class="QLabel" name="solutionStateLabel">
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
      </property>
     </widget>
    </item>
@@ -68,6 +115,45 @@
       </size>
      </property>
     </spacer>
+   </item>
+   <item>
+    <widget class="QFrame" name="runStatusFrame">
+     <property name="frameShape">
+      <enum>QFrame::Box</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QLabel" name="runStatusFrameTitle">
+        <property name="text">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt; font-weight:600;&quot;&gt;Run Progress:&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="margin">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="runProgressBar">
+        <property name="value">
+         <number>24</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="runHardwareStatusLabel">
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>

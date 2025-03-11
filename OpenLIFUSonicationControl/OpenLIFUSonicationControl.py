@@ -1,4 +1,5 @@
-from typing import Optional, Callable, Dict, List
+from typing import Optional, Callable, Dict, List, TYPE_CHECKING
+from enum import Enum
 
 import qt
 import vtk
@@ -14,10 +15,13 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from OpenLIFULib import (get_openlifu_data_parameter_node, 
                          SlicerOpenLIFUSolution,
                          openlifu_lz,
-                         SlicerOpenLIFURun
+                         SlicerOpenLIFURun,
 )
 
 from OpenLIFULib.util import display_errors
+
+if TYPE_CHECKING:
+    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
 
 #
 # OpenLIFUSonicationControl
@@ -34,7 +38,7 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
         self.parent.title = _("OpenLIFU Sonication Control")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = []  # add here list of module names that this module requires
-        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
+        self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Andrew Howe (Kitware) Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
@@ -47,6 +51,11 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
+
+class SolutionOnHardwareState(Enum):
+    SUCCESSFUL_SEND=0
+    FAILED_SEND=1
+    NOT_SENT=2
 
 #
 # OpenLIFUSonicationControlParameterNode
@@ -161,8 +170,14 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
+        self._cur_solution_on_hardware_state : SolutionOnHardwareState = SolutionOnHardwareState.NOT_SENT
+        self._cur_solution_id: str | None = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+
+    @property
+    def cur_solution_on_hardware_state(self) -> SolutionOnHardwareState:
+        return self._cur_solution_on_hardware_state
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -188,16 +203,19 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
+        self.ui.connectLIFUDevicePushButton.clicked.connect(self.onconnectLIFUDevicePushButtonClicked)
+        self.ui.sendSonicationSolutionToDevicePushButton.clicked.connect(self.onSendSonicationSolutionToDevicePushButtonClicked)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
-        self.updateRunEnabled()
-        self.updateAbortEnabled()
+        self.ui.manuallyGetDeviceStatusPushButton.clicked.connect(self.onManuallyGetDeviceStatusPushButtonClicked)
         self.logic.call_on_running_changed(self.onRunningChanged)
         self.logic.call_on_sonication_complete(self.onRunCompleted)
         self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
+        self.logic.call_on_run_hardware_status_updated(self.updateRunHardwareStatusLabel)
 
         # Initialize UI
         self.updateRunProgressBar()
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
         # Add an observer on the Data module's parameter node
         self.addObserver(
@@ -208,6 +226,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        # After setup, update the module state from the data parameter node
+        self.onDataParameterNodeModified()
+
+        # Update the state of any buttons that may not yet have been updated
+        self.updateAllButtonsEnabled()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -259,27 +283,87 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
-    def onDataParameterNodeModified(self,caller, event) -> None:
-        self.updateRunEnabled()
-        self.updateRunProgressBar()
+    def onDataParameterNodeModified(self, caller=None, event=None) -> None:
+        self.updateAllButtonsEnabled()
+        if (solution_parameter_pack := get_openlifu_data_parameter_node().loaded_solution) is None:
+            self._cur_solution_id = None
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        elif solution_parameter_pack.solution.solution.id != self._cur_solution_id:
+            self._cur_solution_id = solution_parameter_pack.solution.solution.id
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+
+    def updateConnectLIFUDevicePushButtonEnabled(self):
+        if self.logic.running:
+            enabled = False
+            tooltip = "Cannot reset connection while a sonication is running."
+        else:
+            enabled = True
+            tooltip = "Connect or reconnect to the connected hardware."
+
+        self.ui.connectLIFUDevicePushButton.setEnabled(enabled)
+        self.ui.connectLIFUDevicePushButton.setToolTip(tooltip)
+
+    @display_errors
+    def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
+        if self.logic.cur_lifu_interface is None:
+            enabled = False
+            tooltip = "To get the device status you must first initiate a LIFU device connection."
+        else:
+            enabled = True
+            tooltip = "Get the current state of the hardware device."
+
+        self.ui.manuallyGetDeviceStatusPushButton.setEnabled(enabled)
+        self.ui.manuallyGetDeviceStatusPushButton.setToolTip(tooltip)
+
+    def updateSendSonicationSolutionToDevicePushButtonEnabled(self):
+        solution = get_openlifu_data_parameter_node().loaded_solution
+
+        if solution is None:
+            enabled = False
+            tooltip = "To run a sonication, first generate and approve a solution in the sonication planning module."
+        elif self.logic.cur_lifu_interface is None:
+            enabled = False
+            tooltip = "To send a sonication solution to the device, you must first initiate a LIFU device connection."
+        elif not solution.is_approved():
+            enabled = False
+            tooltip = "Cannot send to device because the currently active solution is not approved. Approve it in the sonication planning module."
+        elif self.logic.running:
+            enabled = False
+            tooltip = "Cannot send solution while a sonication is running."
+        else:
+            enabled = True
+            tooltip = "Send the sonication solution to the connected hardware."
+
+        self.ui.sendSonicationSolutionToDevicePushButton.setEnabled(enabled)
+        self.ui.sendSonicationSolutionToDevicePushButton.setToolTip(tooltip)
 
     def updateRunEnabled(self):
         solution = get_openlifu_data_parameter_node().loaded_solution
         if solution is None:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
-        elif self.logic.running:
-            self.ui.runPushButton.enabled = False
-            self.ui.runPushButton.setToolTip("Currently running...")
         elif not solution.is_approved():
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("Cannot run because the currently active solution is not approved. It can be approved in the sonication planning module.")
+        elif not self._cur_solution_on_hardware_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("To run a sonication, you must send an approved solution to the hardware device.")
+        elif self.logic.running:
+            self.ui.runPushButton.enabled = False
+            self.ui.runPushButton.setToolTip("Currently running...")
         else:
             self.ui.runPushButton.enabled = True
             self.ui.runPushButton.setToolTip("Run sonication")
 
     def updateAbortEnabled(self):
         self.ui.abortPushButton.setEnabled(self.logic.running)
+
+    def updateAllButtonsEnabled(self):
+        self.updateConnectLIFUDevicePushButtonEnabled()
+        self.updateManuallyGetDeviceStatusPushButtonEnabled()
+        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
+        self.updateRunEnabled()
+        self.updateAbortEnabled()
 
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
@@ -292,17 +376,70 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
 
+    def onconnectLIFUDevicePushButtonClicked(self, checked=False):
+        self.logic.cur_lifu_interface = None  # reset
+
+        if self.ui.testModeCheckBox.isChecked():
+            slicer.util.infoDisplay(text="LIFUInterface connected in test_mode")
+            interface = openlifu_lz().io.LIFUInterface(test_mode=True)
+            interface.txdevice.enum_tx7332_devices(2)
+            if interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
+                raise RuntimeError("Interface not ready")
+
+            self.logic.cur_lifu_interface = interface
+
+        else:
+            try:
+                interface = openlifu_lz().io.LIFUInterface()
+                interface.txdevice.enum_tx7332_devices(2) # TODO: see why can't use kwarg
+                self.logic.cur_lifu_interface = interface
+                    
+            except Exception as e:
+                print("Exception thrown:", e)
+                import traceback
+                traceback.print_exc()
+                return
+
+            slicer.util.infoDisplay(text="LIFUInterface connected")
+
+        self.updateManuallyGetDeviceStatusPushButtonEnabled()
+        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
+
+        # From now on, you can only reset the connection
+        self.ui.connectLIFUDevicePushButton.setText("Reset Connection")
+
+    @display_errors
+    def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
+
+        try:
+            self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
+            if self.logic.cur_lifu_interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
+                raise RuntimeError("Interface not ready")
+            self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
+                
+        except Exception as e:
+            print("Exception thrown:", e)
+            import traceback
+            traceback.print_exc()
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND, self.logic.cur_lifu_interface.get_status())
+
+    @display_errors
+    def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
+        slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
+
     def onRunningChanged(self, new_running_state:bool):
+        self.updateConnectLIFUDevicePushButtonEnabled()
+        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
+        self.updateRunHardwareStatusLabel()
 
     def onRunClicked(self):
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
-        solution = get_openlifu_data_parameter_node().loaded_solution
-
         self.ui.runProgressBar.value = 0
-        self.logic.run(solution) 
+        self.logic.run() 
         
     def onAbortClicked(self):
         self.logic.abort()
@@ -322,6 +459,35 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.runProgressBar.value = 0
             else:
                 self.ui.runProgressBar.value = 100
+
+    def updateRunHardwareStatusLabel(self, new_run_hardware_status_value=None):
+        """Update the label indicating the hardware status of the running hardware."""
+        if self.logic.running:
+            if new_run_hardware_status_value is not None:
+                self.ui.runHardwareStatusLabel.setProperty("text", f"Hardware status: {new_run_hardware_status_value.name}")
+        else: # not running
+            self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
+
+    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu.io.LIFUInterfaceStatus | None" = None):
+        self._cur_solution_on_hardware_state = solution_state
+        if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
+            self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
+            self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
+            self.updateRunEnabled()
+        elif solution_state == SolutionOnHardwareState.FAILED_SEND:
+            # If we have information from the hardware, display that too.
+            if hardware_state is not None:
+                text = f"Send to device failed! (Hardware status: {hardware_state.name})"
+            else:
+                text = "Send to device failed!"
+
+            self.ui.solutionStateLabel.setProperty("text", text)
+            self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
+            self.updateRunEnabled()
+        elif solution_state == SolutionOnHardwareState.NOT_SENT:
+            self.ui.solutionStateLabel.setProperty("text", "")  
+            self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
+            self.updateRunEnabled()
 
 # OpenLIFUSonicationControlLogic
 #
@@ -352,6 +518,18 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._on_run_progress_updated_callbacks: List[Callable[[int],None]] = []
         """List of functions to call when `run_progress` property is changed."""
 
+        self._run_hardware_status = -1
+        """ The live status of the hardware device as returned during the sonication run."""
+
+        self._on_run_hardware_status_updated_callbacks = []
+        """List of functions to call when `run_hardware_status` property is changed."""
+
+        self.cur_lifu_interface: Optional[openlifu.io.LIFUInterface] = None
+        """The active LIFUInterface object to the ultrasound hardware."""
+
+        self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
+        """The active Solution object last sent to the ultrasound hardware."""
+
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
 
@@ -373,6 +551,13 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         of progress made by the sonication control algorithm.
         """
         self._on_run_progress_updated_callbacks.append(f)
+
+    def call_on_run_hardware_status_updated(self, f) -> None:
+        """Set a function to be called whenever the `run_hardware_status` property is changed.
+        The provided callback should accept a single int value (from a status enum) which will indicate status
+        of the running openlifu harware device.
+        """
+        self._on_run_hardware_status_updated_callbacks.append(f)
 
     @property
     def running(self) -> bool:
@@ -407,39 +592,60 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_run_progress_updated_callbacks:
             f(self._run_progress)
 
-    def run(self, solution:SlicerOpenLIFUSolution):
-        " Returns True when the sonication control algorithm is done"
-        self.running = True
-        slicer.util.infoDisplay(
-            text=(
-                "The run sonication button is a placeholder. Sonication control is not yet implemented."
-                f" Here the solution that would have been run is {solution.solution.solution.id}."
-                " The fake \"run\" will start after you close this dialog and end after three seconds."
-            ),
-            windowTitle="Not implemented"
-        )
+    @property
+    def run_hardware_status(self):
+        """The amount of progress made by the sonication algorithm on a scale of 0-100"""
+        return self._run_hardware_status
+    
+    @run_hardware_status.setter
+    def run_hardware_status(self, run_hardware_status_value):
+        self._run_hardware_status = run_hardware_status_value
+        for f in self._on_run_hardware_status_updated_callbacks:
+            f(self._run_hardware_status)
 
-        def end_run():
-            """Placeholder function that represents a sonication ending"""
-            self.running = False
-            self.run_progress = 100
-            self.sonication_run_complete = True
+    def run(self):
+        " Returns True when the sonication control algorithm is done"
+
+        if get_openlifu_data_parameter_node().loaded_solution is None:
+            raise RuntimeError("No solution loaded; cannot run sonication.")
+
+        self.run_progress = 0
+        self.sonication_run_complete = False
+
+        # ---- Start the run ----
+        self.running = True
+        self.cur_lifu_interface.start_sonication()
+        # -----------------------
+
+        def poll():
+            self.run_hardware_status = self.cur_lifu_interface.get_status()
+
+            # In non-test mode we simulate the run bars
+            if self.cur_lifu_interface._test_mode:
+                self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
+                self.sonication_run_complete = self.run_progress >= 99
+            else:
+                # self.run_progress = self.cur_lifu_interface.get_progress_percent_as_int() TODO: figure out
+                self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
+
+            if self.sonication_run_complete:
+                self.timer.stop()
+                self.running = False
 
         self.timer = qt.QTimer()
-        self.timer.timeout.connect(end_run) # Assumes that the sonication algorithm can be connected to a function
-        self.timer.setSingleShot(True)
-        self.timer.start(3000)
-
-        # Dummy code to test updating run progress.
-        # TODO: This value should be set based on progress updates provided by the sonication algorithm
-        self.run_progress = 50
+        self.timer.timeout.connect(poll)
+        self.timer.start(500)
 
     def abort(self) -> None:
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
         # that callback can be called here. 
         self.timer.stop()
-        self.running = False
         self.sonication_run_complete = False
+
+        # ---- Stop the run ----
+        self.running = False
+        self.cur_lifu_interface.stop_sonication()
+        # -----------------------
 
     def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
 
