@@ -2217,6 +2217,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if not photocollection_reference_number in loaded_photocollections:
             raise IndexError(f"No photocollection with reference_number {photocollection_reference_number} appears to be loaded; cannot remove it.")
 
+        loaded_photocollections.remove(photocollection_reference_number)
+
     def remove_photoscan(self, photoscan_id:str, clean_up_scene:bool = True) -> None:
         """Remove a photoscan from the list of loaded photoscans, clearing away its data from the scene.
 
