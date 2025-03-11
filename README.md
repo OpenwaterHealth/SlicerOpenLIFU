@@ -35,10 +35,9 @@ add it to your `PATH`.
 
 ### Enable USB Debugging on Android
 
-1. On your Android device, go to **Settings → About phone**.
-2. Tap **Build number** 7 times until you see “You are now a developer!”.
+1. On your Android device, go to **Settings → About phone → Software information**.
+2. Tap **Build number** 7 times until you see "You are now a developer!".
 3. Go to **Settings → System → Developer options**.
 4. Enable **USB debugging**.
 5. When prompted, allow USB debugging access to your computer.  (Check "Always
    allow" to avoid repeated prompts.)
-
