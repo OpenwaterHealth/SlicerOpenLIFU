@@ -526,8 +526,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             current_page.ui.photoscanMarkupsWidget.setCurrentNode(photoscan.tracking_fiducial_node)
             photoscan.tracking_fiducial_node.SetLocked(True)
             current_page.ui.photoscanMarkupsWidget.enabled = False
-        else:
-            current_page.ui.photoscanMarkupsWidget.show()
 
         self.updatePhotoscanApprovalStatusLabel(current_page, photoscan.is_approved())
 
@@ -537,13 +535,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 tracking_fiducial_node = self.logic.initialize_photoscan_tracking_fiducials(photoscan)
                 # Set view nodes on fiducials
                 photoscan.toggle_model_display(visibility_on = True, viewNode = self.photoscanViewNode[photoscan_id]) # Specify a view node for display
+                markupsWidget.setMRMLScene(slicer.mrmlScene)
+                markupsWidget.setCurrentNode(tracking_fiducial_node)
+                markupsWidget.enabled = False
             else:
                 tracking_fiducial_node = photoscan.tracking_fiducial_node
             
-            markupsWidget.setMRMLScene(slicer.mrmlScene)
-            markupsWidget.setCurrentNode(tracking_fiducial_node)
-            markupsWidget.show()
-            markupsWidget.enabled = False
             if current_page.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
                 tracking_fiducial_node.SetLocked(False)
                 current_page.ui.placeLandmarksButton.setText("Done Placing Landmarks")
