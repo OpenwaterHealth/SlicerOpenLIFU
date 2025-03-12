@@ -1,44 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>PhotoscanPreview</class>
- <widget class="QDialog" name="PhotoscanPreview">
+ <class>TransducerTrackingWizard</class>
+ <widget class="qMRMLWidget" name="TransducerTrackingWizard">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>580</width>
-    <height>751</height>
+    <width>400</width>
+    <height>300</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Form</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QLabel" name="photoscanApprovalStatusLabel">
-     <property name="text">
-      <string/>
-     </property>
+   <item alignment="Qt::AlignTop">
+    <widget class="QWidget" name="viewWidgetPlaceholder" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout_6"/>
     </widget>
    </item>
-   <item>
-    <widget class="QWidget" name="photoscanPlaceholderWidget" native="true">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="minimumSize">
-      <size>
-       <width>560</width>
-       <height>560</height>
-      </size>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2"/>
-    </widget>
-   </item>
-   <item>
+   <item alignment="Qt::AlignTop">
     <widget class="QStackedWidget" name="dialogControls">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
@@ -47,10 +28,17 @@
       </sizepolicy>
      </property>
      <property name="currentIndex">
-      <number>1</number>
+      <number>3</number>
      </property>
      <widget class="QWidget" name="photoscanPreview">
       <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <widget class="QLabel" name="photoscanApprovalStatusLabel">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
        <item>
         <widget class="QPushButton" name="photoscanApprovalButton">
          <property name="text">
@@ -58,23 +46,17 @@
          </property>
         </widget>
        </item>
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="photoscanMarkup">
       <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item>
+        <widget class="QLabel" name="photoscanApprovalStatusLabel_2">
+         <property name="text">
+          <string>TextLabel</string>
+         </property>
+        </widget>
+       </item>
        <item>
         <widget class="QPushButton" name="placeLandmarksButton">
          <property name="text">
@@ -92,10 +74,35 @@
          </property>
         </widget>
        </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="skinSegmentationMarkup">
+      <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
-        <widget class="QPushButton" name="nextStepButton">
+        <widget class="QPushButton" name="placeLandmarksButtonSkinSeg">
          <property name="text">
-          <string>Next</string>
+          <string>Place/Edit Registration Landmarks</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="qSlicerSimpleMarkupsWidget" name="skinSegMarkupsWidget">
+         <property name="nodeSelectorVisible">
+          <bool>false</bool>
+         </property>
+         <property name="optionsVisible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="PhotoscanMRITracking">
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item>
+        <widget class="QPushButton" name="approvePhotoscanVolumeTransform">
+         <property name="text">
+          <string>Approve Photoscan-MRI Transform</string>
          </property>
         </widget>
        </item>
@@ -106,6 +113,12 @@
   </layout>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
   <customwidget>
    <class>qSlicerWidget</class>
    <extends>QWidget</extends>
