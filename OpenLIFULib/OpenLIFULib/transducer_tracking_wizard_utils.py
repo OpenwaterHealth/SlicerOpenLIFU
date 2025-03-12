@@ -1,27 +1,30 @@
 import slicer
 import qt
-from typing import Tuple
-from slicer import vtkMRMLViewNode
+from typing import Tuple, List
+from slicer import vtkMRMLViewNode, vtkMRMLModelNode
 from OpenLIFULib.util import replace_widget
 from OpenLIFULib import SlicerOpenLIFUPhotoscan
 
+def initialize_wizard_ui(wizard: qt.QWizard):
 
-def create_dialog_with_viewnode(dialog_title : str, view_node: vtkMRMLViewNode, ui_path: str) -> Tuple[slicer.qMRMLThreeDWidget, qt.QDialog]:
-    """ Creates the transducer tracking wizard dialog and replaces the place holder widget 
-     with a threeD view widget containing the specified view node.""" 
-      
+    vBoxLayout = qt.QVBoxLayout()
+    wizard.setLayout(vBoxLayout)
+    ui_path = slicer.modules.OpenLIFUTransducerTrackerWidget.resourcePath("UI/TransducerTrackingWizard.ui")
+    uiWidget = slicer.util.loadUI(ui_path)
+    vBoxLayout.addWidget(uiWidget)
+    
+    return slicer.util.childWidgetVariables(uiWidget)
+
+def set_threeD_view_node(wizard_page: qt.QWizardPage, threeD_view_node: vtkMRMLViewNode):
+
     # This widget gets destroyed with the dialog so needs to be created each time
     viewWidget = slicer.qMRMLThreeDWidget()
     viewWidget.setMRMLScene(slicer.mrmlScene)
-    viewWidget.setMRMLViewNode(view_node)
+    viewWidget.setMRMLViewNode(threeD_view_node)
+    viewWidget.setMinimumHeight(200)
     
-    # Create dialog for photoscan preview and add threeD view widget to dialog
-    dialog = slicer.util.loadUI(ui_path)
-    ui = slicer.util.childWidgetVariables(dialog)
-    dialog.setWindowTitle(dialog_title)
-    replace_widget(ui.photoscanPlaceholderWidget, viewWidget, ui)
-
-    return dialog 
+    # Add the threeD view widget to specified ui
+    replace_widget(wizard_page.ui.viewWidgetPlaceholder, viewWidget, wizard_page.ui)
 
 def create_threeD_photoscan_view_node(photoscan_id: str):
     """Creates view node for displaying the photoscan model. Before transducer tracking registration,
