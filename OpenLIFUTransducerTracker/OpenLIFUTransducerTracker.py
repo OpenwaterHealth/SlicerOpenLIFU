@@ -35,8 +35,10 @@ from OpenLIFULib.transducer_tracking_results import (
 from OpenLIFULib.transducer_tracking_wizard_utils import (
     initialize_wizard_ui,
     set_threeD_view_node,
-    display_photoscan_in_viewnode,
+    set_viewnodes_in_scene,
+    reset_view_node_camera,
     create_threeD_photoscan_view_node,
+    get_threeD_transducer_tracking_view_node
 )
 
 from OpenLIFULib.skinseg import generate_skin_mesh
@@ -387,10 +389,18 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         slicer.util.childWidgetVariables(ui)
         
         # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
-        display_photoscan_in_viewnode(photoscan,
-                                      view_node = self.photoscanViewNode[photoscan_id],
-                                      reset_camera_view = reset_camera_view)
-        
+        set_viewnodes_in_scene(view_node = self.photoscanViewNode[photoscan_id])
+    
+        # Display the photoscan 
+        photoscan.toggle_model_display(visibility_on = True, viewNode = self.photoscanViewNode[photoscan_id]) # Specify a view node for display
+
+        # Center and fit displayed photoscan in 3D view.
+        # This should only happen when the user is viewing the photoscan for the first time. 
+        # If the user has previously interacted with the 3Dview widget, then
+        # maintain the previous camera/focal point. 
+        if reset_camera_view:
+            reset_view_node_camera(self.photoscanViewNode[photoscan_id])
+
         self.updatePhotoscanApprovalStatusLabel(wizard_page, photoscan.is_approved())
 
         def onPhotoscanApproveClicked():
@@ -500,12 +510,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         set_threeD_view_node(wizard_page=current_page, threeD_view_node = self.photoscanViewNode[photoscan_id])
  
         # Display the photoscan and hide all displayable nodes from this view node except for the photoscan models
-        display_photoscan_in_viewnode(photoscan, view_node = self.photoscanViewNode[photoscan_id], reset_camera_view = reset_camera_view)
+        set_viewnodes_in_scene(view_node = self.photoscanViewNode[photoscan_id])
+        photoscan.toggle_model_display(visibility_on = True, viewNode = self.photoscanViewNode[photoscan_id]) # Specify a view node for display
+
+        # Center and fit displayed photoscan in 3D view.
+        # This should only happen when the user is viewing the photoscan for the first time. 
+        # If the user has previously interacted with the 3Dview widget, then
+        # maintain the previous camera/focal point. 
+        if reset_camera_view:
+            reset_view_node_camera(self.photoscanViewNode[photoscan_id])
 
         # Specify controls for adding markups to the dialog
         if photoscan.tracking_fiducial_node:
             current_page.ui.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
-            current_page.photoscanMarkupPage.ui.photoscanMarkupsWidget.setCurrentNode(photoscan.tracking_fiducial_node)
+            current_page.ui.photoscanMarkupsWidget.setCurrentNode(photoscan.tracking_fiducial_node)
             photoscan.tracking_fiducial_node.SetLocked(True)
             current_page.ui.photoscanMarkupsWidget.enabled = False
         else:
@@ -517,6 +535,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             markupsWidget = current_page.ui.photoscanMarkupsWidget
             if photoscan.tracking_fiducial_node is None:
                 tracking_fiducial_node = self.logic.initialize_photoscan_tracking_fiducials(photoscan)
+                # Set view nodes on fiducials
+                photoscan.toggle_model_display(visibility_on = True, viewNode = self.photoscanViewNode[photoscan_id]) # Specify a view node for display
             else:
                 tracking_fiducial_node = photoscan.tracking_fiducial_node
             
@@ -524,7 +544,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             markupsWidget.setCurrentNode(tracking_fiducial_node)
             markupsWidget.show()
             markupsWidget.enabled = False
-
             if current_page.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
                 tracking_fiducial_node.SetLocked(False)
                 current_page.ui.placeLandmarksButton.setText("Done Placing Landmarks")
@@ -545,8 +564,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         
         # compute skin segmentation
         skin_mesh_node = self.logic.compute_skin_segmentation(volume)
-        # skin_mesh_node.CreateDefaultDisplayNodes()
-        # skin_mesh_node.GetDisplayNode().SetVisibility(True)
+        
+        tt_view_node = get_threeD_transducer_tracking_view_node()
+        set_threeD_view_node(wizard_page=current_page, threeD_view_node = tt_view_node)
+        set_viewnodes_in_scene(view_node = tt_view_node)
+
+        # Create a view node for performing photoscan-volume registration
+        skin_mesh_node.CreateDefaultDisplayNodes()
+        skin_mesh_node.GetDisplayNode().SetVisibility(True)
+        skin_mesh_node.GetDisplayNode().SetViewNodeIDs([tt_view_node.GetID()])
+
+        reset_view_node_camera(tt_view_node)
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
