@@ -399,7 +399,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.globalAnalysisTableModel.removeRows(0,self.globalAnalysisTableModel.rowCount())
         self.globalAnalysisTableModel.setColumnCount(0)
 
-    def populate_solution_analysis_table(self) -> None:
+# supposed to fill the table model widget with the information from the current
+# solution analysis. This is not currently doing as much as it should, but if I
+# look how it's work.ng..
+    def populate_solution_analysis_table(self) -> None: # TODO: here
         """Fill the solution analysis table models with the information from the current solution analysis.
         Assumes that there is a valid solution analysis, raises error if not.
         """
@@ -420,6 +423,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.focusAnalysisTableModel.setHorizontalHeaderLabels(['Metric'] + [f"Focus {i+1}" for  i in range(max_len)])
         self.globalAnalysisTableModel.setHorizontalHeaderLabels(['Metric', 'Value'])
         self.ui.focusAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
+        # iterating through fields, iterating through the dataclass filesd and
+        # trying to populate the table. In Peter's branch, he might be
+        # generating a table in some other format with constraints in it. Maybe
+        # I'll have to replace this field iteration by whatever peter did
+        # differently.
         self.ui.globalAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
 
         for field in fields(analysis_openlifu):
@@ -577,6 +585,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         """
         slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
 
+# TODO: look for complete sonication issue
     def compute_analysis_from_solution(self, solution:SlicerOpenLIFUSolution) -> Optional[SlicerOpenLIFUSolutionAnalysis]:
         """Compute solution analysis from a given solution.
         Returns the SlicerOpenLIFUSolutionAnalysis on success.
@@ -591,11 +600,13 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             return None
         transducer = data_parameter_node.loaded_transducers[solution_openlifu.transducer_id]
         protocol = data_parameter_node.loaded_protocols[solution_openlifu.protocol_id]
-        analysis_openlifu = solution_openlifu.analyze(
+        analysis_openlifu = solution_openlifu.analyze(  # TODO: this is where it computes the solution analysis. creates object analysis_openlifu
             transducer=transducer.transducer.transducer,
             options=protocol.protocol.analysis_options
         )
         return SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
+
+    # the solution goes into a sliceropenlifusolutionanalysis. 49
 
 
 #
