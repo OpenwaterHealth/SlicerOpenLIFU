@@ -287,7 +287,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.checkCanPreviewPhotoscan()
 
     def onStartPhotoscanGenerationButtonClicked(self):
-        reference_numbers = get_openlifu_data_parameter_node().loaded_photocollections
+        reference_numbers = get_openlifu_data_parameter_node().session_photocollections
         if len(reference_numbers) > 1:
             dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
             if dialog.exec_() == qt.QDialog.Accepted:
@@ -525,7 +525,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if get_openlifu_data_parameter_node().loaded_session is None:
             self.ui.startPhotoscanGenerationButton.setEnabled(False)
             self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires an active session.")
-        elif len(get_openlifu_data_parameter_node().loaded_photocollections) == 0:
+        elif len(get_openlifu_data_parameter_node().session_photocollections) == 0:
             self.ui.startPhotoscanGenerationButton.setEnabled(False)
             self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires at least one photocollection.")
         else:

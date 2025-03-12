@@ -95,7 +95,7 @@ class OpenLIFUDataParameterNode:
     loaded_solution : "Optional[SlicerOpenLIFUSolution]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
     loaded_run: "Optional[SlicerOpenLIFURun]"
-    loaded_photocollections: List[str]
+    session_photocollections: List[str]
     loaded_photoscans: "Dict[str,SlicerOpenLIFUPhotoscan]"
 
 #
@@ -930,7 +930,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         currentIndex = self.ui.subjectSessionView.currentIndex()
         _, session_id = self.getSubjectSessionAtIndex(currentIndex)
         _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
-        self._parameterNode.loaded_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
         self.logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
         
         # If the photocollection is being added to a currently active session,
@@ -1361,7 +1361,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.clear_solution(clean_up_scene=True)
             clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
             for photocollection_reference_number in loaded_session.get_affiliated_photocollection_reference_numbers():
-                if photocollection_reference_number in self.getParameterNode().loaded_photocollections:
+                if photocollection_reference_number in self.getParameterNode().session_photocollections:
                     self.remove_photocollection(photocollection_reference_number)
             for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
                 if photoscan_id in self.getParameterNode().loaded_photoscans:
@@ -1626,12 +1626,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
         session_affiliated_photocollections = self.db.get_photocollection_reference_numbers(subject_id, session_id)
-        conflicting_loaded_photocollections =  [num for num in session_affiliated_photocollections if num in self.getParameterNode().loaded_photocollections]
+        conflicting_session_photocollections =  [num for num in session_affiliated_photocollections if num in self.getParameterNode().session_photocollections]
         if (
-            conflicting_loaded_photocollections
+            conflicting_session_photocollections
+            # TODO: We should add a way for sessions to associate with
+            # photocollections. See @ebrahimebrahim's comment on
+            # https://github.com/OpenwaterHealth/OpenLIFU-python/pull/235#pullrequestreview-2662421403
+            # and (
+            #     loaded_session is None
+            #       or not any(session_openlifu.photocollection_id != loaded_session.get_photocollection_id())
+            #     # (we are okay reloading the photocollection if it's just the one affiliated with the session, since user already decided to replace the session)
+            #     )
         ):
             if not slicer.util.confirmYesNoDisplay(
-                f"Loading this session will replace the already loaded photocollection(s) with reference_number(s) {conflicting_loaded_photocollections}. Proceed?",
+                f"Loading this session will replace the already loaded photocollection(s) with reference_number(s) {conflicting_session_photocollections}. Proceed?",
                 "Confirm replace photocollection"
             ):
                 return
@@ -1723,10 +1731,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # There is no openlifu object for photocollections, so we just add them to the list!
 
         session_affiliated_photocollections = self.db.get_photocollection_reference_numbers(subject_id, session_id)
-        self.getParameterNode().loaded_photocollections.extend(session_affiliated_photocollections)
+        self.getParameterNode().session_photocollections.extend(session_affiliated_photocollections)
 
         # === Also keep track of affiliated photocollections and unload any conflicting photocollections that have been previously loaded ===
-        for photocollection_reference_number in conflicting_loaded_photocollections:
+        for photocollection_reference_number in conflicting_session_photocollections:
             self.remove_photocollection(photocollection_reference_number) 
         self.update_photocollections_affiliated_with_loaded_session()
 
@@ -2213,11 +2221,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         Args:
             photocollection_reference_number: The openlifu reference_number of the photocollection to remove
         """
-        loaded_photocollections = self.getParameterNode().loaded_photocollections
-        if not photocollection_reference_number in loaded_photocollections:
+        session_photocollections = self.getParameterNode().session_photocollections
+        if not photocollection_reference_number in session_photocollections:
             raise IndexError(f"No photocollection with reference_number {photocollection_reference_number} appears to be loaded; cannot remove it.")
 
-        loaded_photocollections.remove(photocollection_reference_number)
+        session_photocollections.remove(photocollection_reference_number)
 
     def remove_photoscan(self, photoscan_id:str, clean_up_scene:bool = True) -> None:
         """Remove a photoscan from the list of loaded photoscans, clearing away its data from the scene.
