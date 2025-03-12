@@ -87,10 +87,13 @@ def get_threeD_transducer_tracking_view_node():
 
     return viewNode
 
-def set_viewnodes_in_scene(view_node: vtkMRMLViewNode):
+def set_viewnodes_in_scene(wizard_view_nodes: List[vtkMRMLViewNode]):
 
     # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
-    views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetID() != view_node.GetID()]
+    views_mainwindow = [
+        node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') 
+        for wizard_view_node in wizard_view_nodes
+        if node.GetID() != wizard_view_node.GetID()]
     
     # Set the view nodes for all displayable nodes.
     # If GetViewNodeIDs() is (), the node is displayed in all views so we need to exclude the photoscan view
