@@ -414,7 +414,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         max_len = max(
             len(getattr(analysis_openlifu, f.name))
             for f in fields(analysis_openlifu)
-            if get_origin(f.type) is list
+            if get_origin(f.type) is list or str(f.type) == "list[float]"
         )
 
         self.focusAnalysisTableModel.setHorizontalHeaderLabels(['Metric'] + [f"Focus {i+1}" for  i in range(max_len)])
@@ -431,7 +431,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             args = get_args(field.type)
 
             # lists of floats go into the focusAnalysisTableModel
-            if origin is list and args == (float,):
+            if origin is list and args == (float,) or str(field.type) == "list[float]":
                 values = getattr(analysis_openlifu,field.name)
                 value_strs = [
                     str(values[i]) if i<len(values) else ""
@@ -443,7 +443,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 )))
 
             # individual floats go into the globalAnalysisTableModel
-            elif origin is Union and len(args)==2 and float in args and type(None) in args:
+            elif origin is Union and len(args)==2 and float in args and type(None) in args or str(field.type) == "float | None":
                 value = getattr(analysis_openlifu,field.name)
                 value_str = str(value) if value is not None else ""
                 self.globalAnalysisTableModel.appendRow(list(map(
@@ -482,7 +482,7 @@ def compute_solution_openlifu(
         target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target'),
         session=session.session.session if session is not None else None,
     )
-    return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["ita"], scaled_solution_analysis
+    return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["intensity"], scaled_solution_analysis
 
 
 #
