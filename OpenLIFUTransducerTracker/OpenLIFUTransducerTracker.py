@@ -559,8 +559,22 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             current_page = self.wizard.skinSegmentationMarkupPage
         
-        # compute skin segmentation
-        skin_mesh_node = self.logic.compute_skin_segmentation(volume)
+        # compute skin segmentation if it has not been created
+        # We add as an attribute, the ID of the volume node used to create the skin segmentation. 
+        # Note, this is different from the openlifu volume id. 
+        skin_mesh_node = [
+            node for node in slicer.util.getNodesByClass('vtkMRMLModelNode') 
+            if node.GetAttribute('OpenLIFUData.volume_id') == volume.GetID()
+            ]
+        if not skin_mesh_node:
+            skin_mesh_node = self.logic.compute_skin_segmentation(volume)
+            skin_mesh_node.SetName(f'{volume.GetName()}-skinsegmentation')
+            # Set the ID of corresponding volume as a node attribute 
+            skin_mesh_node.SetAttribute('OpenLIFUData.volume_id', volume.GetID())
+        elif len(skin_mesh_node) > 1:
+            raise RuntimeError(f"Found multiple skin segmentation models affiliated with volume {volume.GetID()}")
+        else:
+            skin_mesh_node = skin_mesh_node[0]
         
         tt_view_node = get_threeD_transducer_tracking_view_node()
         set_threeD_view_node(wizard_page=current_page, threeD_view_node = tt_view_node)
