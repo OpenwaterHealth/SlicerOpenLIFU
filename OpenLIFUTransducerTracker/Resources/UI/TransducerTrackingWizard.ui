@@ -28,7 +28,7 @@
       </sizepolicy>
      </property>
      <property name="currentIndex">
-      <number>3</number>
+      <number>4</number>
      </property>
      <widget class="QWidget" name="photoscanPreview">
       <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -51,9 +51,9 @@
      <widget class="QWidget" name="photoscanMarkup">
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>
-        <widget class="QLabel" name="photoscanApprovalStatusLabel_2">
+        <widget class="QLabel" name="photoscanApprovalStatusLabel_Markup">
          <property name="text">
-          <string>TextLabel</string>
+          <string/>
          </property>
         </widget>
        </item>
@@ -97,12 +97,23 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="PhotoscanMRITracking">
+     <widget class="QWidget" name="PhotoscanVolumeTracking">
       <layout class="QVBoxLayout" name="verticalLayout_5">
        <item>
         <widget class="QPushButton" name="approvePhotoscanVolumeTransform">
          <property name="text">
-          <string>Approve Photoscan-MRI Transform</string>
+          <string>Approve Photoscan-Volume Transform</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="TransducerPhotoscanTracking">
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <item>
+        <widget class="QPushButton" name="approveTransducerPhotoscanTransform">
+         <property name="text">
+          <string>Approve Transducer - Photoscan transform</string>
          </property>
         </widget>
        </item>
