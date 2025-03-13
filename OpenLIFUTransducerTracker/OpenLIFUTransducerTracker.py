@@ -54,6 +54,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         self.setTitle("Photoscan markup")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
+        self.placingLandmarks = False
 
         # Connect buttons
         self.ui.dialogControls.setCurrentIndex(1)
@@ -93,10 +94,13 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
             tracking_node.SetLocked(False)
             self.ui.placeLandmarksButton.setText("Done Placing Landmarks")
+            self.placingLandmarks = True
+            # Emit signal to update the enable/disable state of 'Next button'. 
+            self.completeChanged()
         elif self.ui.placeLandmarksButton.text == "Done Placing Landmarks":
             tracking_node.SetLocked(True)
             self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
-            
+            self.placingLandmarks = False
             # Emit signal to update the enable/disable state of 'Next button'. 
             self.completeChanged()
     
@@ -109,7 +113,8 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
-        return self.wizard().photoscan.tracking_fiducial_node is not None
+        landmarks_exist = self.wizard().photoscan.tracking_fiducial_node is not None
+        return landmarks_exist and not self.placingLandmarks
 
 class SkinSegmentationMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -197,7 +202,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.addPage(self.skinSegmentationMarkupPage)
         self.addPage(self.photoscanVolumeTrackingPage)
         self.addPage(self.transducerPhotoscanTrackingPage)
-
+    
 class PhotoscanPreviewPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
@@ -544,6 +549,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Display dialog
         wizard.exec_()
+
+        self.resetViewNodes(
+            loaded_slicer_photoscan,
+            photoscan_preview_only = True)
+          
         wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
     def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
@@ -598,6 +608,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             volume_view_node= volume_view_node)
         
         wizard.exec_()
+
+        self.resetViewNodes(
+            loaded_slicer_photoscan,
+            photoscan_preview_only = False,
+            skin_mesh_node =skin_mesh_node,
+            transducer_surface = transducer_registration_surface,
+            )    
         wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
     def setupWizardViewNodes(self,
@@ -649,7 +666,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         photoscan.set_view_nodes(wizard_view_nodes)
 
-        # Hide all displayable nodes in the scene from the wizard view ndoes
+        # Hide all displayable nodes in the scene from the wizard view nodes
         hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
         
         if reset_camera_view:
@@ -658,6 +675,21 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         
         return wizard_view_nodes
     
+    def resetViewNodes(self,
+                       photoscan: SlicerOpenLIFUPhotoscan,
+                       photoscan_preview_only = False,
+                       skin_mesh_node: Optional[vtkMRMLModelNode] = None,
+                       transducer_surface: Optional[vtkMRMLModelNode] = None):
+        
+        photoscan.toggle_model_display(visibility_on = False)
+        photoscan.set_view_nodes([])
+
+        if not photoscan_preview_only:
+            skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
+            transducer_surface.GetDisplayNode().SetViewNodeIDs(())
+            skin_mesh_node.GetDisplayNode().SetVisibility(False)
+            transducer_surface.GetDisplayNode().SetVisibility(False) # This could be left on? Incase it was on before
+            
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
 
