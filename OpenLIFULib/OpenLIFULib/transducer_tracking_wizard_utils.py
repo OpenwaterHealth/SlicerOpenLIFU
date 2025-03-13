@@ -97,7 +97,7 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
     # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
     all_view_nodes = slicer.util.getNodesByClass('vtkMRMLViewNode')
     views_mainwindow = [node.GetID() for node in all_view_nodes if node not in wizard_view_nodes]
-    
+
     # Set the view nodes for all displayable nodes.
     # If GetViewNodeIDs() is (), the node is displayed in all views so we need to exclude the photoscan view
     for displayable_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):

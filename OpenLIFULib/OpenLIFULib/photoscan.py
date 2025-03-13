@@ -149,7 +149,7 @@ class SlicerOpenLIFUPhotoscan:
 
     def set_view_nodes(self,viewNodes: List[vtkMRMLViewNode] = []):
         """ If a viewNode is not specified, the model is displayed in all views by default"""
-        self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes])
+        self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
         if self.tracking_fiducial_node:
-            self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes])
+            self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
         
