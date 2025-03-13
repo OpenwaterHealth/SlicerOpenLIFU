@@ -96,6 +96,9 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         elif self.ui.placeLandmarksButton.text == "Done Placing Landmarks":
             tracking_node.SetLocked(True)
             self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
+            
+            # Emit signal to update the enable/disable state of 'Next button'. 
+            self.completeChanged()
     
     def setupMarkupsWidget(self):
 
@@ -103,6 +106,10 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         self.ui.photoscanMarkupsWidget.setCurrentNode(self.wizard().photoscan.tracking_fiducial_node)
         self.wizard().photoscan.tracking_fiducial_node.SetLocked(True)
         self.ui.photoscanMarkupsWidget.enabled = False
+
+    def isComplete(self):
+        """" Determines if the 'Next' button should be enabled"""
+        return self.wizard().photoscan.tracking_fiducial_node is not None
 
 class SkinSegmentationMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
