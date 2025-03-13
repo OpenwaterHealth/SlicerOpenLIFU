@@ -390,13 +390,14 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.cur_lifu_interface = None  # reset
 
         if self.ui.testModeCheckBox.isChecked():
-            slicer.util.infoDisplay(text="LIFUInterface connected in test_mode")
             interface = openlifu_lz().io.LIFUInterface(test_mode=True)
             interface.txdevice.enum_tx7332_devices(2)
             if interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
 
             self.logic.cur_lifu_interface = interface
+
+            slicer.util.infoDisplay(text="LIFUInterface connected in test_mode")
 
         else:
             try:
@@ -412,8 +413,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             slicer.util.infoDisplay(text="LIFUInterface connected")
 
-        self.updateManuallyGetDeviceStatusPushButtonEnabled()
-        self.updateSendSonicationSolutionToDevicePushButtonEnabled()
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateAllButtonsEnabled()
 
         # From now on, you can only reset the connection
         self.ui.connectLIFUDevicePushButton.setText("Reset Connection")
