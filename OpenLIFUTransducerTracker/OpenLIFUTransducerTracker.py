@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 class PhotoscanMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Photoscan fiducials markup")
+        self.setTitle("Photoscan markup")
         self.ui = initialize_wizard_ui(self)
 
         # Connect buttons
@@ -96,7 +96,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         status = "approved" if photoscan_is_approved else "not approved"
-        self.ui.photoscanApprovalStatusLabel.text = (
+        self.ui.photoscanApprovalStatusLabel_Markup.text = (
             f"Photoscan is {status} for transducer tracking" if loaded_session else f"Photoscan approval status: {photoscan_is_approved}."
         )
     
@@ -134,7 +134,7 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         
         tt_view_node = get_threeD_transducer_tracking_view_node()
         set_threeD_view_node(self, tt_view_node)
-        set_viewnodes_in_scene([tt_view_node])
+        set_viewnodes_in_scene(wizard_view_nodes = [tt_view_node])
 
         # Create a view node for performing photoscan-volume registration
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(True)
@@ -144,7 +144,7 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
 class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Register photoscan to volume")
+        self.setTitle("Photoscan registration")
         self.ui = initialize_wizard_ui(self)
         self.ui.dialogControls.setCurrentIndex(3)
     
@@ -165,12 +165,41 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     
         reset_view_node_camera(tt_view_node)
 
+class TransducerPhotoscanTrackingPage(qt.QWizardPage):
+    def __init__(self, parent = None):
+        super().__init__()
+        self.setTitle("Transducer registration")
+        self.ui = initialize_wizard_ui(self)
+        self.ui.dialogControls.setCurrentIndex(3)
+    
+    def initializePage(self):
+
+        tt_view_node = get_threeD_transducer_tracking_view_node()
+        set_threeD_view_node(self, tt_view_node)
+        set_viewnodes_in_scene(wizard_view_nodes = [tt_view_node])
+
+        # Create a view node for performing transducer-photoscan registration
+        # Hide the skin mesh
+        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
+
+        # Display the photoscan and transducer
+        self.photoscanViewNode = self.wizard().photoscan_view_nodes
+        self.wizard().photoscan.toggle_model_display(
+            visibility_on = True,
+            viewNodes = [self.photoscanViewNode[self.wizard().photoscan.photoscan.photoscan.id],tt_view_node]
+            ) # Specify a view node for display
+        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
+        self.wizard().transducer_surface.GetDisplayNode().SetViewNodeIDs([tt_view_node.GetID()])
+        
+        reset_view_node_camera(tt_view_node)
+
 class TransducerTrackingWizard(qt.QWizard):
-    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, skin_mesh_node: vtkMRMLModelNode, photoscan_view_nodes):
+    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, skin_mesh_node: vtkMRMLModelNode, transducer_surface, photoscan_view_nodes):
         super().__init__()
 
         self.photoscan = photoscan
         self.skin_mesh_node = skin_mesh_node
+        self.transducer_surface = transducer_surface
         self.photoscan_view_nodes = photoscan_view_nodes
         self._logic = OpenLIFUTransducerTrackerLogic()
 
@@ -178,10 +207,12 @@ class TransducerTrackingWizard(qt.QWizard):
         self.photoscanMarkupPage = PhotoscanMarkupPage(self)
         self.skinSegmentationMarkupPage = SkinSegmentationMarkupPage(self)
         self.photoscanVolumeTrackingPage = PhotoscanVolumeTrackingPage(self)
+        self.transducerPhotoscanTrackingPage = TransducerPhotoscanTrackingPage(self)
 
         self.addPage(self.photoscanMarkupPage)
         self.addPage(self.skinSegmentationMarkupPage)
         self.addPage(self.photoscanVolumeTrackingPage)
+        self.addPage(self.transducerPhotoscanTrackingPage)
 
 class PhotoscanPreviewPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -230,13 +261,10 @@ class PhotoscanPreviewPage(qt.QWizardPage):
     def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
         
         loaded_session = get_openlifu_data_parameter_node().loaded_session
-        if loaded_session is not None:
-            if photoscan_is_approved:
-                self.ui.photoscanApprovalStatusLabel.text = "Photoscan is approved for transducer tracking"
-            else:
-                self.ui.photoscanApprovalStatusLabel.text = "Photoscan is not approved for transducer tracking"
-        else:
-            self.ui.photoscanApprovalStatusLabel.text = f"Photoscan approval status: {photoscan_is_approved}."
+        status = "approved" if photoscan_is_approved else "not approved"
+        self.ui.photoscanApprovalStatusLabel.text = (
+            f"Photoscan is {status} for transducer tracking" if loaded_session else f"Photoscan approval status: {photoscan_is_approved}."
+        )
 
     def updatePhotoscanApproveButton(self, photoscan_is_approved: bool):
         loaded_session = get_openlifu_data_parameter_node().loaded_session
@@ -582,18 +610,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         selected_photoscan_openlifu = activeData["Photoscan"]
         loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
 
-        wizard = self.setupTransducerTrackingWizard(photoscan=loaded_slicer_photoscan,
-                                           volume = activeData["Volume"])
-        wizard.exec_()
-        wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
+        selected_transducer = activeData["Transducer"]
+        transducer_registration_surface = selected_transducer.surface_model_node
 
-    def setupTransducerTrackingWizard(self, photoscan: SlicerOpenLIFUPhotoscan, volume: vtkMRMLScalarVolumeNode):
-
+        volume = activeData["Volume"]
         skin_mesh_node = self.logic.get_skin_segmentation(volume)
 
-        wizard = TransducerTrackingWizard(photoscan, skin_mesh_node, self.photoscanViewNode)
-
-        return wizard
+        wizard = TransducerTrackingWizard(
+            photoscan = loaded_slicer_photoscan,
+            skin_mesh_node = skin_mesh_node,
+            transducer_surface = transducer_registration_surface,
+            photoscan_view_nodes = self.photoscanViewNode)
+        
+        wizard.exec_()
+        wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
