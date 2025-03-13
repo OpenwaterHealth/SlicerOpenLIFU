@@ -54,7 +54,10 @@ class SlicerLogHandler(logging.Handler):
             method_to_use = self.handle_warning
         else: # info or any other unaccounted for log message level
             method_to_use = self.handle_info
+        
+        slicer.app.processEvents()
         method_to_use(self.format(record))
+        slicer.app.processEvents()
 
     def handle_error(self, msg):
         slicer.util.errorDisplay(f"{self.name_to_print}: {msg}")
@@ -65,9 +68,26 @@ class SlicerLogHandler(logging.Handler):
     def handle_info(self, msg):
         slicer.util.showStatusMessage(f"{self.name_to_print}: {msg}")
 
-def add_slicer_log_handler(openlifu_object: Any):
+def add_slicer_log_handler(logger_name : str, name_to_print : str):
+    """Adds a SlicerLogHandler to the logger of a given name,
+    and only doing so if that logger doesn't already have a SlicerLogHandler.
+
+    Args:
+        logger_name: The name of the logger that should receive Slicer log handling
+        name_to_print: The display name of the logger to put on Slicer messages and 
+            dialogs to indicate which logger the messages are coming from.
+    """
+    logger : logging.Logger = logging.getLogger(logger_name)
+    if not any(isinstance(h, SlicerLogHandler) for h in logger.handlers):
+        handler = SlicerLogHandler(name_to_print)
+        logger.addHandler(handler)
+
+def add_slicer_log_handler_for_openlifu_object(openlifu_object: Any):
     """Adds an appropriately named SlicerLogHandler to the logger of an openlifu object,
-    and only doing so if that logger doesn't already have a SlicerLogHandler"""
+    and only doing so if that logger doesn't already have a SlicerLogHandler.
+    This is designed to work with those openlifu classes that have a `logger` attribute,
+    a common pattern in the openlifu python codebase.
+    """
     if not hasattr(openlifu_object, "logger"):
         raise ValueError("This object does not have a logger attribute.")
     if not hasattr(openlifu_object, "__class__"):
