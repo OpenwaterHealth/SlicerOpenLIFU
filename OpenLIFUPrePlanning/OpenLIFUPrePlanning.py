@@ -22,7 +22,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
 )
-from OpenLIFULib.util import replace_widget, BusyCursor
+from OpenLIFULib.util import replace_widget, BusyCursor, add_slicer_log_handler
 from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_result,
     clear_virtual_fit_results,
@@ -556,6 +556,8 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             target: vtkMRMLMarkupsFiducialNode,
         ) -> Optional[vtkMRMLTransformNode]:
 
+        add_slicer_log_handler("VirtualFit", "Virtual fitting")
+
         # TODO: Many quantities are hard-coded here will not have to be when these two issues are done:
         # https://github.com/OpenwaterHealth/OpenLIFU-python/issues/166
         # https://github.com/OpenwaterHealth/OpenLIFU-python/issues/165
@@ -578,7 +580,6 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 (-50, 50), # ax
             ),
         )
-        # TODO: add log handler for this
 
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None

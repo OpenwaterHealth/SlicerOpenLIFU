@@ -40,7 +40,7 @@ from OpenLIFULib.util import (
     display_errors,
     create_noneditable_QStandardItem,
     ensure_list,
-    add_slicer_log_handler,
+    add_slicer_log_handler_for_openlifu_object,
     BusyCursor,
 )
 
@@ -1488,7 +1488,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self._subjects = {}
 
         self.db = openlifu_lz().Database(path)
-        add_slicer_log_handler(self.db)
+        add_slicer_log_handler_for_openlifu_object(self.db)
 
         subject_ids : List[str] = ensure_list(self.db.get_subject_ids())
         self._subjects = {
