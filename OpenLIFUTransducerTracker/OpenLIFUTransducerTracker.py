@@ -642,6 +642,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Set view nodes for the skin mesh, transducer and photoscan
         skin_mesh_node.GetDisplayNode().SetViewNodeIDs([volume_view_node.GetID()])
         transducer_surface.GetDisplayNode().SetViewNodeIDs([volume_view_node.GetID()])
+        # For transducers, ensure that the parent folder visibility is turned on
+        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+        parentFolderID = shNode.GetItemParent(shNode.GetItemByDataNode(transducer_surface))
+        shNode.SetItemDisplayVisibility(parentFolderID, True)
+
         photoscan.set_view_nodes(wizard_view_nodes)
 
         # Hide all displayable nodes in the scene from the wizard view ndoes
