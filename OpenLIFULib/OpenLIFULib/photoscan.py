@@ -128,14 +128,11 @@ class SlicerOpenLIFUPhotoscan:
     def toggle_approval(self) -> None:
         self.photoscan.photoscan.photoscan_approved = not self.photoscan.photoscan.photoscan_approved 
     
-    def toggle_model_display(self, visibility_on: bool = False, viewNodes: List[vtkMRMLViewNode] = []):
-        """ If a viewNode is not specified, the model is displayed in all views by default"""
+    def toggle_model_display(self, visibility_on: bool = False):
+
         self.model_node.GetDisplayNode().SetVisibility(visibility_on)
-        self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes])
-        
         if self.tracking_fiducial_node:
             self.tracking_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
-            self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes])
                         
     def create_tracking_fiducial_node(self, right_ear_coordinates = [0,0,0], left_ear_coordinates = [0,0,0], nasion_coordinates = [0,0,0]):
         """Nodes are created by default at the origin"""
@@ -150,4 +147,9 @@ class SlicerOpenLIFUPhotoscan:
         
         return self.tracking_fiducial_node
 
+    def set_view_nodes(self,viewNodes: List[vtkMRMLViewNode] = []):
+        """ If a viewNode is not specified, the model is displayed in all views by default"""
+        self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes])
+        if self.tracking_fiducial_node:
+            self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes])
         

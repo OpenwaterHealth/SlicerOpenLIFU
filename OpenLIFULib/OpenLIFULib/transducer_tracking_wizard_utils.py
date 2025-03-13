@@ -15,16 +15,21 @@ def initialize_wizard_ui(wizard: qt.QWizard):
     
     return slicer.util.childWidgetVariables(uiWidget)
 
-def set_threeD_view_node(wizard_page: qt.QWizardPage, threeD_view_node: vtkMRMLViewNode):
-
-    # This widget gets destroyed with the dialog so needs to be created each time
+def set_threeD_view_widget(ui):
+     
     viewWidget = slicer.qMRMLThreeDWidget()
     viewWidget.setMRMLScene(slicer.mrmlScene)
-    viewWidget.setMRMLViewNode(threeD_view_node)
     viewWidget.setMinimumHeight(200)
-    
+
     # Add the threeD view widget to specified ui
-    replace_widget(wizard_page.ui.viewWidgetPlaceholder, viewWidget, wizard_page.ui)
+    # In the layout, the UI should have the same name
+    replace_widget(ui.viewWidgetPlaceholder, viewWidget, ui)
+
+    return viewWidget
+
+def set_threeD_view_node(view_widget, threeD_view_node: vtkMRMLViewNode):
+
+    view_widget.setMRMLViewNode(threeD_view_node)
 
 def create_threeD_photoscan_view_node(photoscan_id: str):
     """Creates view node for displaying the photoscan model. Before transducer tracking registration,
@@ -87,7 +92,7 @@ def get_threeD_transducer_tracking_view_node():
 
     return viewNode
 
-def set_viewnodes_in_scene(wizard_view_nodes: List[vtkMRMLViewNode]):
+def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
 
     # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
     views_mainwindow = [
