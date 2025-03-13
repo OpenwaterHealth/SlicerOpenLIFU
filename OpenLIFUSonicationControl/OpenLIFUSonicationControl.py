@@ -1,5 +1,6 @@
 from typing import Optional, Callable, Dict, List, TYPE_CHECKING
 from enum import Enum
+import re
 
 import qt
 import vtk
@@ -602,6 +603,20 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._run_hardware_status = run_hardware_status_value
         for f in self._on_run_hardware_status_updated_callbacks:
             f(self._run_hardware_status)
+            
+    def update_run_progress_from_lifuinterface(self, descriptor, message):
+        """ Parses the status message from LIFUInterface. """
+
+        if descriptor != "TX":  
+            return  # Ignore non-transmitter messages
+
+        # Parse progress
+        
+        match = re.search(r'PULSE:\[(\d+)/100\]', message)  # TODO: format subject to change
+        if not match:
+            return
+        progress = int(match.group(1))
+        self.run_progress = progress
 
     def run(self):
         " Returns True when the sonication control algorithm is done"
@@ -617,6 +632,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.cur_lifu_interface.start_sonication()
         # -----------------------
 
+        self.cur_lifu_interface.signal_data_received.connect(self.update_run_progress_from_lifuinterface)
+
         def poll():
             self.run_hardware_status = self.cur_lifu_interface.get_status()
 
@@ -625,12 +642,15 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
                 self.sonication_run_complete = self.run_progress >= 99
             else:
-                # self.run_progress = self.cur_lifu_interface.get_progress_percent_as_int() TODO: figure out
                 self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
 
             if self.sonication_run_complete:
                 self.timer.stop()
                 self.running = False
+                self.cur_lifu_interface.stop_sonication()
+
+                # disconnect signals
+                self.cur_lifu_interface.signal_data_received.disconnect(self.update_run_progress_from_lifuinterface)
 
         self.timer = qt.QTimer()
         self.timer.timeout.connect(poll)
@@ -646,6 +666,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.running = False
         self.cur_lifu_interface.stop_sonication()
         # -----------------------
+
+        # disconnect signals
+        self.cur_lifu_interface.signal_data_received.disconnect(self.update_run_progress_from_lifuinterface)
 
     def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
 
