@@ -1709,15 +1709,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             replace=True, # If there happen to already be some virtual fit result nodes that clash, loading a session will silently overwrite them.
         )
 
-        shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
-        transducer_parent_folder_id = shNode.GetItemParent(shNode.GetItemByDataNode(newly_loaded_transducer.transform_node))
-        
         for vf_node in newly_added_vf_result_nodes:
             preplanning_widget : OpenLIFUPrePlanningWidget = slicer.modules.OpenLIFUPrePlanningWidget
             preplanning_widget.watchVirtualFit(vf_node)
 
             # Place virtual fit results under the transducer folder
-            shNode.SetItemParent(shNode.GetItemByDataNode(vf_node), transducer_parent_folder_id)
+            newly_loaded_transducer.move_node_into_transducer_sh_folder(vf_node)
 
         # === Load transducer tracking results ===
 
@@ -1729,8 +1726,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
 
         for (transducer_to_photoscan_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
-            shNode.SetItemParent(shNode.GetItemByDataNode(transducer_to_photoscan_node), transducer_parent_folder_id)
-            shNode.SetItemParent(shNode.GetItemByDataNode(photoscan_to_volume_node), transducer_parent_folder_id)
+            newly_loaded_transducer.move_node_into_transducer_sh_folder(transducer_to_photoscan_node)
+            newly_loaded_transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_node)
 
         # === Toggle slice visibility and center slices on first target ===
 
