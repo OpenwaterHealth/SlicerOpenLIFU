@@ -2,7 +2,12 @@ from typing import TYPE_CHECKING, List
 import vtk
 from pathlib import Path
 import slicer
-from slicer import vtkMRMLVectorVolumeNode, vtkMRMLModelNode, vtkMRMLViewNode, vtkMRMLMarkupsFiducialNode
+from slicer import (
+    vtkMRMLVectorVolumeNode,
+    vtkMRMLModelNode,
+    vtkMRMLViewNode,
+    vtkMRMLMarkupsFiducialNode,
+    vtkMRMLTransformNode)
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPhotoscanWrapper,
@@ -153,3 +158,9 @@ class SlicerOpenLIFUPhotoscan:
         if self.tracking_fiducial_node:
             self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
         
+    def set_transform_node(self, transform_node: vtkMRMLTransformNode):
+        
+        self.model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+        
+        if self.tracking_fiducial_node:
+            self.tracking_fiducial_node.SetAndObserveTransformNodeID(transform_node.GetID())   

@@ -129,8 +129,6 @@ class SlicerOpenLIFUTransducer:
         new_transform_vtk = numpy_to_vtk_4x4(new_transform)
         self.transform_node.SetMatrixTransformToParent(new_transform_vtk)
 
-
-
     def clear_nodes(self) -> None:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         
