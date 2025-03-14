@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from openlifu import Transducer
 
 class TransducerTrackingTransformType(Enum):
-    TRANSDUCER_TO_PHOTOCAN = auto()
+    TRANSDUCER_TO_PHOTOSCAN = auto()
     PHOTOSCAN_TO_VOLUME = auto()
 
 def add_transducer_tracking_result(
@@ -49,7 +49,7 @@ def add_transducer_tracking_result(
     """
     
     # Should only be one per photoscan/per session/per transform_type
-    existing_tt_result_nodes = get_transducer_tracking_result_nodes(
+    existing_tt_result_nodes = get_transducer_tracking_result_nodes_in_scene(
         photoscan_id=photoscan_id,
         session_id=session_id,
         transform_type=transform_type) 
@@ -66,9 +66,9 @@ def add_transducer_tracking_result(
         else:
             raise RuntimeError("There is already a transducer tracking result node for this transform_type+photoscan+session and replace is False")
     
-    if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOCAN:
+    if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN:
         transform_node.SetName(f"TT transducer-photoscan {photoscan_id}")
-        transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOCAN.name}","1")
+        transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN.name}","1")
     elif transform_type == TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME:
         transform_node.SetName(f"TT photoscan-volume {photoscan_id}")
         transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}","1")
@@ -79,6 +79,9 @@ def add_transducer_tracking_result(
     transform_node.SetAttribute("TT:photoscanID", photoscan_id)
     if session_id is not None:
         transform_node.SetAttribute("TT:sessionID", session_id)
+
+    transform_node.CreateDefaultDisplayNodes()
+    transform_node.GetDisplayNode().SetVisibility(False)
     
     return transform_node
 
@@ -160,7 +163,7 @@ def add_transducer_tracking_results_from_openlifu_session_format(
         
         transducer_to_photoscan_transform_node = add_transducer_tracking_result(
             transform_node=transducer_to_photoscan_transform_node,
-            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOCAN,
+            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN,
             photoscan_id=tt_result.photoscan_id,
             approval_status=tt_result.transducer_to_photoscan_tracking_approved,
             session_id=session_id,
@@ -180,7 +183,7 @@ def add_transducer_tracking_results_from_openlifu_session_format(
 
     return nodes_that_have_been_added
 
-def get_transducer_tracking_result_nodes(
+def get_transducer_tracking_result_nodes_in_scene(
         photoscan_id : Optional[str] = None,
         session_id : Optional[str] = None,
         transform_type: Optional[TransducerTrackingTransformType] = None) -> vtkMRMLTransformNode:
@@ -196,7 +199,7 @@ def get_transducer_tracking_result_nodes(
     """
 
     tt_result_nodes = [
-        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if t.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOCAN.name}") == "1" or t.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
+        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if t.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN.name}") == "1" or t.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
         ]
 
     if session_id is not None:
@@ -209,6 +212,49 @@ def get_transducer_tracking_result_nodes(
         tt_result_nodes = filter(lambda t : t.GetAttribute(f"isTT-{transform_type.name}") == "1", tt_result_nodes)
 
     return tt_result_nodes
+
+def get_transducer_tracking_result(
+    photoscan_id : str,
+    transform_type: TransducerTrackingTransformType,
+    session_id : Optional[str]
+    ) -> Optional[vtkMRMLTransformNode]:
+    """Retrieve the transducer tracking result for the given photoscan and transform type/direction, returning None if there isn't one,
+    and raising an exception if there appears to be a non-unique one.
+
+    Args:
+        photoscan_id: photoscan ID for which to retrieve the transducer tracking result
+        transform_type: transform type for which to retrieve the the transducer tracking result
+        session_id: session ID to help identify the correct transducer tracking result node, or None to work with
+            only transducer tracking result nodes that do not have an affiliated session
+
+    Returns: The retrieved transducer tracking result vtkMRMLTransformNode.
+    """
+    tt_result_nodes = list(get_transducer_tracking_result_nodes_in_scene(
+        photoscan_id= photoscan_id,
+        transform_type= transform_type,
+        session_id=session_id
+    ))
+
+    # If session_id None, then at this point tt_result_nodes is not filtered for session ID
+    # So here we specifically filter for nodes that are have *no* session id:
+    if session_id is None:
+        tt_result_nodes = list(filter(
+            lambda t : t.GetAttribute("TT:sessionID") is None,
+            tt_result_nodes,
+        ))
+
+    if len(tt_result_nodes) < 1:
+        return None
+
+    if len(tt_result_nodes) > 1:
+        raise RuntimeError(
+            f"There are {len(tt_result_nodes)} transducer tracking result nodes of type {transform_type.name} for photoscan {photoscan_id} "
+            + (f"and session {session_id}" if session_id is not None else "with no session.")
+        )
+
+    tt_result_node = tt_result_nodes[0]
+
+    return tt_result_node
 
 def get_complete_transducer_tracking_results(session_id: Optional[str], photoscan_id: Optional[str]) -> Iterable[Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]:
     """A transducer tracking result is considered 'complete' when both the transducer_to_photoscan 
@@ -225,8 +271,8 @@ def get_complete_transducer_tracking_results(session_id: Optional[str], photosca
     tuple of transducer tracking nodes: (transducer_to_photoscan_transform, photoscan_to_volume_transform) 
     """
 
-    tp_nodes = get_transducer_tracking_result_nodes(session_id=session_id, photoscan_id=photoscan_id, transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOCAN)
-    pv_nodes = get_transducer_tracking_result_nodes(session_id = session_id, photoscan_id= photoscan_id, transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
+    tp_nodes = get_transducer_tracking_result_nodes_in_scene(session_id=session_id, photoscan_id=photoscan_id, transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN)
+    pv_nodes = get_transducer_tracking_result_nodes_in_scene(session_id = session_id, photoscan_id= photoscan_id, transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
 
     # If session_id None, then at this point `nodes`` is not filtered for session ID
     # So here we specifically filter for nodes that are have *no* session id:
@@ -263,7 +309,7 @@ def set_transducer_tracking_approval_for_node(approval_state: bool, transform_no
         approval_state: new approval state to apply
         transform_node: vtkMRMLTransformNode
     """
-    if (transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOCAN.name}") != "1" 
+    if (transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN.name}") != "1" 
         or transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") != "1"
     ):
         raise ValueError("The specified transform node is a not a transducer tracking result node")
@@ -297,7 +343,7 @@ def clear_transducer_tracking_results(
         session_id: session ID. If None then **only transducer tracking results with no session ID are removed**!
     """
 
-    nodes_to_remove = get_transducer_tracking_result_nodes(session_id=session_id)
+    nodes_to_remove = get_transducer_tracking_result_nodes_in_scene(session_id=session_id)
 
     # If session_id None, then at this point nodes_to_remove is not filtered for session ID
     # So here we specifically filter for nodes that are have *no* session id:
