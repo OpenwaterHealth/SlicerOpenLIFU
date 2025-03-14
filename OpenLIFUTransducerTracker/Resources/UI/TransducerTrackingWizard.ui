@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TransducerTrackingWizard</class>
+ <widget class="qMRMLWidget" name="TransducerTrackingWizard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>398</width>
+    <height>289</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item alignment="Qt::AlignTop">
+    <widget class="QWidget" name="viewWidgetPlaceholder" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout_6"/>
+    </widget>
+   </item>
+   <item alignment="Qt::AlignTop">
+    <widget class="QStackedWidget" name="dialogControls">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="currentIndex">
+      <number>4</number>
+     </property>
+     <widget class="QWidget" name="photoscanPreview">
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <widget class="QLabel" name="photoscanApprovalStatusLabel">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="photoscanApprovalButton">
+         <property name="text">
+          <string>Approve Photoscan</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="photoscanMarkup">
+      <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item>
+        <widget class="QLabel" name="photoscanApprovalStatusLabel_Markup">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="placeLandmarksButton">
+         <property name="text">
+          <string>Place/Edit Registration Landmarks</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="qSlicerSimpleMarkupsWidget" name="photoscanMarkupsWidget">
+         <property name="nodeSelectorVisible">
+          <bool>false</bool>
+         </property>
+         <property name="optionsVisible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_5">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="skinSegmentationMarkup">
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QPushButton" name="placeLandmarksButtonSkinSeg">
+         <property name="text">
+          <string>Place/Edit Registration Landmarks</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="qSlicerSimpleMarkupsWidget" name="skinSegMarkupsWidget">
+         <property name="nodeSelectorVisible">
+          <bool>false</bool>
+         </property>
+         <property name="optionsVisible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_4">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="PhotoscanVolumeTracking">
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item>
+        <widget class="QLabel" name="photoscanVolumeTransformApprovalStatusLabel">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="runPhotoscanVolumeRegistration">
+         <property name="text">
+          <string>Run ICP registration</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="approvePhotoscanVolumeTransform">
+         <property name="text">
+          <string>Approve photoscan-volume transform</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="TransducerPhotoscanTracking">
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <item>
+        <widget class="QLabel" name="transducerPhotoscanTransformApprovalStatusLabel">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="runTransducerPhotoscanRegistration">
+         <property name="text">
+          <string>Run ICP registration</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="approveTransducerPhotoscanTransform">
+         <property name="text">
+          <string>Approve transducer - photoscan transform</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerWidget</class>
+   <extends>QWidget</extends>
+   <header>qSlicerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerSimpleMarkupsWidget</class>
+   <extends>qSlicerWidget</extends>
+   <header>qSlicerSimpleMarkupsWidget.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

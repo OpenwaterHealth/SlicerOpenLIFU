@@ -1,27 +1,35 @@
 import slicer
 import qt
-from typing import Tuple
-from slicer import vtkMRMLViewNode
+from typing import Tuple, List
+from slicer import vtkMRMLViewNode, vtkMRMLModelNode
 from OpenLIFULib.util import replace_widget
 from OpenLIFULib import SlicerOpenLIFUPhotoscan
 
+def initialize_wizard_ui(wizard: qt.QWizard):
 
-def create_dialog_with_viewnode(dialog_title : str, view_node: vtkMRMLViewNode, ui_path: str) -> Tuple[slicer.qMRMLThreeDWidget, qt.QDialog]:
-    """ Creates the transducer tracking wizard dialog and replaces the place holder widget 
-     with a threeD view widget containing the specified view node.""" 
-      
-    # This widget gets destroyed with the dialog so needs to be created each time
+    vBoxLayout = qt.QVBoxLayout()
+    wizard.setLayout(vBoxLayout)
+    ui_path = slicer.modules.OpenLIFUTransducerTrackerWidget.resourcePath("UI/TransducerTrackingWizard.ui")
+    uiWidget = slicer.util.loadUI(ui_path)
+    vBoxLayout.addWidget(uiWidget)
+    
+    return slicer.util.childWidgetVariables(uiWidget)
+
+def set_threeD_view_widget(ui):
+     
     viewWidget = slicer.qMRMLThreeDWidget()
     viewWidget.setMRMLScene(slicer.mrmlScene)
-    viewWidget.setMRMLViewNode(view_node)
-    
-    # Create dialog for photoscan preview and add threeD view widget to dialog
-    dialog = slicer.util.loadUI(ui_path)
-    ui = slicer.util.childWidgetVariables(dialog)
-    dialog.setWindowTitle(dialog_title)
-    replace_widget(ui.photoscanPlaceholderWidget, viewWidget, ui)
+    viewWidget.setMinimumHeight(200)
 
-    return dialog 
+    # Add the threeD view widget to specified ui
+    # In the layout, the UI should have the same name
+    replace_widget(ui.viewWidgetPlaceholder, viewWidget, ui)
+
+    return viewWidget
+
+def set_threeD_view_node(view_widget, threeD_view_node: vtkMRMLViewNode):
+
+    view_widget.setMRMLViewNode(threeD_view_node)
 
 def create_threeD_photoscan_view_node(photoscan_id: str):
     """Creates view node for displaying the photoscan model. Before transducer tracking registration,
@@ -55,15 +63,41 @@ def create_threeD_photoscan_view_node(photoscan_id: str):
 
     return viewNode
 
-def display_photoscan_in_viewnode(photoscan: SlicerOpenLIFUPhotoscan, view_node: vtkMRMLViewNode, reset_camera_view: bool = False) -> None:
-    """ Displays the photoscan model node and associated fiducial nodes (if created) within the specified view node, while ensuring
-    that all other displayable nodes in the scene are not included in the view node. When a display node is created, by default, no viewIDs are set.
-    When GetViewNodeIDs is null, the node is displayed in all views. Therefore, to restrict non-photoscan nodes from being displayed in the photoscan preview widget, 
-    we need to set the viewNodeIDs of any displayed nodes to IDs of all viewNodes in the scene, excluding the photoscan viewnode."""
+def get_threeD_transducer_tracking_view_node():
+    """Creates view node for performing transducer tracking
+    """
+
+    # Layout name is used to create and identify the underlying view node 
+    layoutName = "TransducerTracking"
+    layoutLabel = "Volume Co-ordinate Space"
+    layoutColor = [0.97, 0.54, 0.12] # Orange background
+    # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
+    viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
+
+    viewNode = slicer.util.getFirstNodeByClassByName('vtkMRMLViewNode','view-transducertracking')
+    if not viewNode:
+        viewLogic = slicer.vtkMRMLViewLogic()
+        viewLogic.SetMRMLScene(slicer.mrmlScene)
+        viewNode = viewLogic.AddViewNode(layoutName)
+        viewNode.SetLayoutLabel(layoutLabel)
+        viewNode.SetLayoutColor(layoutColor)
+        viewNode.SetName(f'view-transducertracking')
+        viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
+
+    # Customize view node. 
+    viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
+    viewNode.SetBackgroundColor2(0.98,0.58,0.4)
+    viewNode.SetBoxVisible(False) # Turn off bounding box visibility
+    viewNode.SetAxisLabelsVisible(False) # Turn off axis labels visibility
+
+    return viewNode
+
+def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
 
     # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
-    views_mainwindow = [node.GetID() for node in slicer.util.getNodesByClass('vtkMRMLViewNode') if node.GetID() != view_node.GetID()]
-    
+    all_view_nodes = slicer.util.getNodesByClass('vtkMRMLViewNode')
+    views_mainwindow = [node.GetID() for node in all_view_nodes if node not in wizard_view_nodes]
+
     # Set the view nodes for all displayable nodes.
     # If GetViewNodeIDs() is (), the node is displayed in all views so we need to exclude the photoscan view
     for displayable_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):
@@ -81,22 +115,16 @@ def display_photoscan_in_viewnode(photoscan: SlicerOpenLIFUPhotoscan, view_node:
             for view_nodeID in views_mainwindow:
                 slice_node.AddThreeDViewID(view_nodeID)
 
-    # Display the photoscan 
-    photoscan.toggle_model_display(visibility_on = True, viewNode = view_node) # Specify a view node for display
+def reset_view_node_camera(view_node: vtkMRMLViewNode):
 
-    # Center and fit displayed photoscan in 3D view.
-    # This should only happen when the user is viewing the photoscan for the first time. 
-    # If the user has previously interacted with the 3Dview widget, then
-    # maintain the previous camera/focal point. 
-    if reset_camera_view:
-        layoutManager = slicer.app.layoutManager()
-        for threeDViewIndex in range(layoutManager.threeDViewCount):
-            view = layoutManager.threeDWidget(threeDViewIndex).threeDView()
-            if view.mrmlViewNode().GetID() == view_node.GetID():
-                photoscanViewIndex = threeDViewIndex
-        
-        threeDWidget = layoutManager.threeDWidget(photoscanViewIndex)
-        threeDView = threeDWidget.threeDView() 
-        threeDView.rotateToViewAxis(3)  # look from anterior direction
-        threeDView.resetFocalPoint()  # reset the 3D view cube size and center it
-        threeDView.resetCamera()  # reset camera zoom
+    layoutManager = slicer.app.layoutManager()
+    for threeDViewIndex in range(layoutManager.threeDViewCount):
+        view = layoutManager.threeDWidget(threeDViewIndex).threeDView()
+        if view.mrmlViewNode().GetID() == view_node.GetID():
+            specifiedViewIndex = threeDViewIndex
+    
+    threeDWidget = layoutManager.threeDWidget(specifiedViewIndex)
+    threeDView = threeDWidget.threeDView() 
+    threeDView.rotateToViewAxis(3)  # look from anterior direction
+    threeDView.resetFocalPoint()  # reset the 3D view cube size and center it
+    threeDView.resetCamera()  # reset camera zoom
