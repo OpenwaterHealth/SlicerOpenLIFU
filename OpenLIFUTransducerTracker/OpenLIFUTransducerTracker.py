@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, TYPE_CHECKING, List, Dict
+from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 import numpy as np
 import vtk
 import qt
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 class PhotoscanMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Place registration fiducials on photoscan")
+        self.setTitle("Place facial landmarks on photoscan")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.placingLandmarks = False
@@ -83,22 +83,22 @@ class PhotoscanMarkupPage(qt.QWizardPage):
     
     def onPlaceLandmarksClicked(self):
 
-        tracking_node = self.wizard().photoscan.tracking_fiducial_node
+        photoscan_facial_landmarks_node = self.wizard().photoscan.tracking_fiducial_node
 
-        if tracking_node is None:
-            tracking_node = self.wizard()._logic.initialize_photoscan_tracking_fiducials(self.wizard().photoscan)
+        if photoscan_facial_landmarks_node is None:
+            photoscan_facial_landmarks_node = self.wizard()._logic.initialize_photoscan_tracking_fiducials(self.wizard().photoscan)
             # Set view nodes on fiducials
             self.wizard().photoscan.set_view_nodes(viewNodes = [self.wizard().photoscan_view_node, self.wizard().volume_view_node]) # Specify a view node for display
             self.setupMarkupsWidget()
 
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
-            tracking_node.SetLocked(False)
+            photoscan_facial_landmarks_node.SetLocked(False)
             self.ui.placeLandmarksButton.setText("Done Placing Landmarks")
             self.placingLandmarks = True
             # Emit signal to update the enable/disable state of 'Next button'. 
             self.completeChanged()
         elif self.ui.placeLandmarksButton.text == "Done Placing Landmarks":
-            tracking_node.SetLocked(True)
+            photoscan_facial_landmarks_node.SetLocked(True)
             self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
             self.placingLandmarks = False
             # Emit signal to update the enable/disable state of 'Next button'. 
@@ -119,11 +119,16 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 class SkinSegmentationMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Place registration fiducials on skin surface")
+        self.setTitle("Place facial landmarks on skin surface")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(2)
     
+        self.skinseg_facial_landmarks = None
+        self.placingLandmarks = False
+
+        self.ui.placeLandmarksButtonSkinSeg.clicked.connect(self.onPlaceLandmarksClicked)
+
     def initializePage(self):
         
         view_node = self.wizard().volume_view_node
@@ -135,6 +140,45 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         self.wizard().transducer_surface.GetDisplayNode().SetVisibility(False)
 
         reset_view_node_camera(view_node)
+
+        self.skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
+        if self.skinseg_facial_landmarks:
+            self.skinseg_facial_landmarks.GetDisplayNode().SetViewNodeIDs([self.wizard().volume_view_node.GetID()]) # Specify a view node for display
+            self.skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
+
+    def onPlaceLandmarksClicked(self):
+
+        if self.skinseg_facial_landmarks is None:
+            self.skinseg_facial_landmarks = self.wizard()._logic.initialize_volume_facial_landmarks(self.wizard().skin_mesh_node)
+            # Set view nodes on fiducials
+            self.skinseg_facial_landmarks.GetDisplayNode().SetViewNodeIDs([self.wizard().volume_view_node.GetID()]) # Specify a view node for display
+            self.skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
+            self.setupMarkupsWidget()
+
+        if self.ui.placeLandmarksButtonSkinSeg.text == "Place/Edit Registration Landmarks":
+            self.skinseg_facial_landmarks.SetLocked(False)
+            self.ui.placeLandmarksButtonSkinSeg.setText("Done Placing Landmarks")
+            self.placingLandmarks = True
+            # Emit signal to update the enable/disable state of 'Next button'. 
+            self.completeChanged()
+        elif self.ui.placeLandmarksButtonSkinSeg.text == "Done Placing Landmarks":
+            self.skinseg_facial_landmarks.SetLocked(True)
+            self.ui.placeLandmarksButtonSkinSeg.setText("Place/Edit Registration Landmarks")
+            self.placingLandmarks = False
+            # Emit signal to update the enable/disable state of 'Next button'. 
+            self.completeChanged()
+    
+    def setupMarkupsWidget(self):
+
+        self.ui.skinSegMarkupsWidget.setMRMLScene(slicer.mrmlScene)
+        self.ui.skinSegMarkupsWidget.setCurrentNode(self.skinseg_facial_landmarks)
+        self.skinseg_facial_landmarks.SetLocked(True)
+        self.ui.skinSegMarkupsWidget.enabled = False
+
+    def isComplete(self):
+        """" Determines if the 'Next' button should be enabled"""
+        landmarks_exist = self.skinseg_facial_landmarks is not None
+        return landmarks_exist and not self.placingLandmarks
 
 class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -153,6 +197,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(True)
         self.wizard().photoscan.toggle_model_display(visibility_on = True) 
         self.wizard().transducer_surface.GetDisplayNode().SetVisibility(False)
+        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
+        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
     
         reset_view_node_camera(view_node)
 
@@ -173,6 +219,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
         self.wizard().photoscan.toggle_model_display(visibility_on = True) 
         self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
+        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
+        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
         
         reset_view_node_camera(view_node)
 
@@ -691,11 +739,16 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         photoscan.set_view_nodes([])
 
         if not photoscan_preview_only:
-            skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
             transducer_surface.GetDisplayNode().SetViewNodeIDs(())
-            skin_mesh_node.GetDisplayNode().SetVisibility(False)
             transducer_surface.GetDisplayNode().SetVisibility(False) # This could be left on? Incase it was on before
             
+            skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
+            skin_mesh_node.GetDisplayNode().SetVisibility(False)
+            skin_facial_landmarks_node = self.logic.get_volume_facial_landmarks(skin_mesh_node)
+            if skin_facial_landmarks_node:
+                skin_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
+                skin_facial_landmarks_node.GetDisplayNode().SetViewNodeIDs(())
+
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
 
@@ -886,3 +939,57 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             skin_mesh_node = skin_mesh_node[0]
 
         return skin_mesh_node
+
+    def get_volume_facial_landmarks(self, volume_or_skin_mesh : Union[vtkMRMLScalarVolumeNode, vtkMRMLModelNode]):
+
+        if isinstance(volume_or_skin_mesh,vtkMRMLScalarVolumeNode):
+            volume_tracking_fiducial_id = volume_or_skin_mesh.GetID()
+        elif isinstance(volume_or_skin_mesh, vtkMRMLModelNode):
+            volume_tracking_fiducial_id = volume_or_skin_mesh.GetAttribute('OpenLIFUData.volume_id')
+        else:
+            raise ValueError("Invalid input type.")
+        
+        volume_facial_landmarks_node = [
+            node for node in slicer.util.getNodesByClass('vtkMRMLMarkupsFiducialNode') 
+            if node.GetAttribute('OpenLIFUData.volume_id') == volume_tracking_fiducial_id
+            ]
+        if len(volume_facial_landmarks_node) > 1:
+            raise RuntimeError(f"Found multiple transducer tracking fiducial nodes affiliated with volume {volume_tracking_fiducial_id}")
+        
+        if not volume_facial_landmarks_node:
+            return None
+
+        return volume_facial_landmarks_node[0]
+    
+    def initialize_volume_facial_landmarks(self, volume_or_skin_mesh : Union[vtkMRMLScalarVolumeNode, vtkMRMLModelNode]):
+        """"Place holder function until the algorithm for detecting facial landmarks
+        using the skin segmentation and mri. """
+
+        if isinstance(volume_or_skin_mesh,vtkMRMLScalarVolumeNode):
+            volume_name = volume_or_skin_mesh.GetName()
+            volume_tracking_fiducial_id = volume_or_skin_mesh.GetID()
+        elif isinstance(volume_or_skin_mesh, vtkMRMLModelNode):
+            volume_name = volume_or_skin_mesh.GetName().split('-')[0]
+            volume_tracking_fiducial_id = volume_or_skin_mesh.GetAttribute('OpenLIFUData.volume_id')
+        else:
+            raise ValueError("Invalid input type.")
+        
+        # For now, initialize them at the origin
+        right_ear_coordinates = [0,0,0]
+        left_ear_coordinates = [0,0,0]
+        nasion_coordinates = [0,0,0]
+
+        volume_facial_landmarks_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f'{volume_name}-faciallandmarks')
+        volume_facial_landmarks_node.SetMaximumNumberOfControlPoints(3)
+        volume_facial_landmarks_node.SetMarkupLabelFormat("%N")
+        volume_facial_landmarks_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
+        volume_facial_landmarks_node.AddControlPoint(left_ear_coordinates[0],left_ear_coordinates[0],left_ear_coordinates[0],"Left Ear")
+        volume_facial_landmarks_node.AddControlPoint(nasion_coordinates[0],nasion_coordinates[0],nasion_coordinates[0],"Nasion")
+
+        # Set the ID of corresponding volume as a node attribute 
+        volume_facial_landmarks_node.SetAttribute('OpenLIFUData.volume_id', volume_tracking_fiducial_id)
+        volume_facial_landmarks_node.CreateDefaultDisplayNodes()
+        volume_facial_landmarks_node.GetDisplayNode().SetVisibility(False) # visibility is turned on by default
+        volume_facial_landmarks_node.GetDisplayNode().SetSelectedColor(0,1,1)
+        volume_facial_landmarks_node.GetDisplayNode().SetColor(0,1,1)
+        return volume_facial_landmarks_node
