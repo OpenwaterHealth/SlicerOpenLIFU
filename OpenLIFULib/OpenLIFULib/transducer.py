@@ -6,6 +6,7 @@ import slicer
 from slicer import (
     vtkMRMLModelNode,
     vtkMRMLTransformNode,
+    vtkMRMLNode,
 )
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
@@ -167,3 +168,11 @@ class SlicerOpenLIFUTransducer:
         transform_matrix = vtk.vtkMatrix4x4()
         transform_node.GetMatrixTransformToParent(transform_matrix)
         self.transform_node.SetMatrixTransformToParent(transform_matrix)
+
+    def move_node_into_transducer_sh_folder(self, node : vtkMRMLNode) -> None:
+        """In the subject hiearchy, move the given `node` into this transducer's transform node folder."""
+        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+        shNode.SetItemParent(
+            shNode.GetItemByDataNode(node),
+            shNode.GetItemParent(shNode.GetItemByDataNode(self.transform_node)),
+        )

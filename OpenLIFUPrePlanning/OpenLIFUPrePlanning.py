@@ -599,6 +599,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 rank = i+1,
             )
             vf_result_nodes.append(node)
+            transducer.move_node_into_transducer_sh_folder(node)
         if len(vf_result_nodes)==0:
             return None
         return vf_result_nodes[0]
