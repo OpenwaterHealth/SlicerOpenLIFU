@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 class PhotoscanMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Photoscan markup")
+        self.setTitle("Place registration fiducials on photoscan")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.placingLandmarks = False
@@ -119,7 +119,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 class SkinSegmentationMarkupPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Skin segmentation markup")
+        self.setTitle("Place registration fiducials on skin surface")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(2)
@@ -139,7 +139,7 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
 class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Photoscan registration")
+        self.setTitle("Register photoscan to skin surface")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(3)
@@ -159,7 +159,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
-        self.setTitle("Transducer registration")
+        self.setTitle("Register transducer to photoscan")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(3)
@@ -202,6 +202,8 @@ class TransducerTrackingWizard(qt.QWizard):
         self.addPage(self.skinSegmentationMarkupPage)
         self.addPage(self.photoscanVolumeTrackingPage)
         self.addPage(self.transducerPhotoscanTrackingPage)
+
+        self.setOption(qt.QWizard.NoBackButtonOnStartPage)
     
 class PhotoscanPreviewPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -267,6 +269,10 @@ class PhotoscanPreviewWizard(qt.QWizard):
         self.setWindowTitle("Photoscan Preview")
         self.photoscanPreviewPage = PhotoscanPreviewPage(self)
         self.addPage(self.photoscanPreviewPage)
+
+        # Customize view
+        self.setOption(qt.QWizard.NoBackButtonOnStartPage)
+        self.setOption(qt.QWizard.NoCancelButton)
 
 #
 # OpenLIFUTransducerTracker
