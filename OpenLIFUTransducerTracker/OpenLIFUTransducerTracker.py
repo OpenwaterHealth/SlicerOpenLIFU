@@ -187,6 +187,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(3)
+        
+        # Temp functionality. This will be determined based on the transform node
+        # if it already exists in the scene. 
+        self.transform_approved = False
+
+        self.ui.approvePhotoscanVolumeTransform.clicked.connect(self.onTransformApproveClicked)
     
     def initializePage(self):
         
@@ -202,13 +208,46 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     
         reset_view_node_camera(view_node)
 
+        self.updateTransformApprovalStatusLabel()
+        self.updateTransformApproveButton()
+    
+    def updateTransformApprovalStatusLabel(self):
+        
+        status = "approved" if self.transform_approved else "not approved"
+        self.ui.photoscanVolumeTransformApprovalStatusLabel.text = (
+            f"The photoscan-volume transform is {status} for transducer tracking"
+        )
+
+    def updateTransformApproveButton(self):
+
+        if self.transform_approved:
+            self.ui.approvePhotoscanVolumeTransform.setText("Revoke approval")
+            self.ui.approvePhotoscanVolumeTransform.setToolTip(
+                    "Revoke approval that the current transducer tracking result is correct")
+        else:
+            self.ui.approvePhotoscanVolumeTransform.setText("Approve photoscan-volume transform")
+            self.ui.approvePhotoscanVolumeTransform.setToolTip("Approve the current transducer tracking result")
+
+    def onTransformApproveClicked(self):
+
+        self.transform_approved = not self.transform_approved
+        
+        # Update the wizard page
+        self.updateTransformApprovalStatusLabel()
+        self.updateTransformApproveButton()
+
 class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
         self.setTitle("Register transducer to photoscan")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
-        self.ui.dialogControls.setCurrentIndex(3)
+        self.ui.dialogControls.setCurrentIndex(4)
+
+        # Temp functionality. This will be determined based on the transform node
+        # if it already exists in the scene. 
+        self.transform_approved = False
+        self.ui.approveTransducerPhotoscanTransform.clicked.connect(self.onTransformApproveClicked)
     
     def initializePage(self):
 
@@ -223,6 +262,34 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
         
         reset_view_node_camera(view_node)
+    
+        self.updateTransformApprovalStatusLabel()
+        self.updateTransformApproveButton()
+    
+    def updateTransformApprovalStatusLabel(self):
+        
+        status = "approved" if self.transform_approved else "not approved"
+        self.ui.transducerPhotoscanTransformApprovalStatusLabel.text = (
+            f"The transducer-photoscan transform is {status} for transducer tracking"
+        )
+
+    def updateTransformApproveButton(self):
+
+        if self.transform_approved:
+            self.ui.approveTransducerPhotoscanTransform.setText("Revoke approval")
+            self.ui.approveTransducerPhotoscanTransform.setToolTip(
+                    "Revoke approval that the current transducer tracking result is correct")
+        else:
+            self.ui.approveTransducerPhotoscanTransform.setText("Approve transducer-photoscan transform")
+            self.ui.approveTransducerPhotoscanTransform.setToolTip("Approve the current transducer tracking result")
+
+    def onTransformApproveClicked(self):
+
+        self.transform_approved = not self.transform_approved
+        
+        # Update the wizard page
+        self.updateTransformApprovalStatusLabel()
+        self.updateTransformApproveButton()
 
 class TransducerTrackingWizard(qt.QWizard):
     def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
