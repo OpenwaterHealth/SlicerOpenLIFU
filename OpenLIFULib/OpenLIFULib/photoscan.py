@@ -138,7 +138,7 @@ class SlicerOpenLIFUPhotoscan:
         """Nodes are created by default at the origin"""
 
         photoscan_id = self.photoscan.photoscan.id
-        self.tracking_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f"Photoscan-{photoscan_id}-TrackingFiducials" )
+        self.tracking_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f"{photoscan_id}-faciallandmarks" )
         self.tracking_fiducial_node.SetMaximumNumberOfControlPoints(3)
         self.tracking_fiducial_node.SetMarkupLabelFormat("%N")
         self.tracking_fiducial_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
