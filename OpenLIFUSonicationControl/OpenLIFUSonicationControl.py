@@ -53,6 +53,10 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
             "and development."
         )
 
+class DeviceConnectedState(Enum):
+    NOT_CONNECTED=0
+    CONNECTED=1
+
 class SolutionOnHardwareState(Enum):
     SUCCESSFUL_SEND=0
     FAILED_SEND=1
@@ -171,6 +175,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
+        self._cur_device_connected_state : DeviceConnectedState = DeviceConnectedState.NOT_CONNECTED
         self._cur_solution_on_hardware_state : SolutionOnHardwareState = SolutionOnHardwareState.NOT_SENT
         self._cur_solution_id: str | None = None
         self._parameterNode = None
@@ -213,9 +218,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.call_on_sonication_complete(self.onRunCompleted)
         self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
         self.logic.call_on_run_hardware_status_updated(self.updateRunHardwareStatusLabel)
+        self.logic.call_on_lifu_device_connected(self.onDeviceConnected)
+        self.logic.call_on_lifu_device_disconnected(self.onDeviceDisconnected)
 
         # Initialize UI
         self.updateRunProgressBar()
+        self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
         # Add an observer on the Data module's parameter node
@@ -383,9 +391,27 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
 
+    @display_errors
+    def onDeviceConnected(self):
+        slicer.util.infoDisplay(text="Ultrasound device connected")
 
+        # Even though this call explicitly tells us whether "Connected" or
+        # "Disconnected", we still update from the actual hardware for the best
+        # possible synchronization
+        self.updateDeviceConnectedStateFromDevice()
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateAllButtonsEnabled()
 
+    @display_errors
+    def onDeviceDisconnected(self):
+        slicer.util.infoDisplay(text="Ultrasound device disconnected")
 
+        # Even though this call explicitly tells us whether "Connected" or
+        # "Disconnected", we still update from the actual hardware for the best
+        # possible synchronization
+        self.updateDeviceConnectedStateFromDevice()
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateAllButtonsEnabled()
 
     @display_errors
     def onTestModePushButtonClicked(self, checked=False):
@@ -397,6 +423,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             slicer.util.infoDisplay(text="LIFUInterface test_mode disabled")
 
+        self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtonsEnabled()
 
@@ -460,6 +487,20 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         else: # not running
             self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
 
+    def updateDeviceConnectedStateFromDevice(self):
+        if self.logic.get_lifu_device_connected():
+            self.updateDeviceConnectedState(DeviceConnectedState.CONNECTED)
+        else:
+            self.updateDeviceConnectedState(DeviceConnectedState.NOT_CONNECTED)
+
+    def updateDeviceConnectedState(self, connected_state: DeviceConnectedState):
+        self._cur_solution_on_hardware_state = connected_state
+        if connected_state == DeviceConnectedState.CONNECTED:
+            self.ui.connectedStateLabel.setProperty("text", "🟢 LIFU Device (connected)")
+        elif connected_state == DeviceConnectedState.NOT_CONNECTED:
+            self.ui.connectedStateLabel.setProperty("text", "🔴 LIFU Device (not connected)")
+        self.updateAllButtonsEnabled()
+
     def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu.io.LIFUInterfaceStatus | None" = None):
         self._cur_solution_on_hardware_state = solution_state
         if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
@@ -516,6 +557,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._on_run_hardware_status_updated_callbacks = []
         """List of functions to call when `run_hardware_status` property is changed."""
 
+        self._on_lifu_device_connected_callbacks = []
+        """List of functions to call when the LIFU interface is connected."""
+
+        self._on_lifu_device_disconnected_callbacks = []
+        """List of functions to call when the LIFU interface is disconnected."""
+
         # ---- LIFU Interface Connection ----
 
         self.lifu_interface: Optional[openlifu.io.LIFUInterface] = openlifu_lz().io.LIFUInterface(run_async=True)
@@ -524,6 +571,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
         """The active Solution object last sent to the ultrasound hardware."""
 
+        self.lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
+        self.lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
         #self.lifu_interface.start_monitoring() # TODO
 
     def __del__(self):
@@ -557,6 +606,14 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         of the running openlifu harware device.
         """
         self._on_run_hardware_status_updated_callbacks.append(f)
+
+    def call_on_lifu_device_connected(self, f) -> None:
+        """Set a function to be called whenever the LIFU device is connected. """
+        self._on_lifu_device_connected_callbacks.append(f)
+
+    def call_on_lifu_device_disconnected(self, f) -> None:
+        """Set a function to be called whenever the LIFU device is disconnected. """
+        self._on_lifu_device_disconnected_callbacks.append(f)
 
     @property
     def running(self) -> bool:
@@ -601,6 +658,14 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._run_hardware_status = run_hardware_status_value
         for f in self._on_run_hardware_status_updated_callbacks:
             f(self._run_hardware_status)
+
+    def on_lifu_device_connected(self):
+        for f in self._on_lifu_device_connected_callbacks:
+            f()
+
+    def on_lifu_device_disconnected(self):
+        for f in self._on_lifu_device_disconnected_callbacks:
+            f()
             
     def update_run_progress_from_lifuinterface(self, descriptor, message):
         """ Parses the status message from LIFUInterface. """
