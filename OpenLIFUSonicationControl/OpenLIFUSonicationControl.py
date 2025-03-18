@@ -4,6 +4,8 @@ import re
 
 import qt
 import vtk
+import asyncio
+import inspect
 from datetime import datetime
 
 import slicer
@@ -597,7 +599,22 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         self.lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
         self.lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-        #self.lifu_interface.start_monitoring() # TODO
+
+        # Set up an event loop just for start_monitoring
+
+        self.monitoring_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.monitoring_loop)
+        def pumpMonitoringLoop():
+            self.monitoring_loop.stop()
+            self.monitoring_loop.run_forever()
+        self.monitoring_timer = qt.QTimer()
+        self.monitoring_timer.setInterval(500)
+        self.monitoring_timer.timeout.connect(pumpMonitoringLoop)
+        self.monitoring_timer.start()
+
+        # Allow us to change the task between self.lifu_interface.start_monitoring() and self.test_mode_start_monitoring()
+        self.current_monitoring_task = None
+        self.start_monitoring_task()
 
     def __del__(self):
         self.lifu_interface.stop_monitoring()
@@ -791,11 +808,34 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         return run
 
     def toggle_test_mode(self, enabled : bool):
-        self.lifu_interface.stop_monitoring() # TODO: LIFUInterface may change so this is not needed. See https://github.com/OpenwaterHealth/OpenLIFU-python/pull/249#issuecomment-2730446411
         self.lifu_interface.toggle_test_mode(enabled)
-        #self.lifu_interface.start_monitoring() # TODO
+        self.start_monitoring_task(test_mode=enabled)
 
     def get_lifu_device_connected(self) -> bool:
         tx_connected = self.lifu_interface.txdevice.is_connected()
         hv_connected = self.lifu_interface.hvcontroller.is_connected()
         return tx_connected and hv_connected
+
+    def start_monitoring_task(self, test_mode=False):
+        """ Changes out the current task in the monitoring_loop event loop """
+
+        # Cancel current task if it's running
+        if self.current_monitoring_task and not self.current_monitoring_task.done():
+            self.current_monitoring_task.cancel()
+            try:
+                self.monitoring_loop.run_until_complete(self.current_monitoring_task)  # Ensure it's fully canceled
+            except asyncio.CancelledError:
+                pass
+
+        # Start new task based on test_mode
+        if test_mode:
+            self.current_monitoring_task = self.monitoring_loop.create_task(self.test_mode_start_monitoring())
+        else:
+            self.current_monitoring_task = self.monitoring_loop.create_task(self.lifu_interface.start_monitoring())
+
+    async def test_mode_start_monitoring(self, interval=1):
+        """Simulate an asynchronous, repeating call (meant for USB device
+        monitoring)"""
+        while True:
+            print(f"{__file__}:{inspect.currentframe().f_lineno} - test_mode_start_monitoring() loop iteration to simulate LIFUInterface USB device monitoring")
+            await asyncio.sleep(interval)
