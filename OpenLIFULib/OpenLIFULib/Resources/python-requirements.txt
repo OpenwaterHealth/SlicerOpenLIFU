@@ -1,2 +1,4 @@
 git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@153dede6fcd51826a2ee0e9319d55ca79b43a9b7
 bcrypt
+qasync
+pyqt5

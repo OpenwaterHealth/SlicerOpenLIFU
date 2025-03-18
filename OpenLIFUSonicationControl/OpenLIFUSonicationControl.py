@@ -4,6 +4,7 @@ import re
 
 import qt
 import vtk
+import asyncio
 from datetime import datetime
 
 import slicer
@@ -16,6 +17,7 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from OpenLIFULib import (get_openlifu_data_parameter_node, 
                          SlicerOpenLIFUSolution,
                          openlifu_lz,
+                         qasync_lz,
                          SlicerOpenLIFURun,
 )
 
@@ -571,9 +573,31 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
         """The active Solution object last sent to the ultrasound hardware."""
 
+        # where the QGuiApplication, slicer.app is a QSlicerApplication, which
+        # inherits from QGuiApplication after some inheritence. If I need a
+        # QGUIApplication, slicer.app should fulfill.
         self.lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
         self.lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-        #self.lifu_interface.start_monitoring() # TODO
+
+        # loop = asyncio.new_event_loop()
+        # asyncio.set_event_loop(loop)
+
+        # def pumpAsyncioLoop():
+        #     # Stop and run_forever is a trick to let pending tasks proceed
+        #     loop.stop()
+        #     loop.run_forever()
+
+        # self.timer = qt.QTimer()
+        # self.timer.setInterval(50)  # 50 
+        # self.timer.timeout.connect(pumpAsyncioLoop)
+        # self.timer.start()
+
+        #loop.create_task(self.lifu_interface.start_sonication())
+
+        ###self.timer = qt.QTimer()
+        ###self.timer.timeout.connect(self.call_async_hello)
+        ###self.timer.start(1000)
+        self.call_async_hello()
 
     def __del__(self):
         self.lifu_interface.stop_monitoring()
@@ -767,11 +791,45 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         return run
 
     def toggle_test_mode(self, enabled : bool):
-        self.lifu_interface.stop_monitoring() # TODO: LIFUInterface may change so this is not needed. See https://github.com/OpenwaterHealth/OpenLIFU-python/pull/249#issuecomment-2730446411
         self.lifu_interface.toggle_test_mode(enabled)
-        #self.lifu_interface.start_monitoring() # TODO
 
     def get_lifu_device_connected(self) -> bool:
         tx_connected = self.lifu_interface.txdevice.is_connected()
         hv_connected = self.lifu_interface.hvcontroller.is_connected()
         return tx_connected and hv_connected
+
+    def call_async_hello(self):
+        self.loop = qasync_lz().QEventLoop(qt.QEventLoop())
+        asyncio.set_event_loop(self.loop)
+
+        with self.loop:
+            try:
+                return self.loop.run_until_complete(self.async_hello)
+            finally:
+                self.loop = None
+                asyncio.set_event_loop(None)
+
+    async def async_hello(self, interval=1):
+        """Periodically check for USB device connection."""
+        while True:
+            print("Hello World")
+            await asyncio.sleep(interval)
+
+
+def call_async_hello():
+    loop = qasync_lz().QEventLoop(qt.QEventLoop())
+    asyncio.set_event_loop(loop)
+
+    with loop:
+        try:
+            return loop.run_until_complete(async_hello())
+        finally:
+            loop = None
+            asyncio.set_event_loop(None)
+
+async def async_hello(interval=1):
+    """Periodically check for USB device connection."""
+    while True:
+        print("Hello World")
+        await asyncio.sleep(interval)
+

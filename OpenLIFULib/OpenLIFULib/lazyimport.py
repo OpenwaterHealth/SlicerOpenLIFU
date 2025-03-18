@@ -73,3 +73,11 @@ def bcrypt_lz() -> "bcrypt":
         with BusyCursor():
             import bcrypt
     return sys.modules["bcrypt"]
+
+def qasync_lz() -> "qasync":
+    """Import qasync and return the module, checking that it is installed along the way."""
+    if "qasync" not in sys.modules:
+        check_and_install_python_requirements(prompt_if_found=False)
+        with BusyCursor():
+            import qasync
+    return sys.modules["qasync"]
