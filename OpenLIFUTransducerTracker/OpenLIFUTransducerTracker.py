@@ -300,13 +300,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        # Display the photoscan and transducer and hide the skin mesh
-        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
-        self.wizard().photoscan.toggle_model_display(visibility_on = True) 
-        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
-        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
-        
         reset_view_node_camera(view_node)
     
         self.updateTransformApprovalStatusLabel()
@@ -323,7 +316,14 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             [self.wizard().volume_view_node.GetID()]
             ) # Specify a view node for display
         self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(False)
-    
+
+        # Display the photoscan and transducer and hide the skin mesh
+        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
+        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
+        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
+        self.wizard().photoscan.toggle_model_display(visibility_on = True) 
+        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
+        
     def updateTransformApprovalStatusLabel(self):
         
         status = "approved" if self.transform_approved else "not approved"
@@ -591,7 +591,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self.wizard = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -1048,8 +1047,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         return fiducial_node
         
     def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
-        """"Computes skin segmentation if it has not been created. The ID of the volume node used to create the 
-        skin segmentation is added as a model node attribute.Note, this is different from the openlifu volume id. "
+        """Computes skin segmentation if it has not been created. The ID of the volume node used to create the 
+        skin segmentation is added as a model node attribute.Note, this is different from the openlifu volume id.
         """
         skin_mesh_node = [
             node for node in slicer.util.getNodesByClass('vtkMRMLModelNode') 
@@ -1147,12 +1146,23 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         the photoscan and skin segmentation. For now, a transform node with
         the required transducer tracking result attributes gets added to the scene."""
 
-        # Temporary functionality
         photoscan_to_volume_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_matrix = np.eye(4)
-        transform_matrix_vtk = numpy_to_vtk_4x4(transducer_matrix)
-        photoscan_to_volume_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+
+        volume_facial_landmarks = self.get_volume_facial_landmarks(skin_mesh_node)
+        if volume_facial_landmarks is None:
+            raise RuntimeError("Can't perform fiducial registration. The provided skin mesh does not have the necessary landmarks for registration.")
         
+        if photoscan.facial_landmarks_fiducial_node is None:
+            raise RuntimeError("Can't perform fiducial registration. The provided photoscan does not have the necessary landmarks for registration.")
+
+        fiducial_registration_cli = slicer.modules.fiducialregistration
+        parameters = {}
+        parameters["fixedLandmarks"] = volume_facial_landmarks
+        parameters["movingLandmarks"] = photoscan.facial_landmarks_fiducial_node
+        parameters["saveTransform"] = photoscan_to_volume_transform_node
+        parameters["transformType"] = "Similarity"
+        slicer.cli.run(fiducial_registration_cli, node = None, parameters = parameters, wait_for_completion = True, update_display = False)
+
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
@@ -1165,8 +1175,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             replace = True, 
             )
         transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_result)
-
-        # TODO: Add checks that the required fiducials have been provided. 
 
         return photoscan_to_volume_result
     
