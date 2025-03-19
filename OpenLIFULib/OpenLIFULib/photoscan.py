@@ -32,9 +32,13 @@ class SlicerOpenLIFUPhotoscan:
     texture_node : vtkMRMLVectorVolumeNode
     """Texture volume node"""
 
-    tracking_fiducial_node : vtkMRMLMarkupsFiducialNode = None
+    facial_landmarks_fiducial_node : vtkMRMLMarkupsFiducialNode = None
     """Fiducial node containing the control points required for photoscan-volume registration when
-     running transducer tracking. The control points mark the left ear, right ear and nasion."""
+     running transducer facial_landmarks. The control points mark the left ear, right ear and nasion."""
+    
+    view_node: vtkMRMLViewNode = None
+    """ View node associated with the preview of this photoscan. Each photoscan has its own viewnode
+    so we can restore the same camera position when the photoscan is previewed."""
 
     @staticmethod
     def _create_nodes(model_data, texture_data, node_name_prefix: str):
@@ -97,8 +101,10 @@ class SlicerOpenLIFUPhotoscan:
         """Clear associated mrml nodes from the scene."""
         slicer.mrmlScene.RemoveNode(self.model_node)
         slicer.mrmlScene.RemoveNode(self.texture_node)
-        if self.tracking_fiducial_node:
-            slicer.mrmlScene.RemoveNode(self.tracking_fiducial_node)
+        if self.facial_landmarks_fiducial_node:
+            slicer.mrmlScene.RemoveNode(self.facial_landmarks_fiducial_node)
+        if self.view_node:
+            slicer.mrmlScene.RemoveNode(self.view_node)
 
     def apply_texture_to_model(self):
         """Apply the texture image to the model node"""
@@ -136,31 +142,31 @@ class SlicerOpenLIFUPhotoscan:
     def toggle_model_display(self, visibility_on: bool = False):
 
         self.model_node.GetDisplayNode().SetVisibility(visibility_on)
-        if self.tracking_fiducial_node:
-            self.tracking_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
+        if self.facial_landmarks_fiducial_node:
+            self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
                         
-    def create_tracking_fiducial_node(self, right_ear_coordinates = [0,0,0], left_ear_coordinates = [0,0,0], nasion_coordinates = [0,0,0]):
+    def create_facial_landmarks_fiducial_node(self, right_ear_coordinates = [0,0,0], left_ear_coordinates = [0,0,0], nasion_coordinates = [0,0,0]):
         """Nodes are created by default at the origin"""
 
         photoscan_id = self.photoscan.photoscan.id
-        self.tracking_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f"{photoscan_id}-faciallandmarks" )
-        self.tracking_fiducial_node.SetMaximumNumberOfControlPoints(3)
-        self.tracking_fiducial_node.SetMarkupLabelFormat("%N")
-        self.tracking_fiducial_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
-        self.tracking_fiducial_node.AddControlPoint(left_ear_coordinates[0],left_ear_coordinates[0],left_ear_coordinates[0],"Left Ear")
-        self.tracking_fiducial_node.AddControlPoint(nasion_coordinates[0],nasion_coordinates[0],nasion_coordinates[0],"Nasion")
+        self.facial_landmarks_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f"{photoscan_id}-faciallandmarks" )
+        self.facial_landmarks_fiducial_node.SetMaximumNumberOfControlPoints(3)
+        self.facial_landmarks_fiducial_node.SetMarkupLabelFormat("%N")
+        self.facial_landmarks_fiducial_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
+        self.facial_landmarks_fiducial_node.AddControlPoint(left_ear_coordinates[0],left_ear_coordinates[0],left_ear_coordinates[0],"Left Ear")
+        self.facial_landmarks_fiducial_node.AddControlPoint(nasion_coordinates[0],nasion_coordinates[0],nasion_coordinates[0],"Nasion")
         
-        return self.tracking_fiducial_node
+        return self.facial_landmarks_fiducial_node
 
     def set_view_nodes(self,viewNodes: List[vtkMRMLViewNode] = []):
         """ If a viewNode is not specified, the model is displayed in all views by default"""
         self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
-        if self.tracking_fiducial_node:
-            self.tracking_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
+        if self.facial_landmarks_fiducial_node:
+            self.facial_landmarks_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
         
     def set_transform_node(self, transform_node: vtkMRMLTransformNode):
         
         self.model_node.SetAndObserveTransformNodeID(transform_node.GetID())
         
-        if self.tracking_fiducial_node:
-            self.tracking_fiducial_node.SetAndObserveTransformNodeID(transform_node.GetID())   
+        if self.facial_landmarks_fiducial_node:
+            self.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(transform_node.GetID())   
