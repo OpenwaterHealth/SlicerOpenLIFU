@@ -113,9 +113,9 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, u
         photoscan_id = transducer_photoscan_node.GetAttribute("TT:photoscanID")
         transducer_tracking_results_openlifu.append(
             openlifu_lz().db.session.TransducerTrackingResult(
-                    photoscan_id,
-                    transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
-                    transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
+                    photoscan_id = photoscan_id,
+                    transducer_to_photoscan_transform = transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
+                    photoscan_to_volume_transform = transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
                     transducer_to_photoscan_tracking_approved = transducer_photoscan_node.GetAttribute("TT:approvalStatus") == "1",
                     photoscan_to_volume_tracking_approved = photoscan_volume_node.GetAttribute("TT:approvalStatus") == "1",
                     )
