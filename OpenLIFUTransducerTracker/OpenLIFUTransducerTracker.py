@@ -15,7 +15,7 @@ from slicer import (
     vtkMRMLViewNode,
     )
 
-from OpenLIFULib.util import replace_widget
+from OpenLIFULib.util import replace_widget, BusyCursor
 from OpenLIFULib import (
     openlifu_lz,
     get_openlifu_data_parameter_node,
@@ -793,29 +793,32 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
 
     def onRunTrackingClicked(self):
-        activeData = self.algorithm_input_widget.get_current_data()
-        selected_photoscan_openlifu = activeData["Photoscan"]
-        loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
 
-        selected_transducer = activeData["Transducer"]
-        transducer_registration_surface = selected_transducer.surface_model_node
+        with BusyCursor():
+            
+            activeData = self.algorithm_input_widget.get_current_data()
+            selected_photoscan_openlifu = activeData["Photoscan"]
+            loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
 
-        volume = activeData["Volume"]
-        skin_mesh_node = self.logic.compute_skin_segmentation(volume)
+            selected_transducer = activeData["Transducer"]
+            transducer_registration_surface = selected_transducer.surface_model_node
 
-        photoscan_view_node, volume_view_node = self.setupWizardViewNodes(
-            loaded_slicer_photoscan,
-            photoscan_preview_only = False,
-            skin_mesh_node =skin_mesh_node,
-            transducer_surface = transducer_registration_surface,
-            )
-      
-        wizard = TransducerTrackingWizard(
-            photoscan = loaded_slicer_photoscan,
-            skin_mesh_node = skin_mesh_node,
-            transducer = selected_transducer,
-            photoscan_view_node= photoscan_view_node,
-            volume_view_node= volume_view_node)
+            volume = activeData["Volume"]
+            skin_mesh_node = self.logic.compute_skin_segmentation(volume)
+
+            photoscan_view_node, volume_view_node = self.setupWizardViewNodes(
+                loaded_slicer_photoscan,
+                photoscan_preview_only = False,
+                skin_mesh_node =skin_mesh_node,
+                transducer_surface = transducer_registration_surface,
+                )
+
+            wizard = TransducerTrackingWizard(
+                photoscan = loaded_slicer_photoscan,
+                skin_mesh_node = skin_mesh_node,
+                transducer = selected_transducer,
+                photoscan_view_node= photoscan_view_node,
+                volume_view_node= volume_view_node)
         
         wizard.exec_()
 
