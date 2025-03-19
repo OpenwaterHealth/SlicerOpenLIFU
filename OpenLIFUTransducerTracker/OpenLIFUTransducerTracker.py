@@ -403,6 +403,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.addPage(self.transducerPhotoscanTrackingPage)
 
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
+        self.setWizardStyle(qt.QWizard.ClassicStyle)
     
 class PhotoscanPreviewPage(qt.QWizardPage):
     def __init__(self, parent = None):
