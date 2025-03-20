@@ -3,8 +3,14 @@ from slicer import vtkMRMLTransformNode
 from typing import Iterable, Optional, Tuple, Union, List, TYPE_CHECKING
 from enum import Enum, auto
 
-from OpenLIFULib.transform_conversion import transform_node_to_openlifu, transform_node_from_openlifu
+from OpenLIFULib.transform_conversion import (
+    transducer_transform_node_to_openlifu,
+    transducer_transform_node_from_openlifu,
+    create_openlifu2slicer_matrix
+    )
 from OpenLIFULib.lazyimport import openlifu_lz
+import numpy as np
+from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 
 if TYPE_CHECKING:
     from openlifu.db.session import TransducerTrackingResult
@@ -85,12 +91,12 @@ def add_transducer_tracking_result(
     
     return transform_node
 
-def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, units:str) -> List["TransducerTrackingResult"]:
+def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, transducer_units:str) -> List["TransducerTrackingResult"]:
     """Parse through transducer tracking transform nodes in the scene and return the information in Session representation.
 
     Args:
         session_id: The ID of the session whose transducer tracking result transform nodes we are interested in.
-        units: The units of the transducer that the transducer tracking transform nodes are meant to apply to.
+        transducer_units: The units of the transducer that the transducer tracking transform nodes are meant to apply to.
             (If the transducer model is not in "mm" then there is a built in unit conversion in the transform
             node matrix and this has to be removed to represent the transform in openlifu format.)
 
@@ -109,14 +115,27 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, u
                                + (f"and session {session_id}" if session_id is not None else "with no session.")
             )
 
-        transducer_photoscan_node, photoscan_volume_node = tt_result_for_session_photoscan[0]
-        photoscan_id = transducer_photoscan_node.GetAttribute("TT:photoscanID")
+        transducer_volume_node, photoscan_volume_node = tt_result_for_session_photoscan[0]
+        
+        # Convert photoscan to volume transform to LPS
+        transform_array = slicer.util.arrayFromTransformMatrix(photoscan_volume_node, toWorld=True)
+        openlifu2slicer_matrix = create_openlifu2slicer_matrix('mm')
+        photoscan_to_volume_transform_openlifu = openlifu_lz().db.session.ArrayTransform(
+            matrix = np.linalg.inv(openlifu2slicer_matrix) @ transform_array,
+            units = 'mm',
+        )
+
+        transducer_to_volume_transform_openlifu = transducer_transform_node_to_openlifu(
+            transform_node=transducer_volume_node,
+            transducer_units=transducer_units)
+
+        photoscan_id = transducer_volume_node.GetAttribute("TT:photoscanID")
         transducer_tracking_results_openlifu.append(
             openlifu_lz().db.session.TransducerTrackingResult(
                     photoscan_id = photoscan_id,
-                    transducer_to_volume_transform = transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
-                    photoscan_to_volume_transform = transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
-                    transducer_to_volume_tracking_approved = transducer_photoscan_node.GetAttribute("TT:approvalStatus") == "1",
+                    transducer_to_volume_transform = transducer_to_volume_transform_openlifu,
+                    photoscan_to_volume_transform = photoscan_to_volume_transform_openlifu,
+                    transducer_to_volume_tracking_approved = transducer_volume_node.GetAttribute("TT:approvalStatus") == "1",
                     photoscan_to_volume_tracking_approved = photoscan_volume_node.GetAttribute("TT:approvalStatus") == "1",
                     )
         )
@@ -149,17 +168,18 @@ def add_transducer_tracking_results_from_openlifu_session_format(
     nodes_that_have_been_added = []
     for tt_result in tt_results_openlifu:
 
-        transducer_to_volume_transform_node = transform_node_from_openlifu(
+        transducer_to_volume_transform_node = transducer_transform_node_from_openlifu(
                 openlifu_transform_matrix = tt_result.transducer_to_volume_transform.matrix,
                 transform_units = tt_result.transducer_to_volume_transform.units,
                 transducer = transducer,
             )
         
-        photoscan_to_volume_transform_node = transform_node_from_openlifu(
-                openlifu_transform_matrix = tt_result.photoscan_to_volume_transform.matrix,
-                transform_units = tt_result.photoscan_to_volume_transform.units,
-                transducer = transducer,
-            )
+        # Convert photoscan_to_volume transform from LPS space to RAS space, both in mm. 
+        openlifu2slicer_matrix = create_openlifu2slicer_matrix('mm')
+        transform_matrix_numpy = openlifu2slicer_matrix @  tt_result.photoscan_to_volume_transform.matrix
+        transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
+        photoscan_to_volume_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        photoscan_to_volume_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
         
         transducer_to_volume_transform_node = add_transducer_tracking_result(
             transform_node=transducer_to_volume_transform_node,

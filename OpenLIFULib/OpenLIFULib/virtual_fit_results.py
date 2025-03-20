@@ -1,7 +1,7 @@
 import slicer
 from slicer import vtkMRMLTransformNode
 from typing import Optional, Iterable, List, Tuple, Dict, TYPE_CHECKING, Union
-from OpenLIFULib.transform_conversion import transform_node_to_openlifu, transform_node_from_openlifu
+from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu, transducer_transform_node_from_openlifu
 from OpenLIFULib.lazyimport import openlifu_lz
 
 if TYPE_CHECKING:
@@ -153,7 +153,7 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
         virtual_fit_results_openlifu[target_id] = (
             approved,
             [
-                transform_node_to_openlifu(transform_node=t, transducer_units=units)
+                transducer_transform_node_to_openlifu(transform_node=t, transducer_units=units)
                 for t in vf_nodes_for_target
             ],
         )
@@ -184,7 +184,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
     nodes_that_have_been_added = []
     for target_id, (is_approved, array_transforms) in vf_results_openlifu.items():
         for i, array_transform in enumerate(array_transforms):
-            virtual_fit_result_transform = transform_node_from_openlifu(
+            virtual_fit_result_transform = transducer_transform_node_from_openlifu(
                 openlifu_transform_matrix = array_transform.matrix,
                 transform_units = array_transform.units,
                 transducer = transducer,
