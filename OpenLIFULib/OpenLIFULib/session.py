@@ -213,7 +213,7 @@ class SlicerOpenLIFUSession:
             photoscan_id for photoscan_id in self.get_affiliated_photoscan_ids()
             for tt_result in session_openlifu.transducer_tracking_results
             if photoscan_id == tt_result.photoscan_id 
-            and tt_result.transducer_to_photoscan_tracking_approved 
+            and tt_result.transducer_to_volume_tracking_approved 
             and tt_result.photoscan_to_volume_tracking_approved 
         ]
 
