@@ -11,7 +11,7 @@ from slicer import (
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
-from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix, transform_node_from_openlifu
+from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix, transducer_transform_node_from_openlifu
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
@@ -59,7 +59,7 @@ class SlicerOpenLIFUTransducer:
         if transducer_matrix_units is None:
             transducer_matrix_units = transducer.units
 
-        transform_node = transform_node_from_openlifu(
+        transform_node = transducer_transform_node_from_openlifu(
             openlifu_transform_matrix = transducer_matrix,
             transform_units = transducer_matrix_units,
             transducer = transducer,
