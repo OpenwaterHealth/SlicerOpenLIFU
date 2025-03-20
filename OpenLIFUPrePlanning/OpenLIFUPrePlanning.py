@@ -558,27 +558,18 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
         add_slicer_log_handler("VirtualFit", "Virtual fitting")
 
-        # TODO: Many quantities are hard-coded here will not have to be when these two issues are done:
-        # https://github.com/OpenwaterHealth/OpenLIFU-python/issues/166
-        # https://github.com/OpenwaterHealth/OpenLIFU-python/issues/165
+        transducer_openlifu : "openlifu.Transducer" = transducer.transducer.transducer
+        protocol_openlifu : "openlifu.Protocol" = protocol.protocol
+
+        units = "mm" # These are the units of the output space of the transform returned by get_IJK2RAS
+
         vf_transforms = openlifu_lz().virtual_fit(
-            standoff_transform = openlifu_lz().geo.create_standoff_transform(
-                z_offset = 13.55,
-                dzdy = 0.15
-            ),
             volume_array = slicer.util.arrayFromVolume(volume),
             volume_affine_RAS = get_IJK2RAS(volume),
+            units = units,
             target_RAS = target.GetNthControlPointPosition(0),
-            pitch_range = (-10,150),
-            pitch_step = 5,
-            yaw_range = (-65, 65),
-            yaw_step = 5,
-            transducer_steering_center_distance = 50,
-            steering_limits = (
-                (-50, 50), # lat
-                (-50, 50), # ele
-                (-50, 50), # ax
-            ),
+            standoff_transform = transducer_openlifu.get_standoff_transform_in_units(units),
+            options = protocol_openlifu.virtual_fit_options,
         )
 
         session = get_openlifu_data_parameter_node().loaded_session

@@ -5,7 +5,7 @@ from OpenLIFULib.transform_conversion import transform_node_to_openlifu, transfo
 from OpenLIFULib.lazyimport import openlifu_lz
 
 if TYPE_CHECKING:
-    from openlifu.db.session import ArrayTransform
+    from openlifu.geo import ArrayTransform
     from openlifu import Transducer
 
 def add_virtual_fit_result(

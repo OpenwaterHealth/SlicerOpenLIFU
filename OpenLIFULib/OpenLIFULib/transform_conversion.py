@@ -13,7 +13,7 @@ from OpenLIFULib.coordinate_system_utils import (
 from OpenLIFULib.lazyimport import openlifu_lz
 
 if TYPE_CHECKING:
-    from openlifu.db.session import ArrayTransform
+    from openlifu.geo import ArrayTransform
     from openlifu import Transducer
 
 def create_openlifu2slicer_matrix(units : str) -> np.ndarray:
@@ -42,7 +42,7 @@ def transform_node_to_openlifu(transform_node:vtkMRMLTransformNode, transducer_u
     """
     transform_array = slicer.util.arrayFromTransformMatrix(transform_node, toWorld=True)
     openlifu2slicer_matrix = create_openlifu2slicer_matrix(transducer_units)
-    return openlifu_lz().db.session.ArrayTransform(
+    return openlifu_lz().geo.ArrayTransform(
         matrix = np.linalg.inv(openlifu2slicer_matrix) @ transform_array,
         units = transducer_units,
     )
