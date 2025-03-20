@@ -236,6 +236,20 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
         
         self.wizard().photoscan.set_transform_node(self.photoscan_to_volume_transform_node)
+
+        # Set the center of the transformation to the center of the photocan model node
+        bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.wizard().photoscan.model_node.GetRASBounds(bounds)
+        center_world = [
+            (bounds[0] + bounds[1]) / 2,
+            (bounds[2] + bounds[3]) / 2,
+            (bounds[4] + bounds[5]) / 2
+        ]
+        center_local = [0.0,0.0,0.0]
+        transform_from_world = vtk.vtkGeneralTransform()
+        self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
+        transform_from_world.TransformPoint(center_world,center_local )
+        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
     
     def updateTransformApprovalStatusLabel(self):
         
@@ -884,6 +898,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             skin_mesh_node = self.logic.compute_skin_segmentation(activeData["Volume"]),
             transducer_surface = selected_transducer.surface_model_node
             )    
+        
+        # Set the current transform node to the transducer tracking result.
+        # TODO: Should this only happen if the the result is approved?
+        tt_result = self.logic.get_transducer_tracking_result_node(
+            photoscan_id=selected_photoscan_openlifu.id,
+            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+        if tt_result:
+            selected_transducer.set_current_transform_to_match_transform_node(tt_result)
+        
         wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
     
     def resetViewNodes(self,
@@ -1171,7 +1194,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         return photoscan_to_volume_result
     
     def get_transducer_tracking_result_node(self, photoscan_id: str, transform_type: TransducerTrackingTransformType):
-
+        """ Returns 'None' if no result is found """
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
     
