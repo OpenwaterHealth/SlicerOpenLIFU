@@ -314,12 +314,12 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
 
-        self.transducer_to_photoscan_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
+        self.transducer_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
             photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
         )
-        if self.transducer_to_photoscan_transform_node is None:
-            self.transducer_to_photoscan_transform_node = self.wizard()._logic.initialize_transducer_to_photoscan_node_from_virtual_fit_result(
+        if self.transducer_to_volume_transform_node is None:
+            self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_transducer_to_volume_node_from_virtual_fit_result(
                 transducer = self.wizard().transducer,
                 target = self.wizard().target,
                 photoscan_id = self.wizard().photoscan.photoscan.photoscan.id
@@ -327,11 +327,11 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             
         # This can probably be outside the wizard. And after exiting wizard, reset all view nodes.
         self.runningRegistration = False 
-        self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_photoscan_transform_node.GetID())
-        self.transducer_to_photoscan_transform_node.GetDisplayNode().SetViewNodeIDs(
+        self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]
             ) # Specify a view node for display
-        self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(False)
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
 
         # Display the photoscan and transducer and hide the skin mesh
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
@@ -344,7 +344,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         
         status = "approved" if self.transform_approved else "not approved"
         self.ui.transducerPhotoscanTransformApprovalStatusLabel.text = (
-            f"The transducer-photoscan transform is {status} for transducer tracking"
+            f"The transducer-volume transform is {status} for transducer tracking"
         )
 
     def updateTransformApproveButton(self):
@@ -354,7 +354,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             self.ui.approveTransducerPhotoscanTransform.setToolTip(
                     "Revoke approval that the current transducer tracking result is correct")
         else:
-            self.ui.approveTransducerPhotoscanTransform.setText("Approve transducer-photoscan transform")
+            self.ui.approveTransducerPhotoscanTransform.setText("Approve transducer-volume transform")
             self.ui.approveTransducerPhotoscanTransform.setToolTip("Approve the current transducer tracking result")
 
     def onTransformApproveClicked(self):
@@ -367,19 +367,19 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     
     def onRunRegistrationClicked(self):
         # Need to integrate ICP registration here
-        if not self.transducer_to_photoscan_transform_node.GetDisplayNode().GetEditorVisibility():
+        if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
             
             self.ui.ICPPlaceholderLabel_2.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
             "Use the interaction handles to manually align the transducer and photoscan." \
             "You can click the run button again to remove the interaction handles."
             self.ui.ICPPlaceholderLabel_2.setProperty("styleSheet", "color: red;")
 
-            self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(True)
+            self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
 
         else:
             self.ui.ICPPlaceholderLabel_2.text = ""
-            self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(False)
+            self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
     
         # Emit signal to update the enable/disable state of 'Finish' button. 
@@ -1204,7 +1204,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         return transform_node
 
-    def initialize_transducer_to_photoscan_node_from_virtual_fit_result(self,
+    def initialize_transducer_to_volume_node_from_virtual_fit_result(self,
             transducer: SlicerOpenLIFUTransducer,
             target: vtkMRMLMarkupsFiducialNode,
             photoscan_id: str):
@@ -1223,21 +1223,21 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         virutal_fit_transform = vtk.vtkMatrix4x4()
         best_virtual_fit_result_node.GetMatrixTransformFromParent(virutal_fit_transform)
         
-        transducer_to_photoscan_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_to_photoscan_result.SetMatrixTransformToParent(virutal_fit_transform)
+        transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        transducer_to_volume_result.SetMatrixTransformToParent(virutal_fit_transform)
 
-        transducer_to_photoscan_result = add_transducer_tracking_result(
-            transducer_to_photoscan_result,
-            TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN,
+        transducer_to_volume_result = add_transducer_tracking_result(
+            transducer_to_volume_result,
+            TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
             photoscan_id = photoscan_id,
             session_id = session_id, 
             approval_status = False,
             replace = True, 
             )
         
-        transducer.move_node_into_transducer_sh_folder(transducer_to_photoscan_result)
+        transducer.move_node_into_transducer_sh_folder(transducer_to_volume_result)
     
-        return transducer_to_photoscan_result
+        return transducer_to_volume_result
 
     def clear_any_openlifu_volume_affiliated_nodes(self, volume_node: vtkMRMLScalarVolumeNode):
 
