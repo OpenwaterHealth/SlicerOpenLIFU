@@ -1,2 +1,2 @@
-git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@3a78135b308444ca954b958615867c04f4529c76
+git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@3340c3ab43525fbb7a09a93eddf9c458f1735c63
 bcrypt
