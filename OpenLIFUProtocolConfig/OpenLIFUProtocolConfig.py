@@ -237,6 +237,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUProtocolConfigLogic()
 
+        # Initialize the member in setup() because it relies on openlifu_lz(),
+        # which has GUI elements attached to trigger a yes/no dialog.
+        self.logic.EMPTY_PROTOCOL = openlifu_lz().plan.Protocol(
+            name = "",
+            id = "",
+            description = "",
+            pulse = openlifu_lz().bf.Pulse(frequency=0.00, duration=0.00),
+            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
+        )
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -774,13 +784,9 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         "Focal patten options": None,
     }
 
-    EMPTY_PROTOCOL = openlifu_lz().plan.Protocol(
-        name = "",
-        id = "",
-        description = "",
-        pulse = openlifu_lz().bf.Pulse(frequency=0.00, duration=0.00),
-        focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
-    )
+    # Initialize in setup() because it relies on openlifu_lz(),
+    # which has GUI elements attached to trigger a yes/no dialog.
+    EMPTY_PROTOCOL = None
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
