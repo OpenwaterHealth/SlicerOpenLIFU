@@ -1733,8 +1733,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             replace=True, # If there happen to already be some virtual fit result nodes that clash, loading a session will silently overwrite them.
         )
 
-        for (transducer_to_photoscan_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
-            newly_loaded_transducer.move_node_into_transducer_sh_folder(transducer_to_photoscan_node)
+        for (transducer_to_volume_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
+            newly_loaded_transducer.move_node_into_transducer_sh_folder(transducer_to_volume_node)
             newly_loaded_transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_node)
 
         # === Toggle slice visibility and center slices on first target ===

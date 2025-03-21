@@ -14,7 +14,7 @@ from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
     fiducial_to_openlifu_point,
 )
-from OpenLIFULib.transform_conversion import transform_node_to_openlifu
+from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
 from OpenLIFULib.transducer_tracking_results import get_transducer_tracking_results_in_openlifu_session_format
 
@@ -188,7 +188,7 @@ class SlicerOpenLIFUSession:
         transducer = get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]
         transducer_openlifu = transducer.transducer.transducer
         transducer_transform_node : vtkMRMLTransformNode = transducer.transform_node
-        self.session.session.array_transform = transform_node_to_openlifu(transducer_transform_node, transducer_openlifu.units)
+        self.session.session.array_transform = transducer_transform_node_to_openlifu(transducer_transform_node, transducer_openlifu.units)
 
         # Update virtual fit results
         self.session.session.virtual_fit_results = get_virtual_fit_results_in_openlifu_session_format(
@@ -199,7 +199,7 @@ class SlicerOpenLIFUSession:
         #Update transducer tracking results
         self.session.session.transducer_tracking_results = get_transducer_tracking_results_in_openlifu_session_format(
             session_id=self.get_session_id(),
-            units = transducer_openlifu.units,
+            transducer_units = transducer_openlifu.units,
         )
 
         return self.session.session
@@ -213,7 +213,7 @@ class SlicerOpenLIFUSession:
             photoscan_id for photoscan_id in self.get_affiliated_photoscan_ids()
             for tt_result in session_openlifu.transducer_tracking_results
             if photoscan_id == tt_result.photoscan_id 
-            and tt_result.transducer_to_photoscan_tracking_approved 
+            and tt_result.transducer_to_volume_tracking_approved 
             and tt_result.photoscan_to_volume_tracking_approved 
         ]
 

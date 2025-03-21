@@ -3,15 +3,21 @@ from slicer import vtkMRMLTransformNode
 from typing import Iterable, Optional, Tuple, Union, List, TYPE_CHECKING
 from enum import Enum, auto
 
-from OpenLIFULib.transform_conversion import transform_node_to_openlifu, transform_node_from_openlifu
+from OpenLIFULib.transform_conversion import (
+    transducer_transform_node_to_openlifu,
+    transducer_transform_node_from_openlifu,
+    create_openlifu2slicer_matrix
+    )
 from OpenLIFULib.lazyimport import openlifu_lz
+import numpy as np
+from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 
 if TYPE_CHECKING:
     from openlifu.db.session import TransducerTrackingResult
     from openlifu import Transducer
 
 class TransducerTrackingTransformType(Enum):
-    TRANSDUCER_TO_PHOTOSCAN = auto()
+    TRANSDUCER_TO_VOLUME = auto()
     PHOTOSCAN_TO_VOLUME = auto()
 
 def add_transducer_tracking_result(
@@ -33,7 +39,7 @@ def add_transducer_tracking_result(
 
     Args:
         transform_node: The transform node associated with the transducer tracking result.
-        transform_type: The direction of the transform - TRANSDUCER_TO_PHOTOSCAN or PHOTOSCAN_TO_VOLUME
+        transform_type: The direction of the transform - TRANSDUCER_TO_VOLUME or PHOTOSCAN_TO_VOLUME
         photoscan_id: The ID of the photoscan for which the transducer tracking transform was computed.
         session_id: The ID of the openlifu.Session during which transducer tracking took place.
             If not provided then it is assumed the transducer tracking took place without
@@ -66,9 +72,9 @@ def add_transducer_tracking_result(
         else:
             raise RuntimeError("There is already a transducer tracking result node for this transform_type+photoscan+session and replace is False")
     
-    if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN:
-        transform_node.SetName(f"TT transducer-photoscan {photoscan_id}")
-        transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN.name}","1")
+    if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME:
+        transform_node.SetName(f"TT transducer-volume {photoscan_id}")
+        transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}","1")
     elif transform_type == TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME:
         transform_node.SetName(f"TT photoscan-volume {photoscan_id}")
         transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}","1")
@@ -85,12 +91,12 @@ def add_transducer_tracking_result(
     
     return transform_node
 
-def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, units:str) -> List["TransducerTrackingResult"]:
+def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, transducer_units:str) -> List["TransducerTrackingResult"]:
     """Parse through transducer tracking transform nodes in the scene and return the information in Session representation.
 
     Args:
         session_id: The ID of the session whose transducer tracking result transform nodes we are interested in.
-        units: The units of the transducer that the transducer tracking transform nodes are meant to apply to.
+        transducer_units: The units of the transducer that the transducer tracking transform nodes are meant to apply to.
             (If the transducer model is not in "mm" then there is a built in unit conversion in the transform
             node matrix and this has to be removed to represent the transform in openlifu format.)
 
@@ -109,14 +115,27 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, u
                                + (f"and session {session_id}" if session_id is not None else "with no session.")
             )
 
-        transducer_photoscan_node, photoscan_volume_node = tt_result_for_session_photoscan[0]
-        photoscan_id = transducer_photoscan_node.GetAttribute("TT:photoscanID")
+        transducer_volume_node, photoscan_volume_node = tt_result_for_session_photoscan[0]
+        
+        # Convert photoscan to volume transform to LPS
+        transform_array = slicer.util.arrayFromTransformMatrix(photoscan_volume_node, toWorld=True)
+        openlifu2slicer_matrix = create_openlifu2slicer_matrix('mm')
+        photoscan_to_volume_transform_openlifu = openlifu_lz().db.session.ArrayTransform(
+            matrix = np.linalg.inv(openlifu2slicer_matrix) @ transform_array,
+            units = 'mm',
+        )
+
+        transducer_to_volume_transform_openlifu = transducer_transform_node_to_openlifu(
+            transform_node=transducer_volume_node,
+            transducer_units=transducer_units)
+
+        photoscan_id = transducer_volume_node.GetAttribute("TT:photoscanID")
         transducer_tracking_results_openlifu.append(
             openlifu_lz().db.session.TransducerTrackingResult(
                     photoscan_id = photoscan_id,
-                    transducer_to_photoscan_transform = transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
-                    photoscan_to_volume_transform = transform_node_to_openlifu(transform_node=transducer_photoscan_node, transducer_units=units),
-                    transducer_to_photoscan_tracking_approved = transducer_photoscan_node.GetAttribute("TT:approvalStatus") == "1",
+                    transducer_to_volume_transform = transducer_to_volume_transform_openlifu,
+                    photoscan_to_volume_transform = photoscan_to_volume_transform_openlifu,
+                    transducer_to_volume_tracking_approved = transducer_volume_node.GetAttribute("TT:approvalStatus") == "1",
                     photoscan_to_volume_tracking_approved = photoscan_volume_node.GetAttribute("TT:approvalStatus") == "1",
                     )
         )
@@ -149,23 +168,24 @@ def add_transducer_tracking_results_from_openlifu_session_format(
     nodes_that_have_been_added = []
     for tt_result in tt_results_openlifu:
 
-        transducer_to_photoscan_transform_node = transform_node_from_openlifu(
-                openlifu_transform_matrix = tt_result.transducer_to_photoscan_transform.matrix,
-                transform_units = tt_result.transducer_to_photoscan_transform.units,
+        transducer_to_volume_transform_node = transducer_transform_node_from_openlifu(
+                openlifu_transform_matrix = tt_result.transducer_to_volume_transform.matrix,
+                transform_units = tt_result.transducer_to_volume_transform.units,
                 transducer = transducer,
             )
         
-        photoscan_to_volume_transform_node = transform_node_from_openlifu(
-                openlifu_transform_matrix = tt_result.photoscan_to_volume_transform.matrix,
-                transform_units = tt_result.photoscan_to_volume_transform.units,
-                transducer = transducer,
-            )
+        # Convert photoscan_to_volume transform from LPS space to RAS space, both in mm. 
+        openlifu2slicer_matrix = create_openlifu2slicer_matrix('mm')
+        transform_matrix_numpy = openlifu2slicer_matrix @  tt_result.photoscan_to_volume_transform.matrix
+        transform_matrix_vtk = numpy_to_vtk_4x4(transform_matrix_numpy)
+        photoscan_to_volume_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        photoscan_to_volume_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
         
-        transducer_to_photoscan_transform_node = add_transducer_tracking_result(
-            transform_node=transducer_to_photoscan_transform_node,
-            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN,
+        transducer_to_volume_transform_node = add_transducer_tracking_result(
+            transform_node=transducer_to_volume_transform_node,
+            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
             photoscan_id=tt_result.photoscan_id,
-            approval_status=tt_result.transducer_to_photoscan_tracking_approved,
+            approval_status=tt_result.transducer_to_volume_tracking_approved,
             session_id=session_id,
             replace = replace
             )
@@ -179,7 +199,7 @@ def add_transducer_tracking_results_from_openlifu_session_format(
             replace = replace
             )
 
-        nodes_that_have_been_added.append((transducer_to_photoscan_transform_node, photoscan_to_volume_transform_node))
+        nodes_that_have_been_added.append((transducer_to_volume_transform_node, photoscan_to_volume_transform_node))
 
     return nodes_that_have_been_added
 
@@ -199,7 +219,7 @@ def get_transducer_tracking_result_nodes_in_scene(
     """
 
     tt_result_nodes = [
-        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if t.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN.name}") == "1" or t.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
+        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if t.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1" or t.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
         ]
 
     if session_id is not None:
@@ -257,10 +277,10 @@ def get_transducer_tracking_result(
     return tt_result_node
 
 def get_complete_transducer_tracking_results(session_id: Optional[str], photoscan_id: Optional[str]) -> Iterable[Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]:
-    """A transducer tracking result is considered 'complete' when both the transducer_to_photoscan 
+    """A transducer tracking result is considered 'complete' when both the transducer_to_volume 
     and photoscan_to_volume transforms nodes have been computed and added to the scene. Only complete
     transducer tracking results can be added to a session. Therefore, this function identifies
-    paired transducer_to_photoscan and photoscan_to_volume transform nodes and returns each result pair as a
+    paired transducer_to_volume and photoscan_to_volume transform nodes and returns each result pair as a
     Tuple. Paired transformed nodes are identified as having the same session ID (unless session-less) and photoscan ID.
 
     Args:
@@ -268,10 +288,10 @@ def get_complete_transducer_tracking_results(session_id: Optional[str], photosca
         photoscan_id: optional photoscan ID. If None then transducer tracking results for any affiliated photoscans are included.
 
     Returns a list of associated transducer tracking results in the scene. Each result is a
-    tuple of transducer tracking nodes: (transducer_to_photoscan_transform, photoscan_to_volume_transform) 
+    tuple of transducer tracking nodes: (transducer_to_volume_transform, photoscan_to_volume_transform) 
     """
 
-    tp_nodes = get_transducer_tracking_result_nodes_in_scene(session_id=session_id, photoscan_id=photoscan_id, transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN)
+    tp_nodes = get_transducer_tracking_result_nodes_in_scene(session_id=session_id, photoscan_id=photoscan_id, transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
     pv_nodes = get_transducer_tracking_result_nodes_in_scene(session_id = session_id, photoscan_id= photoscan_id, transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
 
     # If session_id None, then at this point `nodes`` is not filtered for session ID
@@ -309,7 +329,7 @@ def set_transducer_tracking_approval_for_node(approval_state: bool, transform_no
         approval_state: new approval state to apply
         transform_node: vtkMRMLTransformNode
     """
-    if (transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN.name}") != "1" 
+    if (transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") != "1" 
         or transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") != "1"
     ):
         raise ValueError("The specified transform node is a not a transducer tracking result node")
@@ -324,7 +344,7 @@ def get_photoscan_id_from_transducer_tracking_result(result: Union[vtkMRMLTransf
         transform_node = result
     elif isinstance(result,tuple):
         if result[0].GetAttribute("TT:photoscanID") != result[1].GetAttribute("TT:photoscanID"):
-            raise RuntimeError("Transducer tracking transducer-photoscan and photoscan-volume transforms have mismatched photoscan IDs.")
+            raise RuntimeError("Transducer tracking transducer-volume and photoscan-volume transforms have mismatched photoscan IDs.")
         elif result[0].GetAttribute("TT:photoscanID") is None or result[1].GetAttribute("TT:photoscanID") is None:
             raise RuntimeError("Transducer tracking result does not have a photoscan ID.")
         # Following the above checks, we can return the photoscanID attribute using either transform node

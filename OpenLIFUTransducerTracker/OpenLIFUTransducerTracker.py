@@ -1,4 +1,5 @@
 from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
+import warnings
 import numpy as np
 import vtk
 import qt
@@ -13,6 +14,7 @@ from slicer import (
     vtkMRMLTransformNode,
     vtkMRMLScalarVolumeNode,
     vtkMRMLViewNode,
+    vtkMRMLMarkupsFiducialNode
     )
 
 from OpenLIFULib.util import replace_widget, BusyCursor
@@ -20,7 +22,6 @@ from OpenLIFULib import (
     openlifu_lz,
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
-    SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUPhotoscan
 )
@@ -44,7 +45,8 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node
 )
 
-from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
+from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 from OpenLIFULib.skinseg import generate_skin_mesh
 
@@ -218,17 +220,37 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.updateTransformApproveButton()
 
         self.runningRegistration = False
-        self.photoscan_to_volume_transform_node = self.wizard()._logic.get_photoscan_to_volume_transform_node(
-            self.wizard().photoscan,
-            self.wizard().skin_mesh_node,
-            self.wizard().transducer
-        )
+
+        self.photoscan_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
+            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
+            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
+
+        if self.photoscan_to_volume_transform_node is None:
+            self.photoscan_to_volume_transform_node = self.wizard()._logic.run_photoscan_volume_fiducial_registration(
+                photoscan =  self.wizard().photoscan,
+                skin_mesh_node = self.wizard().skin_mesh_node,
+                transducer = self.wizard().transducer)
+
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]
             ) # Specify a view node for display
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
         
         self.wizard().photoscan.set_transform_node(self.photoscan_to_volume_transform_node)
+
+        # Set the center of the transformation to the center of the photocan model node
+        bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.wizard().photoscan.model_node.GetRASBounds(bounds)
+        center_world = [
+            (bounds[0] + bounds[1]) / 2,
+            (bounds[2] + bounds[3]) / 2,
+            (bounds[4] + bounds[5]) / 2
+        ]
+        center_local = [0.0,0.0,0.0]
+        transform_from_world = vtk.vtkGeneralTransform()
+        self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
+        transform_from_world.TransformPoint(center_world,center_local )
+        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
     
     def updateTransformApprovalStatusLabel(self):
         
@@ -300,35 +322,42 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        # Display the photoscan and transducer and hide the skin mesh
-        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
-        self.wizard().photoscan.toggle_model_display(visibility_on = True) 
-        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
-        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
-        
         reset_view_node_camera(view_node)
     
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
 
-        self.transducer_to_photoscan_transform_node = self.wizard()._logic.get_transducer_to_photoscan_transform_node(
-            self.wizard().transducer,
-            self.wizard().photoscan)
+        self.transducer_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
+            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
+        )
+        if self.transducer_to_volume_transform_node is None:
+            self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_transducer_to_volume_node_from_virtual_fit_result(
+                transducer = self.wizard().transducer,
+                target = self.wizard().target,
+                photoscan_id = self.wizard().photoscan.photoscan.photoscan.id
+            )
             
         # This can probably be outside the wizard. And after exiting wizard, reset all view nodes.
         self.runningRegistration = False 
-        self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_photoscan_transform_node.GetID())
-        self.transducer_to_photoscan_transform_node.GetDisplayNode().SetViewNodeIDs(
+        self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]
             ) # Specify a view node for display
-        self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(False)
-    
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
+
+        # Display the photoscan and transducer and hide the skin mesh
+        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
+        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
+        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
+        self.wizard().photoscan.toggle_model_display(visibility_on = True) 
+        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
+        
     def updateTransformApprovalStatusLabel(self):
         
         status = "approved" if self.transform_approved else "not approved"
         self.ui.transducerPhotoscanTransformApprovalStatusLabel.text = (
-            f"The transducer-photoscan transform is {status} for transducer tracking"
+            f"The transducer-volume transform is {status} for transducer tracking"
         )
 
     def updateTransformApproveButton(self):
@@ -338,7 +367,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             self.ui.approveTransducerPhotoscanTransform.setToolTip(
                     "Revoke approval that the current transducer tracking result is correct")
         else:
-            self.ui.approveTransducerPhotoscanTransform.setText("Approve transducer-photoscan transform")
+            self.ui.approveTransducerPhotoscanTransform.setText("Approve transducer-volume transform")
             self.ui.approveTransducerPhotoscanTransform.setToolTip("Approve the current transducer tracking result")
 
     def onTransformApproveClicked(self):
@@ -351,19 +380,19 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     
     def onRunRegistrationClicked(self):
         # Need to integrate ICP registration here
-        if not self.transducer_to_photoscan_transform_node.GetDisplayNode().GetEditorVisibility():
+        if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
             
             self.ui.ICPPlaceholderLabel_2.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
             "Use the interaction handles to manually align the transducer and photoscan." \
             "You can click the run button again to remove the interaction handles."
             self.ui.ICPPlaceholderLabel_2.setProperty("styleSheet", "color: red;")
 
-            self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(True)
+            self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
 
         else:
             self.ui.ICPPlaceholderLabel_2.text = ""
-            self.transducer_to_photoscan_transform_node.GetDisplayNode().SetEditorVisibility(False)
+            self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
     
         # Emit signal to update the enable/disable state of 'Finish' button. 
@@ -373,23 +402,25 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         """" Determines if the 'Next' button should be enabled"""
         return not self.runningRegistration
 
-
 class TransducerTrackingWizard(qt.QWizard):
-    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
-                 skin_mesh_node: vtkMRMLModelNode, 
+    def __init__(self, photoscan: "openlifu.Photoscan", 
+                 volume: vtkMRMLScalarVolumeNode, 
                  transducer: SlicerOpenLIFUTransducer,
-                 photoscan_view_node: vtkMRMLViewNode, 
-                 volume_view_node: vtkMRMLViewNode):
+                 target: vtkMRMLMarkupsFiducialNode):
         super().__init__()
 
-        self.photoscan = photoscan
-        self.skin_mesh_node = skin_mesh_node
-        self.transducer = transducer
-        self.transducer_surface = transducer.surface_model_node
-        self.photoscan_view_node = photoscan_view_node
-        self.volume_view_node = volume_view_node
-
         self._logic = OpenLIFUTransducerTrackerLogic()
+        
+        with BusyCursor():
+
+            self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
+            self.transducer = transducer
+            self.target = target
+            self.transducer_surface = transducer.surface_model_node
+            # Computing the skin segmentation takes some time the first time
+            self.skin_mesh_node = self._logic.compute_skin_segmentation(volume)
+
+            self.setupViewNodes()
 
         self.setWindowTitle("Transducer Tracking Wizard")
         self.photoscanMarkupPage = PhotoscanMarkupPage(self)
@@ -404,6 +435,40 @@ class TransducerTrackingWizard(qt.QWizard):
 
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setWizardStyle(qt.QWizard.ClassicStyle)
+    
+    def setupViewNodes(self):
+                
+        # Create a viewNode for displaying the photoscan if it hasn't been created
+        photoscan_id = self.photoscan.photoscan.photoscan.id
+        if self.photoscan.view_node is None:
+            self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
+            reset_camera_view = True
+        else:
+            self.photoscan_view_node = self.photoscan.view_node
+            reset_camera_view = False
+        
+        self.photoscan_view_node = self.photoscan.view_node
+        self.volume_view_node = get_threeD_transducer_tracking_view_node()
+        
+        wizard_view_nodes = [self.photoscan_view_node, self.volume_view_node]
+
+        # Set view nodes for the skin mesh, transducer and photoscan
+        self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+
+        # For transducers, ensure that the parent folder visibility is turned on
+        self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+        parentFolderID = shNode.GetItemParent(shNode.GetItemByDataNode(self.transducer_surface))
+        shNode.SetItemDisplayVisibility(parentFolderID, True)
+
+        self.photoscan.set_view_nodes(wizard_view_nodes)
+
+        # Hide all displayable nodes in the scene from the wizard view nodes
+        hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
+        
+        if reset_camera_view:
+            self.photoscan.toggle_model_display(visibility_on = True)
+            reset_view_node_camera(self.photoscan_view_node)
     
 class PhotoscanPreviewPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -459,12 +524,13 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.updatePhotoscanApproveButton(self.wizard().photoscan.is_approved())
 
 class PhotoscanPreviewWizard(qt.QWizard):
-    def __init__(self, photoscan : SlicerOpenLIFUPhotoscan, photoscan_view_node: vtkMRMLViewNode):
+    def __init__(self, photoscan : "openlifu.Photoscan"):
         super().__init__()
 
         self.logic = OpenLIFUTransducerTrackerLogic()
-        self.photoscan = photoscan
-        self.photoscan_view_node = photoscan_view_node
+        self.photoscan = self.logic.load_openlifu_photoscan(photoscan)
+
+        self.setupViewNode()
 
         self.setWindowTitle("Photoscan Preview")
         self.photoscanPreviewPage = PhotoscanPreviewPage(self)
@@ -473,6 +539,33 @@ class PhotoscanPreviewWizard(qt.QWizard):
         # Customize view
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setOption(qt.QWizard.NoCancelButton)
+    
+    def setupViewNode(self):
+        """ Returns the view node associated with the photoscan.
+        If reset_camera_view is True, the view node centers and fits the displayed photoscan in 3D view.
+        This should only happen when the user is viewing the photoscan for the first time. 
+        If the user has previously interacted with the 3D view widget, then
+        maintain the previous camera/focal point."""
+                
+        # Create a viewNode for displaying the photoscan if it hasn't been created
+        photoscan_id = self.photoscan.photoscan.photoscan.id
+        if self.photoscan.view_node is None:
+            self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
+            self.photoscan_view_node = self.photoscan.view_node
+            reset_camera_view = True
+        else:
+            self.photoscan_view_node = self.photoscan.view_node
+            reset_camera_view = False
+
+        # Set view nodes on the photoscan
+        self.photoscan.set_view_nodes([self.photoscan_view_node])
+        
+        # Hide all displayable nodes in the scene from the wizard view ndoes
+        hide_displayable_nodes_from_view(wizard_view_nodes = [self.photoscan_view_node])
+        
+        if reset_camera_view:
+            self.photoscan.toggle_model_display(visibility_on = True)
+            reset_view_node_camera(self.photoscan_view_node)
 
 #
 # OpenLIFUTransducerTracker
@@ -591,7 +684,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self.wizard = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -636,7 +728,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
-        algorithm_input_names = ["Protocol","Volume","Transducer", "Photoscan"]
+        algorithm_input_names = ["Protocol","Volume","Transducer", "Target", "Photoscan"]
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names)
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
@@ -704,6 +796,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         """ Update volume and photoscan combo boxes when nodes are removed from the scene"""
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
+                self.unwatch_fiducial_node(node)
         self.updateInputOptions()
 
         # If a volume node is removed, clear the associated skin surface and facial landmarks fiducial nodes
@@ -713,6 +809,21 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         """ Update volume and photoscan combo boxes when nodes are added to the scene"""
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            self.watch_fiducial_node(node)
+        self.updateInputOptions()
+    
+    def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Add observers so that point-list changes in this fiducial node are tracked by the module."""
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
+        self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+
+    def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Un-does watch_fiducial_node; see watch_fiducial_node."""
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
+        self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+
+    def onPointAddedOrRemoved(self, caller, event):
         self.updateInputOptions()
 
     def updateInputOptions(self):
@@ -748,20 +859,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
-        loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
         
-        photoscan_view_node = self.setupWizardViewNodes(
-            loaded_slicer_photoscan,
-            photoscan_preview_only= True)
-
-        wizard = PhotoscanPreviewWizard(loaded_slicer_photoscan, photoscan_view_node)
+        wizard = PhotoscanPreviewWizard(photoscan = selected_photoscan_openlifu)
 
         # Display dialog
         wizard.exec_()
 
-        # TODO: This should be associated with the finish/cancel signal
+        # # TODO: This should be associated with the finish/cancel signal
         self.resetViewNodes(
-            loaded_slicer_photoscan,
+            photoscan=self.logic.load_openlifu_photoscan(selected_photoscan_openlifu),
             photoscan_preview_only = True)
           
         wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
@@ -794,100 +900,34 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onRunTrackingClicked(self):
 
-        with BusyCursor():
-            
-            activeData = self.algorithm_input_widget.get_current_data()
-            selected_photoscan_openlifu = activeData["Photoscan"]
-            loaded_slicer_photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)
-
-            selected_transducer = activeData["Transducer"]
-            transducer_registration_surface = selected_transducer.surface_model_node
-
-            volume = activeData["Volume"]
-            skin_mesh_node = self.logic.compute_skin_segmentation(volume)
-
-            photoscan_view_node, volume_view_node = self.setupWizardViewNodes(
-                loaded_slicer_photoscan,
-                photoscan_preview_only = False,
-                skin_mesh_node =skin_mesh_node,
-                transducer_surface = transducer_registration_surface,
-                )
-
-            wizard = TransducerTrackingWizard(
-                photoscan = loaded_slicer_photoscan,
-                skin_mesh_node = skin_mesh_node,
-                transducer = selected_transducer,
-                photoscan_view_node= photoscan_view_node,
-                volume_view_node= volume_view_node)
+        activeData = self.algorithm_input_widget.get_current_data()
+        selected_photoscan_openlifu = activeData["Photoscan"]
+        selected_transducer = activeData["Transducer"]
+        wizard = TransducerTrackingWizard(
+            photoscan = selected_photoscan_openlifu,
+            volume = activeData["Volume"],
+            transducer = activeData["Transducer"],
+            target = activeData["Target"])
         
         wizard.exec_()
 
         # TODO: This should be associated with the finish/cancel signal
         self.resetViewNodes(
-            loaded_slicer_photoscan,
+            photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu),
             photoscan_preview_only = False,
-            skin_mesh_node =skin_mesh_node,
-            transducer_surface = transducer_registration_surface,
+            skin_mesh_node = self.logic.compute_skin_segmentation(activeData["Volume"]),
+            transducer_surface = selected_transducer.surface_model_node
             )    
+        
+        # Set the current transform node to the transducer tracking result.
+        # TODO: Should this only happen if the the result is approved?
+        tt_result = self.logic.get_transducer_tracking_result_node(
+            photoscan_id=selected_photoscan_openlifu.id,
+            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+        if tt_result:
+            selected_transducer.set_current_transform_to_match_transform_node(tt_result)
+        
         wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
-
-    def setupWizardViewNodes(self,
-                             photoscan: SlicerOpenLIFUPhotoscan,
-                             photoscan_preview_only = False,
-                             skin_mesh_node: Optional[vtkMRMLModelNode] = None,
-                             transducer_surface: Optional[vtkMRMLModelNode] = None):
-        """ Returns the view node associated with the photoscan.
-        If reset_camera_view is True, the view node centers and fits the displayed photoscan in 3D view.
-        This should only happen when the user is viewing the photoscan for the first time. 
-        If the user has previously interacted with the 3Dview widget, then
-        maintain the previous camera/focal point. """
-                
-        # Create a viewNode for displaying the photoscan if it hasn't been created
-        photoscan_id = photoscan.photoscan.photoscan.id
-        if photoscan.view_node is None:
-            photoscan_view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
-            photoscan.view_node = photoscan_view_node
-            reset_camera_view = True
-        else:
-            photoscan_view_node = photoscan.view_node
-            reset_camera_view = False
-
-        wizard_view_nodes = [photoscan_view_node]
-
-        if photoscan_preview_only:
-            # Set view nodes on the photoscan
-            photoscan.set_view_nodes(wizard_view_nodes)
-            
-            # Hide all displayable nodes in the scene from the wizard view ndoes
-            hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
-            
-            if reset_camera_view:
-                photoscan.toggle_model_display(visibility_on = True)
-                reset_view_node_camera(photoscan_view_node)
-            
-            return photoscan_view_node
-
-        volume_view_node = get_threeD_transducer_tracking_view_node()
-        wizard_view_nodes.append(volume_view_node)
-
-        # Set view nodes for the skin mesh, transducer and photoscan
-        skin_mesh_node.GetDisplayNode().SetViewNodeIDs([volume_view_node.GetID()])
-        transducer_surface.GetDisplayNode().SetViewNodeIDs([volume_view_node.GetID()])
-        # For transducers, ensure that the parent folder visibility is turned on
-        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-        parentFolderID = shNode.GetItemParent(shNode.GetItemByDataNode(transducer_surface))
-        shNode.SetItemDisplayVisibility(parentFolderID, True)
-
-        photoscan.set_view_nodes(wizard_view_nodes)
-
-        # Hide all displayable nodes in the scene from the wizard view nodes
-        hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
-        
-        if reset_camera_view:
-            photoscan.toggle_model_display(visibility_on = True)
-            reset_view_node_camera(photoscan_view_node)
-        
-        return wizard_view_nodes
     
     def resetViewNodes(self,
                        photoscan: SlicerOpenLIFUPhotoscan,
@@ -1048,8 +1088,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         return fiducial_node
         
     def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
-        """"Computes skin segmentation if it has not been created. The ID of the volume node used to create the 
-        skin segmentation is added as a model node attribute.Note, this is different from the openlifu volume id. "
+        """Computes skin segmentation if it has not been created. The ID of the volume node used to create the 
+        skin segmentation is added as a model node attribute.Note, this is different from the openlifu volume id.
         """
         skin_mesh_node = [
             node for node in slicer.util.getNodesByClass('vtkMRMLModelNode') 
@@ -1124,35 +1164,35 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         volume_facial_landmarks_node.GetDisplayNode().SetColor(0,1,1)
         return volume_facial_landmarks_node
     
-    def get_photoscan_to_volume_transform_node(self,photoscan: SlicerOpenLIFUPhotoscan, skin_mesh_node: vtkMRMLModelNode, transducer : SlicerOpenLIFUTransducer):
-        
-        session = get_openlifu_data_parameter_node().loaded_session
-        session_id : Optional[str] = session.get_session_id() if session is not None else None
-    
-        photoscan_to_volume_transform_node = get_transducer_tracking_result(
-            photoscan_id= photoscan.photoscan.photoscan.id,
-            session_id=session_id,
-            transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
-        
-        if not photoscan_to_volume_transform_node:
-            photoscan_to_volume_transform_node = self.run_photoscan_volume_fiducial_registration(photoscan, skin_mesh_node, transducer)
-        
-        return photoscan_to_volume_transform_node
-
     def run_photoscan_volume_fiducial_registration(self,
             photoscan: SlicerOpenLIFUPhotoscan,
             skin_mesh_node: vtkMRMLModelNode,
             transducer : SlicerOpenLIFUTransducer):
-        """Placeholder function for running fiducial registration between
-        the photoscan and skin segmentation. For now, a transform node with
-        the required transducer tracking result attributes gets added to the scene."""
+        """Initializes the photoscan to volume transform node with the result of
+        fiducial registration between the photoscan and skin segmentation. The resulting transform node
+        gets added to the scene with the required transducer tracking result attributes.
+        Args:
+            photoscan: Should contain a valid facial_landmarks_fiducial_node attribute, which are the moving landmarks for registration.
+            skin_mesh_node: Should be associated with TODO: complete. 
+        """
 
-        # Temporary functionality
         photoscan_to_volume_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_matrix = np.eye(4)
-        transform_matrix_vtk = numpy_to_vtk_4x4(transducer_matrix)
-        photoscan_to_volume_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
+
+        volume_facial_landmarks = self.get_volume_facial_landmarks(skin_mesh_node)
+        if volume_facial_landmarks is None:
+            raise RuntimeError("Can't perform fiducial registration. The provided skin mesh does not have the necessary landmarks for registration.")
         
+        if photoscan.facial_landmarks_fiducial_node is None:
+            raise RuntimeError("Can't perform fiducial registration. The provided photoscan does not have the necessary landmarks for registration.")
+
+        fiducial_registration_cli = slicer.modules.fiducialregistration
+        parameters = {}
+        parameters["fixedLandmarks"] = volume_facial_landmarks
+        parameters["movingLandmarks"] = photoscan.facial_landmarks_fiducial_node
+        parameters["saveTransform"] = photoscan_to_volume_transform_node
+        parameters["transformType"] = "Similarity"
+        slicer.cli.run(fiducial_registration_cli, node = None, parameters = parameters, wait_for_completion = True, update_display = False)
+
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
@@ -1166,53 +1206,59 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             )
         transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_result)
 
-        # TODO: Add checks that the required fiducials have been provided. 
+        # Reset photoscan view node camera
+        if photoscan.view_node is not None:
+            photoscan.toggle_model_display(visibility_on = True)
+            reset_view_node_camera(photoscan.view_node)
 
         return photoscan_to_volume_result
     
-    def get_transducer_to_photoscan_transform_node(self, transducer: SlicerOpenLIFUTransducer,
-            photoscan: SlicerOpenLIFUPhotoscan):
-        
+    def get_transducer_tracking_result_node(self, photoscan_id: str, transform_type: TransducerTrackingTransformType):
+        """ Returns 'None' if no result is found """
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
     
-        transducer_to_photoscan_transform_node = get_transducer_tracking_result(
-            photoscan_id= photoscan.photoscan.photoscan.id,
-            session_id=session_id,
-            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN) 
+        transform_node = get_transducer_tracking_result(
+                photoscan_id= photoscan_id,
+                session_id=session_id,
+                transform_type= transform_type) 
         
-        if not transducer_to_photoscan_transform_node:
-            transducer_to_photoscan_transform_node = self.initialize_transducer_to_photoscan_registration(transducer, photoscan)
-        
-        return transducer_to_photoscan_transform_node
+        return transform_node
 
-    def initialize_transducer_to_photoscan_registration(self,
+    def initialize_transducer_to_volume_node_from_virtual_fit_result(self,
             transducer: SlicerOpenLIFUTransducer,
-            photoscan: SlicerOpenLIFUPhotoscan):
+            target: vtkMRMLMarkupsFiducialNode,
+            photoscan_id: str):
         """Placeholder function for initializing function using
         virtual fit result. For now, a transform node with
         the required transducer tracking result attributes gets added to the scene."""
-
-        # Temporary functionality
-        transducer_to_photoscan_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_matrix = np.eye(4)
-        transform_matrix_vtk = numpy_to_vtk_4x4(transducer_matrix)
-        transducer_to_photoscan_transform_node.SetMatrixTransformToParent(transform_matrix_vtk)
-        
+      
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
-        transducer_to_photoscan_result = add_transducer_tracking_result(
-            transducer_to_photoscan_transform_node,
-            TransducerTrackingTransformType.TRANSDUCER_TO_PHOTOSCAN,
-            photoscan_id = photoscan.photoscan.photoscan.id,
+        # Initialize with virtual fit result
+        # TODO: Add check that virtual fit result exists. 
+        best_virtual_fit_result_node = get_best_virtual_fit_result_node(
+            target_id = fiducial_to_openlifu_point_id(target),
+            session_id = session_id)
+        virutal_fit_transform = vtk.vtkMatrix4x4()
+        best_virtual_fit_result_node.GetMatrixTransformFromParent(virutal_fit_transform)
+        
+        transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        transducer_to_volume_result.SetMatrixTransformToParent(virutal_fit_transform)
+
+        transducer_to_volume_result = add_transducer_tracking_result(
+            transducer_to_volume_result,
+            TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+            photoscan_id = photoscan_id,
             session_id = session_id, 
             approval_status = False,
             replace = True, 
             )
-        transducer.move_node_into_transducer_sh_folder(transducer_to_photoscan_result)
+        
+        transducer.move_node_into_transducer_sh_folder(transducer_to_volume_result)
     
-        return transducer_to_photoscan_result
+        return transducer_to_volume_result
 
     def clear_any_openlifu_volume_affiliated_nodes(self, volume_node: vtkMRMLScalarVolumeNode):
 

@@ -27,7 +27,7 @@ def create_openlifu2slicer_matrix(units : str) -> np.ndarray:
         get_xxx2ras_matrix('LPS') * get_xx2mm_scale_factor(units)
     )
 
-def transform_node_to_openlifu(transform_node:vtkMRMLTransformNode, transducer_units:str) -> "ArrayTransform":
+def transducer_transform_node_to_openlifu(transform_node:vtkMRMLTransformNode, transducer_units:str) -> "ArrayTransform":
     """Convert a transducer transform vtkMRMLTransformNode from Slicer to openlifu format.
 
     The vtkMRMLTransformNode has a matrix is assumed to convert from the transducer LPS space in the given `transducer_units`
@@ -47,7 +47,7 @@ def transform_node_to_openlifu(transform_node:vtkMRMLTransformNode, transducer_u
         units = transducer_units,
     )
 
-def transform_node_from_openlifu(
+def transducer_transform_node_from_openlifu(
         openlifu_transform_matrix:np.ndarray,
         transducer : "Transducer",
         transform_units:str = None,
