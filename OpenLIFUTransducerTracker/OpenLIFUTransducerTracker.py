@@ -46,6 +46,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 )
 
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
+from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 from OpenLIFULib.skinseg import generate_skin_mesh
@@ -195,12 +196,16 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(3)
         
-        # Temp functionality. This will be determined based on the transform node
+        # TODO: Temp functionality. This will be determined based on the transform node
         # if it already exists in the scene. 
         self.transform_approved = False
 
         self.ui.approvePhotoscanVolumeTransform.clicked.connect(self.onTransformApproveClicked)
         self.ui.runPhotoscanVolumeRegistration.clicked.connect(self.onRunRegistrationClicked)
+        self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
+
+        self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration "
+        "between the photoscan mesh and skin surface.")
     
     def initializePage(self):
         
@@ -211,46 +216,29 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(True)
         self.wizard().photoscan.toggle_model_display(visibility_on = True) 
         self.wizard().transducer_surface.GetDisplayNode().SetVisibility(False)
-        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
-    
         reset_view_node_camera(view_node)
+        
+        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
+        
+        # Cannot reach this page without creating volume facial landmarks due to
+        # data validation on the previous page
+        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
 
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
-
         self.runningRegistration = False
 
         self.photoscan_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
             photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
             transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
 
-        if self.photoscan_to_volume_transform_node is None:
-            self.photoscan_to_volume_transform_node = self.wizard()._logic.run_photoscan_volume_fiducial_registration(
-                photoscan =  self.wizard().photoscan,
-                skin_mesh_node = self.wizard().skin_mesh_node,
-                transducer = self.wizard().transducer)
-
-        self.photoscan_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
-            [self.wizard().volume_view_node.GetID()]
-            ) # Specify a view node for display
-        self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
-        
-        self.wizard().photoscan.set_transform_node(self.photoscan_to_volume_transform_node)
-
-        # Set the center of the transformation to the center of the photocan model node
-        bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.wizard().photoscan.model_node.GetRASBounds(bounds)
-        center_world = [
-            (bounds[0] + bounds[1]) / 2,
-            (bounds[2] + bounds[3]) / 2,
-            (bounds[4] + bounds[5]) / 2
-        ]
-        center_local = [0.0,0.0,0.0]
-        transform_from_world = vtk.vtkGeneralTransform()
-        self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
-        transform_from_world.TransformPoint(center_world,center_local )
-        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
+        if self.photoscan_to_volume_transform_node:
+            self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
+            self.setupTransformNode()
+        else:
+            self.ui.initializePVRegistration.setText("Initialize photoscan-volume transform")
+            self.ui.runPhotoscanVolumeRegistration.enabled = False
+            self.ui.approvePhotoscanVolumeTransform.enabled = False
     
     def updateTransformApprovalStatusLabel(self):
         
@@ -277,9 +265,46 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
     
-    def onRunRegistrationClicked(self):
+    def onInitializeRegistrationClicked(self):
 
-        # Need to integrate ICP registration here
+        self.photoscan_to_volume_transform_node = self.wizard()._logic.run_photoscan_volume_fiducial_registration(
+            photoscan =  self.wizard().photoscan,
+            skin_mesh_node = self.wizard().skin_mesh_node,
+            transducer = self.wizard().transducer)
+
+        self.setupTransformNode()
+
+        # Enable approval and registration fine-tuning buttons
+        self.ui.runPhotoscanVolumeRegistration.enabled = True
+        self.ui.approvePhotoscanVolumeTransform.enabled = True
+
+    def setupTransformNode(self):
+
+        self.photoscan_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
+            [self.wizard().volume_view_node.GetID()]
+            ) # Specify a view node for display
+        self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
+        
+        self.wizard().photoscan.set_transform_node(self.photoscan_to_volume_transform_node)
+
+        # Set the center of the transformation to the center of the photocan model node
+        bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.wizard().photoscan.model_node.GetRASBounds(bounds)
+        center_world = [
+            (bounds[0] + bounds[1]) / 2,
+            (bounds[2] + bounds[3]) / 2,
+            (bounds[4] + bounds[5]) / 2
+        ]
+        
+        center_local = [0.0,0.0,0.0]
+        transform_from_world = vtk.vtkGeneralTransform()
+        self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
+        transform_from_world.TransformPoint(center_world,center_local )
+        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
+
+    def onRunRegistrationClicked(self):
+        """ This is a temporary implementation that allows the user to manually edit the photoscan-volume transform. In the 
+        future, ICP registration will be integrated here. """
         if not self.photoscan_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
     
             self.ui.ICPPlaceholderLabel.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
@@ -290,12 +315,18 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
 
             self.runningRegistration = True
+            
+            # For now, disable the approval and initialization button while in manual editing mode
+            self.ui.initializePVRegistration.enabled = False
+            self.ui.approvePhotoscanVolumeTransform.enabled = False
 
         else:
             self.ui.ICPPlaceholderLabel.text = ""
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
-        
+            self.ui.initializePVRegistration.enabled = True
+            self.ui.approvePhotoscanVolumeTransform.enabled = True
+
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
         
@@ -316,6 +347,10 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transform_approved = False
         self.ui.approveTransducerPhotoscanTransform.clicked.connect(self.onTransformApproveClicked)
         self.ui.runTransducerPhotoscanRegistration.clicked.connect(self.onRunRegistrationClicked)
+        self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
+        
+        self.ui.initializeTPRegistration.setToolTip("Use the best virtual fit result to initialize the transducer position. If virtual fit has not been run,"
+        "the transform is initialized to idenity.")
     
     def initializePage(self):
 
@@ -326,25 +361,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
-
-        self.transducer_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
-        )
-        if self.transducer_to_volume_transform_node is None:
-            self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_transducer_to_volume_node_from_virtual_fit_result(
-                transducer = self.wizard().transducer,
-                target = self.wizard().target,
-                photoscan_id = self.wizard().photoscan.photoscan.photoscan.id
-            )
-            
-        # This can probably be outside the wizard. And after exiting wizard, reset all view nodes.
         self.runningRegistration = False 
-        self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
-        self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
-            [self.wizard().volume_view_node.GetID()]
-            ) # Specify a view node for display
-        self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
 
         # Display the photoscan and transducer and hide the skin mesh
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
@@ -352,7 +369,20 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
         self.wizard().photoscan.toggle_model_display(visibility_on = True) 
         self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
-        
+
+        self.transducer_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
+            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
+        )
+
+        if self.transducer_to_volume_transform_node:
+            self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
+            self.setupTransformNode()
+        else:
+            self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
+            self.ui.runTransducerPhotoscanRegistration.enabled = False
+            self.ui.approveTransducerPhotoscanTransform.enabled = False
+
     def updateTransformApprovalStatusLabel(self):
         
         status = "approved" if self.transform_approved else "not approved"
@@ -378,8 +408,32 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
     
+    def onInitializeRegistrationClicked(self):
+
+        self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_transducer_to_volume_node_from_virtual_fit_result(
+            transducer = self.wizard().transducer,
+            target = self.wizard().target,
+            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id
+        )
+        self.setupTransformNode()
+
+        # Enable approval and registration fine-tuning buttons
+        self.ui.runTransducerPhotoscanRegistration.enabled = True
+        self.ui.approveTransducerPhotoscanTransform.enabled = True
+            
+    def setupTransformNode(self):
+
+        # TODO: This can probably be outside the wizard? And after exiting wizard, reset all view nodes.
+        self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
+            [self.wizard().volume_view_node.GetID()]
+            ) # Specify a view node for display
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
+
     def onRunRegistrationClicked(self):
-        # Need to integrate ICP registration here
+        """ This is a temporary implementation that allows the user to manually edit the transducer-volume transform. In the 
+        future, ICP registration will be integrated here. """
+        
         if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
             
             self.ui.ICPPlaceholderLabel_2.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
@@ -389,11 +443,16 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
             self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
+            # For now, disable the approval and initialization button while in manual editing mode
+            self.ui.initializeTPRegistration.enabled = False
+            self.ui.approveTransducerPhotoscanTransform.enabled = False
 
         else:
             self.ui.ICPPlaceholderLabel_2.text = ""
             self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
+            self.ui.initializeTPRegistration.enabled = True
+            self.ui.approveTransducerPhotoscanTransform.enabled = True
     
         # Emit signal to update the enable/disable state of 'Finish' button. 
         self.completeChanged()
@@ -1236,16 +1295,20 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
-        # Initialize with virtual fit result
-        # TODO: Add check that virtual fit result exists. 
+        # Initialize with virtual fit result if available
         best_virtual_fit_result_node = get_best_virtual_fit_result_node(
             target_id = fiducial_to_openlifu_point_id(target),
             session_id = session_id)
-        virutal_fit_transform = vtk.vtkMatrix4x4()
-        best_virtual_fit_result_node.GetMatrixTransformFromParent(virutal_fit_transform)
         
+        if best_virtual_fit_result_node is None:
+            # Initialize transform with identity matrix
+            initial_transform = numpy_to_vtk_4x4(np.eye(4))
+        else:
+            initial_transform = vtk.vtkMatrix4x4()
+            best_virtual_fit_result_node.GetMatrixTransformFromParent(initial_transform)
+            
         transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_to_volume_result.SetMatrixTransformToParent(virutal_fit_transform)
+        transducer_to_volume_result.SetMatrixTransformToParent(initial_transform)
 
         transducer_to_volume_result = add_transducer_tracking_result(
             transducer_to_volume_result,
