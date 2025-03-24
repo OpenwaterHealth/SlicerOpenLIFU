@@ -205,6 +205,9 @@ class CreateNewAccountDialog(qt.QDialog):
         if not user_id:
             slicer.util.errorDisplay("Username cannot be empty.", parent=self)
             return
+        if user_id in ["anonymous", "default_admin"]:
+            slicer.util.errorDisplay("You cannot create an account with this username.", parent=self)
+            return
         if len(user_id) < 3:
             slicer.util.errorDisplay("Username must be at least 3 characters.", parent=self)
             return
