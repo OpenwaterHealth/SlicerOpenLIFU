@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>398</width>
-    <height>289</height>
+    <width>774</width>
+    <height>666</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -79,6 +79,12 @@
        </item>
        <item>
         <widget class="qSlicerSimpleMarkupsWidget" name="photoscanMarkupsWidget">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="nodeSelectorVisible">
           <bool>false</bool>
          </property>
@@ -113,6 +119,12 @@
        </item>
        <item>
         <widget class="qSlicerSimpleMarkupsWidget" name="skinSegMarkupsWidget">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="nodeSelectorVisible">
           <bool>false</bool>
          </property>
@@ -139,37 +151,62 @@
      <widget class="QWidget" name="PhotoscanVolumeTracking">
       <layout class="QVBoxLayout" name="verticalLayout_5">
        <item>
-        <widget class="QLabel" name="photoscanVolumeTransformApprovalStatusLabel">
-         <property name="text">
+        <widget class="QGroupBox" name="groupBox_3">
+         <property name="title">
           <string/>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_11">
+          <item>
+           <widget class="QPushButton" name="initializePVRegistration">
+            <property name="text">
+             <string>Initialize photoscan-volume transform</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runPhotoscanVolumeRegistration">
+            <property name="text">
+             <string>Run ICP-based registration fine-tuning</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="ICPPlaceholderLabel">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="runPhotoscanVolumeRegistration">
-         <property name="text">
-          <string>Run ICP registration</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="approvePhotoscanVolumeTransform">
-         <property name="text">
-          <string>Approve photoscan-volume transform</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="ICPPlaceholderLabel">
-         <property name="text">
+        <widget class="QGroupBox" name="groupBox_4">
+         <property name="title">
           <string/>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_10">
+          <item>
+           <widget class="QPushButton" name="approvePhotoscanVolumeTransform">
+            <property name="text">
+             <string>Approve photoscan-volume transform</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="photoscanVolumeTransformApprovalStatusLabel">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
@@ -190,34 +227,65 @@
      <widget class="QWidget" name="TransducerPhotoscanTracking">
       <layout class="QVBoxLayout" name="verticalLayout_7">
        <item>
-        <widget class="QLabel" name="transducerPhotoscanTransformApprovalStatusLabel">
-         <property name="text">
+        <widget class="QGroupBox" name="groupBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
           <string/>
          </property>
+         <layout class="QVBoxLayout" name="verticalLayout_8">
+          <item>
+           <widget class="QPushButton" name="initializeTPRegistration">
+            <property name="text">
+             <string>Initialize transducer-photoscan transform</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runTransducerPhotoscanRegistration">
+            <property name="text">
+             <string>Run ICP-based registration fine-tuning</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="ICPPlaceholderLabel_2">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="runTransducerPhotoscanRegistration">
-         <property name="text">
-          <string>Run ICP registration</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="approveTransducerPhotoscanTransform">
-         <property name="text">
-          <string>Approve transducer - photoscan transform</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="ICPPlaceholderLabel_2">
-         <property name="text">
+        <widget class="QGroupBox" name="groupBox_2">
+         <property name="title">
           <string/>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_9">
+          <item>
+           <widget class="QPushButton" name="approveTransducerPhotoscanTransform">
+            <property name="text">
+             <string>Approve transducer - photoscan transform</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="transducerPhotoscanTransformApprovalStatusLabel">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
