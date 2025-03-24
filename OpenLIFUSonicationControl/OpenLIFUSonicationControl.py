@@ -218,7 +218,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
-        self.ui.connectLIFUDevicePushButton.clicked.connect(self.onConnectLIFUDevicePushButtonClicked)
+        self.ui.reinitializeLIFUInterfacePushButton.clicked.connect(self.onReinitializeLIFUInterfacePushButtonClicked)
         self.ui.sendSonicationSolutionToDevicePushButton.clicked.connect(self.onSendSonicationSolutionToDevicePushButtonClicked)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
@@ -312,17 +312,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._cur_solution_id = solution_parameter_pack.solution.solution.id
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
-    def updateConnectLIFUDevicePushButtonEnabled(self):
+    def updateReinitializeLIFUInterfacePushButtonEnabled(self):
 
         if self.logic.running:
             enabled = False
-            tooltip = "Cannot reset connection while a sonication is running."
+            tooltip = "Cannot reinitialize LIFUInterface while a sonication is running."
         else:
             enabled = True
-            tooltip = "Connect or reconnect to the connected hardware."
+            tooltip = "Reinitialize LIFUInterface, an interface to the connected hardware."
 
-        self.ui.connectLIFUDevicePushButton.setEnabled(enabled) # TODO: all references to this button should instead refer to initializing a LIFUInterface instead
-        self.ui.connectLIFUDevicePushButton.setToolTip(tooltip)
+        self.ui.reinitializeLIFUInterfacePushButton.setEnabled(enabled)
+        self.ui.reinitializeLIFUInterfacePushButton.setToolTip(tooltip)
 
     @display_errors
     def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
@@ -380,7 +380,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
     def updateAllButtonsEnabled(self):
-        self.updateConnectLIFUDevicePushButtonEnabled()
+        self.updateReinitializeLIFUInterfacePushButtonEnabled()
         self.updateManuallyGetDeviceStatusPushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
@@ -420,7 +420,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateAllButtonsEnabled()
 
     @display_errors
-    def onConnectLIFUDevicePushButtonClicked(self, checked=False):
+    def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
         if self.ui.testModeCheckBox.isChecked():
             self.logic.reinitialize_lifu_interface(test_mode=True)
             slicer.util.infoDisplay(text="LIFUInterface reinitialized in test_mode")
@@ -454,7 +454,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
 
     def onRunningChanged(self, new_running_state:bool):
-        self.updateConnectLIFUDevicePushButtonEnabled()
+        self.updateReinitializeLIFUInterfacePushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
