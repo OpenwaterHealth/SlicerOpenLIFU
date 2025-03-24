@@ -251,6 +251,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Update the state of any buttons that may not yet have been updated
         self.updateAllButtonsEnabled()
+        self.updateAllButtons()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -386,6 +387,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
         self.updateAbortEnabled()
 
+    def updateReinitializeLIFUInterfacePushButton(self):
+        if self.logic.cur_lifu_interface._test_mode:
+            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface not in test_mode")
+        else:
+            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface in test_mode")
+
+    def updateAllButtons(self):
+        self.updateReinitializeLIFUInterfacePushButton()
+
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
         """If the soniction_run_complete variable changes from False to True, then open the RunComplete 
@@ -421,15 +431,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
-        if self.ui.testModeCheckBox.isChecked():
+        new_test_mode_state = not self.logic.cur_lifu_interface._test_mode
+        if new_test_mode_state:
             self.logic.reinitialize_lifu_interface(test_mode=True)
             slicer.util.infoDisplay(text="LIFUInterface reinitialized in test_mode")
         else:
             self.logic.reinitialize_lifu_interface(test_mode=False)
-            slicer.util.infoDisplay(text="LIFUInterface reinitialized")
+            slicer.util.infoDisplay(text="LIFUInterface reinitialized not in test_mode")
 
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateAllButtons()
         self.updateAllButtonsEnabled()
 
     @display_errors
