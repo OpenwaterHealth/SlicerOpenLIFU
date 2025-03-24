@@ -14,7 +14,7 @@
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout">
      <item>
-      <widget class="QPushButton" name="connectLIFUDevicePushButton">
+      <widget class="QPushButton" name="reinitializeLIFUInterfacePushButton">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -22,7 +22,7 @@
         </sizepolicy>
        </property>
        <property name="text">
-        <string>Connect LIFU Device</string>
+        <string>Reinitialize LIFUInterface</string>
        </property>
       </widget>
      </item>
