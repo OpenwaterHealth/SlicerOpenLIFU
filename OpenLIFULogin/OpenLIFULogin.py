@@ -813,7 +813,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # === Check cache if there is an active user ===
 
         if self.logic.active_user is not None:
-            if self._cur_user_id_enforced == self.logic.active_user.user.id:
+            if self._cur_user_id_enforced == self.logic.active_user.user.id and self.logic.active_user.user.id != "anonymous":
                 return
             else:
                 self._cur_user_id_enforced = self.logic.active_user.user.id
