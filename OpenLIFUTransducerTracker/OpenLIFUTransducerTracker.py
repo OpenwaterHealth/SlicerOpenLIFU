@@ -31,6 +31,7 @@ from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_result,
     get_photoscan_id_from_transducer_tracking_result,
     set_transducer_tracking_approval_for_node,
+    get_approval_from_transducer_tracking_result_node,
     get_photoscan_ids_with_results,
     get_transducer_tracking_result
 )
@@ -195,10 +196,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(3)
-        
-        # TODO: Temp functionality. This will be determined based on the transform node
-        # if it already exists in the scene. 
-        self.transform_approved = False
 
         self.ui.approvePhotoscanVolumeTransform.clicked.connect(self.onTransformApproveClicked)
         self.ui.runPhotoscanVolumeRegistration.clicked.connect(self.onRunRegistrationClicked)
@@ -219,14 +216,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         reset_view_node_camera(view_node)
         
         skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        
         # Cannot reach this page without creating volume facial landmarks due to
         # data validation on the previous page
         skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
-
-        self.updateTransformApprovalStatusLabel()
-        self.updateTransformApproveButton()
-        self.runningRegistration = False
 
         self.photoscan_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
             photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
@@ -235,12 +227,22 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.photoscan_to_volume_transform_node:
             self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
             self.setupTransformNode()
+            self.transform_approved = get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node)
         else:
             self.ui.initializePVRegistration.setText("Initialize photoscan-volume transform")
             self.ui.runPhotoscanVolumeRegistration.enabled = False
             self.ui.approvePhotoscanVolumeTransform.enabled = False
+            self.transform_approved = None
+        
+        self.updateTransformApprovalStatusLabel()
+        self.updateTransformApproveButton()
+        self.runningRegistration = False
     
     def updateTransformApprovalStatusLabel(self):
+
+        if self.transform_approved is None:
+            self.ui.photoscanVolumeTransformApprovalStatusLabel.text = ""
+            return
         
         status = "approved" if self.transform_approved else "not approved"
         self.ui.photoscanVolumeTransformApprovalStatusLabel.text = (
@@ -253,13 +255,16 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.approvePhotoscanVolumeTransform.setText("Revoke approval")
             self.ui.approvePhotoscanVolumeTransform.setToolTip(
                     "Revoke approval that the current transducer tracking result is correct")
-        else:
             self.ui.approvePhotoscanVolumeTransform.setText("Approve photoscan-volume transform")
             self.ui.approvePhotoscanVolumeTransform.setToolTip("Approve the current transducer tracking result")
 
     def onTransformApproveClicked(self):
 
+        if self.photoscan_to_volume_transform_node is None:
+            raise RuntimeError("Photoscan-volume transform not found.")
+
         self.transform_approved = not self.transform_approved
+        set_transducer_tracking_approval_for_node(self.transform_approved, self.photoscan_to_volume_transform_node)
         
         # Update the wizard page
         self.updateTransformApprovalStatusLabel()
@@ -271,7 +276,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             photoscan =  self.wizard().photoscan,
             skin_mesh_node = self.wizard().skin_mesh_node,
             transducer = self.wizard().transducer)
-
+        self.transform_approved = get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node)
+        self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
 
         # Enable approval and registration fine-tuning buttons
@@ -310,7 +316,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.ICPPlaceholderLabel.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
             "Use the interaction handles to manually align the photoscan and volume mesh." \
             "You can click the run button again to remove the interaction handles."
-            self.ui.ICPPlaceholderLabel.setProperty("styleSheet", "color: red;")
+            self.ui.ICPPlaceholderLabel.setProperty(" .Sheet", "color: red;")
 
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
 
@@ -342,9 +348,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(4)
 
-        # Temp functionality. This will be determined based on the transform node
-        # if it already exists in the scene. 
-        self.transform_approved = False
         self.ui.approveTransducerPhotoscanTransform.clicked.connect(self.onTransformApproveClicked)
         self.ui.runTransducerPhotoscanRegistration.clicked.connect(self.onRunRegistrationClicked)
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
@@ -356,12 +359,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
-
         reset_view_node_camera(view_node)
-    
-        self.updateTransformApprovalStatusLabel()
-        self.updateTransformApproveButton()
-        self.runningRegistration = False 
 
         # Display the photoscan and transducer and hide the skin mesh
         self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
@@ -378,12 +376,22 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         if self.transducer_to_volume_transform_node:
             self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
             self.setupTransformNode()
+            self.transform_approved = get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
         else:
             self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
             self.ui.runTransducerPhotoscanRegistration.enabled = False
             self.ui.approveTransducerPhotoscanTransform.enabled = False
+            self.transform_approved = None
+        
+        self.updateTransformApprovalStatusLabel()
+        self.updateTransformApproveButton()
+        self.runningRegistration = False 
 
     def updateTransformApprovalStatusLabel(self):
+
+        if self.transform_approved is None:
+            self.ui.transducerPhotoscanTransformApprovalStatusLabel.text = ""
+            return
         
         status = "approved" if self.transform_approved else "not approved"
         self.ui.transducerPhotoscanTransformApprovalStatusLabel.text = (
@@ -402,7 +410,12 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
     def onTransformApproveClicked(self):
 
+        if self.transducer_to_volume_transform_node is None:
+            raise RuntimeError("Transducer-photoscan transform not found.")
+        
         self.transform_approved = not self.transform_approved
+        set_transducer_tracking_approval_for_node(approval_state  = self.transform_approved, 
+                                                  transform_node = self.transducer_to_volume_transform_node)
         
         # Update the wizard page
         self.updateTransformApprovalStatusLabel()
@@ -415,6 +428,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             target = self.wizard().target,
             photoscan_id = self.wizard().photoscan.photoscan.photoscan.id
         )
+        self.transform_approved = get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
+        self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
 
         # Enable approval and registration fine-tuning buttons
