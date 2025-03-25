@@ -321,7 +321,6 @@ def get_photoscan_ids_with_results(session_id: str, approved_only = False) -> Li
     else:
         return [t.GetAttribute("TT:photoscanID") for (t,_) in tt_results]
 
-
 def set_transducer_tracking_approval_for_node(approval_state: bool, transform_node: vtkMRMLTransformNode) -> None:
     """Set approval state on the given transducer tracking transform node.
 
@@ -330,10 +329,15 @@ def set_transducer_tracking_approval_for_node(approval_state: bool, transform_no
         transform_node: vtkMRMLTransformNode
     """
     if (transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") != "1" 
-        or transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") != "1"
+        and transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") != "1"
     ):
         raise ValueError("The specified transform node is a not a transducer tracking result node")
     transform_node.SetAttribute("TT:approvalStatus", "1" if approval_state else "0")
+
+def get_approval_from_transducer_tracking_result_node(node : vtkMRMLTransformNode) -> bool:
+    if node.GetAttribute("TT:approvalStatus") is None:
+        raise RuntimeError("Node does not have a transducer tracking approval status.")
+    return node.GetAttribute("TT:approvalStatus") == "1"
 
 def get_photoscan_id_from_transducer_tracking_result(result: Union[vtkMRMLTransformNode, Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]) -> str:
     """Returns the photoscan ID associated with a transducer tracking transform node. 
