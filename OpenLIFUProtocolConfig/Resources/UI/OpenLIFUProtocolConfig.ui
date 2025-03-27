@@ -139,7 +139,7 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
+         <item row="5" column="0">
           <widget class="QLabel" name="pulseDurationLabel">
            <property name="toolTip">
             <string>The pulse duration (s) used in the protocol</string>
@@ -149,14 +149,14 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
+         <item row="5" column="1">
           <widget class="QDoubleSpinBox" name="pulseDurationSpinBox">
            <property name="toolTip">
             <string>The pulse duration (s) used in the protocol</string>
            </property>
           </widget>
          </item>
-         <item row="5" column="0">
+         <item row="6" column="0">
           <widget class="QLabel" name="focalPatternLabel">
            <property name="toolTip">
             <string>The focal pattern used in the protocol. By default, a single point is used</string>
@@ -166,14 +166,14 @@
            </property>
           </widget>
          </item>
-         <item row="5" column="1">
+         <item row="6" column="1">
           <widget class="QComboBox" name="focalPatternComboBox">
            <property name="toolTip">
             <string>The focal pattern used in the protocol. By default, a single point is used</string>
            </property>
           </widget>
          </item>
-         <item row="6" column="0">
+         <item row="7" column="0">
           <widget class="QLabel" name="focalPatternOptionsLabel">
            <property name="toolTip">
             <string>Focal pattern options</string>
@@ -183,7 +183,7 @@
            </property>
           </widget>
          </item>
-         <item row="6" column="1">
+         <item row="7" column="1">
           <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
            <property name="currentIndex">
             <number>0</number>
@@ -249,6 +249,23 @@
              </item>
             </layout>
            </widget>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="pulseAmplitudeLabel">
+           <property name="toolTip">
+            <string>The pulse amplitude (Pa) used in the protocol</string>
+           </property>
+           <property name="text">
+            <string>Pulse amplitude (Pa)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QDoubleSpinBox" name="pulseAmplitudeSpinBox">
+           <property name="toolTip">
+            <string>The pulse amplitude (Pa) used in the protocol</string>
+           </property>
           </widget>
          </item>
         </layout>
