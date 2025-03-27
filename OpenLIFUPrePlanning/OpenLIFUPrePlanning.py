@@ -35,7 +35,7 @@ from OpenLIFULib.virtual_fit_results import (
 )
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
-from OpenLIFULib.transform_conversion import transform_node_from_openlifu
+from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -582,7 +582,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
         for i,vf_transform in zip(range(10), vf_transforms): # We only add the top 10 virtual fit nodes, to not put so many transforms into the scene.
             node = add_virtual_fit_result(
-                transform_node = transform_node_from_openlifu(vf_transform, transducer.transducer.transducer, "mm"),
+                transform_node = transducer_transform_node_from_openlifu(vf_transform, transducer.transducer.transducer, "mm"),
                 target_id = target_id,
                 session_id = session_id,
                 approval_status = False,

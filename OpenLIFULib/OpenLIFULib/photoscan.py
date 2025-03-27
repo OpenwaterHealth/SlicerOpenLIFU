@@ -136,6 +136,9 @@ class SlicerOpenLIFUPhotoscan:
     def is_approved(self) -> bool:
         return self.photoscan.photoscan.photoscan_approved
                        
+    def get_id(self) -> 'str':
+        return self.photoscan.photoscan.id
+    
     def toggle_approval(self) -> None:
         self.photoscan.photoscan.photoscan_approved = not self.photoscan.photoscan.photoscan_approved 
     
@@ -150,6 +153,9 @@ class SlicerOpenLIFUPhotoscan:
 
         photoscan_id = self.photoscan.photoscan.id
         self.facial_landmarks_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f"{photoscan_id}-faciallandmarks" )
+        # Ensure that visibility is turned off
+        self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
+
         self.facial_landmarks_fiducial_node.SetMaximumNumberOfControlPoints(3)
         self.facial_landmarks_fiducial_node.SetMarkupLabelFormat("%N")
         self.facial_landmarks_fiducial_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
