@@ -70,11 +70,8 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 
     def initializePage(self):
 
-        set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan_view_node)
- 
-        # Display the photoscan 
-        self.wizard().photoscan.toggle_model_display(visibility_on = True) # Specify a view node for display
-
+        set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
+        
         # Specify controls for adding markups to the dialog
         if self.wizard().photoscan.facial_landmarks_fiducial_node:
             self.setupMarkupsWidget()
@@ -96,8 +93,9 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         if photoscan_facial_landmarks_node is None:
             photoscan_facial_landmarks_node = self.wizard()._logic.initialize_photoscan_tracking_fiducials(self.wizard().photoscan)
             # Set view nodes on fiducials
-            self.wizard().photoscan.set_view_nodes(viewNodes = [self.wizard().photoscan_view_node, self.wizard().volume_view_node]) # Specify a view node for display
+            self.wizard().photoscan.set_view_nodes(viewNodes = [self.wizard().photoscan.view_node, self.wizard().volume_view_node]) # Specify a view node for display
             self.setupMarkupsWidget()
+            self.wizard().photoscan.toggle_model_display(visibility_on = True) # Ensures that the fiducuals are displayed in the view node
 
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
             photoscan_facial_landmarks_node.SetLocked(False)
@@ -116,7 +114,6 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 
         self.ui.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
         self.ui.photoscanMarkupsWidget.setCurrentNode(self.wizard().photoscan.facial_landmarks_fiducial_node)
-        self.wizard().photoscan.facial_landmarks_fiducial_node.SetLocked(True)
         self.ui.photoscanMarkupsWidget.enabled = False
 
     def isComplete(self):
@@ -131,29 +128,20 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(2)
-    
-        # self.skinseg_facial_landmarks = None
+
         self.placingLandmarks = False
 
         self.ui.placeLandmarksButtonSkinSeg.clicked.connect(self.onPlaceLandmarksClicked)
 
     def initializePage(self):
+        """ This function is called when the user clicks 'Next'."""
         
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        # Display skin segmentation and hide the photoscan and transducer surface
-        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(True)
-        self.wizard().photoscan.toggle_model_display(visibility_on = False) # Specify a view node for display
-        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(False)
-
-        reset_view_node_camera(view_node)
-
         self.skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
         if self.skinseg_facial_landmarks:
             self.setupMarkupsWidget()
-            self.skinseg_facial_landmarks.GetDisplayNode().SetViewNodeIDs([self.wizard().volume_view_node.GetID()]) # Specify a view node for display
-            self.skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
 
     def onPlaceLandmarksClicked(self):
 
@@ -181,7 +169,6 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
 
         self.ui.skinSegMarkupsWidget.setMRMLScene(slicer.mrmlScene)
         self.ui.skinSegMarkupsWidget.setCurrentNode(self.skinseg_facial_landmarks)
-        self.skinseg_facial_landmarks.SetLocked(True)
         self.ui.skinSegMarkupsWidget.enabled = False
 
     def isComplete(self):
@@ -205,23 +192,15 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         "between the photoscan mesh and skin surface.")
     
     def initializePage(self):
+        """ This function is called when the user clicks 'Next'."""
         
+        # We don't need to reset the view node here since the skin 
+        # surface markup from the previous page happens in the same space. 
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        # Display the photoscan and volume and hide the transducer
-        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(True)
-        self.wizard().photoscan.toggle_model_display(visibility_on = True) 
-        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(False)
-        reset_view_node_camera(view_node)
-        
-        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        # Cannot reach this page without creating volume facial landmarks due to
-        # data validation on the previous page
-        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
-
         self.photoscan_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
+            photoscan_id = self.wizard().photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
 
         if self.photoscan_to_volume_transform_node:
@@ -271,6 +250,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.updateTransformApproveButton()
     
     def onInitializeRegistrationClicked(self):
+        """ This function is called when the user clicks 'Next'."""
 
         self.photoscan_to_volume_transform_node = self.wizard()._logic.run_photoscan_volume_fiducial_registration(
             photoscan =  self.wizard().photoscan,
@@ -356,20 +336,13 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         "the transform is initialized to idenity.")
     
     def initializePage(self):
+        """ This function is called when the user clicks 'Next'."""
 
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
-        reset_view_node_camera(view_node)
-
-        # Display the photoscan and transducer and hide the skin mesh
-        self.wizard().skin_mesh_node.GetDisplayNode().SetVisibility(False)
-        skinseg_facial_landmarks = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
-        self.wizard().photoscan.toggle_model_display(visibility_on = True) 
-        self.wizard().transducer_surface.GetDisplayNode().SetVisibility(True)
 
         self.transducer_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id,
+            photoscan_id = self.wizard().photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
         )
 
@@ -426,7 +399,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_transducer_to_volume_node_from_virtual_fit_result(
             transducer = self.wizard().transducer,
             target = self.wizard().target,
-            photoscan_id = self.wizard().photoscan.photoscan.photoscan.id
+            photoscan_id = self.wizard().photoscan.get_id()
         )
         self.transform_approved = get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
         self.updateTransformApprovalStatusLabel()
@@ -511,9 +484,65 @@ class TransducerTrackingWizard(qt.QWizard):
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setWizardStyle(qt.QWizard.ClassicStyle)
 
+        # Connect the currentIdChanged signal
+        self.currentIdChanged.connect(self.setPageSpecificNodeDisplaySettings)
+
         # Connect signals for finish and cancel
         self.button(qt.QWizard.FinishButton).clicked.connect(self.onFinish)
         self.button(qt.QWizard.CancelButton).clicked.connect(self.onCancel)
+
+    def setPageSpecificNodeDisplaySettings(self, page_id: int):
+        current_page = self.page(page_id)
+
+
+        if isinstance(current_page, PhotoscanMarkupPage):
+
+            # Display the photoscan. This sets the visibility on the model and fiducial node
+            # Reset the view node everytime the photoscan is displayed
+            self.photoscan.toggle_model_display(visibility_on = True) # Specify a view node for display
+            reset_view_node_camera(self.photoscan.view_node)
+
+            # Disable editing of the fiducial node position
+            if self.photoscan.facial_landmarks_fiducial_node:
+                self.photoscan.facial_landmarks_fiducial_node.SetLocked(True)
+
+        elif isinstance(current_page, SkinSegmentationMarkupPage):
+
+            # Display skin segmentation and hide the photoscan and transducer surface
+            self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
+            self.photoscan.toggle_model_display(visibility_on = False) # Specify a view node for display
+            self.transducer_surface.GetDisplayNode().SetVisibility(False)
+
+            # If the facial landmarks have been created, set their display settings
+            self.skinseg_facial_landmarks = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
+            if self.skinseg_facial_landmarks:
+                self.skinseg_facial_landmarks.SetLocked(True)
+                self.skinseg_facial_landmarks.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()]) # Specify a view node for display
+                self.skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
+
+        elif isinstance(current_page, PhotoscanVolumeTrackingPage):
+
+            # Display the photoscan and volume and hide the transducer
+            self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
+            self.photoscan.toggle_model_display(visibility_on = True) 
+            self.transducer_surface.GetDisplayNode().SetVisibility(False)
+            
+            skinseg_facial_landmarks = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
+            # Cannot reach this page without creating volume facial landmarks due to
+            # data validation on the previous page
+            skinseg_facial_landmarks.GetDisplayNode().SetVisibility(True)
+
+        elif isinstance(current_page, TransducerPhotoscanTrackingPage):
+
+            # Display the photoscan and transducer and hide the skin mesh
+            self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
+            skinseg_facial_landmarks = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
+            skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
+            self.photoscan.toggle_model_display(visibility_on = True) 
+            self.transducer_surface.GetDisplayNode().SetVisibility(True)
+        
+        # Reset the wizard volume view node based on the display settings
+        reset_view_node_camera(self.volume_view_node)
 
     def onFinish(self):
         """Handle Finish button click."""
@@ -522,7 +551,7 @@ class TransducerTrackingWizard(qt.QWizard):
         # Set the current transform node to the transducer tracking result.
         # TODO: Should this only happen if the the tt result is approved?
         tt_result = self._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.photoscan.photoscan.photoscan.id,
+            photoscan_id = self.photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
         if tt_result:
             self.transducer.set_current_transform_to_match_transform_node(tt_result)
@@ -537,18 +566,13 @@ class TransducerTrackingWizard(qt.QWizard):
     def setupViewNodes(self):
                 
         # Create a viewNode for displaying the photoscan if it hasn't been created
-        photoscan_id = self.photoscan.photoscan.photoscan.id
+        photoscan_id = self.photoscan.get_id()
         if self.photoscan.view_node is None:
             self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
-            reset_camera_view = True
-        else:
-            self.photoscan_view_node = self.photoscan.view_node
-            reset_camera_view = False
         
-        self.photoscan_view_node = self.photoscan.view_node
         self.volume_view_node = get_threeD_transducer_tracking_view_node()
         
-        wizard_view_nodes = [self.photoscan_view_node, self.volume_view_node]
+        wizard_view_nodes = [self.photoscan.view_node, self.volume_view_node]
 
         # Set view nodes for the skin mesh, transducer and photoscan
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
@@ -571,11 +595,10 @@ class TransducerTrackingWizard(qt.QWizard):
         # Hide all displayable nodes in the scene from the wizard view nodes
         hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
         
-        if reset_camera_view:
-            self.photoscan.toggle_model_display(visibility_on = True)
-            reset_view_node_camera(self.photoscan_view_node)
-    
     def resetViewNodes(self):
+        """Resets the view nodes of all models created by the wizard to null '()'. This allows the
+        user to toggle and view the models in the main window through scene manipulation if they 
+        choose it. """
         
         self.photoscan.toggle_model_display(visibility_on = False)
         self.photoscan.set_view_nodes([])
@@ -601,15 +624,18 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.ui.dialogControls.setCurrentIndex(0)
 
     def initializePage(self):
+        """ This function is called when the user clicks 'Next'."""
 
         # Connect buttons and signals
         self.updatePhotoscanApproveButton(self.wizard().photoscan.is_approved())
         self.ui.photoscanApprovalButton.clicked.connect(self.onPhotoscanApproveClicked)
 
-        set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan_view_node)
+        set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
         
         # Display the photoscan 
         self.wizard().photoscan.toggle_model_display(visibility_on=True) # Specify a view node for display
+        # Reset the camera associated with the view node based on the photoscan model
+        reset_view_node_camera(self.wizard().photoscan.view_node)
 
         self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
 
@@ -670,31 +696,22 @@ class PhotoscanPreviewWizard(qt.QWizard):
     
     def setupViewNode(self):
         """ Returns the view node associated with the photoscan.
-        If reset_camera_view is True, the view node centers and fits the displayed photoscan in 3D view.
+        When a new view node is created, the view node centers and fits the displayed photoscan in 3D view.
         This should only happen when the user is viewing the photoscan for the first time. 
         If the user has previously interacted with the 3D view widget, then
         maintain the previous camera/focal point."""
                 
         # Create a viewNode for displaying the photoscan if it hasn't been created
-        photoscan_id = self.photoscan.photoscan.photoscan.id
+        photoscan_id = self.photoscan.get_id()
         if self.photoscan.view_node is None:
             self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
-            self.photoscan_view_node = self.photoscan.view_node
-            reset_camera_view = True
-        else:
-            self.photoscan_view_node = self.photoscan.view_node
-            reset_camera_view = False
 
         # Set view nodes on the photoscan
-        self.photoscan.set_view_nodes([self.photoscan_view_node])
+        self.photoscan.set_view_nodes([self.photoscan.view_node])
         
         # Hide all displayable nodes in the scene from the wizard view ndoes
-        hide_displayable_nodes_from_view(wizard_view_nodes = [self.photoscan_view_node])
+        hide_displayable_nodes_from_view(wizard_view_nodes = [self.photoscan.view_node])
         
-        if reset_camera_view:
-            self.photoscan.toggle_model_display(visibility_on = True)
-            reset_view_node_camera(self.photoscan_view_node)
-    
     def resetViewNodes(self):
         
         self.photoscan.toggle_model_display(visibility_on = False)
@@ -1131,7 +1148,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         if session is None: # We should never be calling togglePhotoscanApproval if there's no active session.
             raise RuntimeError("Cannot toggle photoscan approval because there is no active session.")
         photoscan.toggle_approval()
-        data_parameter_node.loaded_photoscans[photoscan.photoscan.photoscan.id] = photoscan # remember to write the updated photoscan into the parameter node
+        data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan # remember to write the updated photoscan into the parameter node
         
         # Write changes to the database
         loaded_db = slicer.util.getModuleLogic('OpenLIFUData').db
@@ -1178,7 +1195,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         """
         fiducial_node = photoscan.create_facial_landmarks_fiducial_node()
         # remember to write the updated photoscan into the parameter node
-        get_openlifu_data_parameter_node().loaded_photoscans[photoscan.photoscan.photoscan.id] = photoscan 
+        get_openlifu_data_parameter_node().loaded_photoscans[photoscan.get_id()] = photoscan 
 
         return fiducial_node
         
@@ -1252,6 +1269,11 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         nasion_coordinates = [0,0,0]
 
         volume_facial_landmarks_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f'{volume_name}-faciallandmarks')
+        
+        # By default, turn visibility off so that the node is visible before the 
+        # appropriate view node IDs are set. 
+        volume_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
+
         volume_facial_landmarks_node.SetMaximumNumberOfControlPoints(3)
         volume_facial_landmarks_node.SetMarkupLabelFormat("%N")
         volume_facial_landmarks_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
@@ -1310,17 +1332,12 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         photoscan_to_volume_result = add_transducer_tracking_result(
             photoscan_to_volume_transform_node,
             TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-            photoscan_id = photoscan.photoscan.photoscan.id,
+            photoscan_id = photoscan.get_id(),
             session_id = session_id, 
             approval_status = False,
             replace = True, 
             )
         transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_result)
-
-        # Reset photoscan view node camera
-        if photoscan.view_node is not None:
-            photoscan.toggle_model_display(visibility_on = True)
-            reset_view_node_camera(photoscan.view_node)
 
         return photoscan_to_volume_result
     
