@@ -244,6 +244,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             id = "",
             description = "",
             pulse = openlifu_lz().bf.Pulse(frequency=0.00, amplitude=0.00, duration=0.00),
+            sequence = openlifu_lz().bf.Sequence(pulse_interval=1.00, pulse_count=1, pulse_train_interval=1.00, pulse_train_count=1),
             focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
         )
 
@@ -263,6 +264,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.pulseFrequencySpinBox.valueChanged.connect(trigger_unsaved_changes)
         self.ui.pulseAmplitudeSpinBox.valueChanged.connect(trigger_unsaved_changes)
         self.ui.pulseDurationSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseIntervalSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseCountSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseTrainIntervalSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseTrainCountSpinBox.valueChanged.connect(trigger_unsaved_changes)
 
         self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
         self.ui.numSpokesSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
@@ -416,6 +421,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             id = unique_default_id,
             description = defaults["Description"],
             pulse = openlifu_lz().bf.Pulse(frequency=defaults["Pulse frequency"], amplitude=defaults["Pulse amplitude"], duration=defaults["Pulse duration"]),
+            sequence = openlifu_lz().bf.Sequence(pulse_interval=defaults["Pulse interval"], pulse_count=defaults["Pulse count"], pulse_train_interval=defaults["Pulse train interval"], pulse_train_count=defaults["Pulse train count"]),
             focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
         )
 
@@ -620,6 +626,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.pulseFrequencySpinBox.setValue(protocol.pulse.frequency)
         self.ui.pulseAmplitudeSpinBox.setValue(protocol.pulse.amplitude)
         self.ui.pulseDurationSpinBox.setValue(protocol.pulse.duration)
+        self.ui.pulseIntervalSpinBox.setValue(protocol.sequence.pulse_interval)
+        self.ui.pulseCountSpinBox.setValue(protocol.sequence.pulse_count)
+        self.ui.pulseTrainIntervalSpinBox.setValue(protocol.sequence.pulse_train_interval)
+        self.ui.pulseTrainCountSpinBox.setValue(protocol.sequence.pulse_train_count)
         
         # Deal with getting the focal pattern
         focal_pattern_classname: str = type(protocol.focal_pattern).__name__
@@ -673,12 +683,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Get the pulse class
         pulse = openlifu_lz().bf.Pulse(frequency=self.ui.pulseFrequencySpinBox.value, amplitude=self.ui.pulseAmplitudeSpinBox.value, duration=self.ui.pulseDurationSpinBox.value)
 
+        # Get the pulse sequence class
+        sequence = openlifu_lz().bf.Sequence(pulse_interval=self.ui.pulseIntervalSpinBox.value, pulse_count=self.ui.pulseCountSpinBox.value, pulse_train_interval=self.ui.pulseTrainIntervalSpinBox.value, pulse_train_count=self.ui.pulseTrainCountSpinBox.value)
+
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
             name = self.ui.protocolNameLineEdit.text,
             id = self.ui.protocolIdLineEdit.text,
             description = self.ui.protocolDescriptionTextEdit.toPlainText(),
             pulse = pulse,
+            sequence = sequence,
             focal_pattern = focal_pattern
         )
 
@@ -783,6 +797,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         "Pulse frequency": 0.00,
         "Pulse amplitude": 0.00,
         "Pulse duration": 0.00,
+        "Pulse interval": 1.00,
+        "Pulse count": 1,
+        "Pulse train interval": 1.00,
+        "Pulse train count": 1,
         "Focal patten type": "single point",
         "Focal patten options": None,
     }
