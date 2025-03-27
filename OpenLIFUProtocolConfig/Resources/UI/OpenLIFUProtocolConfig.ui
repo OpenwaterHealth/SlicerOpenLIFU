@@ -128,7 +128,7 @@
             <string>The pulse frequency (Hz) used in the protocol</string>
            </property>
            <property name="text">
-            <string>Pulse frequency</string>
+            <string>Pulse frequency (Hz)</string>
            </property>
           </widget>
          </item>
@@ -145,7 +145,7 @@
             <string>The pulse duration (s) used in the protocol</string>
            </property>
            <property name="text">
-            <string>Pulse duration</string>
+            <string>Pulse duration (s)</string>
            </property>
           </widget>
          </item>
