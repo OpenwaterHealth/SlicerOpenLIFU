@@ -65,6 +65,31 @@ class SaveState(Enum):
     UNSAVED_CHANGES=1
     SAVED_CHANGES=2
 
+class DefaultPulseValues(Enum):
+    FREQUENCY = 0.00
+    AMPLITUDE = 0.00
+    DURATION = 0.00
+
+class DefaultSequenceValues(Enum):
+    PULSE_INTERVAL = 1.00
+    PULSE_COUNT = 1
+    PULSE_TRAIN_INTERVAL = 1.00
+    PULSE_TRAIN_COUNT = 1
+
+class DefaultProtocolValues(Enum):
+    NAME = ""
+    ID = ""
+    DESCRIPTION = ""
+    FOCAL_PATTERN_TYPE = "single point"
+    FOCAL_PATTERN_OPTIONS = None
+
+class DefaultNewProtocolValues(Enum):
+    NAME = "New Protocol"
+    ID = "new_protocol"
+    DESCRIPTION = ""
+    FOCAL_PATTERN_TYPE = "single point"
+    FOCAL_PATTERN_OPTIONS = None
+
 class FocalPatternType(Enum):
     SINGLE_POINT=0
     WHEEL=1
@@ -237,17 +262,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUProtocolConfigLogic()
 
-        # Initialize the member in setup() because it relies on openlifu_lz(),
-        # which has GUI elements attached to trigger a yes/no dialog.
-        self.logic.EMPTY_PROTOCOL = openlifu_lz().plan.Protocol(
-            name = "",
-            id = "",
-            description = "",
-            pulse = openlifu_lz().bf.Pulse(frequency=0.00, amplitude=0.00, duration=0.00),
-            sequence = openlifu_lz().bf.Sequence(pulse_interval=1.00, pulse_count=1, pulse_train_interval=1.00, pulse_train_count=1),
-            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
-        )
-
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -388,7 +402,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         protocol = self.ui.protocolSelector.currentData
         if protocol is None:
-            protocol = self.logic.EMPTY_PROTOCOL
+            protocol = self.logic.get_default_protocol()
             self.setProtocolEditButtonEnabled(False)
 
         self._cur_protocol_id = protocol.id
@@ -413,17 +427,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     @display_errors
     def onNewProtocolClicked(self, checked: bool) -> None:
         """Set the widget fields with default protocol values."""
-        defaults = self.logic.NEW_DEFAULTS
+        protocol = self.logic.get_default_new_protocol()
+        
+        # Make sure default new protocol initialization has a unique id
         unique_default_id = self.logic.generate_unique_default_id()
-
-        protocol = openlifu_lz().plan.Protocol(
-            name = defaults["Name"],
-            id = unique_default_id,
-            description = defaults["Description"],
-            pulse = openlifu_lz().bf.Pulse(frequency=defaults["Pulse frequency"], amplitude=defaults["Pulse amplitude"], duration=defaults["Pulse duration"]),
-            sequence = openlifu_lz().bf.Sequence(pulse_interval=defaults["Pulse interval"], pulse_count=defaults["Pulse count"], pulse_train_interval=defaults["Pulse train interval"], pulse_train_count=defaults["Pulse train count"]),
-            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
-        )
+        protocol.id = unique_default_id
 
         self.updateProtocolDisplayFromProtocol(protocol)
 
@@ -790,25 +798,6 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
     
-    NEW_DEFAULTS = {
-        "Name": "New Protocol",
-        "ID": "new_protocol",
-        "Description": "",
-        "Pulse frequency": 0.00,
-        "Pulse amplitude": 0.00,
-        "Pulse duration": 0.00,
-        "Pulse interval": 1.00,
-        "Pulse count": 1,
-        "Pulse train interval": 1.00,
-        "Pulse train count": 1,
-        "Focal patten type": "single point",
-        "Focal patten options": None,
-    }
-
-    # Initialize in setup() because it relies on openlifu_lz(),
-    # which has GUI elements attached to trigger a yes/no dialog.
-    EMPTY_PROTOCOL = None
-
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
@@ -840,8 +829,8 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     def generate_unique_default_id(self) -> str:
         i = 1
-        base_name = self.NEW_DEFAULTS['ID']
-        while self.protocol_id_exists(name := f"{base_name}_{i}"):
+        base_id = DefaultNewProtocolValues.ID.value
+        while self.protocol_id_exists(name := f"{base_id}_{i}"):
             i += 1
         return name
 
@@ -879,8 +868,50 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             return True
         else:
             return True
+    
+    @classmethod
+    def get_default_pulse(cls):
+        return openlifu_lz().bf.Pulse(
+            frequency=DefaultPulseValues.FREQUENCY.value,
+            amplitude=DefaultPulseValues.AMPLITUDE.value,
+            duration=DefaultPulseValues.DURATION.value
+        )
 
-#
+    @classmethod
+    def get_default_sequence(cls):
+        return openlifu_lz().bf.Sequence(
+            pulse_interval=DefaultSequenceValues.PULSE_INTERVAL.value,
+            pulse_count=DefaultSequenceValues.PULSE_COUNT.value,
+            pulse_train_interval=DefaultSequenceValues.PULSE_TRAIN_INTERVAL.value,
+            pulse_train_count=DefaultSequenceValues.PULSE_TRAIN_COUNT.value
+        )
+
+    @classmethod
+    def get_default_focal_pattern(cls):
+        return openlifu_lz().bf.focal_patterns.SinglePoint()#
+
+    @classmethod
+    def get_default_protocol(cls):
+        return openlifu_lz().plan.Protocol(
+            name=DefaultProtocolValues.NAME.value,
+            id=DefaultProtocolValues.ID.value,
+            description=DefaultProtocolValues.DESCRIPTION.value,
+            pulse=cls.get_default_pulse(),
+            sequence=cls.get_default_sequence(),
+            focal_pattern=cls.get_default_focal_pattern()
+        )
+
+    @classmethod
+    def get_default_new_protocol(cls):
+        return openlifu_lz().plan.Protocol(
+            name=DefaultNewProtocolValues.NAME.value,
+            id=DefaultNewProtocolValues.ID.value,
+            description=DefaultNewProtocolValues.DESCRIPTION.value,
+            pulse=cls.get_default_pulse(),
+            sequence=cls.get_default_sequence(),
+            focal_pattern=cls.get_default_focal_pattern()
+        )
+
 # OpenLIFUProtocolConfigTest
 #
 
