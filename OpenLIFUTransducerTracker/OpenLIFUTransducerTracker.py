@@ -555,12 +555,17 @@ class TransducerTrackingWizard(qt.QWizard):
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
         if tt_result:
             self.transducer.set_current_transform_to_match_transform_node(tt_result)
+            
+        # Reset the transducer surface to observe the transducer transform
+        self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         self.accept()  # Closes the wizard
 
     def onCancel(self):
         """Handle Cancel button click."""
         self.resetViewNodes()
+        # Reset the transducer surface to observe the transducer transform
+        self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
         self.reject()  # Closes the wizard
     
     def setupViewNodes(self):
@@ -1383,7 +1388,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             initial_transform = numpy_to_vtk_4x4(np.eye(4))
         else:
             initial_transform = vtk.vtkMatrix4x4()
-            best_virtual_fit_result_node.GetMatrixTransformFromParent(initial_transform)
+            best_virtual_fit_result_node.GetMatrixTransformToParent(initial_transform)
             
         transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
         transducer_to_volume_result.SetMatrixTransformToParent(initial_transform)
