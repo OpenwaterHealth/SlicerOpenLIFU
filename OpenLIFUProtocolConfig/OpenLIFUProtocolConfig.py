@@ -243,7 +243,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             name = "",
             id = "",
             description = "",
-            pulse = openlifu_lz().bf.Pulse(frequency=0.00, duration=0.00),
+            pulse = openlifu_lz().bf.Pulse(frequency=0.00, amplitude=0.00, duration=0.00),
             focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
         )
 
@@ -261,6 +261,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.pulseFrequencySpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.ui.pulseAmplitudeSpinBox.valueChanged.connect(trigger_unsaved_changes)
         self.ui.pulseDurationSpinBox.valueChanged.connect(trigger_unsaved_changes)
 
         self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
@@ -414,7 +415,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             name = defaults["Name"],
             id = unique_default_id,
             description = defaults["Description"],
-            pulse = openlifu_lz().bf.Pulse(frequency=defaults["Pulse frequency"], duration=defaults["Pulse duration"]),
+            pulse = openlifu_lz().bf.Pulse(frequency=defaults["Pulse frequency"], amplitude=defaults["Pulse amplitude"], duration=defaults["Pulse duration"]),
             focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
         )
 
@@ -617,6 +618,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolIdLineEdit.setText(protocol.id)
         self.ui.protocolDescriptionTextEdit.setPlainText(protocol.description)
         self.ui.pulseFrequencySpinBox.setValue(protocol.pulse.frequency)
+        self.ui.pulseAmplitudeSpinBox.setValue(protocol.pulse.amplitude)
         self.ui.pulseDurationSpinBox.setValue(protocol.pulse.duration)
         
         # Deal with getting the focal pattern
@@ -669,7 +671,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                                                                   spoke_radius=self.ui.spokeRadiusSpinBox.value)
 
         # Get the pulse class
-        pulse = openlifu_lz().bf.Pulse(frequency=self.ui.pulseFrequencySpinBox.value, duration=self.ui.pulseDurationSpinBox.value)
+        pulse = openlifu_lz().bf.Pulse(frequency=self.ui.pulseFrequencySpinBox.value, amplitude=self.ui.pulseAmplitudeSpinBox.value, duration=self.ui.pulseDurationSpinBox.value)
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -779,6 +781,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         "ID": "new_protocol",
         "Description": "",
         "Pulse frequency": 0.00,
+        "Pulse amplitude": 0.00,
         "Pulse duration": 0.00,
         "Focal patten type": "single point",
         "Focal patten options": None,
