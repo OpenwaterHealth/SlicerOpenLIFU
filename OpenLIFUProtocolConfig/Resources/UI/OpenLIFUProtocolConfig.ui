@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>817</height>
+    <height>840</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -122,81 +122,7 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="pulseIntervalLabel">
-           <property name="toolTip">
-            <string>Interval (s) between pulses in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse interval (s)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QDoubleSpinBox" name="pulseIntervalSpinBox">
-           <property name="toolTip">
-            <string>Interval (s) between pulses in the sequence</string>
-           </property>
-          </widget>
-         </item>
          <item row="4" column="0">
-          <widget class="QLabel" name="pulseCountLabel">
-           <property name="toolTip">
-            <string>Number of pulses in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse count</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="1">
-          <widget class="QDoubleSpinBox" name="pulseCountSpinBox">
-           <property name="toolTip">
-            <string>Number of pulses in the sequence</string>
-           </property>
-           <property name="decimals">
-            <number>0</number>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="pulseTrainIntervalLabel">
-           <property name="toolTip">
-            <string>Interval (s) between pulse trains in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse train interval (s)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="1">
-          <widget class="QDoubleSpinBox" name="pulseTrainIntervalSpinBox">
-           <property name="toolTip">
-            <string>Interval (s) between pulse trains in the sequence</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="pulseTrainCountLabel">
-           <property name="toolTip">
-            <string>Number of pulse trains in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse train count</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="1">
-          <widget class="QDoubleSpinBox" name="pulseTrainCountSpinBox">
-           <property name="toolTip">
-            <string>Number of pulse trains in the sequence</string>
-           </property>
-           <property name="decimals">
-            <number>0</number>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="0">
           <widget class="QLabel" name="focalPatternLabel">
            <property name="toolTip">
             <string>The focal pattern used in the protocol. By default, a single point is used</string>
@@ -206,14 +132,14 @@
            </property>
           </widget>
          </item>
-         <item row="8" column="1">
+         <item row="4" column="1">
           <widget class="QComboBox" name="focalPatternComboBox">
            <property name="toolTip">
             <string>The focal pattern used in the protocol. By default, a single point is used</string>
            </property>
           </widget>
          </item>
-         <item row="9" column="0">
+         <item row="5" column="0">
           <widget class="QLabel" name="focalPatternOptionsLabel">
            <property name="toolTip">
             <string>Focal pattern options</string>
@@ -223,7 +149,7 @@
            </property>
           </widget>
          </item>
-         <item row="9" column="1">
+         <item row="5" column="1">
           <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
            <property name="currentIndex">
             <number>0</number>
@@ -302,6 +228,20 @@
            <property name="text">
             <string>Placeholder for an
 OpenLIFUPulseDefinitionWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="sequenceDefinitionWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <widget class="QLabel" name="sequenceDefinitionWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUSequenceDefinitionWidget</string>
            </property>
           </widget>
          </item>
