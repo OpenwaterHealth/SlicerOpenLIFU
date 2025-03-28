@@ -37,6 +37,7 @@ from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.events import SlicerOpenLIFUEvents
+from OpenLIFULib.guided_mode_util import WorkflowControls
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -178,6 +179,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.lockButton.clicked.connect(self.onLockClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onVirtualfitClicked)
+
+        # === Guided mode workflow controls ===
+        self.workflow_controls = WorkflowControls(
+            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
+            previous_module_name = "OpenLIFUData",
+            next_module_name = "OpenLIFUTransducerTracker",
+            include_session_controls = True,
+        )
+        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""

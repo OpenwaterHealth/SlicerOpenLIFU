@@ -52,6 +52,7 @@ from OpenLIFULib.transform_conversion import transducer_transform_node_from_open
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.skinseg import generate_skin_mesh
+from OpenLIFULib.guided_mode_util import WorkflowControls
 
 if TYPE_CHECKING:
     import openlifu
@@ -901,6 +902,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
+
+        # === Guided mode workflow controls ===
+        self.workflow_controls = WorkflowControls(
+            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
+            previous_module_name = "OpenLIFUPrePlanning",
+            next_module_name = "OpenLIFUSonicationPlanner",
+            include_session_controls = True,
+        )
+        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
