@@ -936,10 +936,11 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
 #
 
 class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
-    def __init__(self, cls: Union[Type[Any], Any], parent: Optional[qt.QWidget] = None):
+    def __init__(self, cls: Union[Type[Any], Any], title: Optional[str] = None, parent: Optional[qt.QWidget] = None):
         """
-        Creates a QWidget containing a form layout with labeled inputs for each attribute
-        in the given class. Input widgets are generated based on attribute types:
+        Creates a QWidget containing a collapsible button containing a form
+        layout with labeled inputs for each attribute in the given class. Input
+        widgets are generated based on attribute types:
 
         - int: QSpinBox
         - float: QDoubleSpinBox
@@ -950,19 +951,35 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             cls: A class or instance whose attributes will populate the form.
             parent: Optional parent widget.
         """
+        if title is None:
+            title = f"Parameters for {cls.__name__}"
+
         super().__init__(parent)
         self._fields: dict[str, qt.QWidget] = {}
         self._cls = cls
 
-        layout = qt.QFormLayout(self)
-        self.setLayout(layout)
+        # Outer layout to hold the collapsible button
+        outer_layout = qt.QVBoxLayout(self)
+        self.setLayout(outer_layout)
+
+        # Create collapsible button
+        collapsible = ctk.ctkCollapsibleButton()
+        collapsible.text = title
+        outer_layout.addWidget(collapsible)
+
+        # Create inner widget and form layout inside the collapsible
+        inner_widget = qt.QWidget()
+        form_layout = qt.QFormLayout(inner_widget)
+
+        collapsible.setLayout(qt.QVBoxLayout())
+        collapsible.layout().addWidget(inner_widget)
 
         instance = cls() if inspect.isclass(cls) else cls
 
         for name, value in vars(instance).items():
             widget = self._create_widget_for_value(value)
             if widget:
-                layout.addRow(qt.QLabel(name), widget)
+                form_layout.addRow(qt.QLabel(name), widget)
                 self._fields[name] = widget
 
     def _create_widget_for_value(self, value: Any) -> Optional[qt.QWidget]:
