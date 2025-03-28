@@ -1,8 +1,9 @@
 import logging
 import os
 from pathlib import Path
-from typing import Annotated, Optional, Dict, List, Tuple, TYPE_CHECKING
+from typing import Annotated, Optional, Dict, List, Tuple, Union, Type, Any, Callable, TYPE_CHECKING
 from enum import Enum
+import inspect
 
 import vtk
 import qt
@@ -23,6 +24,7 @@ from OpenLIFULib import (
 
 from OpenLIFULib.util import (
     display_errors,
+    replace_widget,
 )
 
 if TYPE_CHECKING:
@@ -262,6 +264,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUProtocolConfigLogic()
 
+        # === Instantiation of Placeholder Widgets ====
+        self.pulse_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -275,9 +281,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolNameLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
-        self.ui.pulseFrequencySpinBox.valueChanged.connect(trigger_unsaved_changes)
-        self.ui.pulseAmplitudeSpinBox.valueChanged.connect(trigger_unsaved_changes)
-        self.ui.pulseDurationSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.pulse_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.ui.pulseIntervalSpinBox.valueChanged.connect(trigger_unsaved_changes)
         self.ui.pulseCountSpinBox.valueChanged.connect(trigger_unsaved_changes)
         self.ui.pulseTrainIntervalSpinBox.valueChanged.connect(trigger_unsaved_changes)
@@ -631,9 +635,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolNameLineEdit.setText(protocol.name)
         self.ui.protocolIdLineEdit.setText(protocol.id)
         self.ui.protocolDescriptionTextEdit.setPlainText(protocol.description)
-        self.ui.pulseFrequencySpinBox.setValue(protocol.pulse.frequency)
-        self.ui.pulseAmplitudeSpinBox.setValue(protocol.pulse.amplitude)
-        self.ui.pulseDurationSpinBox.setValue(protocol.pulse.duration)
+        self.pulse_definition_widget.update_form_from_class(protocol.pulse)
         self.ui.pulseIntervalSpinBox.setValue(protocol.sequence.pulse_interval)
         self.ui.pulseCountSpinBox.setValue(protocol.sequence.pulse_count)
         self.ui.pulseTrainIntervalSpinBox.setValue(protocol.sequence.pulse_train_interval)
@@ -689,7 +691,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                                                                   spoke_radius=self.ui.spokeRadiusSpinBox.value)
 
         # Get the pulse class
-        pulse = openlifu_lz().bf.Pulse(frequency=self.ui.pulseFrequencySpinBox.value, amplitude=self.ui.pulseAmplitudeSpinBox.value, duration=self.ui.pulseDurationSpinBox.value)
+        pulse = self.pulse_definition_widget.get_form_as_class()
 
         # Get the pulse sequence class
         sequence = openlifu_lz().bf.Sequence(pulse_interval=self.ui.pulseIntervalSpinBox.value, pulse_count=self.ui.pulseCountSpinBox.value, pulse_train_interval=self.ui.pulseTrainIntervalSpinBox.value, pulse_train_count=self.ui.pulseTrainCountSpinBox.value)
@@ -713,6 +715,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
+        self.pulse_definition_widget.setEnabled(enabled)
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
@@ -755,13 +758,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def setAllWidgetsEnabled(self, enabled: bool) -> None:
         self.ui.protocolSelector.setEnabled(enabled)
         self.ui.loadProtocolFromFileButton.setEnabled(enabled)
-        self.ui.createNewProtocolButton.setEnabled(enabled)
-        
-        self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
 
-        self.ui.protocolDatabaseSaveButton.setEnabled(enabled)
-        self.ui.protocolDatabaseDeleteButton.setEnabled(enabled)
-        self.ui.protocolEditRevertDiscardButton.setEnabled(enabled)
+        self.setCreateNewProtocolButtonEnabled(enabled)
+        self.setProtocolEditorEnabled(enabled)
+        self.setProtocolEditButtonEnabled(enabled)
 
     def load_protocol_from_openlifu(self, protocol: "openlifu.plan.Protocol", check_cache: bool = True) -> bool:
 
@@ -930,3 +930,133 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
+
+#
+# OpenLIFU Definition Widgets
+#
+
+class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
+    def __init__(self, cls: Union[Type[Any], Any], parent: Optional[qt.QWidget] = None):
+        """
+        Creates a QWidget containing a form layout with labeled inputs for each attribute
+        in the given class. Input widgets are generated based on attribute types:
+
+        - int: QSpinBox
+        - float: QDoubleSpinBox
+        - str: QLineEdit
+        - bool: QComboBox with True/False
+
+        Args:
+            cls: A class or instance whose attributes will populate the form.
+            parent: Optional parent widget.
+        """
+        super().__init__(parent)
+        self._fields: dict[str, qt.QWidget] = {}
+        self._cls = cls
+
+        layout = qt.QFormLayout(self)
+        self.setLayout(layout)
+
+        instance = cls() if inspect.isclass(cls) else cls
+
+        for name, value in vars(instance).items():
+            widget = self._create_widget_for_value(value)
+            if widget:
+                layout.addRow(qt.QLabel(name), widget)
+                self._fields[name] = widget
+
+    def _create_widget_for_value(self, value: Any) -> Optional[qt.QWidget]:
+        if isinstance(value, int):
+            w = qt.QSpinBox()
+            w.setRange(-1_000_000, 1_000_000)
+            w.setValue(value)
+            return w
+        elif isinstance(value, float):
+            w = qt.QDoubleSpinBox()
+            w.setDecimals(2)
+            w.setRange(-1e6, 1e6)
+            w.setValue(value)
+            return w
+        elif isinstance(value, str):
+            w = qt.QLineEdit()
+            w.setText(value)
+            return w
+        elif isinstance(value, bool):
+            w = qt.QComboBox()
+            w.addItems(["False", "True"])
+            w.setCurrentIndex(int(value))
+            return w
+        else:
+            return None  # unsupported type
+
+    def update_form_from_values(self, values: dict[str, Any]) -> None:
+        """
+        Updates form inputs from a dictionary of values.
+
+        Args:
+            values: dict mapping attribute names to new values.
+        """
+        for name, val in values.items():
+            if name not in self._fields:
+                continue
+            w = self._fields[name]
+            if isinstance(w, qt.QSpinBox):
+                w.setValue(int(val))
+            elif isinstance(w, qt.QDoubleSpinBox):
+                w.setValue(float(val))
+            elif isinstance(w, qt.QLineEdit):
+                w.setText(str(val))
+            elif isinstance(w, qt.QComboBox):
+                w.setCurrentIndex(1 if bool(val) else 0)
+
+    def get_form_as_dict(self) -> dict[str, Any]:
+        """
+        Returns the current form values as a dictionary.
+        """
+        values: dict[str, Any] = {}
+        for name, w in self._fields.items():
+            if isinstance(w, qt.QSpinBox):
+                values[name] = w.value
+            elif isinstance(w, qt.QDoubleSpinBox):
+                values[name] = w.value
+            elif isinstance(w, qt.QLineEdit):
+                values[name] = w.text
+            elif isinstance(w, qt.QComboBox):
+                values[name] = bool(w.currentIndex)
+        return values
+
+    def update_form_from_class(self, instance: Any) -> None:
+        """
+        Updates the form fields using the attribute values from the provided instance.
+
+        Args:
+            instance: An instance of the same class used to create the form.
+        """
+        values = vars(instance)
+        self.update_form_from_values(values)
+
+    def get_form_as_class(self) -> Any:
+        """
+        Constructs and returns a new instance of the class using the current form values.
+
+        Returns:
+            A new instance of the class populated with the form's current values.
+        """
+        return self._cls(**self.get_form_as_dict())
+
+    def add_value_changed_signals(self, callback) -> None:
+        """
+        Connects value change signals of all widgets to a given callback.
+
+        Args:
+            callback: Function to call on value change.
+        """
+        for w in self._fields.values():
+            if isinstance(w, qt.QSpinBox):
+                w.valueChanged.connect(callback)
+            elif isinstance(w, qt.QDoubleSpinBox):
+                w.valueChanged.connect(callback)
+            elif isinstance(w, qt.QLineEdit):
+                w.textChanged.connect(callback)
+            elif isinstance(w, qt.QComboBox):
+                w.currentIndexChanged.connect(callback)
