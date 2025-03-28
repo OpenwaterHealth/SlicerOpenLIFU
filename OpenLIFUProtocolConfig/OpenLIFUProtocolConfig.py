@@ -268,6 +268,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.pulse_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
 
+        self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -281,11 +283,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolNameLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
+
         self.pulse_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.ui.pulseIntervalSpinBox.valueChanged.connect(trigger_unsaved_changes)
-        self.ui.pulseCountSpinBox.valueChanged.connect(trigger_unsaved_changes)
-        self.ui.pulseTrainIntervalSpinBox.valueChanged.connect(trigger_unsaved_changes)
-        self.ui.pulseTrainCountSpinBox.valueChanged.connect(trigger_unsaved_changes)
+        self.sequence_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
         self.ui.numSpokesSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
@@ -635,11 +635,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolNameLineEdit.setText(protocol.name)
         self.ui.protocolIdLineEdit.setText(protocol.id)
         self.ui.protocolDescriptionTextEdit.setPlainText(protocol.description)
+
         self.pulse_definition_widget.update_form_from_class(protocol.pulse)
-        self.ui.pulseIntervalSpinBox.setValue(protocol.sequence.pulse_interval)
-        self.ui.pulseCountSpinBox.setValue(protocol.sequence.pulse_count)
-        self.ui.pulseTrainIntervalSpinBox.setValue(protocol.sequence.pulse_train_interval)
-        self.ui.pulseTrainCountSpinBox.setValue(protocol.sequence.pulse_train_count)
+        self.sequence_definition_widget.update_form_from_class(protocol.sequence)
         
         # Deal with getting the focal pattern
         focal_pattern_classname: str = type(protocol.focal_pattern).__name__
@@ -693,8 +691,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Get the pulse class
         pulse = self.pulse_definition_widget.get_form_as_class()
 
-        # Get the pulse sequence class
-        sequence = openlifu_lz().bf.Sequence(pulse_interval=self.ui.pulseIntervalSpinBox.value, pulse_count=self.ui.pulseCountSpinBox.value, pulse_train_interval=self.ui.pulseTrainIntervalSpinBox.value, pulse_train_count=self.ui.pulseTrainCountSpinBox.value)
+        # Get the sequence class
+        sequence = self.sequence_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -716,6 +714,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
         self.pulse_definition_widget.setEnabled(enabled)
+        self.sequence_definition_widget.setEnabled(enabled)
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
