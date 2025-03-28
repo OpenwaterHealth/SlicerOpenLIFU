@@ -241,7 +241,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
     def start_guided_mode(self):
         set_guided_mode_state(True)
-        slicer.util.selectModule("OpenLIFUData")
+        slicer.util.selectModule("OpenLIFULogin")
 
 #
 # OpenLIFUHomeTest
