@@ -115,12 +115,12 @@ class CreateNewSessionDialog(qt.QDialog):
     """ Create new session dialog """
 
     def __init__(self, transducer_ids: List[str], protocol_ids: List[str], volume_ids: List[str], parent="mainWindow"):
-        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         """ Args:
                 transducer_ids: IDs of the transducers available in the loaded database
                 protocol_ids: IDs of the protocols available in the loaded database
                 volume_ids: IDs of the volumes available for the selected subject in the loaded database
         """
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
 
         self.setWindowTitle("Create New Session")
         self.setWindowModality(qt.Qt.WindowModal)
