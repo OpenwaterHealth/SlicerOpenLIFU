@@ -249,6 +249,20 @@ OpenLIFUSequenceDefinitionWidget</string>
        </widget>
       </item>
       <item>
+       <widget class="QWidget" name="simSetupDefinitionWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_7">
+         <item>
+          <widget class="QLabel" name="simSetupDefinitionWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUSimSetupDefinitionWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="saveStateLabel">
         <property name="alignment">
          <set>Qt::AlignCenter</set>
