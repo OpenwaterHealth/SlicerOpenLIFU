@@ -26,6 +26,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
 from OpenLIFULib.events import SlicerOpenLIFUEvents
+from OpenLIFULib.guided_mode_util import WorkflowControls
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -155,6 +156,15 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        # === Guided mode workflow controls ===
+        self.workflow_controls = WorkflowControls(
+            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
+            previous_module_name = "OpenLIFUTransducerTracker",
+            next_module_name = "OpenLIFUSonicationControl",
+            include_session_controls = True,
+        )
+        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
 
 
     def cleanup(self) -> None:
