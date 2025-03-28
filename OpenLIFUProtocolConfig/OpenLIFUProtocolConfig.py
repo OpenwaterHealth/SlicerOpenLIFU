@@ -78,6 +78,20 @@ class DefaultSequenceValues(Enum):
     PULSE_TRAIN_INTERVAL = 1.00
     PULSE_TRAIN_COUNT = 1
 
+class DefaultSimSetupValues(Enum):
+    DIMS = ("lat", "ele", "ax")
+    NAMES = ("Lateral", "Elevation", "Axial")
+    SPACING = 1.0
+    UNITS = "mm"
+    X_EXTENT = (-30.0, 30.0)
+    Y_EXTENT = (-30.0, 30.0)
+    Z_EXTENT = (-4.0, 60.0)
+    DT = 0.0
+    T_END = 0.0
+    C0 = 1500.0
+    CFL = 0.5
+    OPTIONS = {}
+
 class DefaultProtocolValues(Enum):
     NAME = ""
     ID = ""
@@ -270,6 +284,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
+
+        self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -286,6 +304,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.pulse_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.sequence_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
         self.ui.numSpokesSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
@@ -638,6 +657,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.pulse_definition_widget.update_form_from_class(protocol.pulse)
         self.sequence_definition_widget.update_form_from_class(protocol.sequence)
+        self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
         
         # Deal with getting the focal pattern
         focal_pattern_classname: str = type(protocol.focal_pattern).__name__
@@ -688,11 +708,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                                                                   num_spokes=self.ui.numSpokesSpinBox.value,
                                                                   spoke_radius=self.ui.spokeRadiusSpinBox.value)
 
-        # Get the pulse class
+        # Get the classes from dynamic widgets
         pulse = self.pulse_definition_widget.get_form_as_class()
-
-        # Get the sequence class
         sequence = self.sequence_definition_widget.get_form_as_class()
+        sim_setup = self.sim_setup_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -701,6 +720,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             description = self.ui.protocolDescriptionTextEdit.toPlainText(),
             pulse = pulse,
             sequence = sequence,
+            sim_setup = sim_setup,
             focal_pattern = focal_pattern
         )
 
@@ -713,8 +733,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
+
+        # Dynamic widgets
         self.pulse_definition_widget.setEnabled(enabled)
         self.sequence_definition_widget.setEnabled(enabled)
+        self.sim_setup_definition_widget.setEnabled(enabled)
+
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
@@ -886,6 +910,23 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         )
 
     @classmethod
+    def get_default_sim_setup(cls):
+        return openlifu_lz().sim.SimSetup(
+            dims=DefaultSimSetupValues.DIMS.value,
+            names=DefaultSimSetupValues.NAMES.value,
+            spacing=DefaultSimSetupValues.SPACING.value,
+            units=DefaultSimSetupValues.UNITS.value,
+            x_extent=DefaultSimSetupValues.X_EXTENT.value,
+            y_extent=DefaultSimSetupValues.Y_EXTENT.value,
+            z_extent=DefaultSimSetupValues.Z_EXTENT.value,
+            dt=DefaultSimSetupValues.DT.value,
+            t_end=DefaultSimSetupValues.T_END.value,
+            c0=DefaultSimSetupValues.C0.value,
+            cfl=DefaultSimSetupValues.CFL.value,
+            options=DefaultSimSetupValues.OPTIONS.value
+        )
+
+    @classmethod
     def get_default_focal_pattern(cls):
         return openlifu_lz().bf.focal_patterns.SinglePoint()#
 
@@ -895,8 +936,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             name=DefaultProtocolValues.NAME.value,
             id=DefaultProtocolValues.ID.value,
             description=DefaultProtocolValues.DESCRIPTION.value,
+
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
+            sim_setup=cls.get_default_sim_setup(),
             focal_pattern=cls.get_default_focal_pattern()
         )
 
@@ -906,8 +949,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             name=DefaultNewProtocolValues.NAME.value,
             id=DefaultNewProtocolValues.ID.value,
             description=DefaultNewProtocolValues.DESCRIPTION.value,
+
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
+            sim_setup=cls.get_default_sim_setup(),
             focal_pattern=cls.get_default_focal_pattern()
         )
 
@@ -945,6 +990,9 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         - float: QDoubleSpinBox
         - str: QLineEdit
         - bool: QComboBox with True/False
+        - dict: QTableWidget (2 columns for key-value pairs)
+        - Tuple[float, float]: Two QDoubleSpinBox widgets
+        - Tuple[str, str, str]: Three QLineEdit widgets
 
         Args:
             cls: A class or instance whose attributes will populate the form.
@@ -985,23 +1033,48 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         if isinstance(value, int):
             w = qt.QSpinBox()
             w.setRange(-1_000_000, 1_000_000)
-            w.setValue(value)
             return w
         elif isinstance(value, float):
             w = qt.QDoubleSpinBox()
             w.setDecimals(2)
             w.setRange(-1e6, 1e6)
-            w.setValue(value)
             return w
         elif isinstance(value, str):
             w = qt.QLineEdit()
-            w.setText(value)
             return w
         elif isinstance(value, bool):
             w = qt.QComboBox()
             w.addItems(["False", "True"])
-            w.setCurrentIndex(int(value))
             return w
+        elif isinstance(value, dict):
+            table = qt.QTableWidget()
+            table.setColumnCount(2)
+            table.setHorizontalHeaderLabels(["Key", "Value"])
+            table.horizontalHeader().setStretchLastSection(True)
+            table.verticalHeader().setVisible(False)
+            table.setMinimumHeight(150)
+            return table
+        elif isinstance(value, tuple) and len(value) == 2 and all(isinstance(v, float) for v in value):
+            container = qt.QWidget()
+            layout = qt.QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            first_input = qt.QDoubleSpinBox()
+            second_input = qt.QDoubleSpinBox()
+            for spin in [first_input, second_input]:
+                spin.setDecimals(2)
+                spin.setRange(-1e6, 1e6)
+                layout.addWidget(spin)
+            container.setLayout(layout)
+            return container
+        elif isinstance(value, tuple) and len(value) == 3 and all(isinstance(v, str) for v in value):
+            container = qt.QWidget()
+            layout = qt.QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            inputs = [qt.QLineEdit() for _ in value]
+            for line_edit in inputs:
+                layout.addWidget(line_edit)
+            container.setLayout(layout)
+            return container
         else:
             return None  # unsupported type
 
@@ -1010,7 +1083,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         Updates form inputs from a dictionary of values.
 
         Args:
-            values: dict mapping attribute names to new values.
+            values: Dictionary mapping attribute names to new values.
         """
         for name, val in values.items():
             if name not in self._fields:
@@ -1024,6 +1097,19 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.setText(str(val))
             elif isinstance(w, qt.QComboBox):
                 w.setCurrentIndex(1 if bool(val) else 0)
+            elif isinstance(w, qt.QTableWidget) and isinstance(val, dict):
+                w.setRowCount(len(val))
+                for row, (k, v) in enumerate(val.items()):
+                    w.setItem(row, 0, qt.QTableWidgetItem(str(k)))
+                    w.setItem(row, 1, qt.QTableWidgetItem(str(v)))
+            elif isinstance(w, qt.QWidget) and isinstance(val, tuple):
+                # Tuples have nested widgets; we must confirm all cases
+                if all(isinstance(child, qt.QDoubleSpinBox) for child in w.findChildren(qt.QDoubleSpinBox)) and all(isinstance(v, float) for v in val):
+                    for spin, new_val in zip(w.findChildren(qt.QDoubleSpinBox), val):
+                        spin.setValue(float(new_val))
+                elif all(isinstance(child, qt.QLineEdit) for child in w.findChildren(qt.QLineEdit)) and all(isinstance(v, str) for v in val):
+                    for line, new_val in zip(w.findChildren(qt.QLineEdit), val):
+                        line.setText(str(new_val))
 
     def get_form_as_dict(self) -> dict[str, Any]:
         """
@@ -1039,6 +1125,20 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 values[name] = w.text
             elif isinstance(w, qt.QComboBox):
                 values[name] = bool(w.currentIndex)
+            elif isinstance(w, qt.QTableWidget):
+                d = {}
+                for row in range(w.rowCount):
+                    key_item = w.item(row, 0)
+                    val_item = w.item(row, 1)
+                    if key_item and val_item:
+                        d[key_item.text] = val_item.text
+                values[name] = d
+            elif isinstance(w, qt.QWidget):
+                children = slicer.util.findChildren(w)
+                if all(isinstance(child, qt.QDoubleSpinBox) for child in children):
+                    values[name] = tuple(child.value for child in children)
+                elif all(isinstance(child, qt.QLineEdit) for child in children):
+                    values[name] = tuple(child.text for child in children)
         return values
 
     def update_form_from_class(self, instance: Any) -> None:
@@ -1076,3 +1176,11 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.textChanged.connect(callback)
             elif isinstance(w, qt.QComboBox):
                 w.currentIndexChanged.connect(callback)
+            elif isinstance(w, qt.QTableWidget):
+                w.itemChanged.connect(lambda *_: callback())
+            elif isinstance(w, qt.QWidget):
+                for child in slicer.util.findChildren(w):
+                    if isinstance(child, qt.QDoubleSpinBox):
+                        child.valueChanged.connect(callback)
+                    elif isinstance(child, qt.QLineEdit):
+                        child.textChanged.connect(callback)
