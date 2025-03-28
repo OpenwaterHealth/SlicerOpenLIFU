@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>636</width>
+    <width>669</width>
     <height>817</height>
    </rect>
   </property>
@@ -123,57 +123,80 @@
           </widget>
          </item>
          <item row="3" column="0">
-          <widget class="QLabel" name="pulseFrequencyLabel">
+          <widget class="QLabel" name="pulseIntervalLabel">
            <property name="toolTip">
-            <string>The pulse frequency (Hz) used in the protocol</string>
+            <string>Interval (s) between pulses in the sequence</string>
            </property>
            <property name="text">
-            <string>Pulse frequency (Hz)</string>
+            <string>Pulse interval (s)</string>
            </property>
           </widget>
          </item>
          <item row="3" column="1">
-          <widget class="QDoubleSpinBox" name="pulseFrequencySpinBox">
+          <widget class="QDoubleSpinBox" name="pulseIntervalSpinBox">
            <property name="toolTip">
-            <string>The pulse frequency (Hz) used in the protocol</string>
+            <string>Interval (s) between pulses in the sequence</string>
            </property>
           </widget>
          </item>
          <item row="4" column="0">
-          <widget class="QLabel" name="pulseAmplitudeLabel">
+          <widget class="QLabel" name="pulseCountLabel">
            <property name="toolTip">
-            <string>The pulse amplitude (Pa) used in the protocol</string>
+            <string>Number of pulses in the sequence</string>
            </property>
            <property name="text">
-            <string>Pulse amplitude (Pa)</string>
+            <string>Pulse count</string>
            </property>
           </widget>
          </item>
          <item row="4" column="1">
-          <widget class="QDoubleSpinBox" name="pulseAmplitudeSpinBox">
+          <widget class="QDoubleSpinBox" name="pulseCountSpinBox">
            <property name="toolTip">
-            <string>The pulse amplitude (Pa) used in the protocol</string>
+            <string>Number of pulses in the sequence</string>
+           </property>
+           <property name="decimals">
+            <number>0</number>
            </property>
           </widget>
          </item>
          <item row="5" column="0">
-          <widget class="QLabel" name="pulseDurationLabel">
+          <widget class="QLabel" name="pulseTrainIntervalLabel">
            <property name="toolTip">
-            <string>The pulse duration (s) used in the protocol</string>
+            <string>Interval (s) between pulse trains in the sequence</string>
            </property>
            <property name="text">
-            <string>Pulse duration (s)</string>
+            <string>Pulse train interval (s)</string>
            </property>
           </widget>
          </item>
          <item row="5" column="1">
-          <widget class="QDoubleSpinBox" name="pulseDurationSpinBox">
+          <widget class="QDoubleSpinBox" name="pulseTrainIntervalSpinBox">
            <property name="toolTip">
-            <string>The pulse duration (s) used in the protocol</string>
+            <string>Interval (s) between pulse trains in the sequence</string>
            </property>
           </widget>
          </item>
-         <item row="11" column="0">
+         <item row="6" column="0">
+          <widget class="QLabel" name="pulseTrainCountLabel">
+           <property name="toolTip">
+            <string>Number of pulse trains in the sequence</string>
+           </property>
+           <property name="text">
+            <string>Pulse train count</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QDoubleSpinBox" name="pulseTrainCountSpinBox">
+           <property name="toolTip">
+            <string>Number of pulse trains in the sequence</string>
+           </property>
+           <property name="decimals">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="0">
           <widget class="QLabel" name="focalPatternLabel">
            <property name="toolTip">
             <string>The focal pattern used in the protocol. By default, a single point is used</string>
@@ -183,14 +206,14 @@
            </property>
           </widget>
          </item>
-         <item row="11" column="1">
+         <item row="8" column="1">
           <widget class="QComboBox" name="focalPatternComboBox">
            <property name="toolTip">
             <string>The focal pattern used in the protocol. By default, a single point is used</string>
            </property>
           </widget>
          </item>
-         <item row="12" column="0">
+         <item row="9" column="0">
           <widget class="QLabel" name="focalPatternOptionsLabel">
            <property name="toolTip">
             <string>Focal pattern options</string>
@@ -200,7 +223,7 @@
            </property>
           </widget>
          </item>
-         <item row="12" column="1">
+         <item row="9" column="1">
           <widget class="QStackedWidget" name="focalPatternOptionsStackedWidget">
            <property name="currentIndex">
             <number>0</number>
@@ -268,77 +291,17 @@
            </widget>
           </widget>
          </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="pulseIntervalLabel">
-           <property name="toolTip">
-            <string>Interval (s) between pulses in the sequence</string>
-           </property>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="pulseDefinitionWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_3">
+         <item>
+          <widget class="QLabel" name="pulseDefinitionWidgetPlaceholderLabel">
            <property name="text">
-            <string>Pulse interval (s)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="1">
-          <widget class="QDoubleSpinBox" name="pulseIntervalSpinBox">
-           <property name="toolTip">
-            <string>Interval (s) between pulses in the sequence</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="0">
-          <widget class="QLabel" name="pulseCountLabel">
-           <property name="toolTip">
-            <string>Number of pulses in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse count</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="1">
-          <widget class="QDoubleSpinBox" name="pulseCountSpinBox">
-           <property name="toolTip">
-            <string>Number of pulses in the sequence</string>
-           </property>
-           <property name="decimals">
-            <number>0</number>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="0">
-          <widget class="QLabel" name="pulseTrainIntervalLabel">
-           <property name="toolTip">
-            <string>Interval (s) between pulse trains in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse train interval (s)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="1">
-          <widget class="QDoubleSpinBox" name="pulseTrainIntervalSpinBox">
-           <property name="toolTip">
-            <string>Interval (s) between pulse trains in the sequence</string>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="0">
-          <widget class="QLabel" name="pulseTrainCountLabel">
-           <property name="toolTip">
-            <string>Number of pulse trains in the sequence</string>
-           </property>
-           <property name="text">
-            <string>Pulse train count</string>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="1">
-          <widget class="QDoubleSpinBox" name="pulseTrainCountSpinBox">
-           <property name="toolTip">
-            <string>Number of pulse trains in the sequence</string>
-           </property>
-           <property name="decimals">
-            <number>0</number>
+            <string>Placeholder for an
+OpenLIFUPulseDefinitionWidget</string>
            </property>
           </widget>
          </item>
