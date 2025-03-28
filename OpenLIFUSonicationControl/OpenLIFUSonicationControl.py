@@ -18,7 +18,8 @@ from OpenLIFULib import (get_openlifu_data_parameter_node,
                          SlicerOpenLIFURun,
 )
 
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import display_errors, replace_widget
+from OpenLIFULib.guided_mode_util import WorkflowControls
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -228,6 +229,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # After setup, update the module state from the data parameter node
         self.onDataParameterNodeModified()
+
+        # === Guided mode workflow controls ===
+        self.workflow_controls = WorkflowControls(
+            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
+            previous_module_name = "OpenLIFUSonicationPlanner",
+            next_module_name = None,
+            include_session_controls = True,
+        )
+        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""

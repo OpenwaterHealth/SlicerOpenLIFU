@@ -416,6 +416,13 @@
      </property>
     </spacer>
    </item>
+   <item>
+    <widget class="QWidget" name="workflowControlsPlaceholder" native="true">
+     <property name="styleSheet">
+      <string notr="true">background-color: rgb(128, 0, 128);</string>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>

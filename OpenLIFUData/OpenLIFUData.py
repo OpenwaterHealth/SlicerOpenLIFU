@@ -42,6 +42,7 @@ from OpenLIFULib.util import (
     ensure_list,
     add_slicer_log_handler_for_openlifu_object,
     BusyCursor,
+    replace_widget,
 )
 
 from OpenLIFULib.virtual_fit_results import (
@@ -53,6 +54,8 @@ from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results
 )
+
+from OpenLIFULib.guided_mode_util import WorkflowControls
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -743,6 +746,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+
+        # === Guided mode workflow controls ===
+        self.workflow_controls = WorkflowControls(
+            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
+            previous_module_name = "OpenLIFULogin",
+            next_module_name = "OpenLIFUPrePlanning",
+            include_session_controls = False,
+        )
+        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
 
     def onSubjectSessionSelected(self):
         self.update_subjectLevelButtons_enabled()
