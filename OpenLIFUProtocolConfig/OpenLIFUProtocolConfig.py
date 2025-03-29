@@ -67,6 +67,16 @@ class SaveState(Enum):
     UNSAVED_CHANGES=1
     SAVED_CHANGES=2
 
+class DefaultProtocolValues(Enum):
+    NAME = ""
+    ID = ""
+    DESCRIPTION = ""
+
+class DefaultNewProtocolValues(Enum):
+    NAME = "New Protocol"
+    ID = "new_protocol"
+    DESCRIPTION = ""
+
 class DefaultPulseValues(Enum):
     FREQUENCY = 0.00
     AMPLITUDE = 0.00
@@ -77,9 +87,6 @@ class DefaultSequenceValues(Enum):
     PULSE_COUNT = 1
     PULSE_TRAIN_INTERVAL = 1.00
     PULSE_TRAIN_COUNT = 1
-
-class DefaultSinglePointValues(Enum):
-    pass
 
 class DefaultSimSetupValues(Enum):
     DIMS = ("lat", "ele", "ax")
@@ -94,16 +101,6 @@ class DefaultSimSetupValues(Enum):
     C0 = 1500.0
     CFL = 0.5
     OPTIONS = {}
-
-class DefaultProtocolValues(Enum):
-    NAME = ""
-    ID = ""
-    DESCRIPTION = ""
-
-class DefaultNewProtocolValues(Enum):
-    NAME = "New Protocol"
-    ID = "new_protocol"
-    DESCRIPTION = ""
 
 # OpenLIFUProtocolConfigParameterNode
 #
@@ -255,6 +252,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False)
         replace_widget(self.ui.abstractDelayMethodDefinitionWidgetPlaceholder, self.abstract_delay_method_definition_widget, self.ui)
 
+        self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False)
+        replace_widget(self.ui.abstractApodizationMethodDefinitionWidgetPlaceholder, self.abstract_apodization_method_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -274,6 +274,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_focal_pattern_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_delay_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.abstract_apodization_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         # Connect main widget functions
 
@@ -613,6 +614,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_focal_pattern_definition_widget.update_form_from_class(protocol.focal_pattern)
         self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
         self.abstract_delay_method_definition_widget.update_form_from_class(protocol.delay_method)
+        self.abstract_apodization_method_definition_widget.update_form_from_class(protocol.apod_method)
 
         self._is_updating_display = False
 
@@ -645,6 +647,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         focal_pattern = self.abstract_focal_pattern_definition_widget.get_form_as_class()
         sim_setup = self.sim_setup_definition_widget.get_form_as_class()
         delay_method = self.abstract_delay_method_definition_widget.get_form_as_class()
+        apodization_method = self.abstract_apodization_method_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -656,6 +659,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             focal_pattern = focal_pattern,
             sim_setup = sim_setup,
             delay_method = delay_method,
+            apod_method = apodization_method,
         )
 
         return protocol
@@ -674,6 +678,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_focal_pattern_definition_widget.setEnabled(enabled)
         self.sim_setup_definition_widget.setEnabled(enabled)
         self.abstract_delay_method_definition_widget.setEnabled(enabled)
+        self.abstract_apodization_method_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
@@ -871,6 +876,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return openlifu_lz().bf.delay_methods.Direct()
 
     @classmethod
+    def get_default_apodization_method(cls):
+        return openlifu_lz().bf.apod_methods.Uniform()
+
+    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -882,6 +891,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             focal_pattern=cls.get_default_focal_pattern(),
             sim_setup=cls.get_default_sim_setup(),
             delay_method=cls.get_default_delay_method(),
+            apod_method=cls.get_default_apodization_method(),
         )
 
     @classmethod
@@ -896,6 +906,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             focal_pattern=cls.get_default_focal_pattern(),
             sim_setup=cls.get_default_sim_setup(),
             delay_method=cls.get_default_delay_method(),
+            apod_method=cls.get_default_apodization_method(),
         )
 
 # OpenLIFUProtocolConfigTest
