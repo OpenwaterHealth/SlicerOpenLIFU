@@ -252,6 +252,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
 
+        self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False)
+        replace_widget(self.ui.abstractDelayMethodDefinitionWidgetPlaceholder, self.abstract_delay_method_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -270,6 +273,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sequence_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_focal_pattern_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.abstract_delay_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         # Connect main widget functions
 
@@ -608,6 +612,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sequence_definition_widget.update_form_from_class(protocol.sequence)
         self.abstract_focal_pattern_definition_widget.update_form_from_class(protocol.focal_pattern)
         self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
+        self.abstract_delay_method_definition_widget.update_form_from_class(protocol.delay_method)
 
         self._is_updating_display = False
 
@@ -639,6 +644,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         sequence = self.sequence_definition_widget.get_form_as_class()
         focal_pattern = self.abstract_focal_pattern_definition_widget.get_form_as_class()
         sim_setup = self.sim_setup_definition_widget.get_form_as_class()
+        delay_method = self.abstract_delay_method_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -649,6 +655,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             sequence = sequence,
             focal_pattern = focal_pattern,
             sim_setup = sim_setup,
+            delay_method = delay_method,
         )
 
         return protocol
@@ -666,6 +673,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sequence_definition_widget.setEnabled(enabled)
         self.abstract_focal_pattern_definition_widget.setEnabled(enabled)
         self.sim_setup_definition_widget.setEnabled(enabled)
+        self.abstract_delay_method_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
@@ -859,6 +867,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         )
 
     @classmethod
+    def get_default_delay_method(cls):
+        return openlifu_lz().bf.delay_methods.Direct()
+
+    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -869,6 +881,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             sequence=cls.get_default_sequence(),
             focal_pattern=cls.get_default_focal_pattern(),
             sim_setup=cls.get_default_sim_setup(),
+            delay_method=cls.get_default_delay_method(),
         )
 
     @classmethod
@@ -882,6 +895,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             sequence=cls.get_default_sequence(),
             focal_pattern=cls.get_default_focal_pattern(),
             sim_setup=cls.get_default_sim_setup(),
+            delay_method=cls.get_default_delay_method(),
         )
 
 # OpenLIFUProtocolConfigTest

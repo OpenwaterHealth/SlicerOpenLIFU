@@ -182,6 +182,20 @@ OpenLIFUSimSetupDefinitionWidget</string>
        </widget>
       </item>
       <item>
+       <widget class="QWidget" name="abstractDelayMethodDefinitionWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_9">
+         <item>
+          <widget class="QLabel" name="abstractDelayMethodDefinitionWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUAbstractDelayMethodDefinitionWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="saveStateLabel">
         <property name="alignment">
          <set>Qt::AlignCenter</set>
