@@ -1,7 +1,7 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict
 import qt
 import slicer
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import display_errors, replace_widget
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -14,8 +14,10 @@ def get_guided_mode_state() -> bool:
 
 def set_guided_mode_state(new_guided_mode_state: bool):
     """Set guided mode state in OpenLIFU Home module's parameter node"""
-    openlifu_home_parameter_node = slicer.util.getModuleLogic('OpenLIFUHome').getParameterNode()
+    home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+    openlifu_home_parameter_node = home_module_logic.getParameterNode()
     openlifu_home_parameter_node.guided_mode = new_guided_mode_state
+    home_module_logic.workflow.update_all()
 
 class WorkflowControls(qt.QWidget):
     """ Guided mode workflow controls widget
@@ -91,6 +93,10 @@ class WorkflowControls(qt.QWidget):
             self.next_button = qt.QPushButton("Next")
             button_row1_layout.addWidget(self.next_button)
             self.next_button.clicked.connect(self.on_next)
+            self.jump_ahead_button = qt.QPushButton(">>")
+            button_row1_layout.addWidget(self.jump_ahead_button)
+            self.jump_ahead_button.clicked.connect(self.on_jump_ahead)
+            self.jump_ahead_button.setToolTip("Jump ahead to the nearest unfinished step of the workflow")
 
 
         if include_session_controls:
@@ -102,7 +108,12 @@ class WorkflowControls(qt.QWidget):
             main_group_box_layout.addLayout(button_row2_layout)
             self.save_close_button.clicked.connect(self.on_save_close)
             self.close_button.clicked.connect(self.on_close)
+            self.save_close_button.setToolTip("Save and close the session")
+            self.close_button.setToolTip("Close the session without saving it")
 
+        self.update()
+
+    def update(self):
         self.update_back_button_enabledness()
         self.update_next_button_enabledness()
         self.update_status_label()
@@ -112,6 +123,10 @@ class WorkflowControls(qt.QWidget):
 
     def on_back(self):
         slicer.util.selectModule(self.previous_module_name)
+    
+    def on_jump_ahead(self, clicked:bool):
+        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+        home_module_logic.workflow_jump_ahead()
 
     @display_errors
     def on_save_close(self, clicked:bool):
@@ -133,13 +148,7 @@ class WorkflowControls(qt.QWidget):
     def update_next_button_enabledness(self):
         if not hasattr(self, "next_button"):
             return
-        enabled = (
-            (
-                (self.next_module_name is not None)
-                and self.can_proceed
-            )
-            or not get_guided_mode_state()
-        )
+        enabled = self.can_proceed or not get_guided_mode_state()
         self.next_button.setEnabled(enabled)
         if enabled:
             self.next_button.setToolTip(f"Go to the {self.next_module_name} module.")
@@ -150,7 +159,8 @@ class WorkflowControls(qt.QWidget):
     def update_back_button_enabledness(self):
         if not hasattr(self, "back_button"):
             return
-        self.back_button.setEnabled(self.previous_module_name is not None)
+        self.back_button.setEnabled(True)
+        self.back_button.setToolTip(f"Go to the {self.previous_module_name} module.")
 
     def update_status_label(self):
         self.status_label.setText(self.status_text)
@@ -174,5 +184,64 @@ class WorkflowControls(qt.QWidget):
     def status_text(self, new_val : str):
         self._status_text = new_val
         self.update_status_label()
+
+class Workflow:
+    """A class that holds the ordered dictionary of WorkflowControls widgets.
+    The widgets are eventually still owned by (i.e. parented to) the module widget that contains them,
+    assuming the modules use `GuidedModeMixin` appropriately to reparent the WorkflowControls into themselves.
+    But this class provides a convenient way to construct the widgets and convenient access to the widgets.
+    """
+
+    modules = [
+        "OpenLIFULogin",
+        "OpenLIFUData",
+        "OpenLIFUPrePlanning",
+        "OpenLIFUTransducerTracker",
+        "OpenLIFUSonicationPlanner",
+        "OpenLIFUSonicationControl",
+    ]
+    """Defines the order of the guided workflow."""
+
+    def __init__(self):
+        
+        self.workflow_controls : Dict[str,WorkflowControls] = {}
+        
+        for previous_module, current_module, next_module in zip(
+            [None] + self.modules,
+            self.modules,
+            self.modules[1:] + [None],
+        ):
+            self.workflow_controls[current_module] = WorkflowControls(
+                parent = None, # The widget will be parented when it is injected into a module
+                previous_module_name = previous_module,
+                next_module_name = next_module,
+                include_session_controls = current_module not in ["OpenLIFULogin", "OpenLIFUData"],
+            )
+
+    def furthest_module_to_which_can_proceed(self) -> str:
+        """Get the name of the furthest module along the workflow to which we `can_proceed`."""
+        for module_name in self.modules:
+            if not self.workflow_controls[module_name].can_proceed:
+                return module_name
+        return self.modules[-1]
+    
+    def update_all(self):
+        for workflow_controls in self.workflow_controls.values():
+            workflow_controls.update()
+
+class GuidedWorkflowMixin:
+    """A mixin class to add guided mode workflow related methods to a ScriptedLoadableModuleWidget"""
+
+    def inject_workflow_controls_into_placeholder(self):
+        """Assuming the ScriptedLoadableModuleWidget UI has a widget named `workflowControlsPlaceholder`,
+        replace it by the actual workflow controls widget tracked by the `Workflow` in the OpenLIFUHome module.
+        An attribute self.workflow_controls can then be used to conveniently access the `WorkflowControls` widget.
+        """
+        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+        self.workflow_controls = home_module_logic.workflow.workflow_controls[self.moduleName]
+        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
+
+    def enforceGuidedModeVisibility(self):
+        raise NotImplementedError("This method is to be implemented in issue #128")
 
 

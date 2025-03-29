@@ -26,7 +26,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
 from OpenLIFULib.events import SlicerOpenLIFUEvents
-from OpenLIFULib.guided_mode_util import WorkflowControls
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -48,7 +48,7 @@ class OpenLIFUSonicationPlanner(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Sonication Planning")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ["OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -79,7 +79,7 @@ class OpenLIFUSonicationPlannerParameterNode:
 #
 
 
-class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -157,14 +157,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        # === Guided mode workflow controls ===
-        self.workflow_controls = WorkflowControls(
-            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
-            previous_module_name = "OpenLIFUTransducerTracker",
-            next_module_name = "OpenLIFUSonicationControl",
-            include_session_controls = True,
-        )
-        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
+        self.inject_workflow_controls_into_placeholder()
 
 
     def cleanup(self) -> None:
