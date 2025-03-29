@@ -1025,11 +1025,11 @@ class DictTableWidget(qt.QWidget):
             self._add_row(str(key), str(val))
 
 class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
-    def __init__(self, cls: Union[Type[Any], Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
+    def __init__(self, cls: Type[Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
         """
-        Creates a QWidget containing a form layout with labeled inputs for each
-        attribute in the given class. Input widgets are generated based on
-        attribute types:
+        Initializes a QWidget containing a form layout with labeled inputs for
+        each attribute of an instance created from the specified class. Input
+        widgets are generated based on attribute types:
 
         - int: QSpinBox
         - float: QDoubleSpinBox
@@ -1039,15 +1039,16 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         - Tuple[float, float]: Two QDoubleSpinBox widgets
         - Tuple[str, str, str]: Three QLineEdit widgets
 
-        This form is enclosed in a drop down (ctkCollapsibleButton) with the
-        title collapsible_title if is_collapsible is True.
+        If is_collapsible is True, the form is enclosed in a collapsible container
+        with an optional title.
 
         Args:
-            cls: A class or instance whose attributes will populate the form.
+            cls: A class (not an instance) whose attributes will populate the form.
             parent: Optional parent widget.
-            is_collapsible: Whether to enclose the form in a drop down.
-            collapsible_title: The text summarizing the content in the drop down.
+            is_collapsible: Whether to enclose the form in a collapsible container.
+            collapsible_title: Optional title for the collapsible section.
         """
+
         super().__init__(parent)
         self._fields: dict[str, qt.QWidget] = {}
         self._cls = cls
@@ -1071,7 +1072,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         else:
             form_layout = qt.QFormLayout(self)
 
-        instance = cls() if inspect.isclass(cls) else cls
+        instance = cls()
 
         for name, value in vars(instance).items():
             widget = self._create_widget_for_value(value)
