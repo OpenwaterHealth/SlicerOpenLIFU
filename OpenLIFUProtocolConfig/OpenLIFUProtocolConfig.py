@@ -78,6 +78,9 @@ class DefaultSequenceValues(Enum):
     PULSE_TRAIN_INTERVAL = 1.00
     PULSE_TRAIN_COUNT = 1
 
+class DefaultSinglePointValues(Enum):
+    pass
+
 class DefaultSimSetupValues(Enum):
     DIMS = ("lat", "ele", "ax")
     NAMES = ("Lateral", "Elevation", "Axial")
@@ -96,49 +99,11 @@ class DefaultProtocolValues(Enum):
     NAME = ""
     ID = ""
     DESCRIPTION = ""
-    FOCAL_PATTERN_TYPE = "single point"
-    FOCAL_PATTERN_OPTIONS = None
 
 class DefaultNewProtocolValues(Enum):
     NAME = "New Protocol"
     ID = "new_protocol"
     DESCRIPTION = ""
-    FOCAL_PATTERN_TYPE = "single point"
-    FOCAL_PATTERN_OPTIONS = None
-
-class FocalPatternType(Enum):
-    SINGLE_POINT=0
-    WHEEL=1
-
-    def to_string(self) -> str:
-        if self == FocalPatternType.SINGLE_POINT:
-            return "single point"
-        elif self == FocalPatternType.WHEEL:
-            return "wheel"
-        else:
-            raise ValueError(f"Unhandled enum value: {self}")
-
-    @staticmethod
-    def get_pattern_names() -> List[str]:
-        return ['single point', 'wheel']
-
-    @classmethod
-    def from_string_to_enum(cls, focal_pattern: str) -> "FocalPatternType":
-            if focal_pattern == "single point":
-                return cls.SINGLE_POINT
-            elif focal_pattern == "wheel":
-                return cls.WHEEL
-            else:
-                raise ValueError(f"Unknown focal pattern: {focal_pattern}")
-#
-    @classmethod
-    def from_classtype_to_enum(cls, focal_pattern_classname: str) -> "FocalPatternType":
-            if focal_pattern_classname == "SinglePoint":
-                return cls.SINGLE_POINT
-            elif focal_pattern_classname == "Wheel":
-                return cls.WHEEL
-            else:
-                raise ValueError(f"Unknown focal pattern class: {focal_pattern_classname}")
 
 # OpenLIFUProtocolConfigParameterNode
 #
@@ -246,10 +211,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self._cur_save_state = SaveState.NO_CHANGES
         self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
         self._parameterNodeGuiTag = None
-        self.focalPattern_type_to_pageName : Dict[FocalPatternType,str] = {
-            FocalPatternType.SINGLE_POINT : "singlePointPage",
-            FocalPatternType.WHEEL : "wheelPage",
-        }
 
     @property
     def cur_protocol_id(self) -> str:
@@ -285,6 +246,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
 
+        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint])
+        replace_widget(self.ui.abstractFocalPatternDefinitionWidgetPlaceholder, self.abstract_focal_pattern_definition_widget, self.ui)
+
         self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
 
@@ -304,11 +268,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.pulse_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.sequence_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.abstract_focal_pattern_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-
-        self.ui.wheelCenterCheckBox.stateChanged.connect(trigger_unsaved_changes)  # wheel
-        self.ui.numSpokesSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
-        self.ui.spokeRadiusSpinBox.valueChanged.connect(trigger_unsaved_changes)  # wheel
 
         # Connect main widget functions
 
@@ -321,18 +282,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolFileSaveButton.clicked.connect(self.onSaveProtocolToFileClicked)
         self.ui.protocolDatabaseSaveButton.clicked.connect(self.onSaveProtocolToDatabaseClicked)
         self.ui.protocolDatabaseDeleteButton.clicked.connect(self.onDeleteProtocolFromDatabaseClicked)
-
-        # === Connections and UI setup for Focal Pattern specifically =======
-
-        self.ui.focalPatternComboBox.currentIndexChanged.connect(
-            lambda : self.ui.focalPatternOptionsStackedWidget.setCurrentWidget(
-                self.ui.focalPatternOptionsStackedWidget.findChild(
-                    qt.QWidget,
-                    self.focalPattern_type_to_pageName[self.getCurrentlySelectedFocalPatternType()]
-                )
-            )
-        )
-        self.ui.focalPatternComboBox.addItems(FocalPatternType.get_pattern_names())
 
         # === Disable some of the widgets ===
 
@@ -657,17 +606,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.pulse_definition_widget.update_form_from_class(protocol.pulse)
         self.sequence_definition_widget.update_form_from_class(protocol.sequence)
+        self.abstract_focal_pattern_definition_widget.update_form_from_class(protocol.focal_pattern)
         self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
-        
-        # Deal with getting the focal pattern
-        focal_pattern_classname: str = type(protocol.focal_pattern).__name__
-        focal_pattern: FocalPatternType = FocalPatternType.from_classtype_to_enum(focal_pattern_classname)
-        self.ui.focalPatternComboBox.setCurrentText(focal_pattern.to_string())
-
-        if focal_pattern == FocalPatternType.WHEEL:
-            self.ui.wheelCenterCheckBox.setCheckState(2 if protocol.focal_pattern.center else 0)  # wheel
-            self.ui.numSpokesSpinBox.setValue(protocol.focal_pattern.num_spokes)  # wheel
-            self.ui.spokeRadiusSpinBox.setValue(protocol.focal_pattern.spoke_radius)  # wheel
 
         self._is_updating_display = False
 
@@ -693,24 +633,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
-    def getCurrentlySelectedFocalPatternType(self) -> FocalPatternType:
-        """Return the type of focal pattern that is currently selected in the protocol configuration."""
-        return FocalPatternType.from_string_to_enum(self.ui.focalPatternComboBox.currentText)
-    
     def getProtocolFromGUI(self) -> "openlifu.plan.Protocol":
-        # First get the focal pattern class
-        focal_pattern_type = FocalPatternType.from_string_to_enum(self.ui.focalPatternComboBox.currentText)
-        focal_pattern = None
-        if focal_pattern_type == FocalPatternType.SINGLE_POINT:
-            focal_pattern = openlifu_lz().bf.focal_patterns.SinglePoint()
-        elif focal_pattern_type == FocalPatternType.WHEEL:
-            focal_pattern = openlifu_lz().bf.focal_patterns.Wheel(center=self.ui.wheelCenterCheckBox.isChecked(),
-                                                                  num_spokes=self.ui.numSpokesSpinBox.value,
-                                                                  spoke_radius=self.ui.spokeRadiusSpinBox.value)
-
         # Get the classes from dynamic widgets
         pulse = self.pulse_definition_widget.get_form_as_class()
         sequence = self.sequence_definition_widget.get_form_as_class()
+        focal_pattern = self.abstract_focal_pattern_definition_widget.get_form_as_class()
         sim_setup = self.sim_setup_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
@@ -720,8 +647,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             description = self.ui.protocolDescriptionTextEdit.toPlainText(),
             pulse = pulse,
             sequence = sequence,
+            focal_pattern = focal_pattern,
             sim_setup = sim_setup,
-            focal_pattern = focal_pattern
         )
 
         return protocol
@@ -737,6 +664,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Dynamic widgets
         self.pulse_definition_widget.setEnabled(enabled)
         self.sequence_definition_widget.setEnabled(enabled)
+        self.abstract_focal_pattern_definition_widget.setEnabled(enabled)
         self.sim_setup_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
@@ -910,6 +838,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         )
 
     @classmethod
+    def get_default_focal_pattern(cls):
+        return openlifu_lz().bf.focal_patterns.SinglePoint()
+
+    @classmethod
     def get_default_sim_setup(cls):
         return openlifu_lz().sim.SimSetup(
             dims=DefaultSimSetupValues.DIMS.value,
@@ -927,10 +859,6 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         )
 
     @classmethod
-    def get_default_focal_pattern(cls):
-        return openlifu_lz().bf.focal_patterns.SinglePoint()#
-
-    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -939,8 +867,8 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
+            focal_pattern=cls.get_default_focal_pattern(),
             sim_setup=cls.get_default_sim_setup(),
-            focal_pattern=cls.get_default_focal_pattern()
         )
 
     @classmethod
@@ -952,8 +880,8 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
+            focal_pattern=cls.get_default_focal_pattern(),
             sim_setup=cls.get_default_sim_setup(),
-            focal_pattern=cls.get_default_focal_pattern()
         )
 
 # OpenLIFUProtocolConfigTest
@@ -1291,3 +1219,77 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                         child.valueChanged.connect(callback)
                     elif isinstance(child, qt.QLineEdit):
                         child.textChanged.connect(callback)
+
+class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
+    def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
+        """
+        Creates a QWidget that allows multiple implementations of an Abstract
+        Base Class to be selected, which after selection will display the
+        corresponding form widget (through
+        OpenLIFUAbstractClassDefinitionFormWidget) allowing the specific ABC to
+        be configured
+
+        Args:
+            cls_list: A list of classes belonging to the same ABC whose attributes will populate the form.
+            parent: Optional parent widget.
+        """
+        if not cls_list:
+            raise ValueError("cls_list cannot be empty.")
+
+        self.base_class_name = cls_list[0].__bases__[0].__name__
+        if not all(cls.__bases__[0].__name__ == self.base_class_name for cls in cls_list):
+            raise TypeError("All classes in cls_list must share the same base class name.")
+
+        super().__init__(parent)
+
+        top_level_layout = qt.QFormLayout(self)
+
+        self.selector = qt.QComboBox()
+        self.forms = qt.QStackedWidget()
+
+        for cls in cls_list:
+            self.selector.addItem(cls.__name__)
+            self.forms.addWidget(OpenLIFUAbstractClassDefinitionFormWidget(cls, parent, is_collapsible, collapsible_title))
+
+        top_level_layout.addRow(qt.QLabel(f"{self.base_class_name} type"), self.selector) 
+        top_level_layout.addRow(qt.QLabel(f"{self.base_class_name} options"), self.forms) 
+
+        # Connect combo box to setting the widget. Assumes indices match
+        self.selector.currentIndexChanged.connect(self.forms.setCurrentIndex)
+
+    def update_form_from_class(self, instance_of_derived: Any) -> None:
+        """
+        Updates the selected form and form fields using the class name of the instance_of_derived as well as the attribute values in the instance.
+
+        Args:
+            instance_of_derived: An instance_of_derived of the same class used to create the form.
+        """
+
+        # __name__ is an attribute of a class, not an instance.
+        index = self.selector.findText(instance_of_derived.__class__.__name__)
+        self.selector.setCurrentIndex(index) # also changes the stacked widget through the signal
+
+        self.forms.currentWidget().update_form_from_class(instance_of_derived)
+
+    def get_form_as_class(self) -> Any:
+        """
+        Constructs and returns a new instance of the derived class using the current form values.
+
+        Returns:
+            A new instance of the derived class populated with the form's current values.
+        """
+        return self.forms.currentWidget().get_form_as_class()
+
+
+    def add_value_changed_signals(self, callback) -> None:
+        """
+        Connects value change signals of all widgets in all forms to a given
+        callback.
+
+        Args:
+            callback: Function to call on value change.
+        """
+        self.selector.currentIndexChanged.connect(callback)
+        for w_idx in range(self.forms.count):
+            form = self.forms.widget(w_idx)
+            form.add_value_changed_signals(callback)
