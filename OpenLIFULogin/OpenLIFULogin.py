@@ -29,10 +29,9 @@ from OpenLIFULib import (
 
 from OpenLIFULib.util import (
     display_errors,
-    replace_widget,
 )
 
-from OpenLIFULib.guided_mode_util import WorkflowControls
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -509,7 +508,7 @@ class ChangePasswordDialog(qt.QDialog):
 # OpenLIFULoginWidget
 #
 
-class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -580,14 +579,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Call the routine to update from data parameter node
         self.onDataParameterNodeModified()
 
-        # === Guided mode workflow controls ===
-        self.workflow_controls = WorkflowControls(
-            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
-            previous_module_name = None,
-            next_module_name = "OpenLIFUData",
-            include_session_controls = False,
-        )
-        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
+        self.inject_workflow_controls_into_placeholder()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""

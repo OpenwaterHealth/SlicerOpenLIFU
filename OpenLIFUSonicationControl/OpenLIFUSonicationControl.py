@@ -18,8 +18,8 @@ from OpenLIFULib import (get_openlifu_data_parameter_node,
                          SlicerOpenLIFURun,
 )
 
-from OpenLIFULib.util import display_errors, replace_widget
-from OpenLIFULib.guided_mode_util import WorkflowControls
+from OpenLIFULib.util import display_errors
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -38,7 +38,7 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Sonication Control")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ["OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Andrew Howe (Kitware) Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -161,7 +161,7 @@ class OnRunCompletedDialog(qt.QDialog):
 #
 
 
-class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -230,14 +230,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # After setup, update the module state from the data parameter node
         self.onDataParameterNodeModified()
 
-        # === Guided mode workflow controls ===
-        self.workflow_controls = WorkflowControls(
-            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
-            previous_module_name = "OpenLIFUSonicationPlanner",
-            next_module_name = None,
-            include_session_controls = True,
-        )
-        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
+        self.inject_workflow_controls_into_placeholder()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""

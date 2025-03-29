@@ -13,7 +13,7 @@ from OpenLIFULib.lazyimport import (
     check_and_install_python_requirements,
 )
 
-from OpenLIFULib.guided_mode_util import set_guided_mode_state
+from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 
 #
 # OpenLIFUHome
@@ -232,6 +232,8 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self.workflow = Workflow()
+
     
     def getParameterNode(self):
         return OpenLIFUHomeParameterNode(super().getParameterNode())
@@ -242,6 +244,10 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
     def start_guided_mode(self):
         set_guided_mode_state(True)
         slicer.util.selectModule("OpenLIFULogin")
+    
+    def workflow_jump_ahead(self):
+        """Jump ahead in the guided workflow to the furthest step for which `can_proceed` is True."""
+        slicer.util.selectModule(self.workflow.furthest_module_to_which_can_proceed())
 
 #
 # OpenLIFUHomeTest
