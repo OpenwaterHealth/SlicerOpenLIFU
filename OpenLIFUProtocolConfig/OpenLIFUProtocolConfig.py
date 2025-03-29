@@ -980,7 +980,7 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
 #
 
 class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
-    def __init__(self, cls: Union[Type[Any], Any], title: Optional[str] = None, parent: Optional[qt.QWidget] = None):
+    def __init__(self, cls: Union[Type[Any], Any], collapsible_title: Optional[str] = None, parent: Optional[qt.QWidget] = None):
         """
         Creates a QWidget containing a collapsible button containing a form
         layout with labeled inputs for each attribute in the given class. Input
@@ -998,28 +998,28 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             cls: A class or instance whose attributes will populate the form.
             parent: Optional parent widget.
         """
-        if title is None:
-            title = f"Parameters for {cls.__name__}"
+        if collapsible_title is None:
+            collapsible_title = f"Parameters for {cls.__name__}"
 
         super().__init__(parent)
         self._fields: dict[str, qt.QWidget] = {}
         self._cls = cls
 
-        # Outer layout to hold the collapsible button
-        outer_layout = qt.QVBoxLayout(self)
-        self.setLayout(outer_layout)
+        # self (QWidget) has a QVBoxLayout layout
+        top_level_layout = qt.QVBoxLayout(self)
 
-        # Create collapsible button
+        # Create collapsible button and add it to the top level layout
         collapsible = ctk.ctkCollapsibleButton()
-        collapsible.text = title
-        outer_layout.addWidget(collapsible)
+        collapsible.text = collapsible_title
+        top_level_layout.addWidget(collapsible)
 
-        # Create inner widget and form layout inside the collapsible
-        inner_widget = qt.QWidget()
-        form_layout = qt.QFormLayout(inner_widget)
+        # collapsible (ctkCollapsibleButton) has a QVBoxLayout layout
+        collapsible_layout = qt.QVBoxLayout(collapsible)
 
-        collapsible.setLayout(qt.QVBoxLayout())
-        collapsible.layout().addWidget(inner_widget)
+        # Create the inner form widget and add it to the collapsible layout
+        form_widget = qt.QWidget()
+        form_layout = qt.QFormLayout(form_widget)
+        collapsible_layout.addWidget(form_widget)
 
         instance = cls() if inspect.isclass(cls) else cls
 
