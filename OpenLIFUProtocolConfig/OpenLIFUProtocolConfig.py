@@ -979,6 +979,123 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
 # OpenLIFU Definition Widgets
 #
 
+class DictTableWidget(qt.QWidget):
+    
+    class KeyValueDialog(qt.QDialog):
+        """ Dialog for entering a key-value pair """
+
+        def __init__(self, key_name: str, val_name: str, existing_keys: List[str], parent="mainWindow"):
+            super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+            self.setWindowTitle("Add Entry")
+            self.setWindowModality(qt.Qt.ApplicationModal)
+            self.key_name = key_name
+            self.val_name = val_name
+            self.existing_keys = existing_keys
+            self.setup()
+
+        def setup(self):
+            self.setMinimumWidth(300)
+            self.setContentsMargins(15, 15, 15, 15)
+
+            formLayout = qt.QFormLayout()
+            formLayout.setSpacing(10)
+            self.setLayout(formLayout)
+
+            self.key_input = qt.QLineEdit()
+            formLayout.addRow(_(f"{self.key_name}:"), self.key_input)
+
+            self.val_input = qt.QLineEdit()
+            formLayout.addRow(_(f"{self.val_name}:"), self.val_input)
+
+            self.buttonBox = qt.QDialogButtonBox()
+            self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                              qt.QDialogButtonBox.Cancel)
+            formLayout.addWidget(self.buttonBox)
+
+            self.buttonBox.rejected.connect(self.reject)
+            self.buttonBox.accepted.connect(self.validateInputs)
+
+        def validateInputs(self):
+            """
+            Ensure a key does not exist and that inputs are valid
+            """
+            typed_key = self.key_input.text
+            typed_val = self.val_input.text
+
+            if not typed_key:
+                slicer.util.errorDisplay(f"{self.key_name} field cannot be empty.", parent=self)
+                return
+            if not typed_val:
+                slicer.util.errorDisplay(f"{self.val_name} field cannot be empty.", parent=self)
+                return
+            if any(k == typed_key for k in self.existing_keys):
+                slicer.util.errorDisplay(f"You cannot add duplicate {self.key_name} entries.", parent=self)
+                return
+
+            self.accept()
+
+        def customexec_(self):
+            returncode = self.exec_()
+            if returncode == qt.QDialog.Accepted:
+                return (returncode, self.key_input.text, self.val_input.text)
+            return (returncode, None, None)
+    
+
+    def __init__(self, parent=None, key_name: str = "Key", val_name: str = "Value"):
+        super().__init__(parent)
+        self.key_name = key_name
+        self.val_name = val_name
+
+        top_level_layout = qt.QVBoxLayout(self)
+
+        # Add the table representing the dictionary
+
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels([key_name, val_name])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setMinimumHeight(150)
+
+        top_level_layout.addWidget(self.table)
+
+        # Add the button to add to the dictionary
+
+        self.add_button = qt.QPushButton("Add entry", self)
+        self.add_button.setFixedHeight(24)
+        self.add_button.clicked.connect(self._open_add_dialog)
+        top_level_layout.addWidget(self.add_button)
+
+    def _open_add_dialog(self):
+        existing_keys = list(self.to_dict().keys())
+        addDlg = self.KeyValueDialog(self.key_name, self.val_name, existing_keys)
+        returncode, key, val = addDlg.customexec_()
+        if not returncode:
+            return
+
+        self._add_row(key, val)
+
+    def _add_row(self, key, val):
+        row_position = self.table.rowCount
+        self.table.insertRow(row_position)
+        self.table.setItem(row_position, 0, qt.QTableWidgetItem(key))
+        self.table.setItem(row_position, 1, qt.QTableWidgetItem(val))
+
+    def to_dict(self):
+        result = {}
+        for row in range(self.table.rowCount):
+            key_item = self.table.item(row, 0)
+            val_item = self.table.item(row, 1)
+            if key_item and val_item:
+                # uses parenthesis because items are python versions, not cpp? TODO: ask @jcfr
+                result[key_item.text()] = val_item.text()
+        return result
+
+    def from_dict(self, data: dict):
+        self.table.setRowCount(0)
+        for key, val in data.items():
+            self._add_row(str(key), str(val))
+
 class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls: Union[Type[Any], Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
         """
@@ -1052,12 +1169,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             w.addItems(["False", "True"])
             return w
         elif isinstance(value, dict):
-            table = qt.QTableWidget()
-            table.setColumnCount(2)
-            table.setHorizontalHeaderLabels(["Key", "Value"])
-            table.horizontalHeader().setStretchLastSection(True)
-            table.verticalHeader().setVisible(False)
-            table.setMinimumHeight(150)
+            table = DictTableWidget()
             return table
         elif isinstance(value, tuple) and len(value) == 2 and all(isinstance(v, float) for v in value):
             container = qt.QWidget()
@@ -1102,11 +1214,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.setText(str(val))
             elif isinstance(w, qt.QComboBox):
                 w.setCurrentIndex(1 if bool(val) else 0)
-            elif isinstance(w, qt.QTableWidget) and isinstance(val, dict):
-                w.setRowCount(len(val))
-                for row, (k, v) in enumerate(val.items()):
-                    w.setItem(row, 0, qt.QTableWidgetItem(str(k)))
-                    w.setItem(row, 1, qt.QTableWidgetItem(str(v)))
+            elif isinstance(w, DictTableWidget) and isinstance(val, dict):
+                w.from_dict(val)
             elif isinstance(w, qt.QWidget) and isinstance(val, tuple):
                 # Tuples have nested widgets; we must confirm all cases
                 if all(isinstance(child, qt.QDoubleSpinBox) for child in w.findChildren(qt.QDoubleSpinBox)) and all(isinstance(v, float) for v in val):
@@ -1130,14 +1239,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 values[name] = w.text
             elif isinstance(w, qt.QComboBox):
                 values[name] = bool(w.currentIndex)
-            elif isinstance(w, qt.QTableWidget):
-                d = {}
-                for row in range(w.rowCount):
-                    key_item = w.item(row, 0)
-                    val_item = w.item(row, 1)
-                    if key_item and val_item:
-                        d[key_item.text] = val_item.text
-                values[name] = d
+            elif isinstance(w, DictTableWidget):
+                values[name] = w.to_dict()
             elif isinstance(w, qt.QWidget):
                 children = slicer.util.findChildren(w)
                 if all(isinstance(child, qt.QDoubleSpinBox) for child in children):
@@ -1181,8 +1284,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.textChanged.connect(callback)
             elif isinstance(w, qt.QComboBox):
                 w.currentIndexChanged.connect(callback)
-            elif isinstance(w, qt.QTableWidget):
-                w.itemChanged.connect(lambda *_: callback())
+            elif isinstance(w, DictTableWidget):
+                w.table.itemChanged.connect(lambda *_: callback())
             elif isinstance(w, qt.QWidget):
                 for child in slicer.util.findChildren(w):
                     if isinstance(child, qt.QDoubleSpinBox):
