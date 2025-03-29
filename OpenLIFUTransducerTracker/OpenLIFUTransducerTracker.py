@@ -45,8 +45,8 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 )
 
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
-
 from OpenLIFULib.skinseg import generate_skin_mesh
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu
@@ -487,7 +487,7 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Transducer Tracking")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = ['OpenLIFUData']  # add here list of module names that this module requires
+        self.parent.dependencies = ['OpenLIFUData',"OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -579,7 +579,7 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
 # OpenLIFUTransducerTrackerWidget
 #
     
-class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -647,6 +647,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
+
+        self.inject_workflow_controls_into_placeholder()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""

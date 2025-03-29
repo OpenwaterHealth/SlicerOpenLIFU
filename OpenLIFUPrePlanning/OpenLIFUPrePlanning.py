@@ -36,6 +36,7 @@ from OpenLIFULib.virtual_fit_results import (
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.transform_conversion import transform_node_from_openlifu
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -53,7 +54,7 @@ class OpenLIFUPrePlanning(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Pre-Planning")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ["OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -88,7 +89,7 @@ class OpenLIFUPrePlanningParameterNode:
 #
 
 
-class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -175,6 +176,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.lockButton.clicked.connect(self.onLockClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onVirtualfitClicked)
+
+        self.inject_workflow_controls_into_placeholder()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""

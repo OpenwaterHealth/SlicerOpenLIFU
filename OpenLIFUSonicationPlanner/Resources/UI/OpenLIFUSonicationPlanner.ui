@@ -17,8 +17,7 @@
       <item>
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Placeholder for an
-OpenLIFUAlgorithmInputWidget</string>
+         <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
         </property>
        </widget>
       </item>
@@ -211,6 +210,13 @@ analysis.</string>
        </widget>
       </item>
      </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="workflowControlsPlaceholder" native="true">
+     <property name="styleSheet">
+      <string notr="true">background-color: rgb(128, 0, 128);</string>
+     </property>
     </widget>
    </item>
   </layout>

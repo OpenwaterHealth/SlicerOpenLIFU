@@ -25,6 +25,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolutionAnalysis,
 )
 from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -46,7 +47,7 @@ class OpenLIFUSonicationPlanner(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Sonication Planning")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ["OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -77,7 +78,7 @@ class OpenLIFUSonicationPlannerParameterNode:
 #
 
 
-class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -154,6 +155,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        self.inject_workflow_controls_into_placeholder()
 
 
     def cleanup(self) -> None:
