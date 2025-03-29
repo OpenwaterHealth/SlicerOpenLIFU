@@ -580,6 +580,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.onDataParameterNodeModified()
 
         self.inject_workflow_controls_into_placeholder()
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -661,12 +662,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # reset user state
         self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+        self.updateWorkflowControls()
 
     @display_errors
     def onLoginLogoutClicked(self, checked: bool = False) -> None:
         if self.ui.loginLogoutButton.text == "Logout":
             self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+            self.updateWorkflowControls()
         elif self.ui.loginLogoutButton.text == "Login":
             loginDlg = UsernamePasswordDialog()
             returncode, user_id, password_text = loginDlg.customexec_()
@@ -685,7 +688,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
             self.logic.active_user = SlicerOpenLIFUUser(matched_user)
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
-            slicer.util.selectModule('OpenLIFUHome')
+            self.updateWorkflowControls()
 
     @display_errors
     def onCreateNewAccountClicked(self, checked:bool = False) -> None:
@@ -700,6 +703,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
     def onManageAccountsButtonclicked(self, checked:bool) -> None:
         new_account_dlg = ManageAccountsDialog(self.logic.dataLogic.db)
         new_account_dlg.exec_()
+
+    def updateWorkflowControls(self):
+        if self.logic.active_user.user.id == "anonymous":
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Log in to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Logged in, proceed to the next step."
 
     def updateLoginLogoutButtonAsLoginButton(self):
 
@@ -730,7 +741,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                     ))
             self.logic.active_user = default_admin_user
             self.updateWidgetLoginState(LoginState.DEFAULT_ADMIN)
-            slicer.util.selectModule('OpenLIFUHome')
+            self.updateWorkflowControls()
             return
 
         # === Otherwise, login works ===
