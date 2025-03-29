@@ -47,7 +47,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 )
 
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
-from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
+from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 
 from OpenLIFULib.skinseg import generate_skin_mesh
@@ -1385,13 +1385,15 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         if best_virtual_fit_result_node is None:
             # Initialize transform with identity matrix
-            initial_transform = numpy_to_vtk_4x4(np.eye(4))
+            transducer_to_volume_result = transducer_transform_node_from_openlifu(
+                openlifu_transform_matrix = np.eye(4) ,
+                transducer = transducer.transducer.transducer,
+                transform_units = transducer.transducer.transducer.units)
         else:
-            initial_transform = vtk.vtkMatrix4x4()
-            best_virtual_fit_result_node.GetMatrixTransformToParent(initial_transform)
-            
-        transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        transducer_to_volume_result.SetMatrixTransformToParent(initial_transform)
+            virtual_fit_transform = vtk.vtkMatrix4x4()
+            best_virtual_fit_result_node.GetMatrixTransformToParent(virtual_fit_transform)
+            transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+            transducer_to_volume_result.SetMatrixTransformToParent(virtual_fit_transform)
 
         transducer_to_volume_result = add_transducer_tracking_result(
             transducer_to_volume_result,
