@@ -1106,7 +1106,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         - int: QSpinBox
         - float: QDoubleSpinBox
         - str: QLineEdit
-        - bool: QComboBox with True/False
+        - bool: QCheckBox
         - dict: QTableWidget (2 columns for key-value pairs)
         - Tuple[float, float]: Two QDoubleSpinBox widgets
         - Tuple[str, str, str]: Three QLineEdit widgets
@@ -1165,8 +1165,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             w = qt.QLineEdit()
             return w
         elif isinstance(value, bool):
-            w = qt.QComboBox()
-            w.addItems(["False", "True"])
+            w = qt.QCheckBox()
             return w
         elif isinstance(value, dict):
             table = DictTableWidget()
@@ -1212,8 +1211,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.setValue(float(val))
             elif isinstance(w, qt.QLineEdit):
                 w.setText(str(val))
-            elif isinstance(w, qt.QComboBox):
-                w.setCurrentIndex(1 if bool(val) else 0)
+            elif isinstance(w, qt.QCheckBox):
+                w.setChecked(bool(val))
             elif isinstance(w, DictTableWidget) and isinstance(val, dict):
                 w.from_dict(val)
             elif isinstance(w, qt.QWidget) and isinstance(val, tuple):
@@ -1237,8 +1236,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 values[name] = w.value
             elif isinstance(w, qt.QLineEdit):
                 values[name] = w.text
-            elif isinstance(w, qt.QComboBox):
-                values[name] = bool(w.currentIndex)
+            elif isinstance(w, qt.QCheckBox):
+                values[name] = w.isChecked()
             elif isinstance(w, DictTableWidget):
                 values[name] = w.to_dict()
             elif isinstance(w, qt.QWidget):
@@ -1282,8 +1281,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.valueChanged.connect(callback)
             elif isinstance(w, qt.QLineEdit):
                 w.textChanged.connect(callback)
-            elif isinstance(w, qt.QComboBox):
-                w.currentIndexChanged.connect(callback)
+            elif isinstance(w, qt.QCheckBox):
+                w.stateChanged.connect(callback)
             elif isinstance(w, DictTableWidget):
                 w.table.itemChanged.connect(lambda *_: callback())
             elif isinstance(w, qt.QWidget):
