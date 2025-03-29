@@ -52,7 +52,7 @@ from OpenLIFULib.transform_conversion import transducer_transform_node_from_open
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.skinseg import generate_skin_mesh
-from OpenLIFULib.guided_mode_util import WorkflowControls
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu
@@ -738,7 +738,7 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Transducer Tracking")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = ['OpenLIFUData']  # add here list of module names that this module requires
+        self.parent.dependencies = ['OpenLIFUData',"OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -830,7 +830,7 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
 # OpenLIFUTransducerTrackerWidget
 #
     
-class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -903,14 +903,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
 
-        # === Guided mode workflow controls ===
-        self.workflow_controls = WorkflowControls(
-            parent = self.ui.workflowControlsPlaceholder.parentWidget(),
-            previous_module_name = "OpenLIFUPrePlanning",
-            next_module_name = "OpenLIFUSonicationPlanner",
-            include_session_controls = True,
-        )
-        replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
+        self.inject_workflow_controls_into_placeholder()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
