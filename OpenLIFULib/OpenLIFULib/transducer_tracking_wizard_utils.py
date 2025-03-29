@@ -106,6 +106,8 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
             vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(displayable_node)
             if vrDisplayNode and vrDisplayNode.GetVisibility() and not vrDisplayNode.GetViewNodeIDs():
                     vrDisplayNode.SetViewNodeIDs(views_mainwindow)
+        elif displayable_node.IsA('vtkMRMLTransformNode') and displayable_node.GetDisplayNode() is not None:
+            displayable_node.GetDisplayNode().SetEditorVisibility(False)
         elif displayable_node.GetDisplayVisibility() and not displayable_node.GetDisplayNode().GetViewNodeIDs():
             displayable_node.GetDisplayNode().SetViewNodeIDs(views_mainwindow)
     
