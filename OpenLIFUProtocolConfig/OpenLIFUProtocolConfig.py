@@ -246,7 +246,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
 
-        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint])
+        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint], is_collapsible=False)
         replace_widget(self.ui.abstractFocalPatternDefinitionWidgetPlaceholder, self.abstract_focal_pattern_definition_widget, self.ui)
 
         self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
