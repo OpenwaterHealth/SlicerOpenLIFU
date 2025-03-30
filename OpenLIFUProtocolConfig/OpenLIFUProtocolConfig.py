@@ -1032,8 +1032,14 @@ class DictTableWidget(qt.QWidget):
     def _add_row(self, key, val):
         row_position = self.table.rowCount
         self.table.insertRow(row_position)
-        self.table.setItem(row_position, 0, qt.QTableWidgetItem(key))
-        self.table.setItem(row_position, 1, qt.QTableWidgetItem(val))
+
+        key_item = qt.QTableWidgetItem(key)
+        key_item.setFlags(key_item.flags() & ~qt.Qt.ItemIsEditable)
+        self.table.setItem(row_position, 0, key_item)
+
+        val_item = qt.QTableWidgetItem(val)
+        val_item.setFlags(val_item.flags() & ~qt.Qt.ItemIsEditable)
+        self.table.setItem(row_position, 1, val_item)
 
     def to_dict(self):
         result = {}
