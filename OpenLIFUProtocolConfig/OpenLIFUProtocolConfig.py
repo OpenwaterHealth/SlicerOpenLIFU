@@ -932,72 +932,73 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
 # OpenLIFU Definition Widgets
 #
 
+class KeyValueDialog(qt.QDialog):
+    """ Dialog for entering a key-value pair; ideal for adding entries into
+    dictionaries """
+
+    def __init__(self, key_name: str, val_name: str, existing_keys: List[str], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Add Entry")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.key_name = key_name
+        self.val_name = val_name
+        self.existing_keys = existing_keys
+        self.setup()
+
+    def setup(self):
+        self.setMinimumWidth(300)
+        self.setContentsMargins(15, 15, 15, 15)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(10)
+        self.setLayout(formLayout)
+
+        self.key_input = qt.QLineEdit()
+        formLayout.addRow(_(f"{self.key_name}:"), self.key_input)
+
+        self.val_input = qt.QLineEdit()
+        formLayout.addRow(_(f"{self.val_name}:"), self.val_input)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        Ensure a key does not exist and that inputs are valid
+        """
+        typed_key = self.key_input.text
+        typed_val = self.val_input.text
+
+        if not typed_key:
+            slicer.util.errorDisplay(f"{self.key_name} field cannot be empty.", parent=self)
+            return
+        if not typed_val:
+            slicer.util.errorDisplay(f"{self.val_name} field cannot be empty.", parent=self)
+            return
+        if any(k == typed_key for k in self.existing_keys):
+            slicer.util.errorDisplay(f"You cannot add duplicate {self.key_name} entries.", parent=self)
+            return
+
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            return (returncode, self.key_input.text, self.val_input.text)
+        return (returncode, None, None)
+
 class DictTableWidget(qt.QWidget):
     
-    class KeyValueDialog(qt.QDialog):
-        """ Dialog for entering a key-value pair """
-
-        def __init__(self, key_name: str, val_name: str, existing_keys: List[str], parent="mainWindow"):
-            super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-            self.setWindowTitle("Add Entry")
-            self.setWindowModality(qt.Qt.ApplicationModal)
-            self.key_name = key_name
-            self.val_name = val_name
-            self.existing_keys = existing_keys
-            self.setup()
-
-        def setup(self):
-            self.setMinimumWidth(300)
-            self.setContentsMargins(15, 15, 15, 15)
-
-            formLayout = qt.QFormLayout()
-            formLayout.setSpacing(10)
-            self.setLayout(formLayout)
-
-            self.key_input = qt.QLineEdit()
-            formLayout.addRow(_(f"{self.key_name}:"), self.key_input)
-
-            self.val_input = qt.QLineEdit()
-            formLayout.addRow(_(f"{self.val_name}:"), self.val_input)
-
-            self.buttonBox = qt.QDialogButtonBox()
-            self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
-                                              qt.QDialogButtonBox.Cancel)
-            formLayout.addWidget(self.buttonBox)
-
-            self.buttonBox.rejected.connect(self.reject)
-            self.buttonBox.accepted.connect(self.validateInputs)
-
-        def validateInputs(self):
-            """
-            Ensure a key does not exist and that inputs are valid
-            """
-            typed_key = self.key_input.text
-            typed_val = self.val_input.text
-
-            if not typed_key:
-                slicer.util.errorDisplay(f"{self.key_name} field cannot be empty.", parent=self)
-                return
-            if not typed_val:
-                slicer.util.errorDisplay(f"{self.val_name} field cannot be empty.", parent=self)
-                return
-            if any(k == typed_key for k in self.existing_keys):
-                slicer.util.errorDisplay(f"You cannot add duplicate {self.key_name} entries.", parent=self)
-                return
-
-            self.accept()
-
-        def customexec_(self):
-            returncode = self.exec_()
-            if returncode == qt.QDialog.Accepted:
-                return (returncode, self.key_input.text, self.val_input.text)
-            return (returncode, None, None)
-    
-
-    def __init__(self, parent=None, key_name: str = "Key", val_name: str = "Value"):
+    def __init__(self, parent=None, key_name: str = "Key", val_name: str = "Value", insert_dialog_class: Type = KeyValueDialog):
         super().__init__(parent)
         self.key_name = key_name
         self.val_name = val_name
+        self.insert_dialog_class = insert_dialog_class
 
         top_level_layout = qt.QVBoxLayout(self)
 
@@ -1021,7 +1022,7 @@ class DictTableWidget(qt.QWidget):
 
     def _open_add_dialog(self):
         existing_keys = list(self.to_dict().keys())
-        addDlg = self.KeyValueDialog(self.key_name, self.val_name, existing_keys)
+        addDlg = self.insert_dialog_class(self.key_name, self.val_name, existing_keys)
         returncode, key, val = addDlg.customexec_()
         if not returncode:
             return
@@ -1047,7 +1048,7 @@ class DictTableWidget(qt.QWidget):
     def from_dict(self, data: dict):
         self.table.setRowCount(0)
         for key, val in data.items():
-            self._add_row(str(key), str(val))
+            self._add_row(str(key), val)
 
 class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls: Type[Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
