@@ -264,6 +264,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
         replace_widget(self.ui.targetConstraintsWidgetPlaceholder, self.target_constraints_widget, self.ui)
 
+        self.solution_analysis_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -287,6 +290,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.segmentation_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.parameter_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
         self.target_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
+        self.solution_analysis_options_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         # Connect main widget functions
 
@@ -630,6 +634,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.segmentation_method_definition_widget.update_form_from_class(protocol.seg_method)
         self.parameter_constraints_widget.from_dict(protocol.param_constraints)
         self.target_constraints_widget.from_list(protocol.target_constraints)
+        self.solution_analysis_options_definition_widget.update_form_from_class(protocol.analysis_options)
 
         self._is_updating_display = False
 
@@ -666,6 +671,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         segmentation_method = self.segmentation_method_definition_widget.get_form_as_class()
         parameter_constraints = self.parameter_constraints_widget.to_dict()
         target_constraints = self.target_constraints_widget.to_list()
+        solution_analysis_options = self.solution_analysis_options_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -681,6 +687,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             seg_method = segmentation_method,
             param_constraints = parameter_constraints,
             target_constraints = target_constraints,
+            analysis_options = solution_analysis_options,
         )
 
         return protocol
@@ -703,6 +710,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.segmentation_method_definition_widget.setEnabled(enabled)
         self.parameter_constraints_widget.setEnabled(enabled)
         self.target_constraints_widget.setEnabled(enabled)
+        self.solution_analysis_options_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
@@ -916,6 +924,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return []
 
     @classmethod
+    def get_default_solution_analysis_options(cls):
+        return openlifu_lz().plan.SolutionAnalysisOptions()
+
+    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -931,6 +943,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             seg_method=cls.get_default_segmentation_method(),
             param_constraints=cls.get_default_parameter_constraints(),
             target_constraints=cls.get_default_target_constraints(),
+            analysis_options=cls.get_default_solution_analysis_options(),
         )
 
     @classmethod
@@ -949,6 +962,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             seg_method=cls.get_default_segmentation_method(),
             param_constraints=cls.get_default_parameter_constraints(),
             target_constraints=cls.get_default_target_constraints(),
+            analysis_options=cls.get_default_solution_analysis_options(),
         )
 
 # OpenLIFUProtocolConfigTest
