@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>848</height>
+    <height>888</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -203,6 +203,20 @@ OpenLIFUAbstractDelayMethodDefinitionWidget</string>
            <property name="text">
             <string>Placeholder for an
 OpenLIFUAbstractApodizationMethodDefinitionWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="segmentationMethodDefinitionWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_13">
+         <item>
+          <widget class="QLabel" name="segmentationMethodDefinitionWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUSegmentationMethodDefinitionWidget</string>
            </property>
           </widget>
          </item>

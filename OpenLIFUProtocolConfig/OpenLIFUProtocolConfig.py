@@ -255,6 +255,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False)
         replace_widget(self.ui.abstractApodizationMethodDefinitionWidgetPlaceholder, self.abstract_apodization_method_definition_widget, self.ui)
 
+        self.segmentation_method_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.segmentationMethodDefinitionWidgetPlaceholder, self.segmentation_method_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -275,6 +278,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_delay_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_apodization_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.segmentation_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         # Connect main widget functions
 
@@ -615,6 +619,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
         self.abstract_delay_method_definition_widget.update_form_from_class(protocol.delay_method)
         self.abstract_apodization_method_definition_widget.update_form_from_class(protocol.apod_method)
+        self.segmentation_method_definition_widget.update_form_from_class(protocol.seg_method)
 
         self._is_updating_display = False
 
@@ -648,6 +653,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         sim_setup = self.sim_setup_definition_widget.get_form_as_class()
         delay_method = self.abstract_delay_method_definition_widget.get_form_as_class()
         apodization_method = self.abstract_apodization_method_definition_widget.get_form_as_class()
+        segmentation_method = self.segmentation_method_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -660,6 +666,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             sim_setup = sim_setup,
             delay_method = delay_method,
             apod_method = apodization_method,
+            seg_method = segmentation_method,
         )
 
         return protocol
@@ -679,6 +686,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget.setEnabled(enabled)
         self.abstract_delay_method_definition_widget.setEnabled(enabled)
         self.abstract_apodization_method_definition_widget.setEnabled(enabled)
+        self.segmentation_method_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
@@ -880,6 +888,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return openlifu_lz().bf.apod_methods.Uniform()
 
     @classmethod
+    def get_default_segmentation_method(cls):
+        return openlifu_lz().seg.seg_methods.Water()
+
+    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -892,6 +904,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             sim_setup=cls.get_default_sim_setup(),
             delay_method=cls.get_default_delay_method(),
             apod_method=cls.get_default_apodization_method(),
+            seg_method=cls.get_default_segmentation_method(),
         )
 
     @classmethod
@@ -907,6 +920,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             sim_setup=cls.get_default_sim_setup(),
             delay_method=cls.get_default_delay_method(),
             apod_method=cls.get_default_apodization_method(),
+            seg_method=cls.get_default_segmentation_method(),
         )
 
 # OpenLIFUProtocolConfigTest
@@ -929,7 +943,8 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
         self.setUp()
 
 #
-# OpenLIFU Definition Widgets
+# OpenLIFU Definition Widgets. All of these widgets rely on strongly typed
+# classes.
 #
 
 class KeyValueDialog(qt.QDialog):
@@ -1132,9 +1147,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         - float: QDoubleSpinBox
         - str: QLineEdit
         - bool: QCheckBox
-        - dict: QTableWidget (2 columns for key-value pairs)
-        - Tuple[float, float]: Two QDoubleSpinBox widgets
-        - Tuple[str, str, str]: Three QLineEdit widgets
+        - dict: DictTableWidget (2 columns for key-value pairs)
+        - Tuple[]: Container of widgets for filling out all the values in the tuple
 
         If is_collapsible is True, the form is enclosed in a collapsible container
         with an optional title.
@@ -1181,52 +1195,54 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         origin = get_origin(annotated_type)
         args = get_args(annotated_type)
 
-        if annotated_type is int:
-            w = qt.QSpinBox()
-            w.setRange(-1_000_000, 1_000_000)
-            return w
-        elif annotated_type is float:
-            w = qt.QDoubleSpinBox()
-            w.setDecimals(2)
-            w.setRange(-1e6, 1e6)
-            return w
-        elif annotated_type is str:
-            return qt.QLineEdit()
-        elif annotated_type is bool:
-            return qt.QCheckBox()
-        elif annotated_type is dict and origin is None:
-            # raw dict does not have origin or args
-            return DictTableWidget() # assume dict type is always dict[str,str]
-        elif origin is dict and len(args) == 2:
-            key_type, val_type = args
-            if key_type is str and val_type is str:
+        def create_basic_widget(typ: Any) -> Optional[qt.QWidget]:
+            if typ is int:
+                w = qt.QSpinBox()
+                w.setRange(-1_000_000, 1_000_000)
+                return w
+            elif typ is float:
+                w = qt.QDoubleSpinBox()
+                w.setDecimals(2)
+                w.setRange(-1e6, 1e6)
+                return w
+            elif typ is str:
+                return qt.QLineEdit()
+            elif typ is bool:
+                return qt.QCheckBox()
+            elif typ is dict:
+                # raw dict does not have origin or args. We assume dict[str,str]
                 return DictTableWidget()
-            elif key_type is str and hasattr(val_type, "__annotations__"):
-                return DictTableWidget(val_type=val_type)
+            return None
+
+        if origin is None:
+            return create_basic_widget(annotated_type)
+
+        if origin is dict:
+            if len(args) == 2:
+                key_type, val_type = args
+                if key_type is str and val_type is str:
+                    return DictTableWidget()
+                elif key_type is str and hasattr(val_type, "__annotations__"):
+                    return DictTableWidget(val_type=val_type)
             return DictTableWidget()
-        elif origin is tuple and len(args) == 2 and all(t is float for t in args):
+
+        if origin is tuple:
+            # if making a form entry for a tuple, it's a container of widgets
             container = qt.QWidget()
             layout = qt.QHBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
-            first_input = qt.QDoubleSpinBox()
-            second_input = qt.QDoubleSpinBox()
-            for spin in [first_input, second_input]:
-                spin.setDecimals(2)
-                spin.setRange(-1e6, 1e6)
-                layout.addWidget(spin)
+
+            for typ in args:
+                if typ is dict:
+                    raise TypeError(f"Invalid tuple field: dict inside a tuple structure not yet supported.")
+
+                widget = create_basic_widget(typ)
+                if widget is None:
+                    return None  # unsupported tuple element type
+                layout.addWidget(widget)
+
             container.setLayout(layout)
             return container
-        elif origin is tuple and len(args) == 3 and all(t is str for t in args):
-            container = qt.QWidget()
-            layout = qt.QHBoxLayout(container)
-            layout.setContentsMargins(0, 0, 0, 0)
-            inputs = [qt.QLineEdit() for _ in range(3)]
-            for line_edit in inputs:
-                layout.addWidget(line_edit)
-            container.setLayout(layout)
-            return container
-        else:
-            return None  # unsupported type
 
     def update_form_from_values(self, values: dict[str, Any]) -> None:
         """
@@ -1250,13 +1266,20 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             elif isinstance(w, DictTableWidget) and isinstance(val, dict):
                 w.from_dict(val)
             elif isinstance(w, qt.QWidget) and isinstance(val, tuple):
-                # Tuples have nested widgets; we must confirm all cases
-                if all(isinstance(child, qt.QDoubleSpinBox) for child in w.findChildren(qt.QDoubleSpinBox)) and all(isinstance(v, float) for v in val):
-                    for spin, new_val in zip(w.findChildren(qt.QDoubleSpinBox), val):
-                        spin.setValue(float(new_val))
-                elif all(isinstance(child, qt.QLineEdit) for child in w.findChildren(qt.QLineEdit)) and all(isinstance(v, str) for v in val):
-                    for line, new_val in zip(w.findChildren(qt.QLineEdit), val):
-                        line.setText(str(new_val))
+                children = w.findChildren(qt.QWidget)
+                if len(children) != len(val):
+                    continue  # skip if # of widgets doesn't match tuple len
+                for child, item in zip(children, val):
+                    if isinstance(child, qt.QSpinBox) and isinstance(item, int):
+                        child.setValue(item)
+                    elif isinstance(child, qt.QDoubleSpinBox) and isinstance(item, float):
+                        child.setValue(item)
+                    elif isinstance(child, qt.QLineEdit) and isinstance(item, str):
+                        child.setText(item)
+                    elif isinstance(child, qt.QCheckBox) and isinstance(item, bool):
+                        child.setChecked(item)
+                    elif isinstance(child, DictTableWidget) and isinstance(item, dict):
+                        raise TypeError(f"Invalid tuple field: dict inside a tuple structure not yet supported.")
 
     def get_form_as_dict(self) -> dict[str, Any]:
         """
@@ -1274,12 +1297,22 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 values[name] = w.isChecked()
             elif isinstance(w, DictTableWidget):
                 values[name] = w.to_dict()
-            elif isinstance(w, qt.QWidget):
+            elif isinstance(w, qt.QWidget): # assumed to be container for tuple
                 children = slicer.util.findChildren(w)
-                if all(isinstance(child, qt.QDoubleSpinBox) for child in children):
-                    values[name] = tuple(child.value for child in children)
-                elif all(isinstance(child, qt.QLineEdit) for child in children):
-                    values[name] = tuple(child.text for child in children)
+                tuple_values = []
+                for child in children:
+                    if isinstance(child, qt.QSpinBox):
+                        tuple_values.append(child.value)
+                    elif isinstance(child, qt.QDoubleSpinBox):
+                        tuple_values.append(child.value)
+                    elif isinstance(child, qt.QLineEdit):
+                        tuple_values.append(child.text)
+                    elif isinstance(child, qt.QCheckBox):
+                        tuple_values.append(child.isChecked())
+                    else:
+                        break  # unsupported child type
+                else:
+                    values[name] = tuple(tuple_values)
         return values
 
     def update_form_from_class(self, instance: Any) -> None:
@@ -1319,12 +1352,16 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 w.stateChanged.connect(callback)
             elif isinstance(w, DictTableWidget):
                 w.table.itemChanged.connect(lambda *_: callback())
-            elif isinstance(w, qt.QWidget):
+            elif isinstance(w, qt.QWidget): # assumed to be container for tuple
                 for child in slicer.util.findChildren(w):
-                    if isinstance(child, qt.QDoubleSpinBox):
+                    if isinstance(child, qt.QSpinBox):
+                        child.valueChanged.connect(callback)
+                    elif isinstance(child, qt.QDoubleSpinBox):
                         child.valueChanged.connect(callback)
                     elif isinstance(child, qt.QLineEdit):
                         child.textChanged.connect(callback)
+                    elif isinstance(child, qt.QCheckBox):
+                        child.stateChanged.connect(callback)
 
 class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
