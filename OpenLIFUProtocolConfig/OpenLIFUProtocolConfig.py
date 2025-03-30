@@ -258,6 +258,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.segmentation_method_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.segmentationMethodDefinitionWidgetPlaceholder, self.segmentation_method_definition_widget, self.ui)
 
+        self.parameter_constraints_widget = DictTableWidget()
+        replace_widget(self.ui.parameterConstraintsWidgetPlaceholder, self.parameter_constraints_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -279,6 +282,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_delay_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_apodization_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.segmentation_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.parameter_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
 
         # Connect main widget functions
 
@@ -620,6 +624,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_delay_method_definition_widget.update_form_from_class(protocol.delay_method)
         self.abstract_apodization_method_definition_widget.update_form_from_class(protocol.apod_method)
         self.segmentation_method_definition_widget.update_form_from_class(protocol.seg_method)
+        self.parameter_constraints_widget.from_dict(protocol.param_constraints)
 
         self._is_updating_display = False
 
@@ -654,6 +659,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         delay_method = self.abstract_delay_method_definition_widget.get_form_as_class()
         apodization_method = self.abstract_apodization_method_definition_widget.get_form_as_class()
         segmentation_method = self.segmentation_method_definition_widget.get_form_as_class()
+        parameter_constraints = self.parameter_constraints_widget.to_dict()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -667,6 +673,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             delay_method = delay_method,
             apod_method = apodization_method,
             seg_method = segmentation_method,
+            param_constraints = parameter_constraints,
         )
 
         return protocol
@@ -687,6 +694,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_delay_method_definition_widget.setEnabled(enabled)
         self.abstract_apodization_method_definition_widget.setEnabled(enabled)
         self.segmentation_method_definition_widget.setEnabled(enabled)
+        self.parameter_constraints_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
@@ -892,6 +900,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return openlifu_lz().seg.seg_methods.Water()
 
     @classmethod
+    def get_default_parameter_constraints(cls):
+        return {}
+
+    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -905,6 +917,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             delay_method=cls.get_default_delay_method(),
             apod_method=cls.get_default_apodization_method(),
             seg_method=cls.get_default_segmentation_method(),
+            param_constraints=cls.get_default_parameter_constraints(),
         )
 
     @classmethod
@@ -921,6 +934,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             delay_method=cls.get_default_delay_method(),
             apod_method=cls.get_default_apodization_method(),
             seg_method=cls.get_default_segmentation_method(),
+            param_constraints=cls.get_default_parameter_constraints(),
         )
 
 # OpenLIFUProtocolConfigTest
