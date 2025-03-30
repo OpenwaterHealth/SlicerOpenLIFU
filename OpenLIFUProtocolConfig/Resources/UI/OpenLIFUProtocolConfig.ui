@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>978</height>
+    <height>1068</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -238,6 +238,27 @@ OpenLIFUSegmentationMethodDefinitionWidget</string>
            <property name="text">
             <string>Placeholder for an
 OpenLIFUParameterConstraintsWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="targetConstraintsLabel">
+        <property name="text">
+         <string>Target Constraints</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="targetConstraintsWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_15">
+         <item>
+          <widget class="QLabel" name="targetConstraintsWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUTargetConstraintsWidget</string>
            </property>
           </widget>
          </item>
