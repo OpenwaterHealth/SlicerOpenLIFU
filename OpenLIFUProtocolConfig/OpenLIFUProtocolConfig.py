@@ -1029,7 +1029,7 @@ class DictTableWidget(qt.QWidget):
 
         self._add_row(key, val)
 
-    def _add_row(self, key, val):
+    def _add_row(self, key: str, val: Type):
         row_position = self.table.rowCount
         self.table.insertRow(row_position)
 
@@ -1037,7 +1037,13 @@ class DictTableWidget(qt.QWidget):
         key_item.setFlags(key_item.flags() & ~qt.Qt.ItemIsEditable)
         self.table.setItem(row_position, 0, key_item)
 
-        val_item = qt.QTableWidgetItem(val)
+        # Within the table itself, a string representation is required.
+        # However, to associate custom user data, Qt.UserRole is used, which is
+        # a predefined constant in Qt used to store custom,
+        # application-specific data in the table, set with setData and
+        # retrieved with .data(Qt.UserRole).
+        val_item = qt.QTableWidgetItem(str(val))
+        val_item.setData(qt.Qt.UserRole, val)
         val_item.setFlags(val_item.flags() & ~qt.Qt.ItemIsEditable)
         self.table.setItem(row_position, 1, val_item)
 
@@ -1047,8 +1053,7 @@ class DictTableWidget(qt.QWidget):
             key_item = self.table.item(row, 0)
             val_item = self.table.item(row, 1)
             if key_item and val_item:
-                # uses parenthesis because items are python versions, not cpp? TODO: ask @jcfr
-                result[key_item.text()] = val_item.text()
+                result[key_item.text()] = val_item.data(qt.Qt.UserRole)
         return result
 
     def from_dict(self, data: dict):
