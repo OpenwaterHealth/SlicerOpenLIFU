@@ -1422,7 +1422,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 return w
             elif typ is float:
                 w = qt.QDoubleSpinBox()
-                w.setDecimals(2)
+                w.setDecimals(4)
                 w.setRange(-1e6, 1e6)
                 return w
             elif typ is str:
