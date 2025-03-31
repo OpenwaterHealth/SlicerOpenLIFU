@@ -114,9 +114,9 @@ class WorkflowControls(qt.QWidget):
         self.update()
 
     def update(self):
-        self.update_back_button_enabledness()
-        self.update_next_button_enabledness()
         self.update_status_label()
+        self.update_back_button_enabledness()
+        self.update_next_button()
 
     def on_next(self):
         slicer.util.selectModule(self.next_module_name)
@@ -145,7 +145,8 @@ class WorkflowControls(qt.QWidget):
         data_module_logic.clear_session(clean_up_scene=True)
         home_module_logic.start_guided_mode()
 
-    def update_next_button_enabledness(self):
+    def update_next_button(self):
+        """Update next button enabledness and tooltip"""
         if not hasattr(self, "next_button"):
             return
         enabled = self.can_proceed or not get_guided_mode_state()
@@ -155,7 +156,6 @@ class WorkflowControls(qt.QWidget):
         else:
             self.next_button.setToolTip(self.status_text)
 
-
     def update_back_button_enabledness(self):
         if not hasattr(self, "back_button"):
             return
@@ -164,6 +164,7 @@ class WorkflowControls(qt.QWidget):
 
     def update_status_label(self):
         self.status_label.setText(self.status_text)
+        self.update_next_button() # Ensures the tooltip gets updated
 
     @property
     def can_proceed(self) -> bool:
@@ -173,7 +174,7 @@ class WorkflowControls(qt.QWidget):
     @can_proceed.setter
     def can_proceed(self, new_val : bool):
         self._can_proceed = new_val
-        self.update_next_button_enabledness()
+        self.update_next_button()
 
     @property
     def status_text(self) -> str:
