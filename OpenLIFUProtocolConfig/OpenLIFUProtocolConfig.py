@@ -267,6 +267,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.solution_analysis_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
 
+        self.virtual_fit_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget())
+        replace_widget(self.ui.virtualFitOptionsDefinitionWidgetPlaceholder, self.virtual_fit_options_definition_widget, self.ui)
+
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -291,6 +294,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.parameter_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
         self.target_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
         self.solution_analysis_options_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.virtual_fit_options_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
 
         # Connect main widget functions
 
@@ -635,6 +639,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.parameter_constraints_widget.from_dict(protocol.param_constraints)
         self.target_constraints_widget.from_list(protocol.target_constraints)
         self.solution_analysis_options_definition_widget.update_form_from_class(protocol.analysis_options)
+        self.virtual_fit_options_definition_widget.update_form_from_class(protocol.virtual_fit_options)
 
         self._is_updating_display = False
 
@@ -672,6 +677,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         parameter_constraints = self.parameter_constraints_widget.to_dict()
         target_constraints = self.target_constraints_widget.to_list()
         solution_analysis_options = self.solution_analysis_options_definition_widget.get_form_as_class()
+        virtual_fit_options = self.virtual_fit_options_definition_widget.get_form_as_class()
 
         # Then get the protocol class and return it
         protocol = openlifu_lz().plan.Protocol(
@@ -688,6 +694,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             param_constraints = parameter_constraints,
             target_constraints = target_constraints,
             analysis_options = solution_analysis_options,
+            virtual_fit_options = virtual_fit_options,
         )
 
         return protocol
@@ -711,6 +718,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.parameter_constraints_widget.setEnabled(enabled)
         self.target_constraints_widget.setEnabled(enabled)
         self.solution_analysis_options_definition_widget.setEnabled(enabled)
+        self.virtual_fit_options_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_openlifu_data_parameter_node().database_is_loaded:
@@ -928,6 +936,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return openlifu_lz().plan.SolutionAnalysisOptions()
 
     @classmethod
+    def get_default_virtual_fit_options(cls):
+        return openlifu_lz().VirtualFitOptions()
+
+    @classmethod
     def get_default_protocol(cls):
         return openlifu_lz().plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
@@ -944,6 +956,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             param_constraints=cls.get_default_parameter_constraints(),
             target_constraints=cls.get_default_target_constraints(),
             analysis_options=cls.get_default_solution_analysis_options(),
+            virtual_fit_options=cls.get_default_virtual_fit_options(),
         )
 
     @classmethod
@@ -963,6 +976,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             param_constraints=cls.get_default_parameter_constraints(),
             target_constraints=cls.get_default_target_constraints(),
             analysis_options=cls.get_default_solution_analysis_options(),
+            virtual_fit_options=cls.get_default_virtual_fit_options(),
         )
 
 # OpenLIFUProtocolConfigTest
@@ -1365,7 +1379,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         - str: QLineEdit
         - bool: QCheckBox
         - dict: DictTableWidget (2 columns for key-value pairs)
-        - Tuple[]: Container of widgets for filling out all the values in the tuple
+        - Tuple[primitive_type, ...]: Horizontal of widgets for filling out all the values in the tuple
+        - Tuple[Tuple[primitive_type] | primitive_type ...]: Vertical container of horizontal containers of widgets for filling out all the values in the nested tuple
 
         If is_collapsible is True, the form is enclosed in a collapsible container
         with an optional title.
@@ -1446,7 +1461,8 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                     return DictTableWidget(val_type=val_type)
             return DictTableWidget()
 
-        if origin is tuple:
+        # non-nested tuple
+        if origin is tuple and all(get_origin(t) is None for t in args):
             # if making a form entry for a tuple, it's a container of widgets
             container = qt.QWidget()
             layout = qt.QHBoxLayout(container)
@@ -1464,6 +1480,45 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             container.setLayout(layout)
             return container
 
+        # Tuple[Tuple[primitive_type], ...] or Tuple[primitive_type, Tuple[...], ...]
+        if origin is tuple:
+            container = qt.QWidget()
+            layout = qt.QVBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+
+            for outer_type in args:
+                outer_origin = get_origin(outer_type)
+                outer_args = get_args(outer_type)
+
+                # Case: Nested tuple -> horizontal row of widgets
+                if outer_origin is tuple:
+                    row_widget = qt.QWidget()
+                    row_layout = qt.QHBoxLayout(row_widget)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+
+                    for inner_type in outer_args:
+                        if inner_type is dict:
+                            raise TypeError("Invalid tuple field: dict inside a tuple structure not yet supported.")
+
+                        inner_widget = create_basic_widget(inner_type)
+                        if inner_widget is None:
+                            return None
+                        row_layout.addWidget(inner_widget)
+
+                    layout.addWidget(row_widget)
+
+                # Case: Single type -> single widget in its own row
+                else:
+                    single_widget = create_basic_widget(outer_type)
+                    if single_widget is None:
+                        return None
+                    layout.addWidget(single_widget)
+
+            container.setLayout(layout)
+            return container
+
+        return None # unsupported type
+
     def update_form_from_values(self, values: dict[str, Any]) -> None:
         """
         Updates form inputs from a dictionary of values.
@@ -1471,6 +1526,24 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         Args:
             values: Dictionary mapping attribute names to new values.
         """
+
+        def _set_widget_value(widget: qt.QWidget, value: Any) -> None:
+            """
+            Helper method to set a value on a widget based on its type, with relaxed type checks.
+            """
+            if isinstance(widget, qt.QSpinBox) and isinstance(value, int):
+                widget.setValue(value)
+            elif isinstance(widget, qt.QDoubleSpinBox) and isinstance(value, (int, float)):
+                widget.setValue(float(value))
+            elif isinstance(widget, qt.QLineEdit):
+                widget.setText(str(value))
+            elif isinstance(widget, qt.QCheckBox) and isinstance(value, bool):
+                widget.setChecked(value)
+            elif isinstance(widget, DictTableWidget) and isinstance(value, dict):
+                raise TypeError("Invalid tuple field: dict inside a tuple structure not yet supported.")
+            else:
+                raise TypeError(f"Unsupported widget-value combination: {type(widget)} and {type(value)}")
+    
         for name, val in values.items():
             if name not in self._fields:
                 continue
@@ -1486,25 +1559,51 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             elif isinstance(w, DictTableWidget) and isinstance(val, dict):
                 w.from_dict(val)
             elif isinstance(w, qt.QWidget) and isinstance(val, tuple):
-                children = w.findChildren(qt.QWidget)
-                if len(children) != len(val):
-                    continue  # skip if # of widgets doesn't match tuple len
-                for child, item in zip(children, val):
-                    if isinstance(child, qt.QSpinBox) and isinstance(item, int):
-                        child.setValue(item)
-                    elif isinstance(child, qt.QDoubleSpinBox) and isinstance(item, float):
-                        child.setValue(item)
-                    elif isinstance(child, qt.QLineEdit) and isinstance(item, str):
-                        child.setText(item)
-                    elif isinstance(child, qt.QCheckBox) and isinstance(item, bool):
-                        child.setChecked(item)
-                    elif isinstance(child, DictTableWidget) and isinstance(item, dict):
-                        raise TypeError(f"Invalid tuple field: dict inside a tuple structure not yet supported.")
+                # determine if it's a flat tuple (horizontal row) or a nested one (vertical stack)
+                layout = w.layout()
+                if isinstance(layout, qt.QHBoxLayout) and layout.count() == len(val):
+                    # flat tuple (horizontal row of widgets)
+                    for i, item in enumerate(val):
+                        child = layout.itemAt(i).widget()
+                        _set_widget_value(child, item)
+
+                elif isinstance(layout, qt.QVBoxLayout) and layout.count() == len(val):
+                    # nested tuple (vertical stack of rows)
+                    for row_idx, row_val in enumerate(val):
+                        row_item = layout.itemAt(row_idx)
+                        row_widget = row_item.widget()
+                        if isinstance(row_val, tuple):
+                            # row is a tuple 
+                            row_layout = row_widget.layout()
+                            if row_layout.count() != len(row_val):
+                                continue
+                            for col_idx, col_val in enumerate(row_val):
+                                child = row_layout.itemAt(col_idx).widget()
+                                _set_widget_value(child, col_val)
+                                
+                        else:
+                            # row is a single widget
+                            _set_widget_value(row_widget, row_val)
 
     def get_form_as_dict(self) -> dict[str, Any]:
         """
         Returns the current form values as a dictionary.
         """
+        
+        def _extract_widget_value(widget: qt.QWidget) -> Any:
+            """
+            Helper method to get a value from a widget based on its type.
+            """
+            if isinstance(widget, qt.QSpinBox):
+                return widget.value
+            elif isinstance(widget, qt.QDoubleSpinBox):
+                return widget.value
+            elif isinstance(widget, qt.QLineEdit):
+                return widget.text
+            elif isinstance(widget, qt.QCheckBox):
+                return widget.isChecked()
+            return None
+
         values: dict[str, Any] = {}
         for name, w in self._fields.items():
             if isinstance(w, qt.QSpinBox):
@@ -1517,22 +1616,42 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                 values[name] = w.isChecked()
             elif isinstance(w, DictTableWidget):
                 values[name] = w.to_dict()
-            elif isinstance(w, qt.QWidget): # assumed to be container for tuple
-                children = slicer.util.findChildren(w)
-                tuple_values = []
-                for child in children:
-                    if isinstance(child, qt.QSpinBox):
-                        tuple_values.append(child.value)
-                    elif isinstance(child, qt.QDoubleSpinBox):
-                        tuple_values.append(child.value)
-                    elif isinstance(child, qt.QLineEdit):
-                        tuple_values.append(child.text)
-                    elif isinstance(child, qt.QCheckBox):
-                        tuple_values.append(child.isChecked())
+            elif isinstance(w, qt.QWidget):  # assumed to be flat or nested tuple
+                layout = w.layout()
+                if isinstance(layout, qt.QHBoxLayout): # flat tuple (hbox)
+                    tuple_values = []
+                    for i in range(layout.count()):
+                        child = layout.itemAt(i).widget()
+                        value = _extract_widget_value(child)
+                        if value is None:
+                            break
+                        tuple_values.append(value)
                     else:
-                        break  # unsupported child type
-                else:
-                    values[name] = tuple(tuple_values)
+                        values[name] = tuple(tuple_values)
+                elif isinstance(layout, qt.QVBoxLayout): # nested tuple (vbox)
+                    nested_values = []
+                    for i in range(layout.count()):
+                        row_widget = layout.itemAt(i).widget()
+                        if row_widget is None:
+                            continue
+                        row_layout = row_widget.layout()
+                        if isinstance(row_layout, qt.QHBoxLayout):
+                            # row is a tuple (hbox)
+                            row_values = []
+                            for j in range(row_layout.count()):
+                                child = row_layout.itemAt(j).widget()
+                                value = _extract_widget_value(child)
+                                if value is None:
+                                    break
+                                row_values.append(value)
+                            else:
+                                nested_values.append(tuple(row_values))
+                        else:
+                            # row is a singular widget
+                            value = _extract_widget_value(row_widget)
+                            if value is not None:
+                                nested_values.append(value)
+                    values[name] = tuple(nested_values)
         return values
 
     def update_form_from_class(self, instance: Any) -> None:

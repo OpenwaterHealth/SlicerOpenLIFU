@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>1134</height>
+    <height>1200</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -273,6 +273,20 @@ OpenLIFUTargetConstraintsWidget</string>
            <property name="text">
             <string>Placeholder for an
 OpenLIFUSolutionAnalysisOptionsDefinitionWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="virtualFitOptionsDefinitionWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_17">
+         <item>
+          <widget class="QLabel" name="virtualFitOptionsDefinitionWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUVirtualFitOptionsDefinitionWidget</string>
            </property>
           </widget>
          </item>
