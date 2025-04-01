@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>774</width>
-    <height>666</height>
+    <width>778</width>
+    <height>688</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -28,7 +28,7 @@
       </sizepolicy>
      </property>
      <property name="currentIndex">
-      <number>3</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="photoscanPreview">
       <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -78,12 +78,25 @@
         </widget>
        </item>
        <item>
+        <widget class="QLabel" name="landmarkPlacementStatus">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="qSlicerSimpleMarkupsWidget" name="photoscanMarkupsWidget">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="contextMenuPolicy">
+          <enum>Qt::PreventContextMenu</enum>
          </property>
          <property name="nodeSelectorVisible">
           <bool>false</bool>
