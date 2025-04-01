@@ -158,6 +158,9 @@ class SlicerOpenLIFUPhotoscan:
         self.facial_landmarks_fiducial_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
         self.facial_landmarks_fiducial_node.AddControlPoint(left_ear_coordinates[0],left_ear_coordinates[0],left_ear_coordinates[0],"Left Ear")
         self.facial_landmarks_fiducial_node.AddControlPoint(nasion_coordinates[0],nasion_coordinates[0],nasion_coordinates[0],"Nasion")
+        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(0)
+        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(1)
+        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(2)
         
         return self.facial_landmarks_fiducial_node
 
