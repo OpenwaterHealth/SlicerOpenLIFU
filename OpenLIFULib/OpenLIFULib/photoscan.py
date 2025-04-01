@@ -125,10 +125,7 @@ class SlicerOpenLIFUPhotoscan:
         self.model_node.CreateDefaultDisplayNodes() # By default, this turns model visibility on
         modelDisplayNode = self.model_node.GetDisplayNode()
         modelDisplayNode.SetBackfaceCulling(0)
-        textureImageFlipVert = vtk.vtkImageFlip()
-        textureImageFlipVert.SetFilteredAxis(1)
-        textureImageFlipVert.SetInputConnection(filter.GetOutputPort())
-        modelDisplayNode.SetTextureImageDataConnection(textureImageFlipVert.GetOutputPort())
+        modelDisplayNode.SetTextureImageDataConnection(filter.GetOutputPort())
 
         # Turn model visibility off
         modelDisplayNode.SetVisibility(False)
