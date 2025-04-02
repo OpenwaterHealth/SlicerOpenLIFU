@@ -77,31 +77,6 @@ class DefaultNewProtocolValues(Enum):
     ID = "new_protocol"
     DESCRIPTION = ""
 
-class DefaultPulseValues(Enum):
-    FREQUENCY = 0.00
-    AMPLITUDE = 0.00
-    DURATION = 0.00
-
-class DefaultSequenceValues(Enum):
-    PULSE_INTERVAL = 1.00
-    PULSE_COUNT = 1
-    PULSE_TRAIN_INTERVAL = 1.00
-    PULSE_TRAIN_COUNT = 1
-
-class DefaultSimSetupValues(Enum):
-    DIMS = ("lat", "ele", "ax")
-    NAMES = ("Lateral", "Elevation", "Axial")
-    SPACING = 1.0
-    UNITS = "mm"
-    X_EXTENT = (-30.0, 30.0)
-    Y_EXTENT = (-30.0, 30.0)
-    Z_EXTENT = (-4.0, 60.0)
-    DT = 0.0
-    T_END = 0.0
-    C0 = 1500.0
-    CFL = 0.5
-    OPTIONS = {}
-
 # OpenLIFUProtocolConfigParameterNode
 #
 
@@ -875,20 +850,11 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     
     @classmethod
     def get_default_pulse(cls):
-        return openlifu_lz().bf.Pulse(
-            frequency=DefaultPulseValues.FREQUENCY.value,
-            amplitude=DefaultPulseValues.AMPLITUDE.value,
-            duration=DefaultPulseValues.DURATION.value
-        )
+        return openlifu_lz().bf.Pulse()
 
     @classmethod
     def get_default_sequence(cls):
-        return openlifu_lz().bf.Sequence(
-            pulse_interval=DefaultSequenceValues.PULSE_INTERVAL.value,
-            pulse_count=DefaultSequenceValues.PULSE_COUNT.value,
-            pulse_train_interval=DefaultSequenceValues.PULSE_TRAIN_INTERVAL.value,
-            pulse_train_count=DefaultSequenceValues.PULSE_TRAIN_COUNT.value
-        )
+        return openlifu_lz().bf.Sequence()
 
     @classmethod
     def get_default_focal_pattern(cls):
@@ -896,20 +862,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def get_default_sim_setup(cls):
-        return openlifu_lz().sim.SimSetup(
-            dims=DefaultSimSetupValues.DIMS.value,
-            names=DefaultSimSetupValues.NAMES.value,
-            spacing=DefaultSimSetupValues.SPACING.value,
-            units=DefaultSimSetupValues.UNITS.value,
-            x_extent=DefaultSimSetupValues.X_EXTENT.value,
-            y_extent=DefaultSimSetupValues.Y_EXTENT.value,
-            z_extent=DefaultSimSetupValues.Z_EXTENT.value,
-            dt=DefaultSimSetupValues.DT.value,
-            t_end=DefaultSimSetupValues.T_END.value,
-            c0=DefaultSimSetupValues.C0.value,
-            cfl=DefaultSimSetupValues.CFL.value,
-            options=DefaultSimSetupValues.OPTIONS.value
-        )
+        return openlifu_lz().sim.SimSetup()
 
     @classmethod
     def get_default_delay_method(cls):
