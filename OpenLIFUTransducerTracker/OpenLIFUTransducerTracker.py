@@ -1,7 +1,6 @@
 from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 import warnings
-import random
-import string
+import itertools
 import numpy as np
 import vtk
 import qt
@@ -1173,10 +1172,12 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         with BusyCursor():
             photoscan, data_dir = openlifu_lz().photoscan.run_reconstruction(photocollection_filepaths)
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
-        photoscan.id = (
-            photocollection_reference_number
-            + "".join(random.choices(string.ascii_letters + string.digits, k=10)) # Avoid ID collision in case mesh gen is run multiple times
-        )
+        photoscan_ids = db.get_photoscan_ids(subject_id=subject_id, session_id=session_id)
+        for i in itertools.count(): # Assumes a finite number of photoscans :)
+            photoscan_id = f"{photocollection_reference_number}_{i}"
+            if photoscan_id not in photoscan_ids:
+                break
+        photoscan.id = photoscan_id
         db.write_photoscan(
             subject_id = subject_id,
             session_id = session_id,
