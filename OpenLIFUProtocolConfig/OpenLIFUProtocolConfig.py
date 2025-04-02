@@ -1127,12 +1127,20 @@ class DictTableWidget(qt.QWidget):
 
         top_level_layout.addWidget(self.table)
 
-        # Add the button to add to the dictionary
+        # Add and Remove buttons
+        buttons_layout = qt.QHBoxLayout()
 
-        self.add_button = qt.QPushButton("Add entry", self)
-        self.add_button.setFixedHeight(24)
+        self.add_button = qt.QPushButton(f"Add entry", self)
+        self.remove_button = qt.QPushButton(f"Remove entry", self)
+
+        for button in [self.add_button, self.remove_button]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            buttons_layout.addWidget(button)
+
         self.add_button.clicked.connect(self._open_add_dialog)
-        top_level_layout.addWidget(self.add_button)
+        self.remove_button.clicked.connect(self._remove_selected_item)
+
+        top_level_layout.addLayout(buttons_layout)
 
     def _open_add_dialog(self):
         existing_keys = list(self.to_dict().keys())
@@ -1145,6 +1153,15 @@ class DictTableWidget(qt.QWidget):
             return
 
         self._add_row(key, val)
+
+    def _remove_selected_item(self):
+        selected_items = self.table.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay(f"Please select an entry to delete.")
+            return
+
+        selected_row = selected_items[0].row()
+        self.table.removeRow(selected_row)
 
     def _add_row(self, key, val):
         row_position = self.table.rowCount
@@ -1267,12 +1284,20 @@ class ListTableWidget(qt.QWidget):
 
         top_level_layout.addWidget(self.table)
 
-        # Add the button to add to the list
+        # Add and Remove buttons
+        buttons_layout = qt.QHBoxLayout()
 
         self.add_button = qt.QPushButton(f"Add {object_name}", self)
-        self.add_button.setFixedHeight(24)
+        self.remove_button = qt.QPushButton(f"Remove {object_name}", self)
+
+        for button in [self.add_button, self.remove_button]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            buttons_layout.addWidget(button)
+
         self.add_button.clicked.connect(self._open_add_dialog)
-        top_level_layout.addWidget(self.add_button)
+        self.remove_button.clicked.connect(self._remove_selected_item)
+
+        top_level_layout.addLayout(buttons_layout)
 
     def _open_add_dialog(self):
         createDlg = CreateAbstractClassDialog(self.object_name, self.object_type)
@@ -1282,6 +1307,15 @@ class ListTableWidget(qt.QWidget):
             return
 
         self._add_row(new_object)
+
+    def _remove_selected_item(self):
+        selected_items = self.table.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay(f"Please select a {self.object_name} to delete.")
+            return
+
+        selected_row = selected_items[0].row()
+        self.table.removeRow(selected_row)
 
     def _add_row(self, new_object):
         row_position = self.table.rowCount
