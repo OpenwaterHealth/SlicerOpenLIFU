@@ -217,37 +217,37 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.logic = OpenLIFUProtocolConfigLogic()
 
         # === Instantiation of Placeholder Widgets ====
-        self.pulse_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget())
+        self.pulse_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
         replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
 
-        self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget())
+        self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Sequence")
         replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
 
-        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint], is_collapsible=False)
+        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint], is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern")
         replace_widget(self.ui.abstractFocalPatternDefinitionWidgetPlaceholder, self.abstract_focal_pattern_definition_widget, self.ui)
 
-        self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
+        self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Sim Setup")
         replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
 
-        self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False)
+        self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
         replace_widget(self.ui.abstractDelayMethodDefinitionWidgetPlaceholder, self.abstract_delay_method_definition_widget, self.ui)
 
-        self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False)
+        self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
         replace_widget(self.ui.abstractApodizationMethodDefinitionWidgetPlaceholder, self.abstract_apodization_method_definition_widget, self.ui)
 
-        self.segmentation_method_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget())
+        self.segmentation_method_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Segmentation Method")
         replace_widget(self.ui.segmentationMethodDefinitionWidgetPlaceholder, self.segmentation_method_definition_widget, self.ui)
 
-        self.parameter_constraints_widget = DictTableWidget()
+        self.parameter_constraints_widget = DictTableWidget(key_name="Parameter", val_name="Constraint")
         replace_widget(self.ui.parameterConstraintsWidgetPlaceholder, self.parameter_constraints_widget, self.ui)
 
         self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
         replace_widget(self.ui.targetConstraintsWidgetPlaceholder, self.target_constraints_widget, self.ui)
 
-        self.solution_analysis_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget())
+        self.solution_analysis_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Solution Analysis Options")
         replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
 
-        self.virtual_fit_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget())
+        self.virtual_fit_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
         replace_widget(self.ui.virtualFitOptionsDefinitionWidgetPlaceholder, self.virtual_fit_options_definition_widget, self.ui)
 
         # === Connections and UI setup =======
@@ -1712,7 +1712,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
                         child.stateChanged.connect(callback)
 
 class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
-    def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
+    def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None, custom_abc_title: Optional[str] = None):
         """
         Creates a QWidget that allows multiple implementations of an Abstract
         Base Class to be selected, which after selection will display the
@@ -1728,6 +1728,8 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
             raise ValueError("cls_list cannot be empty.")
 
         self.base_class_name = cls_list[0].__bases__[0].__name__
+        self.custom_abc_title = self.base_class_name if custom_abc_title is None else custom_abc_title
+        
         if not all(cls.__bases__[0].__name__ == self.base_class_name for cls in cls_list):
             raise TypeError("All classes in cls_list must share the same base class name.")
 
@@ -1742,8 +1744,8 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
             self.selector.addItem(cls.__name__)
             self.forms.addWidget(OpenLIFUAbstractClassDefinitionFormWidget(cls, parent, is_collapsible, collapsible_title))
 
-        top_level_layout.addRow(qt.QLabel(f"{self.base_class_name} type"), self.selector) 
-        top_level_layout.addRow(qt.QLabel(f"{self.base_class_name} options"), self.forms) 
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} type"), self.selector) 
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} options"), self.forms) 
 
         # Connect combo box to setting the widget. Assumes indices match
         self.selector.currentIndexChanged.connect(self.forms.setCurrentIndex)
