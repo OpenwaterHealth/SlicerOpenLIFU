@@ -2,6 +2,8 @@ import logging
 import os
 from pathlib import Path
 from typing import Annotated, Optional, Dict, List, Tuple, Union, Type, Any, Callable, get_type_hints, get_args, get_origin, TYPE_CHECKING
+from typing_extensions import get_type_hints as get_type_hints_ext # for <3.10 compatibility
+
 from enum import Enum
 import inspect
 
@@ -30,6 +32,9 @@ from OpenLIFULib.util import (
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
+
+# Use this to ensure compatibility
+get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext
 
 #
 # OpenLIFUProtocolConfig
@@ -1405,12 +1410,29 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         else:
             form_layout = qt.QFormLayout(self)
 
-        type_hints = get_type_hints(cls)  # cls is the class object
+        type_hints = get_hints(cls, include_extras=True)
 
         for name, annotated_type in type_hints.items():
-            widget = self._create_widget_for_type(annotated_type)
+            origin = get_origin(annotated_type)
+            args = get_args(annotated_type)
+
+            if origin is Annotated and len(args) > 1:  # If field has Annotated[]
+                base_type = args[0]
+                metadata = args[1]
+                label_text = metadata.name if metadata.name is not None else name
+                tooltip_text = metadata.description if metadata.description is not None else f"Write a description for {name}"
+            else:  # Field was not Annotated[]
+                base_type = annotated_type
+                label_text = name
+                tooltip_text = f"Write a description for {name}"
+
+            widget = self._create_widget_for_type(base_type)
             if widget:
-                form_layout.addRow(qt.QLabel(name), widget)
+                label = qt.QLabel(label_text)
+                label.setToolTip(tooltip_text)
+                widget.setToolTip(tooltip_text)
+
+                form_layout.addRow(label, widget)
                 self._fields[name] = widget
 
     def _create_widget_for_type(self, annotated_type: Any) -> Optional[qt.QWidget]:
