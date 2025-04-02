@@ -1,5 +1,7 @@
 from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 import warnings
+import random
+import string
 import numpy as np
 import vtk
 import qt
@@ -54,6 +56,7 @@ from OpenLIFULib.skinseg import generate_skin_mesh
 
 if TYPE_CHECKING:
     import openlifu
+    from openlifu.db import Database
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 class PhotoscanMarkupPage(qt.QWizardPage):
@@ -1009,11 +1012,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             selected_reference_number = reference_numbers[0]
 
-        print(selected_reference_number)
-
-        # TODO: Pass the reference number to the photocollection to a function
-        # that generates the photoscan from the photocollection. I guess this
-        # would then add the photoscan to the database here
+        data_parameter_node = get_openlifu_data_parameter_node()
+        if data_parameter_node.loaded_session is None:
+            raise RuntimeError("The photoscan generation button should not be clickable without an active session.")
+        session_openlifu = data_parameter_node.loaded_session.session.session
+        session_id = session_openlifu.id
+        subject_id = session_openlifu.subject_id
+        self.logic.generate_photoscan(
+            subject_id = subject_id,
+            session_id = session_id,
+            photocollection_reference_number = selected_reference_number,
+        )
             
     def onPreviewPhotoscanClicked(self):
 
@@ -1144,6 +1153,35 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
+
+    def generate_photoscan(self,
+        subject_id:str,
+        session_id:str,
+        photocollection_reference_number:str,
+    ) -> None:
+        db : "Database" = slicer.util.getModuleLogic('OpenLIFUData').db
+        if db is None:
+            raise RuntimeError("Cannot generate photoscan without a database connected to write it into.")
+        photocollection_filepaths = db.get_photocollection_absolute_filepaths(
+            subject_id=subject_id,
+            session_id=session_id,
+            reference_number=photocollection_reference_number,
+        )
+        with BusyCursor():
+            photoscan, data_dir = openlifu_lz().photoscan.run_reconstruction(photocollection_filepaths)
+        photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
+        photoscan.id = (
+            photocollection_reference_number
+            + "".join(random.choices(string.ascii_letters + string.digits, k=10)) # Avoid ID collision in case mesh gen is run multiple times
+        )
+        db.write_photoscan(
+            subject_id = subject_id,
+            session_id = session_id,
+            photoscan = photoscan,
+            model_data_filepath = data_dir/photoscan.model_filename,
+            texture_data_filepath = data_dir/photoscan.texture_filename,
+            mtl_data_filepath = data_dir/photoscan.mtl_filename,
+        )
 
     def togglePhotoscanApproval(self, photoscan: SlicerOpenLIFUPhotoscan) -> None:
         """Approve the specified photoscan if it was not approved. Revoke approval if it was approved. Write changes
