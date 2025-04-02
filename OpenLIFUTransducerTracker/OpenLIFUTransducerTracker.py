@@ -1023,6 +1023,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             session_id = session_id,
             photocollection_reference_number = selected_reference_number,
         )
+        data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic.update_photoscans_affiliated_with_loaded_session()
+        self.updateInputOptions()
             
     def onPreviewPhotoscanClicked(self):
 
