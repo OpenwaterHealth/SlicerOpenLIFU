@@ -1583,10 +1583,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_session(self, subject_id, session_id) -> None:
 
-        # Make sure to the preplanning module is loaded in -- it watches for some events
-        # that would cause virtual fit approval to be revoked. We could be about to load a
-        # session with virtual fit approval already applied so this is important.
+        # Certain modules need to have their widgets already set up, if they were not, before loading a session.
+        # This is because those module widgets set up observers on certain kinds of nodes as those nodes are added to the scene.
+        # If the widgets don't exist when a session is loaded, they will not get a chance to add their observers.
         slicer.util.getModule("OpenLIFUPrePlanning").widgetRepresentation()
+        slicer.util.getModule("OpenLIFUTransducerTracker").widgetRepresentation()
+        slicer.util.getModule("OpenLIFUSonicationPlanner").widgetRepresentation()
 
         # === Ensure it's okay to load a session ===
 
