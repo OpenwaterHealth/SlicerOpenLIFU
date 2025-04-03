@@ -102,7 +102,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.guidedModePushButton.connect("clicked()", self.onGuidedModeClicked)
         self.updateInstallButtonText()
         self.updateGuidedModeButton()
-        
+
         # Switch modules
         self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
         self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
@@ -111,9 +111,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
         self.ui.protocolConfigPushButton.clicked.connect(lambda :
                                                          self.switchModule(self.ui.protocolConfigPushButton.text))
-    
 
-    def switchModule(self, moduleButtonText: str) -> None:  
+
+    def switchModule(self, moduleButtonText: str) -> None:
         moduleButtonText = moduleButtonText.replace(" ", "")
         moduleButtonText = moduleButtonText.replace("-", "")
 
@@ -124,7 +124,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if (moduleButtonText == "OpenLIFUProtocolConfiguration"):
             moduleButtonText = moduleButtonText[:-7]  # strip to -Config
-        
+
         slicer.util.selectModule(moduleButtonText)
 
 
@@ -173,7 +173,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # so that when the scene is saved and reloaded, these settings are restored.
 
         self.setParameterNode(self.logic.getParameterNode())
-       
+
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFUHomeParameterNode]) -> None:
         """
         Set and observe parameter node.
@@ -209,10 +209,10 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.guidedModePushButton.setToolTip(
                     "Guided mode will take you step-by-step through the treatment workflow"
                 )
-    
+
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateGuidedModeButton()
-            
+
 #
 # OpenLIFUHomeLogic
 #
@@ -234,7 +234,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
         self.workflow = Workflow()
 
-    
+
     def getParameterNode(self):
         return OpenLIFUHomeParameterNode(super().getParameterNode())
 
@@ -243,11 +243,15 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 
     def start_guided_mode(self):
         set_guided_mode_state(True)
-        slicer.util.selectModule("OpenLIFULogin")
-    
+        self.workflow_go_to_start()
+
     def workflow_jump_ahead(self):
         """Jump ahead in the guided workflow to the furthest step for which `can_proceed` is True."""
         slicer.util.selectModule(self.workflow.furthest_module_to_which_can_proceed())
+
+    def workflow_go_to_start(self):
+        """Go to the starting module of the workflow"""
+        slicer.util.selectModule(self.workflow.starting_module())
 
 #
 # OpenLIFUHomeTest

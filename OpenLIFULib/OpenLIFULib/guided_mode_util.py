@@ -143,7 +143,7 @@ class WorkflowControls(qt.QWidget):
         if save:
             data_module_logic.save_session()
         data_module_logic.clear_session(clean_up_scene=True)
-        home_module_logic.start_guided_mode()
+        home_module_logic.workflow_go_to_start()
 
     def update_next_button(self):
         """Update next button enabledness and tooltip"""
@@ -218,6 +218,10 @@ class Workflow:
                 next_module_name = next_module,
                 include_session_controls = current_module not in ["OpenLIFULogin", "OpenLIFUData"],
             )
+
+    def starting_module(self) -> str:
+        """Get the name of the first module in the guided workflow."""
+        return self.modules[0]
 
     def furthest_module_to_which_can_proceed(self) -> str:
         """Get the name of the furthest module along the workflow to which we `can_proceed`."""
