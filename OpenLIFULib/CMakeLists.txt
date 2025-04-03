@@ -22,6 +22,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/transducer_tracking_results.py
   OpenLIFULib/skinseg.py
   OpenLIFULib/transducer_tracking_wizard_utils.py
+  OpenLIFULib/events.py
 )
 
 set(MODULE_PYTHON_RESOURCES

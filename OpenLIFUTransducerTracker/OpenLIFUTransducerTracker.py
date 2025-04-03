@@ -50,7 +50,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
-
+from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.skinseg import generate_skin_mesh
 
 if TYPE_CHECKING:
@@ -979,6 +979,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+        self.addObserver(node,SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT,self.onTargetNameModified)
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
@@ -986,6 +987,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
 
     def onPointAddedOrRemoved(self, caller, event):
+        self.updateInputOptions()
+
+    def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
 
     def updateInputOptions(self):

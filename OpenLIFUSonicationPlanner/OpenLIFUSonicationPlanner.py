@@ -25,6 +25,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolutionAnalysis,
 )
 from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
+from OpenLIFULib.events import SlicerOpenLIFUEvents
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -274,6 +275,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
+        self.addObserver(node,SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT,self.onTargetNameModified)
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
@@ -281,6 +283,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.removeObserver(node,slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddedOrRemoved)
 
     def onPointAddedOrRemoved(self, caller, event):
+        self.updateInputOptions()
+
+    def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
 
     def onComputeSolutionClicked(self):

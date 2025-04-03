@@ -36,6 +36,7 @@ from OpenLIFULib.virtual_fit_results import (
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
+from OpenLIFULib.events import SlicerOpenLIFUEvents
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -146,6 +147,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateApproveButton)
 
         self.ui.targetListWidget.currentItemChanged.connect(self.onTargetListWidgetCurrentItemChanged)
+        self.ui.targetListWidget.itemChanged.connect(self.onTargetListWidgetItemDataChanged)
 
         position_coordinate_validator = qt.QDoubleValidator(slicer.util.mainWindow())
         position_coordinate_validator.setNotation(qt.QDoubleValidator.StandardNotation)
@@ -247,6 +249,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,partial(self.onPointAddedOrRemoved, node)))
         self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,partial(self.onPointModified, node)))
         self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified))
+        self.node_observations[node.GetID()].append(node.AddObserver(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT,self.onTargetNameModified))
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
@@ -294,6 +297,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.targetListWidget.clear()
         for target_node in get_target_candidates():
             item = qt.QListWidgetItem(target_node.GetName())
+            item.setFlags(item.flags() | qt.Qt.ItemIsEditable) # Make it possible to click and rename items
             item.setData(qt.Qt.UserRole, target_node)
             self.ui.targetListWidget.addItem(item)
 
@@ -318,6 +322,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateEditTargetEnabled()
         self.updateTargetPositionInputs()
         self.updateLockButtonIcon()
+
+    def onTargetListWidgetItemDataChanged(self, item:qt.QListWidgetItem):
+        node : vtkMRMLMarkupsFiducialNode = item.data(qt.Qt.UserRole)
+        node.SetName(item.text().replace(" ", "-")) # This becomes openlifu Point ID
+        node.SetNthControlPointLabel(0, item.text()) # This becomes openlifu Point name
+        node.InvokeEvent(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT)
+
+    def onTargetNameModified(self, caller, event):
+        self.updateInputOptions()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateApproveButton()
