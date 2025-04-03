@@ -28,7 +28,7 @@
       </sizepolicy>
      </property>
      <property name="currentIndex">
-      <number>1</number>
+      <number>2</number>
      </property>
      <widget class="QWidget" name="photoscanPreview">
       <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -127,6 +127,16 @@
         <widget class="QPushButton" name="placeLandmarksButtonSkinSeg">
          <property name="text">
           <string>Place/Edit Registration Landmarks</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="landmarkPlacementStatus_2">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
          </property>
         </widget>
        </item>
