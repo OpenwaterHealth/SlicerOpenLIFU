@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
+from collections import defaultdict
 import json
 import os
 import random
@@ -23,6 +24,7 @@ from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer import (
     vtkMRMLScriptedModuleNode,
+    vtkMRMLMarkupsFiducialNode,
 )
 
 from OpenLIFULib import (
@@ -53,6 +55,8 @@ from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results
 )
+
+from OpenLIFULib.events import SlicerOpenLIFUEvents
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -637,6 +641,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
+
+        # Mapping from mrml node ID to a list of vtkCommand tags that can later be used to remove the observation
+        self.node_observations : Dict[str,List[int]] = defaultdict(list)
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
@@ -1261,10 +1268,30 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.logic.validate_session()
             self.logic.validate_solution()
 
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            self.unwatch_fiducial_node(node)
+
         self.updateLoadedObjectsView()
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        if node.IsA('vtkMRMLMarkupsFiducialNode'):
+            self.watch_fiducial_node(node)
+
+        self.updateLoadedObjectsView()
+
+    def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Add observers so that point-list changes in this fiducial node are tracked by the module."""
+        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddRemoveRename))
+        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.onPointAddRemoveRename))
+        self.node_observations[node.GetID()].append(node.AddObserver(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT,self.onPointAddRemoveRename))
+
+    def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
+        """Un-does watch_fiducial_node; see watch_fiducial_node."""
+        for tag in self.node_observations.pop(node.GetID()):
+            node.RemoveObserver(tag)
+
+    def onPointAddRemoveRename(self, caller, event) -> None:
         self.updateLoadedObjectsView()
 
     def initializeParameterNode(self) -> None:

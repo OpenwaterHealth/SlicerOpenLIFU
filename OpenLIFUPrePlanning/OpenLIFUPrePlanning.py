@@ -106,7 +106,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
 
-        self.node_observations : Dict[str:List[int]] = defaultdict(list)
+        # Mapping from mrml node ID to a list of vtkCommand tags that can later be used to remove the observation
+        self.node_observations : Dict[str,List[int]] = defaultdict(list)
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
