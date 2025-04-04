@@ -96,7 +96,7 @@
           </sizepolicy>
          </property>
          <property name="contextMenuPolicy">
-          <enum>Qt::PreventContextMenu</enum>
+          <enum>Qt::NoContextMenu</enum>
          </property>
          <property name="nodeSelectorVisible">
           <bool>false</bool>
@@ -194,6 +194,38 @@
             <property name="text">
              <string>Run ICP-based registration fine-tuning</string>
             </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="scalingTransformWidget" native="true">
+            <layout class="QFormLayout" name="formLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="scalingLabel">
+               <property name="text">
+                <string>Scale:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="qMRMLSliderWidget" name="scalingTransformMRMLSliderWidget">
+               <property name="singleStep">
+                <double>0.010000000000000</double>
+               </property>
+               <property name="minimum">
+                <double>-0.800000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>1.200000000000000</double>
+               </property>
+               <property name="value">
+                <double>1.000000000000000</double>
+               </property>
+               <property name="quantity">
+                <string notr="true"/>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
           </item>
           <item>
@@ -335,6 +367,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>qMRMLSliderWidget</class>
+   <extends>ctkSliderWidget</extends>
+   <header>qMRMLSliderWidget.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
@@ -350,6 +387,11 @@
    <class>qSlicerSimpleMarkupsWidget</class>
    <extends>qSlicerWidget</extends>
    <header>qSlicerSimpleMarkupsWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkSliderWidget</class>
+   <extends>QWidget</extends>
+   <header>ctkSliderWidget.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
