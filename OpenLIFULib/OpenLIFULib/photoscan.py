@@ -138,13 +138,7 @@ class SlicerOpenLIFUPhotoscan:
     
     def toggle_approval(self) -> None:
         self.photoscan.photoscan.photoscan_approved = not self.photoscan.photoscan.photoscan_approved 
-    
-    # def toggle_model_display(self, visibility_on: bool = False):
-
-    #     self.model_node.GetDisplayNode().SetVisibility(visibility_on)
-    #     # if self.facial_landmarks_fiducial_node:
-    #     #     self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
-                        
+                     
     def initialize_facial_landmarks_from_node(self, fiducial_node: vtkMRMLMarkupsFiducialNode):
         """ Clones the provided vtkMRMLMarkupsFiducialNode and assigns the clone to the photoscan attribute. The input fiducial node
         is expected to contain 3 control points, marking the Right Ear, Left Ear and Nasion on the photoscan mesh. This node
