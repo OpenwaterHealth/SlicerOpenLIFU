@@ -57,6 +57,7 @@ from OpenLIFULib.transducer_tracking_results import (
 )
 
 from OpenLIFULib.events import SlicerOpenLIFUEvents
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -76,7 +77,7 @@ class OpenLIFUData(ScriptedLoadableModule):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("OpenLIFU Data")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
-        self.parent.dependencies = []  # add here list of module names that this module requires
+        self.parent.dependencies = ["OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
@@ -115,12 +116,12 @@ class CreateNewSessionDialog(qt.QDialog):
     """ Create new session dialog """
 
     def __init__(self, transducer_ids: List[str], protocol_ids: List[str], volume_ids: List[str], parent="mainWindow"):
-        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         """ Args:
                 transducer_ids: IDs of the transducers available in the loaded database
                 protocol_ids: IDs of the protocols available in the loaded database
                 volume_ids: IDs of the volumes available for the selected subject in the loaded database
         """
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
 
         self.setWindowTitle("Create New Session")
         self.setWindowModality(qt.Qt.WindowModal)
@@ -625,7 +626,7 @@ def sessionInvalidatedDialogDisplay(message:str) -> bool:
 #
 
 
-class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -750,6 +751,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+
+        self.inject_workflow_controls_into_placeholder()
 
     def onSubjectSessionSelected(self):
         self.update_subjectLevelButtons_enabled()
