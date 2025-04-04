@@ -155,10 +155,16 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.ui.placeLandmarksButton.setText("Done Placing Landmarks")
             self.placingLandmarks = True
             self.ui.photoscanMarkupsWidget.enabled = True
+            self.ui.photoscanMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
                 self.ui.landmarkPlacementStatus.text = "- Landmark positions unlocked. Click on the mesh to adjust.\n" \
                 "- To unset a landmark's position, double-click it in the list."
+                self.ui.landmarkPlacementStatus.text = "-Landmark positions unlocked. Click on the mesh to adjust.\n" \
+                "- To unset a landmark's position, double-click it in the list."
             else:
+                self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
+                "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
+                "- To unset a landmark's position, double-click it in the list."
                 self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
                 "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
                 "- To unset a landmark's position, double-click it in the list."
@@ -167,6 +173,8 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.facial_landmarks_fiducial_node.SetLocked(True)
             self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
             self.placingLandmarks = False
+            self.ui.photoscanMarkupsWidget.tableWidget().clearSelection()
+            self.ui.photoscanMarkupsWidget.enabled = False
             self.ui.photoscanMarkupsWidget.tableWidget().clearSelection()
             self.ui.photoscanMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
@@ -179,6 +187,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 
         self.ui.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
         self.ui.photoscanMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
+        self.ui.photoscanMarkupsWidget.enabled = False
         self.ui.photoscanMarkupsWidget.enabled = False
         
         # If the selected landmark is 'unset', then the cursor is set to 'Place' mode.
@@ -590,6 +599,17 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.runPhotoscanVolumeRegistration.clicked.connect(self.onRunRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
 
+        # Transform scale slider
+        self.ui.scalingTransformMRMLSliderWidget.setMRMLScene(slicer.mrmlScene)
+        self.ui.scalingTransformMRMLSliderWidget.minimum = -0.8
+        self.ui.scalingTransformMRMLSliderWidget.maximum = 1.2
+        self.ui.scalingTransformMRMLSliderWidget.value = 1
+        self.ui.scalingTransformMRMLSliderWidget.decimals = 2
+        self.ui.scalingTransformMRMLSliderWidget.singleStep = 0.01
+        self.ui.scalingTransformMRMLSliderWidget.pageStep = 1.0
+        self.ui.scalingTransformMRMLSliderWidget.setToolTip(_('"'))
+        self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.updateTransformScale)
+
         self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration "
         "between the photoscan mesh and skin surface.")
     
@@ -617,6 +637,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
+        self.ui.scalingTransformWidget.hide()
         self.runningRegistration = False
     
     def updateTransformApprovalStatusLabel(self):
@@ -701,6 +722,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             "Use the interaction handles to manually align the photoscan and volume mesh." \
             "You can click the run button again to remove the interaction handles."
             self.ui.ICPPlaceholderLabel.setProperty("styleSheet", "color: red;")
+            self.ui.scalingTransformWidget.show()
 
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
@@ -715,9 +737,13 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.runningRegistration = False
             self.ui.initializePVRegistration.enabled = True
             self.ui.approvePhotoscanVolumeTransform.enabled = True
+            self.ui.scalingTransformWidget.hide()
 
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
+    
+    def updateTransformScale(self):
+        print(self.ui.scalingTransformMRMLSliderWidget.value)
         
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
@@ -910,7 +936,12 @@ class TransducerTrackingWizard(qt.QWizard):
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.SetLocked(True)
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(True)
+
+            # If the user clicks 'Back' from the skin segmentation markup page
+            if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
+                self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
             reset_view_node_camera(self.photoscan.view_node)
+            
 
         elif isinstance(current_page, SkinSegmentationMarkupPage):
 
