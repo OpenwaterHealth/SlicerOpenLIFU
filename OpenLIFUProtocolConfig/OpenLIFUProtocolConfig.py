@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from dataclasses import fields, is_dataclass
 from typing import Annotated, Optional, Dict, List, Tuple, Union, Type, Any, Callable, get_type_hints, get_args, get_origin, TYPE_CHECKING
 from typing_extensions import get_type_hints as get_type_hints_ext # for <3.10 compatibility
 
@@ -217,16 +218,16 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.logic = OpenLIFUProtocolConfigLogic()
 
         # === Instantiation of Placeholder Widgets ====
-        self.pulse_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
+        self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
         replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
 
-        self.sequence_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Sequence")
+        self.sequence_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Sequence")
         replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
 
         self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint], is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern")
         replace_widget(self.ui.abstractFocalPatternDefinitionWidgetPlaceholder, self.abstract_focal_pattern_definition_widget, self.ui)
 
-        self.sim_setup_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Sim Setup")
+        self.sim_setup_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Sim Setup")
         replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
 
         self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
@@ -235,7 +236,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
         replace_widget(self.ui.abstractApodizationMethodDefinitionWidgetPlaceholder, self.abstract_apodization_method_definition_widget, self.ui)
 
-        self.segmentation_method_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Segmentation Method")
+        self.segmentation_method_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Segmentation Method")
         replace_widget(self.ui.segmentationMethodDefinitionWidgetPlaceholder, self.segmentation_method_definition_widget, self.ui)
 
         self.parameter_constraints_widget = DictTableWidget(key_name="Parameter", val_name="Constraint")
@@ -244,10 +245,10 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
         replace_widget(self.ui.targetConstraintsWidgetPlaceholder, self.target_constraints_widget, self.ui)
 
-        self.solution_analysis_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Solution Analysis Options")
+        self.solution_analysis_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Solution Analysis Options")
         replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
 
-        self.virtual_fit_options_definition_widget = OpenLIFUAbstractClassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
+        self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
         replace_widget(self.ui.virtualFitOptionsDefinitionWidgetPlaceholder, self.virtual_fit_options_definition_widget, self.ui)
 
         # === Connections and UI setup =======
@@ -1033,7 +1034,7 @@ class CreateKeyValueDialog(qt.QDialog):
 class CreateKeyAbstractClassValueDialog(CreateKeyValueDialog):
     """
     Dialog for entering a key-class pair, where class can be entered
-    through the form generated by OpenLIFUAbstractClassDefinitionFormWidget;
+    through the form generated by OpenLIFUAbstractDataclassDefinitionFormWidget;
     ideal for adding entries with arbitrary value types (e.g. custom
     classes) into dictionaries
     """
@@ -1061,7 +1062,7 @@ class CreateKeyAbstractClassValueDialog(CreateKeyValueDialog):
         self.key_input = qt.QLineEdit()
         formLayout.addRow(_(f"{self.key_name}:"), self.key_input)
 
-        self.val_input = OpenLIFUAbstractClassDefinitionFormWidget(self.val_type, parent=self, is_collapsible=False)
+        self.val_input = OpenLIFUAbstractDataclassDefinitionFormWidget(self.val_type, parent=self, is_collapsible=False)
         formLayout.addRow(_(f"{self.val_name}:"), self.val_input)
 
         self.buttonBox = qt.QDialogButtonBox()
@@ -1203,7 +1204,7 @@ class DictTableWidget(qt.QWidget):
 class CreateAbstractClassDialog(qt.QDialog):
     """
     Dialog for creating a custom object, where the class is entered
-    through the form generated by OpenLIFUAbstractClassDefinitionFormWidget;
+    through the form generated by OpenLIFUAbstractDataclassDefinitionFormWidget;
     ideal for adding custom objects into lists
     """
 
@@ -1228,7 +1229,7 @@ class CreateAbstractClassDialog(qt.QDialog):
         top_level_layout = qt.QFormLayout(self)
         top_level_layout.setSpacing(10)
 
-        self.object_input = OpenLIFUAbstractClassDefinitionFormWidget(self.object_type, parent=self, is_collapsible=False)
+        self.object_input = OpenLIFUAbstractDataclassDefinitionFormWidget(self.object_type, parent=self, is_collapsible=False)
         top_level_layout.addRow(_(f"{self.object_name}:"), self.object_input)
 
         self.buttonBox = qt.QDialogButtonBox()
@@ -1359,11 +1360,11 @@ class ListTableWidget(qt.QWidget):
         for obj in data:
             self._add_row(obj)
 
-class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
+class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls: Type[Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
         """
         Initializes a QWidget containing a form layout with labeled inputs for
-        each attribute of an instance created from the specified class. Input
+        each attribute of an instance created from the specified dataclass. Input
         widgets are generated based on attribute types:
 
         - int: QSpinBox
@@ -1378,7 +1379,7 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
         with an optional title.
 
         Args:
-            cls: A class (not an instance) whose attributes will populate the form.
+            cls: A dataclass (not an instance) whose attributes will populate the form.
             parent: Optional parent widget.
             is_collapsible: Whether to enclose the form in a collapsible container.
             collapsible_title: Optional title for the collapsible section.
@@ -1386,6 +1387,9 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
 
         if not inspect.isclass(cls) or cls in (int, float, str, bool, dict, list, tuple, set):
             raise TypeError(f"'cls' must be a user-defined class with type annotations, not a built-in type like {cls.__name__}")
+
+        if not is_dataclass(cls):
+            raise TypeError(f"{cls.__name__} is not a dataclass. This class form widget only works for dataclasses.")
 
         super().__init__(parent)
         self._fields: dict[str, qt.QWidget] = {}
@@ -1411,8 +1415,16 @@ class OpenLIFUAbstractClassDefinitionFormWidget(qt.QWidget):
             form_layout = qt.QFormLayout(self)
 
         type_hints = get_hints(cls, include_extras=True)
+        dataclass_fields = {f.name: f for f in fields(cls)}
 
         for name, annotated_type in type_hints.items():
+
+            # Some dataclass fields cannot be initialized
+            field_info = dataclass_fields.get(name)
+            if field_info is None or not field_info.init:
+                continue # Skip fields not meant to be initialized. e.g., openlifu.seg.material.Material.param_ids
+
+            # Now, for each member of cls, create widgets and tooltips
             origin = get_origin(annotated_type)
             args = get_args(annotated_type)
 
@@ -1717,7 +1729,7 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
         Creates a QWidget that allows multiple implementations of an Abstract
         Base Class to be selected, which after selection will display the
         corresponding form widget (through
-        OpenLIFUAbstractClassDefinitionFormWidget) allowing the specific ABC to
+        OpenLIFUAbstractDataclassDefinitionFormWidget) allowing the specific ABC to
         be configured
 
         Args:
@@ -1742,7 +1754,7 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
 
         for cls in cls_list:
             self.selector.addItem(cls.__name__)
-            self.forms.addWidget(OpenLIFUAbstractClassDefinitionFormWidget(cls, parent, is_collapsible, collapsible_title))
+            self.forms.addWidget(OpenLIFUAbstractDataclassDefinitionFormWidget(cls, parent, is_collapsible, collapsible_title))
 
         top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} type"), self.selector) 
         top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} options"), self.forms) 
