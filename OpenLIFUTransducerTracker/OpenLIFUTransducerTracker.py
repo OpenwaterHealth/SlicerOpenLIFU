@@ -70,23 +70,58 @@ class PhotoscanMarkupPage(qt.QWizardPage):
 
         self.placingLandmarks = False
         self._pointModifiedObserverTag = None
+
+        # We need to create this dictionary of temporary fiducial nodes because when
+        # entering place mode, to use `SetActiveListID` i.e. set the node associated with control point placement,
+        # The input must be a fiducial node. However, to be able to list the required facial landmarks
+        # within the qMRMLSimpleMarkupsWidget, the landmarks need to be represented as control points within a fiducial node.
+        # Therefore, we introduce a temporary markup fiducial during point placement, that gets copied to the landmark control point 
+        # once a position is defined.
         self.temp_markup_fiducials = {
             'Right Ear': None,
             'Left Ear': None,
             'Nasion': None}
+        self.facial_landmarks_fiducial_node: vtkMRMLMarkupsFiducialNode = None # Internal to the wizard facial landmarks node
 
         # Connect buttons
         self.ui.placeLandmarksButton.clicked.connect(self.onPlaceLandmarksClicked)
-
+    
     def initializePage(self):
 
         set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
         
         # Specify controls for adding markups to the dialog
         if self.wizard().photoscan.facial_landmarks_fiducial_node:
+            self.wizard().photoscan.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
+            self._initialize_facial_landmarks_fiducial_node(existing_landmarks_node = self.wizard().photoscan.facial_landmarks_fiducial_node)
             self.setupMarkupsWidget()
 
         self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
+    
+    def _initialize_facial_landmarks_fiducial_node(self, existing_landmarks_node = None) -> vtkMRMLMarkupsFiducialNode:
+
+        if existing_landmarks_node: # Clone the existing node
+            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+            itemIDToClone = shNode.GetItemByDataNode(existing_landmarks_node)
+            clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+            node = shNode.GetItemDataNode(clonedItemID)
+            node.SetName("photoscan-wizard-faciallandmarks")
+            node.GetDisplayNode().SetVisibility(False) 
+
+        else: # Initialize a new node
+            node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","photoscan-wizard-faciallandmarks")
+            node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
+            node.SetMaximumNumberOfControlPoints(3)
+            node.SetMarkupLabelFormat("%N")
+            for landmark_name in self.temp_markup_fiducials:
+                node.AddControlPoint(0,0,0,f"Click to Place {landmark_name}")
+                index = list(self.temp_markup_fiducials.keys()).index(landmark_name)
+                node.UnsetNthControlPointPosition(index) # Unset all the points initially 
+        
+        node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(),self.wizard().volume_view_node.GetID()])
+        node.GetDisplayNode().SetVisibility(True) # Ensure that visibility is turned off
+
+        self.facial_landmarks_fiducial_node = node
 
     def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
         
@@ -98,27 +133,22 @@ class PhotoscanMarkupPage(qt.QWizardPage):
     
     def onPlaceLandmarksClicked(self):
 
-        photoscan_facial_landmarks_node = self.wizard().photoscan.facial_landmarks_fiducial_node
-
-        if photoscan_facial_landmarks_node is None:
-            photoscan_facial_landmarks_node = self.wizard()._logic.initialize_photoscan_tracking_fiducials(self.wizard().photoscan)
-            # Set view nodes on fiducials
-            self.wizard().photoscan.set_view_nodes(viewNodes = [self.wizard().photoscan.view_node, self.wizard().volume_view_node]) # Specify a view node for display
+        if self.facial_landmarks_fiducial_node is None:
+            self._initialize_facial_landmarks_fiducial_node()
             self.setupMarkupsWidget()
-            self.wizard().photoscan.toggle_model_display(visibility_on = True) # Ensures that the fiducuals are displayed in the view node
 
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
-            photoscan_facial_landmarks_node.SetLocked(False)
+            self.facial_landmarks_fiducial_node.SetLocked(False)
             self.ui.placeLandmarksButton.setText("Done Placing Landmarks")
             self.placingLandmarks = True
-            if self.checkAllLandmarksDefined():
+            if self._checkAllLandmarksDefined():
                 self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust."
             else:
                 self.ui.landmarkPlacementStatus.text = "To place a landmark (Right Ear, Left Ear, or Nasion), first select it from the list, " \
                         "and then click on the corresponding location on the photoscan mesh."
 
         elif self.ui.placeLandmarksButton.text == "Done Placing Landmarks":
-            photoscan_facial_landmarks_node.SetLocked(True)
+            self.facial_landmarks_fiducial_node.SetLocked(True)
             self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
             self.placingLandmarks = False
             self.exitPlaceFiducialMode()
@@ -127,7 +157,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
 
-    def initialize_temporary_photoscan_tracking_fiducial(self, node_name: str):
+    def _initialize_temporary_photoscan_tracking_fiducial(self, node_name: str):
 
         initialized_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", node_name)
         initialized_node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
@@ -141,15 +171,10 @@ class PhotoscanMarkupPage(qt.QWizardPage):
     def setupMarkupsWidget(self):
 
         self.ui.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
-        self.ui.photoscanMarkupsWidget.setCurrentNode(self.wizard().photoscan.facial_landmarks_fiducial_node)
-        
-        tableWidget = self.ui.photoscanMarkupsWidget.tableWidget()
-
-        # for i in range(self.wizard().photoscan.facial_landmarks_fiducial_node.GetNumberOfControlPoints()):
-        #     if self.wizard().photoscan.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(i) == 0:
-        #         tableWidget.setItem(i,1,None)
+        self.ui.photoscanMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
         
         # If the selected landmark is 'unset', then the cursor is set to 'Place' mode.
+        tableWidget = self.ui.photoscanMarkupsWidget.tableWidget()
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
         tableWidget.setSelectionBehavior(tableWidget.SelectRows)
         tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
@@ -165,14 +190,16 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.exitPlaceFiducialMode()
             return
 
-        selected_landmark_name = self.ui.photoscanMarkupsWidget.tableWidget().item(currentRow, 0).text()
         # If the point has already been defined, exit place mode
-        if self.wizard().photoscan.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
+        if self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
+            # print('on clicked:', self.wizard().photoscan.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow))
             self.exitPlaceFiducialMode()
             return
-        # Initialize temporary fiducial if it doesn't exist
-        if self.temp_markup_fiducials.get(selected_landmark_name) is None:
-            self.temp_markup_fiducials[selected_landmark_name] = self.initialize_temporary_photoscan_tracking_fiducial(node_name=selected_landmark_name)
+        
+        # Initialize temporary fiducial for markup if it doesn't exist
+        keys_list = list(self.temp_markup_fiducials.keys())
+        selected_landmark_name = keys_list[currentRow]
+        self.temp_markup_fiducials[selected_landmark_name] = self._initialize_temporary_photoscan_tracking_fiducial(node_name=selected_landmark_name)
 
         self.currently_placing_node = self.temp_markup_fiducials[selected_landmark_name]
         # Enter place mode if the node has no control points yet
@@ -180,22 +207,22 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.enterPlaceFiducialMode()
             self._currentlyPlacingIndex = currentRow
     
-    def checkAllLandmarksDefined(self):
+    def _checkAllLandmarksDefined(self):
 
-        if self.wizard().photoscan.facial_landmarks_fiducial_node is None:
+        if self.facial_landmarks_fiducial_node is None:
             return False
 
         # Check that all the landmarks are valid/set control point
         all_points_defined = True
-        for i in range(self.wizard().photoscan.facial_landmarks_fiducial_node.GetNumberOfControlPoints()):
-            if self.wizard().photoscan.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(i) == 0:
+        for i in range(self.facial_landmarks_fiducial_node.GetNumberOfControlPoints()):
+            if self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(i) == 0:
                 all_points_defined = False
         return all_points_defined
     
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
-        landmarks_exist = self.wizard().photoscan.facial_landmarks_fiducial_node is not None
-        all_points_defined = self.checkAllLandmarksDefined()
+        landmarks_exist = self.facial_landmarks_fiducial_node is not None
+        all_points_defined = self._checkAllLandmarksDefined()
         return landmarks_exist and all_points_defined and not self.placingLandmarks
 
     def enterPlaceFiducialMode(self):
@@ -217,12 +244,13 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         # Update the control point associatd with the photoscan
         position = [0.0, 0.0, 0.0]
         self.currently_placing_node.GetNthControlPointPosition(0,position)
-        self.wizard().photoscan.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
+        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
+        self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
         
         self.exitPlaceFiducialMode() # Exit place mode after the point is placed
         slicer.mrmlScene.RemoveNode(self.currently_placing_node) # Remove the temporary node
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
-        if self.checkAllLandmarksDefined():
+        if self._checkAllLandmarksDefined():
             self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust." # Update the status message
 
     def exitPlaceFiducialMode(self):
@@ -663,7 +691,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         return not self.runningRegistration
 
 class TransducerTrackingWizard(qt.QWizard):
-    def __init__(self, photoscan: "openlifu.Photoscan", 
+    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
                  volume: vtkMRMLScalarVolumeNode, 
                  transducer: SlicerOpenLIFUTransducer,
                  target: vtkMRMLMarkupsFiducialNode):
@@ -712,7 +740,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
             # Display the photoscan. This sets the visibility on the model and fiducial node
             # Reset the view node everytime the photoscan is displayed
-            self.photoscan.toggle_model_display(visibility_on = True) # Specify a view node for display
+            self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             reset_view_node_camera(self.photoscan.view_node)
 
             # Disable editing of the fiducial node position
@@ -723,7 +751,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
             # Display skin segmentation and hide the photoscan and transducer surface
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
-            self.photoscan.toggle_model_display(visibility_on = False) # Specify a view node for display
+            self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
 
             # If the facial landmarks have been created, set their display settings
@@ -737,7 +765,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
             # Display the photoscan and volume and hide the transducer
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
-            self.photoscan.toggle_model_display(visibility_on = True) 
+            self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             
             skinseg_facial_landmarks = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
@@ -751,7 +779,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             skinseg_facial_landmarks = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
             skinseg_facial_landmarks.GetDisplayNode().SetVisibility(False)
-            self.photoscan.toggle_model_display(visibility_on = True) 
+            self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(True)
         
         # Reset the wizard volume view node based on the display settings
@@ -772,6 +800,12 @@ class TransducerTrackingWizard(qt.QWizard):
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
+        # Copy photoscan landmarks to slicer scene and remove the wizard-level node
+        self._logic.update_photoscan_tracking_fiducials(
+            photoscan = self.photoscan,
+            fiducial_node =  self.photoscanMarkupPage.facial_landmarks_fiducial_node)
+        slicer.mrmlScene.RemoveNode(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
+
         self.accept()  # Closes the wizard
 
     def onCancel(self):
@@ -780,9 +814,11 @@ class TransducerTrackingWizard(qt.QWizard):
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
-        # Ensure any temporary variables are cleared
+        # Ensure any temporary variables are cleared. Nodes in the scene are not updated
         for node in self.photoscanMarkupPage.temp_markup_fiducials.values():
             slicer.mrmlScene.RemoveNode(node)
+        slicer.mrmlScene.RemoveNode(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
+        self.photoscanMarkupPage.exitPlaceFiducialMode()
 
         self.reject()  # Closes the wizard
     
@@ -823,7 +859,7 @@ class TransducerTrackingWizard(qt.QWizard):
         user to toggle and view the models in the main window through scene manipulation if they 
         choose it. """
         
-        self.photoscan.toggle_model_display(visibility_on = False)
+        self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
         self.photoscan.set_view_nodes([])
 
         # Restore previous view settings
@@ -856,7 +892,7 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
         
         # Display the photoscan 
-        self.wizard().photoscan.toggle_model_display(visibility_on=True) # Specify a view node for display
+        self.wizard().photoscan.model_node.GetDisplayNode().SetVisibility(True) # Specify a view node for display
         # Reset the camera associated with the view node based on the photoscan model
         reset_view_node_camera(self.wizard().photoscan.view_node)
 
@@ -937,7 +973,7 @@ class PhotoscanPreviewWizard(qt.QWizard):
         
     def resetViewNodes(self):
         
-        self.photoscan.toggle_model_display(visibility_on = False)
+        self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
         self.photoscan.set_view_nodes([])
 
 #
@@ -1455,17 +1491,27 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         return loaded_slicer_photoscan
     
-    def initialize_photoscan_tracking_fiducials(self, photoscan: SlicerOpenLIFUPhotoscan) -> vtkMRMLMarkupsFiducialNode:
+    def update_photoscan_tracking_fiducials(self, photoscan: SlicerOpenLIFUPhotoscan, fiducial_node: vtkMRMLMarkupsFiducialNode) -> vtkMRMLMarkupsFiducialNode:
         """This is a placeholder function for calling the algorithm for detecting
         initial registration landmarks positions on the photoscan surface. For now, 
         the landmarks are initialized at the origin by default.
         """
 
-        fiducial_node = photoscan.create_facial_landmarks_fiducial_node()
-        # remember to write the updated photoscan into the parameter node
-        get_openlifu_data_parameter_node().loaded_photoscans[photoscan.get_id()] = photoscan 
-
-        return fiducial_node
+        if photoscan.facial_landmarks_fiducial_node is None:
+            fiducial_node = photoscan.initialize_facial_landmarks_from_node(fiducial_node)
+            # remember to write the updated photoscan into the parameter node
+            get_openlifu_data_parameter_node().loaded_photoscans[photoscan.get_id()] = photoscan 
+        else:
+            # Just update the coorindates in the existing node
+            if fiducial_node.GetNumberOfControlPoints() != photoscan.facial_landmarks_fiducial_node.GetNumberOfControlPoints():
+                raise RuntimeError("There is an existing fiducial node associated with the photoscan with a different number of control points")
+            else:
+                for i in range(fiducial_node.GetNumberOfControlPoints()):
+                    position = [0.0, 0.0, 0.0]
+                    fiducial_node.GetNthControlPointPosition(i, position)
+                    photoscan.facial_landmarks_fiducial_node.SetNthControlPointPosition(i, position)
+            
+        return photoscan.facial_landmarks_fiducial_node
         
     def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
         """Computes skin segmentation if it has not been created. The ID of the volume node used to create the 
