@@ -121,6 +121,9 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(),self.wizard().volume_view_node.GetID()])
         node.GetDisplayNode().SetVisibility(True) # Ensure that visibility is turned off
 
+        # Add an observer if any of the points are undefined 
+        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionUndefinedEvent , self.onPointUndefined)
+
         self.facial_landmarks_fiducial_node = node
 
     def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
@@ -178,6 +181,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
         tableWidget.setSelectionBehavior(tableWidget.SelectRows)
         tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
+        tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
 
     def markupTableWidgetSelected(self, item):
 
@@ -185,28 +189,40 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             return
         
         currentRow = item.row()
-        if currentRow == -1:
+        # If a invalid row is selected or the point has already been defined, exit place mode
+        if currentRow == -1 or self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
             self._currentlyPlacingIndex = -1
             self.exitPlaceFiducialMode()
             return
 
-        # If the point has already been defined, exit place mode
-        if self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
-            # print('on clicked:', self.wizard().photoscan.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow))
-            self.exitPlaceFiducialMode()
-            return
-        
-        # Initialize temporary fiducial for markup if it doesn't exist
-        keys_list = list(self.temp_markup_fiducials.keys())
-        selected_landmark_name = keys_list[currentRow]
-        self.temp_markup_fiducials[selected_landmark_name] = self._initialize_temporary_photoscan_tracking_fiducial(node_name=selected_landmark_name)
-
-        self.currently_placing_node = self.temp_markup_fiducials[selected_landmark_name]
         # Enter place mode if the node has no control points yet
+        self.currently_placing_node = self._getSelectedNode(selected_row=currentRow)
         if self.currently_placing_node.GetNumberOfControlPoints() == 0:
             self.enterPlaceFiducialMode()
             self._currentlyPlacingIndex = currentRow
     
+    def _getSelectedNode(self, selected_row: int):
+        
+        # Initialize temporary fiducial for markup if it doesn't exist
+        keys_list = list(self.temp_markup_fiducials.keys())
+        selected_landmark_name = keys_list[selected_row]
+        self.temp_markup_fiducials[selected_landmark_name] = self._initialize_temporary_photoscan_tracking_fiducial(node_name=selected_landmark_name)
+
+        return self.temp_markup_fiducials[selected_landmark_name]
+    
+    def unsetControlPoint(self, item):
+
+        currentRow = item.row()
+        self._currentlyUnsettingIndex = currentRow
+        if not self.placingLandmarks or currentRow == -1:
+            return
+
+        # Unset the control point and enter fiducial place mode
+        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(currentRow)
+        self.currently_placing_node = self._getSelectedNode(selected_row = currentRow)
+        self.enterPlaceFiducialMode()
+        self._currentlyPlacingIndex = currentRow
+
     def _checkAllLandmarksDefined(self):
 
         if self.facial_landmarks_fiducial_node is None:
@@ -252,6 +268,12 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
         if self._checkAllLandmarksDefined():
             self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust." # Update the status message
+
+    def onPointUndefined(self, caller, event):
+        """ Renames the control point to indicate that it needs to be placed again"""
+        
+        landmark_name = caller.GetNthControlPointLabel(self._currentlyUnsettingIndex)
+        caller.SetNthControlPointLabel(self._currentlyUnsettingIndex, f"Click to Place {landmark_name}")
 
     def exitPlaceFiducialMode(self):
         if self._pointModifiedObserverTag:
