@@ -707,11 +707,17 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_run_hardware_status_updated_callbacks:
             f(self._run_hardware_status)
 
-    def on_lifu_device_connected(self):
+    def on_lifu_device_connected(self, *args, **kwargs):
+        print("on_lifu_device_connected called in sonication control module. The arguments given in were:") # TODO: Remove when hardware device works without issues
+        print("Positional arguments:", args) # TODO: Remove when hardware device works without issues
+        print("Keyword arguments:", kwargs) # TODO: Remove when hardware device works without issues
         for f in self._on_lifu_device_connected_callbacks:
             f()
 
-    def on_lifu_device_disconnected(self):
+    def on_lifu_device_disconnected(self, *args, **kwargs):
+        print("on_lifu_device_disconnected called in sonication control module. The arguments given in were:") # TODO: Remove when hardware device works without issues
+        print("Positional arguments:", args) # TODO: Remove when hardware device works without issues
+        print("Keyword arguments:", kwargs) # TODO: Remove when hardware device works without issues
         for f in self._on_lifu_device_disconnected_callbacks:
             f()
             
