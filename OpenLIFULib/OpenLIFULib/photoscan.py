@@ -139,29 +139,28 @@ class SlicerOpenLIFUPhotoscan:
     def toggle_approval(self) -> None:
         self.photoscan.photoscan.photoscan_approved = not self.photoscan.photoscan.photoscan_approved 
     
-    def toggle_model_display(self, visibility_on: bool = False):
+    # def toggle_model_display(self, visibility_on: bool = False):
 
-        self.model_node.GetDisplayNode().SetVisibility(visibility_on)
-        if self.facial_landmarks_fiducial_node:
-            self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
+    #     self.model_node.GetDisplayNode().SetVisibility(visibility_on)
+    #     # if self.facial_landmarks_fiducial_node:
+    #     #     self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(visibility_on)
                         
-    def create_facial_landmarks_fiducial_node(self, right_ear_coordinates = [0,0,0], left_ear_coordinates = [0,0,0], nasion_coordinates = [0,0,0]):
-        """Nodes are created by default at the origin"""
+    def initialize_facial_landmarks_from_node(self, fiducial_node: vtkMRMLMarkupsFiducialNode):
+        """ Clones the provided vtkMRMLMarkupsFiducialNode and assigns the clone to the photoscan attribute. The input fiducial node
+        is expected to contain 3 control points, marking the Right Ear, Left Ear and Nasion on the photoscan mesh. This node
+        can be created using the Transducer Tracking Wizard."""
 
-        photoscan_id = self.photoscan.photoscan.id
-        self.facial_landmarks_fiducial_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",f"{photoscan_id}-faciallandmarks" )
+        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+        itemIDToClone = shNode.GetItemByDataNode(fiducial_node)
+        clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+        self.facial_landmarks_fiducial_node : vtkMRMLMarkupsFiducialNode = shNode.GetItemDataNode(clonedItemID)
+        self.facial_landmarks_fiducial_node.SetName(f"{self.get_id()}-faciallandmarks")
+        
         # Ensure that visibility is turned off
         self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
-
         self.facial_landmarks_fiducial_node.SetMaximumNumberOfControlPoints(3)
         self.facial_landmarks_fiducial_node.SetMarkupLabelFormat("%N")
-        self.facial_landmarks_fiducial_node.AddControlPoint(right_ear_coordinates[0],right_ear_coordinates[0],right_ear_coordinates[0],"Right Ear")
-        self.facial_landmarks_fiducial_node.AddControlPoint(left_ear_coordinates[0],left_ear_coordinates[0],left_ear_coordinates[0],"Left Ear")
-        self.facial_landmarks_fiducial_node.AddControlPoint(nasion_coordinates[0],nasion_coordinates[0],nasion_coordinates[0],"Nasion")
-        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(0)
-        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(1)
-        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(2)
-        
+
         return self.facial_landmarks_fiducial_node
 
     def set_view_nodes(self,viewNodes: List[vtkMRMLViewNode] = []):
