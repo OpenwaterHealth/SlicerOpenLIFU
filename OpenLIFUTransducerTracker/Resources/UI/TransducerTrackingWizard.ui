@@ -28,7 +28,7 @@
       </sizepolicy>
      </property>
      <property name="currentIndex">
-      <number>2</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="photoscanPreview">
       <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -96,7 +96,7 @@
           </sizepolicy>
          </property>
          <property name="contextMenuPolicy">
-          <enum>Qt::PreventContextMenu</enum>
+          <enum>Qt::NoContextMenu</enum>
          </property>
          <property name="nodeSelectorVisible">
           <bool>false</bool>
@@ -147,6 +147,9 @@
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="contextMenuPolicy">
+          <enum>Qt::NoContextMenu</enum>
          </property>
          <property name="nodeSelectorVisible">
           <bool>false</bool>
