@@ -274,7 +274,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         slicer.util.getModuleLogic('OpenLIFUData').clear_session() # from previous implementation
         subjects = {}
 
-        if not os.path.exists(path):
+        if not self.path_is_openlifu_database_root(path):
             if not slicer.util.confirmYesNoDisplay(
                 f"A database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
                 "Confirm initialize database"
@@ -314,8 +314,28 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
             raise NotImplementedError("Unsupported platform")
 
     @staticmethod
-    def copy_preinitialized_database(destination):
-        db_destination = Path(destination)
+    def path_is_openlifu_database_root(path: Path) -> bool:
+        """
+        Check if the given path is the root of a valid OpenLIFU ad-hoc database.
+
+        Returns True if the required directory and file structure exists, otherwise False.
+        """
+        if not path.is_dir():
+            return False
+
+        required_structure = {
+            "protocols/protocols.json",
+            "subjects/subjects.json",
+            "transducers/transducers.json",
+            "users/users.json",
+            "systems"
+        }
+
+        for relative_path in required_structure:
+            if not (path / relative_path).exists():
+                return False
+
+        return True
 
         db_source = Path(slicer.util.getModule('OpenLIFUDatabase').resourcePath(os.path.join("openlifu-database", "empty_db")))
         db_destination.parent.mkdir(parents=True, exist_ok=True)
