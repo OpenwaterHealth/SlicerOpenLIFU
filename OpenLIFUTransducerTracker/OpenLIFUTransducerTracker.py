@@ -176,6 +176,14 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         tableWidget = self.ui.photoscanMarkupsWidget.tableWidget()
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
         tableWidget.setSelectionBehavior(tableWidget.SelectRows)
+        tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu) # Prevents context menu that allows point deletion/rearrangement.
+        # Make the row  names uneditable
+        for row in range(tableWidget.rowCount):
+            item = tableWidget.item(row, 0)
+            flags = item.flags()
+            flags &= ~qt.Qt.ItemIsEditable
+            item.setFlags(flags)
+
         tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
         tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
 
@@ -397,6 +405,13 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         tableWidget = self.ui.skinSegMarkupsWidget.tableWidget()
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
         tableWidget.setSelectionBehavior(tableWidget.SelectRows)
+        tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu) # Prevents context menu that allows point deletion/rearrangement.
+        # Make the row  names uneditable
+        for row in range(tableWidget.rowCount):
+            item = tableWidget.item(row, 0)
+            flags = item.flags()
+            flags &= ~qt.Qt.ItemIsEditable
+            item.setFlags(flags)
         tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
         tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
 
