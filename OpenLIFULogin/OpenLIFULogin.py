@@ -553,9 +553,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # === Connections and UI setup =======
 
-        # Connect to the data parameter node for updates related to database
-
-        self.addObserver(get_openlifu_database_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDatabaseParameterNodeModified)
+        # Connect to the database logic for updates related to database
+        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_database_is_loaded_changed(self.onDatabaseIsLoadedChanged)
 
         # Login
 
@@ -578,7 +577,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.cacheAllPermissionswidgets()
 
         # Call the routine to update from data parameter node
-        self.onDatabaseParameterNodeModified()
+        self.onDatabaseIsLoadedChanged()
 
         self.inject_workflow_controls_into_placeholder()
         self.updateWorkflowControls()
@@ -611,7 +610,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         if self.parent.isEntered:
             self.initializeParameterNode()
 
-    def onDatabaseParameterNodeModified(self, caller = None, event = None):
+    def onDatabaseIsLoadedChanged(self, database_is_loaded: bool = False):
         self.updateLoginLogoutButton()
         self.updateAccountManagementButtons()
 
@@ -722,7 +721,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.ui.loginLogoutButton.setToolTip("The login feature is only available with user account mode turned on.")
             return
 
-        if not get_openlifu_database_parameter_node().database_is_loaded:
+        if not get_cur_db():
             self.ui.loginLogoutButton.setEnabled(False)
             self.ui.loginLogoutButton.setToolTip("The login feature requires a database connection.")
             return
@@ -771,7 +770,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # You only need a database loaded to be able to do this. User account
         # mode can be off. If user account mode is on, only admins can interact
         # with the button.
-        if not get_openlifu_database_parameter_node().database_is_loaded:
+        if not get_cur_db():
             self.ui.createNewAccountButton.setEnabled(False)
             self.ui.createNewAccountButton.setToolTip("The login feature requires a database connection.")
             self.ui.manageAccountsButton.setEnabled(False)
