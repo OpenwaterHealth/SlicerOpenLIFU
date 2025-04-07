@@ -27,6 +27,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUPhotoscan
 )
+from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 
 from OpenLIFULib.transducer_tracking_results import (
     TransducerTrackingTransformType,
@@ -601,14 +602,16 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         # Transform scale slider
         self.ui.scalingTransformMRMLSliderWidget.setMRMLScene(slicer.mrmlScene)
-        self.ui.scalingTransformMRMLSliderWidget.minimum = -0.8
+        self.ui.scalingTransformMRMLSliderWidget.minimum = 0.8
         self.ui.scalingTransformMRMLSliderWidget.maximum = 1.2
         self.ui.scalingTransformMRMLSliderWidget.value = 1
         self.ui.scalingTransformMRMLSliderWidget.decimals = 2
         self.ui.scalingTransformMRMLSliderWidget.singleStep = 0.01
         self.ui.scalingTransformMRMLSliderWidget.pageStep = 1.0
         self.ui.scalingTransformMRMLSliderWidget.setToolTip(_('"'))
-        self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.updateTransformScale)
+        self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.scaleTransformNode)
+
+        self.scaledTransformNode : vtkMRMLTransformNode = None
 
         self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration "
         "between the photoscan mesh and skin surface.")
@@ -713,6 +716,14 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         transform_from_world.TransformPoint(center_world,center_local )
         self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
 
+        if self.scaledTransformNode is None:
+            # Clone the current transform node
+            self.scaledTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+            self.scaledTransformNode.SetName("wizard_photoscan_volume-scaled")
+            self.scaledTransformNode.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
+
+        self.wizard().photoscan.set_transform_node(self.scaledTransformNode)
+
     def onRunRegistrationClicked(self):
         """ This is a temporary implementation that allows the user to manually edit the photoscan-volume transform. In the 
         future, ICP registration will be integrated here. """
@@ -722,7 +733,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             "Use the interaction handles to manually align the photoscan and volume mesh." \
             "You can click the run button again to remove the interaction handles."
             self.ui.ICPPlaceholderLabel.setProperty("styleSheet", "color: red;")
-            self.ui.scalingTransformWidget.show()
 
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
@@ -730,6 +740,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializePVRegistration.enabled = False
             self.ui.approvePhotoscanVolumeTransform.enabled = False
+
+            # Enabling scaling of transform node
+            self.ui.scalingTransformWidget.show()
 
         else:
             self.ui.ICPPlaceholderLabel.text = ""
@@ -742,8 +755,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
     
-    def updateTransformScale(self):
-        print(self.ui.scalingTransformMRMLSliderWidget.value)
+    def scaleTransformNode(self):
+
+        scaling_value = self.ui.scalingTransformMRMLSliderWidget.value
+        scaling_matrix = np.diag([scaling_value, scaling_value, scaling_value, 1])
+        self.scaledTransformNode.SetMatrixTransformToParent(numpy_to_vtk_4x4(scaling_matrix))
+
         
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
@@ -841,6 +858,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def setupTransformNode(self):
 
         # TODO: This can probably be outside the wizard? And after exiting wizard, reset all view nodes.
+
+
         self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
         self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]
