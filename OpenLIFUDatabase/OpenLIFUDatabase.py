@@ -158,11 +158,11 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
         subject_info = self.logic.load_database(Path(self.ui.databaseDirectoryLineEdit.currentPath))
 
-        slicer.util.getModuleWidget('OpenLIFUData').updateSubjectSessionSelector(subject_info) # vestigial from previous Datamodule behavior
+        slicer.util.getModuleWidget('OpenLIFUData').updateSubjectSessionSelector(subject_info) # from previous Data module behavior
 
         self.updateSettingFromParameter('databaseDirectory')
 
-        slicer.util.getModuleWidget('OpenLIFUData').update_newSubjectButton_enabled() # vestigial from previous Datamodule behavior
+        slicer.util.getModuleWidget('OpenLIFUData').update_newSubjectButton_enabled() # from previous Data module behavior
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
