@@ -276,7 +276,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
 
         if not self.path_is_openlifu_database_root(path):
             if not slicer.util.confirmYesNoDisplay(
-                f"A database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
+                f"An openlifu database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
                 "Confirm initialize database"
             ):
                 self.db = None
@@ -337,19 +337,33 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
 
         return True
 
-        db_source = Path(slicer.util.getModule('OpenLIFUDatabase').resourcePath(os.path.join("openlifu-database", "empty_db")))
-        db_destination.parent.mkdir(parents=True, exist_ok=True)
+    @staticmethod
+    def copy_preinitialized_database(destination):
+        destination = Path(destination)
+        db_source = Path(slicer.util.getModuleWidget('OpenLIFUDatabase').resourcePath(os.path.join("openlifu-database", "empty_db")))
 
-        if not db_destination.exists():
-            shutil.copytree(db_source, db_destination)
+        destination.mkdir(parents=True, exist_ok=True)
 
-        # Set permissions
+        copied_paths = []
+
+        for root, dirs, files in os.walk(db_source):
+            
+            rel_root = Path(root).relative_to(db_source) # Compute path relative to the source base directory
+            dest_root = destination / rel_root # Target directory to copy files into
+
+            dest_root.mkdir(exist_ok=True)
+
+            for file in files:
+                src_file = Path(root) / file
+                dest_file = dest_root / file
+
+                shutil.copy2(src_file, dest_file) # Copy file with metadata (preserves timestamps and permissions)
+                copied_paths.append(dest_file)
+
+        # Set permissions only on **newly copied files** (in case they existed)
         if os.name == "nt":
-            os.system(f'icacls "{db_destination}" /grant Everyone:F /T /C')
+            for path in copied_paths:
+                os.system(f'icacls "{path}" /grant Everyone:F /C')
         else:
-            for root, dirs, files in os.walk(db_destination):
-                for d in dirs:
-                    os.chmod(Path(root) / d, 0o755)
-                for f in files:
-                    os.chmod(Path(root) / f, 0o644)
-            os.chmod(db_destination, 0o755)
+            for path in copied_paths:
+                os.chmod(path, 0o644 if path.is_file() else 0o755)
