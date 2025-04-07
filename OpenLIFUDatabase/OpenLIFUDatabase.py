@@ -287,3 +287,35 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         self.database_is_loaded = True
 
         return list(zip(subject_ids, subject_names))
+    
+    @staticmethod
+    def get_database_destination():
+        if sys.platform.startswith("win"):
+            return Path(os.environ["APPDATA"]) / "OpenLIFU-app" / "db"
+        elif sys.platform.startswith("darwin"):
+            return Path.home() / "Library" / "Application Support" / "OpenLIFU-app" / "db"
+        elif sys.platform.startswith("linux"):
+            return Path.home() / ".local" / "share" / "OpenLIFU-app" / "db"
+        else:
+            raise NotImplementedError("Unsupported platform")
+
+    @staticmethod
+    def copy_preinitialized_database(destination, source):
+        db_destination = Path(destination)
+        db_source = Path(source)
+        db_destination.parent.mkdir(parents=True, exist_ok=True)
+
+        if not db_destination.exists():
+            shutil.copytree(db_source, db_destination)
+
+        # Set permissions
+        if os.name == "nt":
+            os.system(f'icacls "{db_destination}" /grant Everyone:F /T /C')
+        else:
+            for root, dirs, files in os.walk(db_destination):
+                for d in dirs:
+                    os.chmod(Path(root) / d, 0o755)
+                for f in files:
+                    os.chmod(Path(root) / f, 0o644)
+            os.chmod(db_destination, 0o755)
+
