@@ -103,7 +103,13 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUDatabaseLogic()
 
+        # ---- Inject guided mode workflow controls ----
+
+        self.inject_workflow_controls_into_placeholder()
+
         # === Connections and UI setup =======
+
+        self.logic.call_on_db_changed(self.onDatabaseChanged)
 
         self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
         self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect(
@@ -118,10 +124,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
         # Call the routine to update from data parameter node
         self.onDataParameterNodeModified()
-
-        # ---- Inject guided mode workflow controls ----
-
-        self.inject_workflow_controls_into_placeholder()
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -131,6 +134,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -213,6 +217,17 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     def onParameterNodeModified(self, caller, event) -> None:
         pass
+
+    def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
+        self.updateWorkflowControls()
+
+    def updateWorkflowControls(self):
+        if self.logic.db is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Connect a database to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Database connected, proceed to the next step."
 
 # OpenLIFUDatabaseLogic
 #
