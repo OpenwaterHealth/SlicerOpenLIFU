@@ -156,7 +156,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
 
-        subject_info = self.logic.load_database(self.ui.databaseDirectoryLineEdit.currentPath)
+        subject_info = self.logic.load_database(Path(self.ui.databaseDirectoryLineEdit.currentPath))
 
         slicer.util.getModuleWidget('OpenLIFUData').updateSubjectSessionSelector(subject_info) # vestigial from previous Datamodule behavior
 
