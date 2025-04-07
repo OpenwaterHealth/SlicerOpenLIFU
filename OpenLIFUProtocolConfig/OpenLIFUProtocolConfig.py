@@ -21,7 +21,9 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 
 from OpenLIFULib import (
     openlifu_lz,
+    get_cur_db,
     get_openlifu_data_parameter_node,
+    get_openlifu_database_parameter_node,
     SlicerOpenLIFUProtocol,
 )
 
@@ -256,6 +258,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+        self.addObserver(get_openlifu_database_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDatabaseParameterNodeModified)
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # Connect signals to trigger save state update
@@ -294,6 +297,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.setProtocolEditButtonEnabled(False)
         self.setProtocolEditorEnabled(False)
 
+        self.onDatabaseParameterNodeModified()  # might not have queued
         self.onDataParameterNodeModified()  # might not have queued
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -332,16 +336,22 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if self.parent.isEntered:
             self.initializeParameterNode()
 
-    def onDataParameterNodeModified(self, caller = None, event = None):
-
-        if not get_openlifu_data_parameter_node().database_is_loaded:
+    def onDatabaseParameterNodeModified(self, caller = None, event = None):
+        if not get_openlifu_database_parameter_node().database_is_loaded:
             self.setDatabaseButtonsEnabled(False)
         else:
             self.setDatabaseButtonsEnabled(True)
 
+        # Edits to database parameter node should not change selected protocol
+        prev_protocol = self.ui.protocolSelector.currentText
 
+        self.reloadProtocols()
+
+        if (len(get_openlifu_data_parameter_node().loaded_protocols) + len(self.logic.new_protocol_ids)) > 1:
+            self.ui.protocolSelector.setCurrentText(prev_protocol)
+
+    def onDataParameterNodeModified(self, caller = None, event = None):
         # Edits to data parameter node should not change selected protocol
-
         prev_protocol = self.ui.protocolSelector.currentText
 
         self.reloadProtocols()
@@ -556,11 +566,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             protocol_changed = self.getProtocolFromGUI()
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
-        if not get_openlifu_data_parameter_node().database_is_loaded:
+        if not get_openlifu_database_parameter_node().database_is_loaded:
             raise RuntimeError("Cannot load protocol from database because there is no database connection")
 
         # Open the protocol selection dialog
-        protocols : "List[openlifu.plan.Protocol]" = self.logic.dataLogic.db.load_all_protocols()
+        protocols : "List[openlifu.plan.Protocol]" = get_cur_db().load_all_protocols()
         protocol_names_and_IDs = [(p.name, p.id) for p in protocols]
 
         dialog = ProtocolSelectionFromDatabaseDialog(protocol_names_and_IDs)
@@ -569,7 +579,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             if not selected_protocol_id:
                 return
 
-            protocol = self.logic.dataLogic.db.load_protocol(selected_protocol_id)
+            protocol = get_cur_db().load_protocol(selected_protocol_id)
 
             if not self.load_protocol_from_openlifu(protocol):
                 return
@@ -702,7 +712,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.virtual_fit_options_definition_widget.setEnabled(enabled)
 
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
-        if not get_openlifu_data_parameter_node().database_is_loaded:
+        if not get_openlifu_database_parameter_node().database_is_loaded:
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
@@ -805,9 +815,9 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return protocol_id in get_openlifu_data_parameter_node().loaded_protocols
 
     def protocol_id_is_in_database(self, protocol_id: str) -> bool:
-        if not get_openlifu_data_parameter_node().database_is_loaded:
+        if not get_openlifu_database_parameter_node().database_is_loaded:
             return False
-        return protocol_id in self.dataLogic.db.get_protocol_ids()
+        return protocol_id in get_cur_db().get_protocol_ids()
 
     def protocol_id_exists(self, protocol_id: str) -> bool:
         return self.protocol_id_is_loaded(protocol_id) or self.protocol_id_is_in_database(protocol_id) or self.protocol_id_is_new(protocol_id) or self.protocol_id_is_in_cache(protocol_id)
@@ -820,14 +830,14 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         return name
 
     def save_protocol_to_database(self, protocol: "openlifu.plan.Protocol") -> None:
-        if self.dataLogic.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Cannot save protocol because there is no database connection")
-        self.dataLogic.db.write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
     def delete_protocol_from_database(self, protocol_id: str) -> None:
-        if self.dataLogic.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Cannot delete protocol because there is no database connection")
-        self.dataLogic.db.delete_protocol(protocol_id, openlifu_lz().db.database.OnConflictOpts.ERROR)
+        get_cur_db().delete_protocol(protocol_id, openlifu_lz().db.database.OnConflictOpts.ERROR)
 
     def cache_protocol(self, protocol_id: str, protocol: "openlifu.plan.Protocol") -> None:
         self.cached_protocols[protocol_id] = protocol

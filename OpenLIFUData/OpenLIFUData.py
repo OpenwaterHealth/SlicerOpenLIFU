@@ -29,6 +29,7 @@ from slicer import (
 
 from OpenLIFULib import (
     openlifu_lz,
+    get_cur_db,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     SlicerOpenLIFUSolution,
@@ -42,7 +43,6 @@ from OpenLIFULib.util import (
     display_errors,
     create_noneditable_QStandardItem,
     ensure_list,
-    add_slicer_log_handler_for_openlifu_object,
     BusyCursor,
 )
 
@@ -61,7 +61,6 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
-    import openlifu.db
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
 
 #
@@ -98,8 +97,6 @@ class OpenLIFUData(ScriptedLoadableModule):
 
 @parameterNodeWrapper
 class OpenLIFUDataParameterNode:
-    databaseDirectory : Path
-    database_is_loaded : bool
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
     loaded_solution : "Optional[SlicerOpenLIFUSolution]"
@@ -672,13 +669,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
-        # Buttons
-        self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
-        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect(
-            "returnPressed()",
-            lambda : self.onLoadDatabaseClicked(checked=True)
-        )
-
         # Add new subject
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
         self.update_newSubjectButton_enabled()
@@ -778,19 +768,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             elif action == addNewSessionAction:
                 self.onCreateNewSessionClicked(checked=True)
 
-    @display_errors
-    def onLoadDatabaseClicked(self, checked:bool):
-
-        self.updateSubjectSessionSelector()
-
-        self.updateSettingFromParameter('databaseDirectory')
-        self.update_newSubjectButton_enabled()
-
-    def updateSubjectSessionSelector(self):
+    def updateSubjectSessionSelector(self, subject_info: Sequence[Tuple[str, str]]):
         # Clear any items that are already there
         self.subjectSessionItemModel.removeRows(0,self.subjectSessionItemModel.rowCount())
-
-        subject_info = self.logic.load_database(self.ui.databaseDirectoryLineEdit.currentPath)
 
         for subject_id, subject_name in subject_info:
             subject_row = list(map(
@@ -808,7 +788,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def update_newSubjectButton_enabled(self):
         """ Update whether the add new subject button is enabled based on whether a database has been loaded"""
-        if self.logic.db:
+        if get_cur_db():
             self.ui.newSubjectButton.setEnabled(True)
             self.ui.newSubjectButton.toolTip = 'Add new subject to loaded database'
         else:
@@ -819,7 +799,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """ Update whether the add volume and create session buttons are enabled based on whether a database has been loaded
         and a subject has been selected in the tree view"""
 
-        if self.logic.db and not self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
+        if get_cur_db() and not self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
             self.ui.addVolumeToSubjectButton.setEnabled(True)
             self.ui.addVolumeToSubjectButton.toolTip = 'Add new volume to selected subject'
 
@@ -837,7 +817,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         based on whether a database has been loaded and a session has been
         selected in the tree view"""
 
-        if self.logic.db and self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
+        if get_cur_db() and self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
             self.ui.addPhotocollectionToSessionButton.setEnabled(True)
             self.ui.addPhotocollectionToSessionButton.toolTip = 'Add new photocollection to selected session'
             self.ui.addPhotoscanToSessionButton.setEnabled(True)
@@ -888,7 +868,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 # Add subject to database
                 self.logic.add_subject_to_database(subject_name,subject_id)
                 #Update loaded subjects view
-                self.updateSubjectSessionSelector()
+                self.updateSubjectSessionSelector(slicer.util.getModuleLogic('OpenLIFUDatabase').load_database(slicer.util.getModuleWidget('OpenLIFUDatabase').ui.databaseDirectoryLineEdit.currentPath))
 
     @display_errors
     def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
@@ -916,12 +896,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         currentIndex = self.ui.subjectSessionView.currentIndex()
         _, subject_id = self.getSubjectSessionAtIndex(currentIndex)
 
-        if self.logic.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Cannot create session because there is no database connection")
 
-        db_transducer_ids = self.logic.db.get_transducer_ids()
-        db_protocol_ids = self.logic.db.get_protocol_ids()
-        db_volume_ids = self.logic.db.get_volume_ids(subject_id)
+        db_transducer_ids = get_cur_db().get_transducer_ids()
+        db_protocol_ids = get_cur_db().get_protocol_ids()
+        db_volume_ids = get_cur_db().get_volume_ids(subject_id)
         sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
         returncode, session_parameters = sessiondlg.customexec_()
         if not returncode:
@@ -1327,13 +1307,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 )
         qsettings.endGroup()
 
-    def updateSettingFromParameter(self, parameter_name:str) -> None:
-        parameterNode : vtkMRMLScriptedModuleNode = self._parameterNode.parameterNode
-        qsettings = qt.QSettings()
-        qsettings.beginGroup("OpenLIFU")
-        qsettings.setValue(parameter_name,parameterNode.GetParameter(parameter_name))
-        qsettings.endGroup()
-
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFUDataParameterNode]) -> None:
         """
         Set and observe parameter node.
@@ -1367,8 +1340,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
-
-        self.db : Optional[openlifu.Database] = None
 
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
         self._folder_deletion_in_progress = False
@@ -1418,7 +1389,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         and then it writes that Session object to the database.
         """
 
-        if self.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Cannot save session because there is no database connection")
 
         if not self.validate_session():
@@ -1427,7 +1398,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_openlifu = self.update_underlying_openlifu_session()
 
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
-        self.db.write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
+        get_cur_db().write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
 
     def update_underlying_openlifu_session(self) -> "openlifu.db.Session":
         """Update the underlying openlifu session of the currently loaded session, if there is one.
@@ -1503,56 +1474,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         return True
 
-    def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
-        """Load an openlifu database from a local folder hierarchy.
-
-        This sets the internal openlifu database object and reads in all the subjects,
-        and returns the subject information.
-
-        Args:
-            path: Path to the openlifu database folder on disk.
-
-        Returns: A sequence of pairs (subject_id, subject_name) running over all subjects
-            in the database.
-        """
-        self.clear_session()
-        self._subjects = {}
-
-        self.db = openlifu_lz().Database(path)
-        add_slicer_log_handler_for_openlifu_object(self.db)
-
-        subject_ids : List[str] = ensure_list(self.db.get_subject_ids())
-        self._subjects = {
-            subject_id : self.db.load_subject(subject_id)
-            for subject_id in subject_ids
-        }
-
-        subject_names = [subject.name for subject in self._subjects.values()]
-
-        self.getParameterNode().database_is_loaded = True
-
-        return zip(subject_ids, subject_names)
-
     def get_subject(self, subject_id:str) -> "openlifu.db.subject.Subject":
         """Get the Subject with a given ID"""
-        if self.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Unable to fetch subject info because there is no loaded database.")
         try:
             return self._subjects[subject_id] # use the in-memory Subject if it is in memory
         except KeyError:
             # otherwise attempt to load it:
-            return self.db.load_subject(subject_id)
+            return get_cur_db().load_subject(subject_id)
 
     def get_sessions(self, subject_id:str) -> "List[openlifu.db.session.Session]":
         """Get the collection of Sessions associated with a given subject ID"""
-        if self.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Unable to fetch session info because there is no loaded database.")
         return [
-            self.db.load_session(
+            get_cur_db().load_session(
                 self.get_subject(subject_id),
                 session_id
             )
-            for session_id in ensure_list(self.db.get_session_ids(subject_id))
+            for session_id in ensure_list(get_cur_db().get_session_ids(subject_id))
         ]
 
     def get_session_info(self, subject_id:str) -> Sequence[Tuple[str,str]]:
@@ -1571,9 +1512,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def get_session(self, subject_id:str, session_id:str) -> "openlifu.db.session.Session":
         """Fetch the Session with the given ID"""
-        if self.db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Unable to fetch session info because there is no loaded database.")
-        return self.db.load_session(self.get_subject(subject_id), session_id)
+        return get_cur_db().load_session(self.get_subject(subject_id), session_id)
 
     def get_current_session_transducer_id(self) -> Optional[str]:
         """Get the transducer ID of the current session, if there is a current session. Returns None
@@ -1596,7 +1537,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_id = loaded_session.get_session_id()
         
         # Keep track of any photocollections associated with the session
-        affiliated_photocollections = [num for num in self.db.get_photocollection_reference_numbers(subject_id, session_id)]
+        affiliated_photocollections = [num for num in get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)]
         if affiliated_photocollections:
             loaded_session.set_affiliated_photocollections(affiliated_photocollections)
 
@@ -1607,7 +1548,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_id = loaded_session.get_session_id()
         
         # Keep track of any photoscans associated with the session
-        affiliated_photoscans = {id:self.db.load_photoscan(subject_id, session_id, id) for id in self.db.get_photoscan_ids(subject_id, session_id)}
+        affiliated_photoscans = {id:get_cur_db().load_photoscan(subject_id, session_id, id) for id in get_cur_db().get_photoscan_ids(subject_id, session_id)}
         if affiliated_photoscans:
             loaded_session.set_affiliated_photoscans(affiliated_photoscans)
 
@@ -1672,7 +1613,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 idx = loaded_volume_ids.index(session_openlifu.volume_id)
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
-        session_affiliated_photocollections = self.db.get_photocollection_reference_numbers(subject_id, session_id)
+        session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         conflicting_session_photocollections =  [num for num in session_affiliated_photocollections if num in self.getParameterNode().session_photocollections]
         if (
             conflicting_session_photocollections
@@ -1691,10 +1632,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
             
-        session_affiliated_photoscans = self.db.get_photoscan_ids(subject_id, session_id)
+        session_affiliated_photoscans = get_cur_db().get_photoscan_ids(subject_id, session_id)
         if loaded_session is not None:
             # (we are okay reloading photoscans if they are just the one affiliated with the session, since user already decided to replace the session)
-            loaded_session_affiliated_photoscans = self.db.get_photoscan_ids(loaded_session.get_subject_id(), loaded_session.get_session_id())
+            loaded_session_affiliated_photoscans = get_cur_db().get_photoscan_ids(loaded_session.get_subject_id(), loaded_session.get_session_id())
             conflicting_loaded_photoscans =  [photoscan for photoscan in session_affiliated_photoscans 
                                               if photoscan in self.getParameterNode().loaded_photoscans and 
                                               photoscan not in loaded_session_affiliated_photoscans]
@@ -1713,7 +1654,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.clear_session()
 
-        volume_info = self.db.get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
+        volume_info = get_cur_db().get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
        # Create the SlicerOpenLIFU session object; this handles loading volume and targets
         new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(
@@ -1723,8 +1664,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # === Load transducer ===
 
-        transducer_openlifu = self.db.load_transducer(session_openlifu.transducer_id)
-        transducer_abspaths_info = self.db.get_transducer_absolute_filepaths(session_openlifu.transducer_id)
+        transducer_openlifu = get_cur_db().load_transducer(session_openlifu.transducer_id)
+        transducer_abspaths_info = get_cur_db().get_transducer_absolute_filepaths(session_openlifu.transducer_id)
         newly_loaded_transducer = self.load_transducer_from_openlifu(
             transducer = transducer_openlifu,
             transducer_abspaths_info = transducer_abspaths_info,
@@ -1736,7 +1677,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Load protocol ===
 
         self.load_protocol_from_openlifu(
-            self.db.load_protocol(session_openlifu.protocol_id),
+            get_cur_db().load_protocol(session_openlifu.protocol_id),
             replace_confirmed = True,
         )
 
@@ -1791,7 +1732,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Load photocollections as all reference_numbers ===
         # There is no openlifu object for photocollections, so we just add them to the list!
 
-        session_affiliated_photocollections = self.db.get_photocollection_reference_numbers(subject_id, session_id)
+        session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         self.getParameterNode().session_photocollections.extend(session_affiliated_photocollections)
 
         # === Also keep track of affiliated photocollections and unload any conflicting photocollections that have been previously loaded ===
@@ -2041,12 +1982,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """Set a solution to be the currently active solution. If there is an active session, write that solution to the database."""
         self.getParameterNode().loaded_solution = solution
         if self.validate_session():
-            if self.db is None: # This should not happen -- if there is an active session then there should be a database connection as well.
+            if get_cur_db() is None: # This should not happen -- if there is an active session then there should be a database connection as well.
                 raise RuntimeError("Unable to write solution to the session because there is no database connection")
             session_openlifu = self.getParameterNode().loaded_session.session.session
             solution_openlifu = solution.solution.solution
             self.getParameterNode().loaded_session.last_generated_solution_id = solution_openlifu.id
-            self.db.write_solution(session_openlifu, solution_openlifu)
+            get_cur_db().write_solution(session_openlifu, solution_openlifu)
 
 
     def clear_solution(self,  clean_up_scene:bool = True) -> None:
@@ -2070,7 +2011,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # If there is an active session, save run to database
         if self.validate_session():
-            if self.db is None: # This should not happen -- if there is an active session then there should be a database connection as well.
+            if get_cur_db() is None: # This should not happen -- if there is an active session then there should be a database connection as well.
                 raise RuntimeError("Unable to write run to the session because there is no database connection")
             loaded_session = self.getParameterNode().loaded_session
             session_openlifu = loaded_session.session.session
@@ -2079,7 +2020,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             run_openlifu = run.run
             
             # Session and protocol snapshots are optional arguments
-            self.db.write_run(run_openlifu, session_openlifu, protocol_openlifu)
+            get_cur_db().write_run(run_openlifu, session_openlifu, protocol_openlifu)
             
     def add_subject_to_database(self, subject_name, subject_id):
         """ Adds new subject to loaded openlifu database.
@@ -2094,7 +2035,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             id = subject_id,
         )
 
-        subject_ids = self.db.get_subject_ids()
+        subject_ids = get_cur_db().get_subject_ids()
 
         if newOpenLIFUSubject.id in subject_ids:
             if not slicer.util.confirmYesNoDisplay(
@@ -2103,7 +2044,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        self.db.write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
     def get_virtual_fit_approvals_in_session(self) -> List[str]:
         """Get the virtual fit approval state in the current session object, a list of target IDs for which virtual fit
@@ -2226,7 +2167,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             if parent_dir is None:
                 raise RuntimeError("Cannot load photoscan because the parent_dir was not specified for the photoscan object.")
         else:
-            if self.db is None: # This shouldn't happen
+            if get_cur_db() is None: # This shouldn't happen
                 raise RuntimeError("Cannot load photoscan because there is a session but no database connection to load the data from.")
 
         if photoscan_openlifu.id in self.getParameterNode().loaded_photoscans:
@@ -2241,7 +2182,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         with BusyCursor():
             if load_from_active_session:
                 loaded_session = self.getParameterNode().loaded_session
-                _, (model_data, texture_data) = self.db.load_photoscan(loaded_session.get_subject_id(),loaded_session.get_session_id(),photoscan_openlifu.id, load_data = True)
+                _, (model_data, texture_data) = get_cur_db().load_photoscan(loaded_session.get_subject_id(),loaded_session.get_session_id(),photoscan_openlifu.id, load_data = True)
             else:
                 model_data, texture_data = openlifu_lz().photoscan.load_data_from_photoscan(photoscan_openlifu,parent_dir = parent_dir)
 
@@ -2322,7 +2263,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             volume_filepath: filepath of volume to be added (str)
         """
 
-        volume_ids = self.db.get_volume_ids(subject_id)
+        volume_ids = get_cur_db().get_volume_ids(subject_id)
         if volume_id in volume_ids:
             if not slicer.util.confirmYesNoDisplay(
                 f"Volume ID {volume_id} already exists in the database for subject {subject_id}. Overwrite volume?",
@@ -2330,7 +2271,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        self.db.write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
     def add_session_to_database(self, subject_id: str, session_parameters: Dict) -> bool:
         """ Add new session to selected subject in the loaded openlifu database
@@ -2360,7 +2301,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             volume_id = session_parameters['volume_id'],
             transducer_id = session_parameters['transducer_id']
         )
-        self.db.write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
     def add_photocollection_to_database(self, subject_id: str, session_id: str, photocollection_parameters: Dict) -> None:
@@ -2370,7 +2311,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session_id: ID of session associated with the photocollection (str)
             photocollection_parameters: Dictionary containing the required parameters for adding a photocollection to database
         """
-        photocollection_reference_numbers = self.db.get_photocollection_reference_numbers(subject_id, session_id)
+        photocollection_reference_numbers = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         if photocollection_parameters['reference_number'] in photocollection_reference_numbers:
             if not slicer.util.confirmYesNoDisplay(
                 f"Photocollection reference_number {photocollection_parameters['reference_number']} already exists in the database for session {session_id}. Overwrite photocollection?",
@@ -2381,7 +2322,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         reference_number = photocollection_parameters.pop("reference_number")
         photo_abspaths = photocollection_parameters.pop("photo_paths")
 
-        self.db.write_photocollection(subject_id, session_id, reference_number,
+        get_cur_db().write_photocollection(subject_id, session_id, reference_number,
                                       photo_abspaths, on_conflict =
                                       openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
 
@@ -2392,7 +2333,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session_id: ID of session associated with the photoscan (str)
             photoscan_parameters: Dictionary containing the required parameters for adding a photoscan to database
         """
-        photoscan_ids = self.db.get_photoscan_ids(subject_id, session_id)
+        photoscan_ids = get_cur_db().get_photoscan_ids(subject_id, session_id)
         if photoscan_parameters['id'] in photoscan_ids:
             if not slicer.util.confirmYesNoDisplay(
                 f"Photoscan ID {photoscan_parameters['id']} already exists in the database for session {session_id}. Overwrite photoscan?",
@@ -2405,7 +2346,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         mtl_abspath = photoscan_parameters.pop("mtl_abspath")
 
         newOpenLIFUPhotoscan = openlifu_lz().photoscan.Photoscan().from_dict(photoscan_parameters)
-        self.db.write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
+        get_cur_db().write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
                                 model_abspath,
                                 texture_abspath,
                                 mtl_abspath,
@@ -2426,10 +2367,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         solution.toggle_approval() # apply or revoke approval
         if session is not None:
             if session.last_generated_solution_id == solution.solution.solution.id:
-                if self.db is None: # This shouldn't happen
+                if get_cur_db() is None: # This shouldn't happen
                     raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
                 OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
-                self.db.write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
+                get_cur_db().write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
             else:
                 # This can happen if, for example, a solution is generated from a session and then a new session is loaded and the user
                 # tries to toggle approval on the old solution. The user would have to have kept the old solution around by

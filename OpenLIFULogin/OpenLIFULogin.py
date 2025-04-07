@@ -23,7 +23,8 @@ from OpenLIFULib import (
     openlifu_lz,
     bcrypt_lz,
     SlicerOpenLIFUUser,
-    get_openlifu_data_parameter_node,
+    get_cur_db,
+    get_openlifu_database_parameter_node,
     get_current_user,
 )
 
@@ -554,7 +555,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # Connect to the data parameter node for updates related to database
 
-        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        self.addObserver(get_openlifu_database_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDatabaseParameterNodeModified)
 
         # Login
 
@@ -577,7 +578,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.cacheAllPermissionswidgets()
 
         # Call the routine to update from data parameter node
-        self.onDataParameterNodeModified()
+        self.onDatabaseParameterNodeModified()
 
         self.inject_workflow_controls_into_placeholder()
         self.updateWorkflowControls()
@@ -610,7 +611,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         if self.parent.isEntered:
             self.initializeParameterNode()
 
-    def onDataParameterNodeModified(self, caller = None, event = None):
+    def onDatabaseParameterNodeModified(self, caller = None, event = None):
         self.updateLoginLogoutButton()
         self.updateAccountManagementButtons()
 
@@ -677,7 +678,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             if not returncode:
                 return
 
-            users = self.logic.dataLogic.db.load_all_users()
+            users = get_cur_db().load_all_users()
             verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
 
             matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
@@ -692,7 +693,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     @display_errors
     def onCreateNewAccountClicked(self, checked:bool = False) -> None:
-        new_account_dlg = CreateNewAccountDialog(self.logic.dataLogic.db.load_all_users())
+        new_account_dlg = CreateNewAccountDialog(get_cur_db().load_all_users())
         returncode, user_dict = new_account_dlg.customexec_()
         if not returncode or user_dict is None:
             return
@@ -701,7 +702,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     @display_errors
     def onManageAccountsButtonclicked(self, checked:bool) -> None:
-        new_account_dlg = ManageAccountsDialog(self.logic.dataLogic.db)
+        new_account_dlg = ManageAccountsDialog(get_cur_db())
         new_account_dlg.exec_()
 
     def updateWorkflowControls(self):
@@ -721,13 +722,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.ui.loginLogoutButton.setToolTip("The login feature is only available with user account mode turned on.")
             return
 
-        if not get_openlifu_data_parameter_node().database_is_loaded:
+        if not get_openlifu_database_parameter_node().database_is_loaded:
             self.ui.loginLogoutButton.setEnabled(False)
             self.ui.loginLogoutButton.setToolTip("The login feature requires a database connection.")
             return
 
         # Now we see if there is an admin in the database
-        users = self.logic.dataLogic.db.load_all_users()
+        users = get_cur_db().load_all_users()
         if not any('admin' in u.roles for u in users):
             self.ui.loginLogoutButton.setEnabled(False)
             self.ui.loginLogoutButton.setToolTip("The login feature requires at least one administrative user in the database.")
@@ -770,7 +771,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # You only need a database loaded to be able to do this. User account
         # mode can be off. If user account mode is on, only admins can interact
         # with the button.
-        if not get_openlifu_data_parameter_node().database_is_loaded:
+        if not get_openlifu_database_parameter_node().database_is_loaded:
             self.ui.createNewAccountButton.setEnabled(False)
             self.ui.createNewAccountButton.setToolTip("The login feature requires a database connection.")
             self.ui.manageAccountsButton.setEnabled(False)
@@ -860,15 +861,10 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
-        self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
-
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
         return OpenLIFULoginParameterNode(super().getParameterNode())
-
-    def clear_session(self) -> None:
-        self.current_session = None
 
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
@@ -878,7 +874,7 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
         Args:
             user_parameters: Dictionary containing the required parameters for adding a user to database
         """
-        user_ids = self.dataLogic.db.get_user_ids()
+        user_ids = get_cur_db().get_user_ids()
         if user_parameters['id'] in user_ids:
             if not slicer.util.confirmYesNoDisplay(
                 f"user ID {user_parameters['id']} already exists in the database. Overwrite user?",
@@ -887,4 +883,4 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
                 return
 
         newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
-        self.dataLogic.db.write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
