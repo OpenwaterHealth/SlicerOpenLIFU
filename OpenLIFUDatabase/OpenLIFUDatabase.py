@@ -1,5 +1,8 @@
 from typing import Optional, List, Sequence, Tuple, Callable, TYPE_CHECKING
 from pathlib import Path
+import sys
+import os
+import shutil
 
 import qt
 
@@ -271,6 +274,17 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         slicer.util.getModuleLogic('OpenLIFUData').clear_session() # from previous implementation
         subjects = {}
 
+        if not os.path.exists(path):
+            if not slicer.util.confirmYesNoDisplay(
+                f"A database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
+                "Confirm initialize database"
+            ):
+                self.db = None
+                self.database_is_loaded = False
+                return list()
+
+            self.copy_preinitialized_database(path)
+
         self.db = openlifu_lz().Database(path)
         add_slicer_log_handler_for_openlifu_object(self.db)
 
@@ -300,9 +314,10 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
             raise NotImplementedError("Unsupported platform")
 
     @staticmethod
-    def copy_preinitialized_database(destination, source):
+    def copy_preinitialized_database(destination):
         db_destination = Path(destination)
-        db_source = Path(source)
+
+        db_source = Path(slicer.util.getModule('OpenLIFUDatabase').resourcePath(os.path.join("openlifu-database", "empty_db")))
         db_destination.parent.mkdir(parents=True, exist_ok=True)
 
         if not db_destination.exists():
@@ -318,4 +333,3 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
                 for f in files:
                     os.chmod(Path(root) / f, 0o644)
             os.chmod(db_destination, 0o755)
-
