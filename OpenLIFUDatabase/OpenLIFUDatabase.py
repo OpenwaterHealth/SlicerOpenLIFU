@@ -227,11 +227,11 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    db = None
-
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
+
+        self.db = None
 
         self._database_is_loaded : bool = False
         """Whether a database is loaded. Do not set this directly -- use the `database_is_loaded` property."""
