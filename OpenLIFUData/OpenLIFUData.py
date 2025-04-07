@@ -868,7 +868,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 # Add subject to database
                 self.logic.add_subject_to_database(subject_name,subject_id)
                 #Update loaded subjects view
-                self.updateSubjectSessionSelector(slicer.util.getModuleLogic('OpenLIFUDatabase').load_database(slicer.util.getModuleWidget('OpenLIFUDatabase').ui.databaseDirectoryLineEdit.currentPath))
+                self.updateSubjectSessionSelector(slicer.util.getModuleLogic('OpenLIFUDatabase').load_database(Path(slicer.util.getModuleWidget('OpenLIFUDatabase').ui.databaseDirectoryLineEdit.currentPath)))
 
     @display_errors
     def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
