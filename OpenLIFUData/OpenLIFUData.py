@@ -658,6 +658,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUDataLogic()
 
+        # Manual object loading UI and the loaded objects view
+        self.loadedObjectsItemModel = qt.QStandardItemModel()
+        self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'Type', 'ID'])
+        self.ui.loadedObjectsView.setModel(self.loadedObjectsItemModel)
+        self.ui.loadedObjectsView.setColumnWidth(0, 150)
+        self.ui.loadedObjectsView.setColumnWidth(1, 150)
+        self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
+        self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
+        self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
+        self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
+        self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
+
         # Connections
 
         # These connections ensure that we update parameter node when scene is closed
@@ -714,18 +726,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
         self.ui.saveSessionButton.clicked.connect(self.onSaveSessionClicked)
 
-        # Manual object loading UI and the loaded objects view
-        self.loadedObjectsItemModel = qt.QStandardItemModel()
-        self.loadedObjectsItemModel.setHorizontalHeaderLabels(['Name', 'Type', 'ID'])
-        self.ui.loadedObjectsView.setModel(self.loadedObjectsItemModel)
-        self.ui.loadedObjectsView.setColumnWidth(0, 150)
-        self.ui.loadedObjectsView.setColumnWidth(1, 150)
-        self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
-        self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
-        self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
-        self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
-        self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
-       
         self.session_status_field_widgets = [
             self.ui.sessionStatusSubjectNameIdValueLabel,
             self.ui.sessionStatusSessionNameIdValueLabel,
