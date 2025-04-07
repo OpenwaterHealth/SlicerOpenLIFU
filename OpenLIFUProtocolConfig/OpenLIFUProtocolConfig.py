@@ -260,7 +260,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Connect to the database logic for updates related to database
-        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_database_is_loaded_changed(self.onDatabaseIsLoadedChanged)
+        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(self.onDatabaseChanged)
 
         # Watch the data parameter node for loaded_protocol-related changes
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
@@ -301,7 +301,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.setProtocolEditButtonEnabled(False)
         self.setProtocolEditorEnabled(False)
 
-        self.onDatabaseIsLoadedChanged()  # might not have queued
+        self.onDatabaseChanged()  # might not have queued
         self.onDataParameterNodeModified()  # might not have queued
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -340,7 +340,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if self.parent.isEntered:
             self.initializeParameterNode()
 
-    def onDatabaseIsLoadedChanged(self, database_is_loaded: bool = False):
+    def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         if not get_cur_db():
             self.setDatabaseButtonsEnabled(False)
         else:

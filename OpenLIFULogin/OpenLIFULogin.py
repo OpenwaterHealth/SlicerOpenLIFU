@@ -555,7 +555,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # === Connections and UI setup =======
 
         # Connect to the database logic for updates related to database
-        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_database_is_loaded_changed(self.onDatabaseIsLoadedChanged)
+        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(self.onDatabaseChanged)
 
         # Login
 
@@ -577,7 +577,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-        self.onDatabaseIsLoadedChanged() # Call the routine to update from data parameter node
+        self.onDatabaseChanged() # Call the routine to update from data parameter node
         self.updateWorkflowControls()
 
     def cleanup(self) -> None:
@@ -608,7 +608,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         if self.parent.isEntered:
             self.initializeParameterNode()
 
-    def onDatabaseIsLoadedChanged(self, database_is_loaded: bool = False):
+    def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     def initializeParameterNode(self) -> None:

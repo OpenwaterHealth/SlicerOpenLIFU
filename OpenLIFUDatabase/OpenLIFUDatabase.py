@@ -231,33 +231,31 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
-        self.db = None
+        self._db = None
+        """The loaded database. Do not set this directly -- use the `db` property."""
 
-        self._database_is_loaded : bool = False
-        """Whether a database is loaded. Do not set this directly -- use the `database_is_loaded` property."""
-
-        self._on_database_is_loaded_changed_callbacks : List[Callable[[bool],None]] = []
+        self._on_db_changed_callbacks : List[Callable[[Optional["openlifu.db.Database"]],None]] = []
         """List of functions to call when `database_is_loaded` property is changed."""
 
     def getParameterNode(self):
         return OpenLIFUDatabaseParameterNode(super().getParameterNode())
 
-    def call_on_database_is_loaded_changed(self, f : Callable[[bool],None]) -> None:
+    def call_on_db_changed(self, f : Callable[[Optional["openlifu.db.Database"]],None]) -> None:
         """Set a function to be called whenever the `database_is_loaded` property is changed.
         The provided callback should accept a single bool argument which will be the new database_is_loaded state.
         """
-        self._on_database_is_loaded_changed_callbacks.append(f)
+        self._on_db_changed_callbacks.append(f)
 
     @property
-    def database_is_loaded(self) -> bool:
-        """Whether database_is_loaded"""
-        return self._database_is_loaded
+    def db(self) -> Optional["openlifu.db.Database"]:
+        """The currently loaded db"""
+        return self._db
 
-    @database_is_loaded.setter
-    def database_is_loaded(self, database_is_loaded_value : bool):
-        self._database_is_loaded = database_is_loaded_value
-        for f in self._on_database_is_loaded_changed_callbacks:
-            f(self._database_is_loaded)
+    @db.setter
+    def db(self, db_value : Optional["openlifu.db.Database"]):
+        self._db = db_value
+        for f in self._on_db_changed_callbacks:
+            f(self._db)
 
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
         """Load an openlifu database from a local folder hierarchy.
@@ -280,7 +278,6 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
                 "Confirm initialize database"
             ):
                 self.db = None
-                self.database_is_loaded = False
                 return list()
 
             self.copy_preinitialized_database(path)
@@ -297,8 +294,6 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         slicer.util.getModuleLogic('OpenLIFUData')._subjects = subjects # from previous implementation
 
         subject_names : List[str] = [subject.name for subject in subjects.values()]
-
-        self.database_is_loaded = True
 
         return list(zip(subject_ids, subject_names))
     
