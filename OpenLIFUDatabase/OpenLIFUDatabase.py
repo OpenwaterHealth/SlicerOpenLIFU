@@ -1,4 +1,4 @@
-from typing import Optional, List, Sequence, Tuple, TYPE_CHECKING
+from typing import Optional, List, Sequence, Tuple, Callable, TYPE_CHECKING
 from pathlib import Path
 
 import qt
@@ -67,7 +67,6 @@ class OpenLIFUDatabase(ScriptedLoadableModule):
 @parameterNodeWrapper
 class OpenLIFUDatabaseParameterNode:
     databaseDirectory : Path
-    database_is_loaded : bool
     
 class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
@@ -225,14 +224,37 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    db : "Optional[openlifu_lz().db.Database]" = None
+    db = None
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self._database_is_loaded : bool = False
+        """Whether a database is loaded. Do not set this directly -- use the `database_is_loaded` property."""
+
+        self._on_database_is_loaded_changed_callbacks : List[Callable[[bool],None]] = []
+        """List of functions to call when `database_is_loaded` property is changed."""
+
     def getParameterNode(self):
         return OpenLIFUDatabaseParameterNode(super().getParameterNode())
+
+    def call_on_database_is_loaded_changed(self, f : Callable[[bool],None]) -> None:
+        """Set a function to be called whenever the `database_is_loaded` property is changed.
+        The provided callback should accept a single bool argument which will be the new database_is_loaded state.
+        """
+        self._on_database_is_loaded_changed_callbacks.append(f)
+
+    @property
+    def database_is_loaded(self) -> bool:
+        """Whether database_is_loaded"""
+        return self._database_is_loaded
+
+    @database_is_loaded.setter
+    def database_is_loaded(self, database_is_loaded_value : bool):
+        self._database_is_loaded = database_is_loaded_value
+        for f in self._on_database_is_loaded_changed_callbacks:
+            f(self._database_is_loaded)
 
     def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
         """Load an openlifu database from a local folder hierarchy.
@@ -262,6 +284,6 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
 
         subject_names : List[str] = [subject.name for subject in subjects.values()]
 
-        self.getParameterNode().database_is_loaded = True
+        self.database_is_loaded = True
 
         return list(zip(subject_ids, subject_names))
