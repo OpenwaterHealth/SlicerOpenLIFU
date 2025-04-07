@@ -670,7 +670,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
 
-        # Connections
+        # ---- Inject guided mode workflow controls ----
+
+        self.inject_workflow_controls_into_placeholder()
+
+        # ---- Connections ----
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -741,8 +745,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
-
-        self.inject_workflow_controls_into_placeholder()
+        self.updateWorkflowControls()
 
     def onSubjectSessionSelected(self):
         self.update_subjectLevelButtons_enabled()
@@ -1185,9 +1188,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.unloadSessionButton.setToolTip("Unload the active session, cleaning up session-affiliated nodes in the scene")
             self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
 
+    def updateWorkflowControls(self):
+        if self._parameterNode.loaded_session is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Load a session to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Session loaded, proceed to the next step."
+
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -1197,6 +1209,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
