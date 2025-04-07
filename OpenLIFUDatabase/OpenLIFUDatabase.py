@@ -216,7 +216,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def onParameterNodeModified(self, caller, event) -> None:
-        pass
+        self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.updateWorkflowControls()
