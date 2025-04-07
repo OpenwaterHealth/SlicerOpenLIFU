@@ -194,6 +194,7 @@ class Workflow:
     """
 
     modules = [
+        "OpenLIFUDatabase",
         "OpenLIFULogin",
         "OpenLIFUData",
         "OpenLIFUPrePlanning",
@@ -216,7 +217,7 @@ class Workflow:
                 parent = None, # The widget will be parented when it is injected into a module
                 previous_module_name = previous_module,
                 next_module_name = next_module,
-                include_session_controls = current_module not in ["OpenLIFULogin", "OpenLIFUData"],
+                include_session_controls = current_module not in ["OpenLIFUDatabase", "OpenLIFULogin", "OpenLIFUData"],
             )
 
     def starting_module(self) -> str:

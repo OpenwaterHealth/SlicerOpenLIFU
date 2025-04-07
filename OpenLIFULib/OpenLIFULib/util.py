@@ -3,6 +3,7 @@ import logging
 import qt
 import slicer
 if TYPE_CHECKING:
+    from OpenLIFUDatabase.OpenLIFUDatabase import OpenLIFUDatabaseParameterNode
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginLogic
@@ -19,6 +20,14 @@ class BusyCursor:
     def __exit__(self, exception_type, exception_value, traceback):
         qt.QApplication.restoreOverrideCursor()
         return False
+
+def get_openlifu_database_parameter_node() -> "OpenLIFUDatabaseParameterNode":
+    """Get the parameter node of the OpenLIFU Database module"""
+    return slicer.util.getModuleLogic('OpenLIFUDatabase').getParameterNode()
+
+def get_cur_db():
+    """Get the current openlifu.Database loaded in the OpenLIFU Database module"""
+    return slicer.util.getModuleLogic('OpenLIFUDatabase').db
 
 def get_openlifu_data_parameter_node() -> "OpenLIFUDataParameterNode":
     """Get the parameter node of the OpenLIFU Data module"""

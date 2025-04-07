@@ -21,30 +21,6 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_9">
       <item>
-       <widget class="QLabel" name="databaseDirectoryLabel">
-        <property name="text">
-         <string>Database directory:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
-        <property name="filters">
-         <set>ctkPathLineEdit::Dirs</set>
-        </property>
-        <property name="SlicerParameterName" stdset="0">
-         <string>databaseDirectory</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="databaseLoadButton">
-        <property name="text">
-         <string>Load Database</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QWidget" name="permissionsWidget2" native="true">
         <property name="slicer.openlifu.allowed-roles" stdset="0">
          <stringlist>
@@ -437,11 +413,6 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ctkPathLineEdit</class>
-   <extends>QWidget</extends>
-   <header>ctkPathLineEdit.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

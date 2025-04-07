@@ -21,6 +21,7 @@ from slicer import (
 from OpenLIFULib.util import replace_widget, BusyCursor
 from OpenLIFULib import (
     openlifu_lz,
+    get_cur_db,
     get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUTransducer,
@@ -1168,10 +1169,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session_id:str,
         photocollection_reference_number:str,
     ) -> None:
-        db : "Database" = slicer.util.getModuleLogic('OpenLIFUData').db
-        if db is None:
+        if get_cur_db() is None:
             raise RuntimeError("Cannot generate photoscan without a database connected to write it into.")
-        photocollection_filepaths = db.get_photocollection_absolute_filepaths(
+        photocollection_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
             subject_id=subject_id,
             session_id=session_id,
             reference_number=photocollection_reference_number,
@@ -1179,13 +1179,13 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         with BusyCursor():
             photoscan, data_dir = openlifu_lz().photoscan.run_reconstruction(photocollection_filepaths)
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
-        photoscan_ids = db.get_photoscan_ids(subject_id=subject_id, session_id=session_id)
+        photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
         for i in itertools.count(): # Assumes a finite number of photoscans :)
             photoscan_id = f"{photocollection_reference_number}_{i}"
             if photoscan_id not in photoscan_ids:
                 break
         photoscan.id = photoscan_id
-        db.write_photoscan(
+        get_cur_db().write_photoscan(
             subject_id = subject_id,
             session_id = session_id,
             photoscan = photoscan,
@@ -1205,11 +1205,10 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan # remember to write the updated photoscan into the parameter node
         
         # Write changes to the database
-        loaded_db = slicer.util.getModuleLogic('OpenLIFUData').db
-        if loaded_db is None: # This shouldn't happen
+        if get_cur_db() is None: # This shouldn't happen
             raise RuntimeError("Cannot toggle photoscan approval because there is a session but no database connection to write the approval.")
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
-        loaded_db.write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
+        get_cur_db().write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
 
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
