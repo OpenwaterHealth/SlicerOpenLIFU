@@ -567,20 +567,17 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.ui.createNewAccountButton.clicked.connect(self.onCreateNewAccountClicked)
         self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
+        self.inject_workflow_controls_into_placeholder()
+
         # ====================================
-        
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-
-        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-        self.logic.active_user = self._default_anonymous_user
-
         self.cacheAllPermissionswidgets()
 
-        # Call the routine to update from data parameter node
-        self.onDatabaseIsLoadedChanged()
-
-        self.inject_workflow_controls_into_placeholder()
+        self.logic.active_user = self._default_anonymous_user
+        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+        self.onDatabaseIsLoadedChanged() # Call the routine to update from data parameter node
         self.updateWorkflowControls()
 
     def cleanup(self) -> None:
@@ -612,8 +609,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.initializeParameterNode()
 
     def onDatabaseIsLoadedChanged(self, database_is_loaded: bool = False):
-        self.updateLoginLogoutButton()
-        self.updateAccountManagementButtons()
+        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -671,7 +667,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         if self.ui.loginLogoutButton.text == "Logout":
             self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-            self.updateWorkflowControls()
         elif self.ui.loginLogoutButton.text == "Login":
             loginDlg = UsernamePasswordDialog()
             returncode, user_id, password_text = loginDlg.customexec_()
@@ -690,7 +685,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
             self.logic.active_user = SlicerOpenLIFUUser(matched_user)
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
-            self.updateWorkflowControls()
 
     @display_errors
     def onCreateNewAccountClicked(self, checked:bool = False) -> None:
@@ -707,7 +701,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         new_account_dlg.exec_()
 
     def updateWorkflowControls(self):
-        if self.logic.active_user.user.id == "anonymous":
+        if self._cur_login_state in [LoginState.NOT_LOGGED_IN, LoginState.UNSUCCESSFUL_LOGIN]:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Log in to proceed."
         else:
@@ -728,22 +722,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.ui.loginLogoutButton.setToolTip("The login feature requires a database connection.")
             return
 
-        # Now we see if there is an admin in the database
-        users = get_cur_db().load_all_users()
-        if not any('admin' in u.roles for u in users):
+        if self._cur_login_state == LoginState.DEFAULT_ADMIN:
             self.ui.loginLogoutButton.setEnabled(False)
-            self.ui.loginLogoutButton.setToolTip("The login feature requires at least one administrative user in the database.")
-            # set the user to admin, go to home module
-            default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
-                    id = "default_admin", 
-                    password_hash = "default_admin",
-                    roles = ['admin'],
-                    name = "default_admin",
-                    description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
-                    ))
-            self.logic.active_user = default_admin_user
-            self.updateWidgetLoginState(LoginState.DEFAULT_ADMIN)
-            self.updateWorkflowControls()
+            self.ui.loginLogoutButton.setToolTip("The login feature requires at least one admin user.")
             return
 
         # === Otherwise, login works ===
@@ -785,11 +766,27 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
 
     def updateWidgetLoginState(self, state: LoginState):
-        self._cur_login_state = state
+        # if a db is connected, check if there is an admin there. If not, override the state.
+        if get_cur_db() and not any('admin' in u.roles for u in get_cur_db().load_all_users()):
+            # set the user to admin
+            default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+                    id = "default_admin", 
+                    password_hash = "default_admin",
+                    roles = ['admin'],
+                    name = "default_admin",
+                    description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
+                    ))
+            self.logic.active_user = default_admin_user
+
+            self._cur_login_state = LoginState.DEFAULT_ADMIN
+        else:
+            self._cur_login_state = state
+
         self.updateLoginStateNotificationLabel()
         self.updateLoginLogoutButton()
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
+        self.updateWorkflowControls()
 
     def updateLoginStateNotificationLabel(self):
         if self._cur_login_state == LoginState.NOT_LOGGED_IN:
