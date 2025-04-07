@@ -52,6 +52,7 @@ class OpenLIFULogin(ScriptedLoadableModule):
         self.parent.title = _("OpenLIFU Login")  # TODO: make this more human readable by adding spaces
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = [
+            "OpenLIFUDatabase",
             "OpenLIFUData",
             "OpenLIFUHome",
             "OpenLIFUPrePlanning",
@@ -623,6 +624,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def cacheAllPermissionswidgets(self) -> None:
         all_openlifu_modules = [
+            "OpenLIFUDatabase",
             "OpenLIFUData",
             "OpenLIFUHome",
             "OpenLIFUPrePlanning",
