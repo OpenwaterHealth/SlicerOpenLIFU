@@ -276,7 +276,3 @@ class GuidedWorkflowMixin:
         self.workflow_controls = home_module_logic.workflow.workflow_controls[self.moduleName]
         replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
 
-    def enforceGuidedModeVisibility(self):
-        raise NotImplementedError("This method is to be implemented in issue #128")
-
-
