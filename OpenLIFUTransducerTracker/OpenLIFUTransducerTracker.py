@@ -668,6 +668,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
 
+        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_transform_node)
         self.photoscan_to_volume_transform_node = self.wizard()._logic.run_fiducial_registration(
             moving_landmarks = self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node,
             fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
@@ -753,7 +754,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.approveTransducerPhotoscanTransform.clicked.connect(self.onTransformApproveClicked)
         self.ui.runTransducerPhotoscanRegistration.clicked.connect(self.onRunRegistrationClicked)
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
-        
+        self.runningRegistration = False 
+        self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
+
         self.ui.initializeTPRegistration.setToolTip("Use the best virtual fit result to initialize the transducer position. If virtual fit has not been run,"
         "the transform is initialized to idenity.")
     
@@ -763,24 +766,17 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        self.transducer_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.wizard().photoscan.get_id(),
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
-        )
-
         if self.transducer_to_volume_transform_node:
             self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
             self.setupTransformNode()
-            self.transform_approved = get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
         else:
             self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
             self.ui.runTransducerPhotoscanRegistration.enabled = False
             self.ui.approveTransducerPhotoscanTransform.enabled = False
-            self.transform_approved = None
+            self.transform_approved = False
         
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
-        self.runningRegistration = False 
 
     def updateTransformApprovalStatusLabel(self):
 
@@ -809,21 +805,17 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             raise RuntimeError("Transducer-photoscan transform not found.")
         
         self.transform_approved = not self.transform_approved
-        set_transducer_tracking_approval_for_node(approval_state  = self.transform_approved, 
-                                                  transform_node = self.transducer_to_volume_transform_node)
-        
+
         # Update the wizard page
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
     
     def onInitializeRegistrationClicked(self):
 
-        self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_transducer_to_volume_node_from_virtual_fit_result(
+        slicer.mrmlScene.RemoveNode(self.transducer_to_volume_transform_node)
+        self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_node_from_virtual_fit_result(
             transducer = self.wizard().transducer,
-            target = self.wizard().target,
-            photoscan_id = self.wizard().photoscan.get_id()
-        )
-        self.transform_approved = get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
+            target = self.wizard().target)
         self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
 
@@ -833,13 +825,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             
     def setupTransformNode(self):
 
-        # TODO: This can probably be outside the wizard? And after exiting wizard, reset all view nodes.
-
-
         self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
         self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
-            [self.wizard().volume_view_node.GetID()]
-            ) # Specify a view node for display
+            [self.wizard().volume_view_node.GetID()]) # Specify a view node for display
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
 
     def onRunRegistrationClicked(self):
@@ -984,32 +972,40 @@ class TransducerTrackingWizard(qt.QWizard):
         """Handle Finish button click."""
         self.resetViewNodes()
 
-        # Set the current transform node to the transducer tracking result.
-        tt_result = self._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.photoscan.get_id(),
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
-        if tt_result:
-            self.transducer.set_current_transform_to_match_transform_node(tt_result)
-            
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
-        # Copy photoscan landmarks to slicer scene and remove the wizard-level node
+        # Copy photoscan and skin segmentation landmarks to slicer scene
         self._logic.update_photoscan_tracking_fiducials_from_node(
             photoscan = self.photoscan,
             fiducial_node =  self.photoscanMarkupPage.facial_landmarks_fiducial_node)
         self._logic.update_volume_facial_landmarks_from_node(volume_or_skin_mesh = self.skin_mesh_node,
             fiducial_node =  self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         
-        self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform()
-        self._logic.add_photoscan_volume_transducer_tracking_result(
+        # Add the transducer tracking result noes to the scene
+        self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform() 
+        self._logic.add_transducer_tracking_result(
             transform_node=self.photoscanVolumeTrackingPage.scaledTransformNode,
+            transform_type= TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
             approval_status=self.photoscanVolumeTrackingPage.transform_approved,
             photoscan=self.photoscan,
             transducer=self.transducer)
+        self._logic.add_transducer_tracking_result(
+            transform_node=self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node,
+            transform_type= TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+            approval_status=self.transducerPhotoscanTrackingPage.transform_approved,
+            photoscan=self.photoscan,
+            transducer=self.transducer)
 
-        self.clearWizardNodes()
+        self.clearWizardNodes() #remove the wizard-level node
 
+        # Set the current transducer transform node to the transducer tracking result.
+        tt_result = self._logic.get_transducer_tracking_result_node(
+            photoscan_id = self.photoscan.get_id(),
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+        if tt_result:
+            self.transducer.set_current_transform_to_match_transform_node(tt_result)
+            
         # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
         # This forced set of the interaction node is needed to solve that. 
         interactionNode = slicer.app.applicationLogic().GetInteractionNode()
@@ -1046,6 +1042,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.scaledTransformNode)
+        slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
 
     def setupViewNodes(self):
                 
@@ -1871,29 +1868,31 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         slicer.cli.run(fiducial_registration_cli, node = None, parameters = parameters, wait_for_completion = True, update_display = False)
         return fiducial_result_node
 
-    def add_photoscan_volume_transducer_tracking_result(self,
-                                                        transform_node: vtkMRMLTransformNode,
-                                                        approval_status: bool,
-                                                        photoscan: SlicerOpenLIFUPhotoscan,
-                                                        transducer : SlicerOpenLIFUTransducer) -> vtkMRMLTransformNode:
-        """Initializes and returns a photoscan-to-volume transducer tracking result transform node. 
-        This new transform node is added to the scene and assigned the necessary attributes to identify it as a transducer tracking result of type PHOTOSCAN_TO_VOLUME.
+    def add_transducer_tracking_result(self,
+                                       transform_node: vtkMRMLTransformNode,
+                                       transform_type: TransducerTrackingTransformType,
+                                       approval_status: bool,
+                                       photoscan: SlicerOpenLIFUPhotoscan,
+                                       transducer : SlicerOpenLIFUTransducer) -> vtkMRMLTransformNode:
+        """Initializes and returns a transducer tracking result transform node. 
+        This new transform node is added to the scene and assigned the necessary attributes to 
+        identify it as a transducer tracking result of type 'PHOTOSCAN_TO-VOLUME' or 'TRANSDUCER_TO_VOLUME.
         """
         
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
-        photoscan_to_volume_result = add_transducer_tracking_result(
+        tt_result = add_transducer_tracking_result(
             transform_node = transform_node,
-            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+            transform_type = transform_type,
             photoscan_id = photoscan.get_id(),
             session_id = session_id, 
             approval_status = approval_status,
             replace = True, 
             )
-        transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_result)
+        transducer.move_node_into_transducer_sh_folder(tt_result)
 
-        return photoscan_to_volume_result
+        return tt_result
     
     def get_transducer_tracking_result_node(self, photoscan_id: str, transform_type: TransducerTrackingTransformType) -> vtkMRMLTransformNode:
         """ Returns 'None' if no result is found """
@@ -1907,21 +1906,14 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         return transform_node
 
-    def initialize_transducer_to_volume_node_from_virtual_fit_result(self,
+    def initialize_node_from_virtual_fit_result(self,
             transducer: SlicerOpenLIFUTransducer,
-            target: vtkMRMLMarkupsFiducialNode,
-            photoscan_id: str) -> vtkMRMLTransformNode:
-        """Initializes and returns a transducer-to-volume transform node using the best virtual fit result for a 
-        target fiducial. This function adds a new `vtkMRMLTransformNode` to the scene with the necessary attributes
-        to identify it as a transducer tracking result of type TRANSDUCER_TO_VOLUME. It attempts to initialize
-        this transform with the transformation matrix obtained from the best available virtual
-        fit result associated with the given target fiducial. If no virtual
-        fit result is found, the transform is initialized to the identity matrix. 
+            target: vtkMRMLMarkupsFiducialNode) -> vtkMRMLTransformNode:
+        """Initializes a transform node using the best available virtual fit result for a 
+        target fiducial. If no virtual fit result is found, the transform is initialized to the identity matrix. 
         Args:
             transducer: The `SlicerOpenLIFUTransducer` object associated with this transform.
             target: The target for which the virtual fit result should be retrieved.
-            photoscan_id: The ID of the photoscan for which this transducer
-                tracking transform is being initialized
         """
       
         session = get_openlifu_data_parameter_node().loaded_session
@@ -1934,28 +1926,18 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         if best_virtual_fit_result_node is None:
             # Initialize transform with identity matrix
-            transducer_to_volume_result = transducer_transform_node_from_openlifu(
+            transform_node = transducer_transform_node_from_openlifu(
                 openlifu_transform_matrix = np.eye(4) ,
                 transducer = transducer.transducer.transducer,
                 transform_units = transducer.transducer.transducer.units)
         else:
             virtual_fit_transform = vtk.vtkMatrix4x4()
             best_virtual_fit_result_node.GetMatrixTransformToParent(virtual_fit_transform)
-            transducer_to_volume_result = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-            transducer_to_volume_result.SetMatrixTransformToParent(virtual_fit_transform)
+            transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+            transform_node.SetMatrixTransformToParent(virtual_fit_transform)
+        transform_node.CreateDefaultDisplayNodes()
 
-        transducer_to_volume_result = add_transducer_tracking_result(
-            transducer_to_volume_result,
-            TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
-            photoscan_id = photoscan_id,
-            session_id = session_id, 
-            approval_status = False,
-            replace = True, 
-            )
-        
-        transducer.move_node_into_transducer_sh_folder(transducer_to_volume_result)
-    
-        return transducer_to_volume_result
+        return transform_node
 
     def clear_any_openlifu_volume_affiliated_nodes(self, volume_node: vtkMRMLScalarVolumeNode) -> None:
 
