@@ -694,11 +694,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             return
 
         self.logic.add_user_to_database(user_dict)
+        self.updateWidgetLoginState() # reload in case an admin user was added when there previously wasn't one
 
     @display_errors
     def onManageAccountsButtonclicked(self, checked:bool) -> None:
         new_account_dlg = ManageAccountsDialog(get_cur_db())
         new_account_dlg.exec_()
+        self.updateWidgetLoginState() # reload in case an admin user was added when there previously wasn't one
 
     def updateWorkflowControls(self):
         if self._cur_login_state in [LoginState.NOT_LOGGED_IN, LoginState.UNSUCCESSFUL_LOGIN]:
@@ -765,7 +767,10 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.ui.manageAccountsButton.setToolTip("Manage accounts")
 
 
-    def updateWidgetLoginState(self, state: LoginState):
+    def updateWidgetLoginState(self, state: Optional[LoginState] = None):
+        if state is None:
+            state = self._cur_login_state # if called with None, we reload
+
         # if a db is connected, check if there is an admin there. If not, override the state.
         if get_cur_db() and not any('admin' in u.roles for u in get_cur_db().load_all_users()):
             # set the user to admin
@@ -779,6 +784,12 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.logic.active_user = default_admin_user
 
             self._cur_login_state = LoginState.DEFAULT_ADMIN
+        elif get_cur_db() and self._cur_login_state == LoginState.DEFAULT_ADMIN:
+            # If we are here, this means there *IS* an admin in the db, but the
+            # state is DEFAULT_ADMIN. So we have to exit the DEFAULT_ADMIN
+            # state.
+            self.logic.active_user = self._default_anonymous_user
+            self._cur_login_state = LoginState.NOT_LOGGED_IN
         else:
             self._cur_login_state = state
 
