@@ -27,6 +27,7 @@ from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_result,
     clear_virtual_fit_results,
     get_approved_target_ids,
+    get_virtual_fit_result_nodes,
     get_virtual_fit_approval_for_target,
     set_virtual_fit_approval_for_target,
     get_best_virtual_fit_result_node,
@@ -130,6 +131,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
         slicer.util.getModule("OpenLIFUData").widgetRepresentation()
 
+        # ---- Inject guided mode workflow controls ----
+
+        self.inject_workflow_controls_into_placeholder()
+
+        # ---- Connections ----
+
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
@@ -180,7 +187,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onVirtualfitClicked)
 
-        self.inject_workflow_controls_into_placeholder()
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -190,6 +197,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -340,6 +348,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApproveButton()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
+        self.updateWorkflowControls()
 
     def updateEditTargetEnabled(self):
         """Update whether the controls that edit targets are enabled"""
@@ -365,11 +374,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             False # "place mode persistence" set to False means we want to place one target and then stop
         )
 
+        self.updateWorkflowControls()
+
     def onremoveTargetClicked(self):
         node = self.getTargetsListViewCurrentSelection()
         if node is None:
             raise RuntimeError("It should not be possible to click Remove target while there is not a valid target selected.")
         slicer.mrmlScene.RemoveNode(node)
+
+        self.updateWorkflowControls()
 
     def updateTargetPositionInputs(self):
         node = self.getTargetsListViewCurrentSelection()
@@ -468,6 +481,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.logic.toggle_virtual_fit_approval(target_id=target_id, session_id=session_id)
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
+        self.updateWorkflowControls()  # TODO: workflow controls should check for approval too!
 
     def updateApprovalStatusLabel(self):
         approved_target_ids = self.logic.get_approved_target_ids()
@@ -478,6 +492,23 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 "Virtual fit is approved for the following targets:\n- "
                 + "\n- ".join(approved_target_ids)
             )
+
+    def updateWorkflowControls(self):
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+
+        if session is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
+        if not get_target_candidates():
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Create a target to proceed."
+        elif not list(get_virtual_fit_result_nodes(session_id=session_id)):
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Run a virtual fit result for a target to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Virtual fit result detected, proceed to the next step."
 
     def onVirtualfitClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
@@ -496,6 +527,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
+        self.updateWorkflowControls()
 
     def watchVirtualFit(self, virtual_fit_transform_node : vtkMRMLTransformNode):
         """Watch the virtual fit transform node to revoke approval in case the transform node is approved and then modified."""
