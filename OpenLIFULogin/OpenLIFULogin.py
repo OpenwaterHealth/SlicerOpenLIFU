@@ -701,7 +701,10 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         new_account_dlg.exec_()
 
     def updateWorkflowControls(self):
-        if self._cur_login_state in [LoginState.NOT_LOGGED_IN, LoginState.UNSUCCESSFUL_LOGIN]:
+        if not self._parameterNode.user_account_mode:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "User account mode disabled, proceed to the next step."
+        elif self._cur_login_state in [LoginState.NOT_LOGGED_IN, LoginState.UNSUCCESSFUL_LOGIN]:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Log in to proceed."
         else:
