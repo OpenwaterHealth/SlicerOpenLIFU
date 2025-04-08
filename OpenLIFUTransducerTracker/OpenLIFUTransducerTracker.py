@@ -92,10 +92,8 @@ class PhotoscanMarkupPage(qt.QWizardPage):
     def initializePage(self):
 
         set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
-        
         # Specify controls for adding markups to the dialog
         if self.wizard().photoscan.facial_landmarks_fiducial_node:
-
             # If an existing node is specified, check that it is valid
             if self.wizard().photoscan.facial_landmarks_fiducial_node.GetNumberOfControlPoints() != 3:
                 slicer.util.infoDisplay(
@@ -104,11 +102,10 @@ class PhotoscanMarkupPage(qt.QWizardPage):
                 )
                 slicer.mrmlScene.RemoveNode(self.wizard().photoscan.facial_landmarks_fiducial_node)
                 self.wizard().photoscan.facial_landmarks_fiducial_node = None
-            else:
+            elif self.facial_landmarks_fiducial_node is None:
                 self.wizard().photoscan.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
                 self._initialize_facial_landmarks_fiducial_node(existing_landmarks_node = self.wizard().photoscan.facial_landmarks_fiducial_node)
-                self.setupMarkupsWidget()
-
+        self.setupMarkupsWidget()
         self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
     
     def _initialize_facial_landmarks_fiducial_node(self, existing_landmarks_node = None) -> vtkMRMLMarkupsFiducialNode:
@@ -156,16 +153,10 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.ui.placeLandmarksButton.setText("Done Placing Landmarks")
             self.placingLandmarks = True
             self.ui.photoscanMarkupsWidget.enabled = True
-            self.ui.photoscanMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
                 self.ui.landmarkPlacementStatus.text = "- Landmark positions unlocked. Click on the mesh to adjust.\n" \
                 "- To unset a landmark's position, double-click it in the list."
-                self.ui.landmarkPlacementStatus.text = "-Landmark positions unlocked. Click on the mesh to adjust.\n" \
-                "- To unset a landmark's position, double-click it in the list."
             else:
-                self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
-                "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
-                "- To unset a landmark's position, double-click it in the list."
                 self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
                 "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
                 "- To unset a landmark's position, double-click it in the list."
@@ -174,8 +165,6 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.facial_landmarks_fiducial_node.SetLocked(True)
             self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
             self.placingLandmarks = False
-            self.ui.photoscanMarkupsWidget.tableWidget().clearSelection()
-            self.ui.photoscanMarkupsWidget.enabled = False
             self.ui.photoscanMarkupsWidget.tableWidget().clearSelection()
             self.ui.photoscanMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
@@ -187,8 +176,6 @@ class PhotoscanMarkupPage(qt.QWizardPage):
     def setupMarkupsWidget(self):
 
         self.ui.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
-        self.ui.photoscanMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
-        self.ui.photoscanMarkupsWidget.enabled = False
         self.ui.photoscanMarkupsWidget.enabled = False
         
         # If the selected landmark is 'unset', then the cursor is set to 'Place' mode.
@@ -196,14 +183,15 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
         tableWidget.setSelectionBehavior(tableWidget.SelectRows)
         tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu) # Prevents context menu that allows point deletion/rearrangement.
-        # Make the row  names uneditable
-        for row in range(tableWidget.rowCount):
-            item = tableWidget.item(row, 0)
-            flags = item.flags()
-            item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
-
         tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
         tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
+
+        if self.facial_landmarks_fiducial_node:
+            self.ui.photoscanMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
+            # Make the row  names uneditable
+            for row in range(tableWidget.rowCount):
+                item = tableWidget.item(row, 0)
+                item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
 
     def markupTableWidgetSelected(self, item):
 
@@ -373,10 +361,10 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
                     windowTitle="Invalid fiducial node detected", parent = self.wizard()
                 )
                 slicer.mrmlScene.RemoveNode(existing_skin_seg_fiducials)
-            else:
+            elif self.facial_landmarks_fiducial_node is None:
                 existing_skin_seg_fiducials.GetDisplayNode().SetVisibility(False)
                 self._initialize_facial_landmarks_fiducial_node(existing_landmarks_node = existing_skin_seg_fiducials)
-                self.setupMarkupsWidget()
+        self.setupMarkupsWidget()
 
     def _initialize_facial_landmarks_fiducial_node(self, existing_landmarks_node = None) -> vtkMRMLMarkupsFiducialNode:
 
@@ -441,7 +429,6 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
     def setupMarkupsWidget(self):
 
         self.ui.skinSegMarkupsWidget.setMRMLScene(slicer.mrmlScene)
-        self.ui.skinSegMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
         self.ui.skinSegMarkupsWidget.enabled = False
         
         # If the selected landmark is 'unset', then the cursor is set to 'Place' mode.
@@ -449,12 +436,14 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
         tableWidget.setSelectionBehavior(tableWidget.SelectRows)
         tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu) # Prevents context menu that allows point deletion/rearrangement.
-        # Make the row  names uneditable
-        for row in range(tableWidget.rowCount):
-            item = tableWidget.item(row, 0)
-            item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
         tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
         tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
+        if self.facial_landmarks_fiducial_node:
+            self.ui.skinSegMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
+            # Make the row  names uneditable
+            for row in range(tableWidget.rowCount):
+                item = tableWidget.item(row, 0)
+                item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
 
     def markupTableWidgetSelected(self, item):
 
@@ -513,7 +502,6 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         selected_text = self.ui.skinSegMarkupsWidget.tableWidget().item(self._currentlyUnsettingIndex, 0).text() 
         self.currently_placing_node = self._getSelectedNode(selected_text = selected_text)
         self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyUnsettingIndex, 0,0,0) # First set position to zero
-        # self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyUnsettingIndex, f"Click to Place {self.currently_placing_node.GetName()}")
         self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(self._currentlyUnsettingIndex)
         self.enterPlaceFiducialMode()
         self._currentlyPlacingIndex = currentRow
@@ -599,6 +587,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.approvePhotoscanVolumeTransform.clicked.connect(self.onTransformApproveClicked)
         self.ui.runPhotoscanVolumeRegistration.clicked.connect(self.onRunRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
+        self.runningRegistration = False
 
         # Transform scale slider
         self.ui.scalingTransformMRMLSliderWidget.setMRMLScene(slicer.mrmlScene)
@@ -608,10 +597,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.scalingTransformMRMLSliderWidget.decimals = 2
         self.ui.scalingTransformMRMLSliderWidget.singleStep = 0.01
         self.ui.scalingTransformMRMLSliderWidget.pageStep = 1.0
-        self.ui.scalingTransformMRMLSliderWidget.setToolTip(_('"'))
-        self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.scaleTransformNode)
+        self.ui.scalingTransformMRMLSliderWidget.setToolTip(_('Adjust the scale of the photosan mesh."'))
+        self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.updateScaledTransformNode)
 
-        self.scaledTransformNode : vtkMRMLTransformNode = None
+        self.scaledTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        self.scaledTransformNode.SetName("wizard_photoscan_volume-scaled")
+        self.photoscan_to_volume_transform_node: vtkMRMLTransformNode = None
 
         self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration "
         "between the photoscan mesh and skin surface.")
@@ -624,24 +615,24 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        self.photoscan_to_volume_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.wizard().photoscan.get_id(),
-            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
-
+        # Always starts the registration process from scratch even if there is an existing transform
+        # node in the scene
         if self.photoscan_to_volume_transform_node:
             self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
             self.setupTransformNode()
-            self.transform_approved = get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node)
         else:
             self.ui.initializePVRegistration.setText("Initialize photoscan-volume transform")
             self.ui.runPhotoscanVolumeRegistration.enabled = False
             self.ui.approvePhotoscanVolumeTransform.enabled = False
-            self.transform_approved = None
+            self.transform_approved = False
+        
+        self.updateScaledTransformNode() 
+        self.wizard().photoscan.model_node.SetAndObserveTransformNodeID(self.scaledTransformNode.GetID())
+        self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(self.scaledTransformNode.GetID())
         
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
         self.ui.scalingTransformWidget.hide()
-        self.runningRegistration = False
     
     def updateTransformApprovalStatusLabel(self):
 
@@ -669,8 +660,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             raise RuntimeError("Photoscan-volume transform not found.")
 
         self.transform_approved = not self.transform_approved
-        set_transducer_tracking_approval_for_node(self.transform_approved, self.photoscan_to_volume_transform_node)
-        
+
         # Update the wizard page
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
@@ -678,12 +668,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
 
-        self.photoscan_to_volume_transform_node = self.wizard()._logic.run_photoscan_volume_fiducial_registration(
-            photoscan_facial_landmarks = self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node,
-            volume_facial_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node,
-            transducer = self.wizard().transducer,
-            photoscan_id = self.wizard().photoscan.get_id())
-        self.transform_approved = get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node)
+        self.photoscan_to_volume_transform_node = self.wizard()._logic.run_fiducial_registration(
+            moving_landmarks = self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node,
+            fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
 
@@ -698,9 +685,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             ) # Specify a view node for display
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
         
-        self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
-        self.wizard().photoscan.model_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
-
         # Set the center of the transformation to the center of the photocan model node
         bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.wizard().photoscan.model_node.GetRASBounds(bounds)
@@ -715,14 +699,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
         transform_from_world.TransformPoint(center_world,center_local )
         self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
-
-        if self.scaledTransformNode is None:
-            # Clone the current transform node
-            self.scaledTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-            self.scaledTransformNode.SetName("wizard_photoscan_volume-scaled")
-            self.scaledTransformNode.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
-
-        self.wizard().photoscan.set_transform_node(self.scaledTransformNode)
+        self.scaledTransformNode.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
 
     def onRunRegistrationClicked(self):
         """ This is a temporary implementation that allows the user to manually edit the photoscan-volume transform. In the 
@@ -755,13 +732,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
     
-    def scaleTransformNode(self):
+    def updateScaledTransformNode(self):
 
         scaling_value = self.ui.scalingTransformMRMLSliderWidget.value
         scaling_matrix = np.diag([scaling_value, scaling_value, scaling_value, 1])
         self.scaledTransformNode.SetMatrixTransformToParent(numpy_to_vtk_4x4(scaling_matrix))
 
-        
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
         return not self.runningRegistration
@@ -947,20 +923,20 @@ class TransducerTrackingWizard(qt.QWizard):
             # Display the photoscan. This sets the visibility on the model and fiducial node
             # Reset the view node everytime the photoscan is displayed
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
-            # If the user clicks 'Back' from the skin segmentation markup page
-            if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
-                self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
+            self.photoscan.model_node.SetAndObserveTransformNodeID(None)
 
             # Disable editing of the fiducial node position
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.SetLocked(True)
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(True)
+                self.photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(None)
 
             # If the user clicks 'Back' from the skin segmentation markup page
+            self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
                 self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
-            reset_view_node_camera(self.photoscan.view_node)
             
+            reset_view_node_camera(self.photoscan.view_node)
 
         elif isinstance(current_page, SkinSegmentationMarkupPage):
 
@@ -1009,7 +985,6 @@ class TransducerTrackingWizard(qt.QWizard):
         self.resetViewNodes()
 
         # Set the current transform node to the transducer tracking result.
-        # TODO: Should this only happen if the the tt result is approved?
         tt_result = self._logic.get_transducer_tracking_result_node(
             photoscan_id = self.photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
@@ -1020,17 +995,23 @@ class TransducerTrackingWizard(qt.QWizard):
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         # Copy photoscan landmarks to slicer scene and remove the wizard-level node
-        self._logic.update_photoscan_tracking_fiducials(
+        self._logic.update_photoscan_tracking_fiducials_from_node(
             photoscan = self.photoscan,
             fiducial_node =  self.photoscanMarkupPage.facial_landmarks_fiducial_node)
         self._logic.update_volume_facial_landmarks_from_node(volume_or_skin_mesh = self.skin_mesh_node,
             fiducial_node =  self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
+        
+        self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform()
+        self._logic.add_photoscan_volume_transducer_tracking_result(
+            transform_node=self.photoscanVolumeTrackingPage.scaledTransformNode,
+            approval_status=self.photoscanVolumeTrackingPage.transform_approved,
+            photoscan=self.photoscan,
+            transducer=self.transducer)
 
         self.clearWizardNodes()
 
         # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
         # This forced set of the interaction node is needed to solve that. 
-        # Exit place mode
         interactionNode = slicer.app.applicationLogic().GetInteractionNode()
         interactionNode.SwitchToViewTransformMode()
 
@@ -1041,7 +1022,6 @@ class TransducerTrackingWizard(qt.QWizard):
         self.resetViewNodes()
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
-
         self.clearWizardNodes()
 
         # Exit place mode
@@ -1063,7 +1043,10 @@ class TransducerTrackingWizard(qt.QWizard):
                 node.RemoveAllObservers()
             slicer.mrmlScene.RemoveNode(node)
         slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
-        
+
+        slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
+        slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.scaledTransformNode)
+
     def setupViewNodes(self):
                 
         # Create a viewNode for displaying the photoscan if it hasn't been created
@@ -1756,7 +1739,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         return loaded_slicer_photoscan
     
-    def update_photoscan_tracking_fiducials(self, photoscan: SlicerOpenLIFUPhotoscan, fiducial_node: vtkMRMLMarkupsFiducialNode) -> vtkMRMLMarkupsFiducialNode:
+    def update_photoscan_tracking_fiducials_from_node(self, photoscan: SlicerOpenLIFUPhotoscan, fiducial_node: vtkMRMLMarkupsFiducialNode) -> vtkMRMLMarkupsFiducialNode:
         """This is a placeholder function for calling the algorithm for detecting
         initial registration landmarks positions on the photoscan surface. For now, 
         the landmarks are initialized at the origin by default.
@@ -1873,35 +1856,39 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
 
         return volume_facial_landmarks_node
     
-    def run_photoscan_volume_fiducial_registration(self,
-            photoscan_facial_landmarks: SlicerOpenLIFUPhotoscan,
-            volume_facial_landmarks: vtkMRMLModelNode,
-            transducer : SlicerOpenLIFUTransducer, photoscan_id: str) -> vtkMRMLTransformNode:
-        """Initializes and returns the photoscan-to-volume transform node by performing fiducial registration
-          between the photoscan facial landmarks and volume facial landmarks. The resulting transformation matrix is used to initialize a new
-        `vtkMRMLTransformNode`. This new transform node is added to the scene and assigned
-        the necessary attributes to identify it as a transducer tracking result of type PHOTOSCAN_TO_VOLUME.
-        """
-
-        photoscan_to_volume_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-
+    def run_fiducial_registration(self,
+            moving_landmarks: vtkMRMLMarkupsFiducialNode,
+            fixed_landmarks: vtkMRMLMarkupsFiducialNode) -> vtkMRMLTransformNode:
+        """Runs fiducial registration between the provided fixed and moving fiducial node landmarks and returns the result as a `vtkMRMLTransformNode`."""
+        
+        fiducial_result_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
         fiducial_registration_cli = slicer.modules.fiducialregistration
         parameters = {}
-        parameters["fixedLandmarks"] = volume_facial_landmarks
-        parameters["movingLandmarks"] = photoscan_facial_landmarks
-        parameters["saveTransform"] = photoscan_to_volume_transform_node
+        parameters["fixedLandmarks"] = fixed_landmarks
+        parameters["movingLandmarks"] = moving_landmarks
+        parameters["saveTransform"] = fiducial_result_node
         parameters["transformType"] = "Similarity"
         slicer.cli.run(fiducial_registration_cli, node = None, parameters = parameters, wait_for_completion = True, update_display = False)
+        return fiducial_result_node
 
+    def add_photoscan_volume_transducer_tracking_result(self,
+                                                        transform_node: vtkMRMLTransformNode,
+                                                        approval_status: bool,
+                                                        photoscan: SlicerOpenLIFUPhotoscan,
+                                                        transducer : SlicerOpenLIFUTransducer) -> vtkMRMLTransformNode:
+        """Initializes and returns a photoscan-to-volume transducer tracking result transform node. 
+        This new transform node is added to the scene and assigned the necessary attributes to identify it as a transducer tracking result of type PHOTOSCAN_TO_VOLUME.
+        """
+        
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         photoscan_to_volume_result = add_transducer_tracking_result(
-            photoscan_to_volume_transform_node,
-            TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-            photoscan_id = photoscan_id,
+            transform_node = transform_node,
+            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+            photoscan_id = photoscan.get_id(),
             session_id = session_id, 
-            approval_status = False,
+            approval_status = approval_status,
             replace = True, 
             )
         transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_result)
