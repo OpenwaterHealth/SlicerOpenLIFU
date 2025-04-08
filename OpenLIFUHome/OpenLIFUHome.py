@@ -212,6 +212,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateGuidedModeButton()
+        self.logic.workflow.enforceGuidedModeVisibility(self._parameterNode.guided_mode)
 
 #
 # OpenLIFUHomeLogic
