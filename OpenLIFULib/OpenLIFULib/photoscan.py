@@ -162,10 +162,3 @@ class SlicerOpenLIFUPhotoscan:
         self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
         if self.facial_landmarks_fiducial_node:
             self.facial_landmarks_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
-        
-    def set_transform_node(self, transform_node: vtkMRMLTransformNode):
-        
-        self.model_node.SetAndObserveTransformNodeID(transform_node.GetID())
-        
-        if self.facial_landmarks_fiducial_node:
-            self.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(transform_node.GetID())   

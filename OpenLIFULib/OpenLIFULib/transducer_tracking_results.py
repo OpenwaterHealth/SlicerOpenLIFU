@@ -33,12 +33,9 @@ def add_transducer_tracking_result(
     and will have a bunch of attributes set on it so that we can identify it
     later as a transducer tracking result node.
 
-    Note: This is a placeholder implementation. The format of this function will likely change in the future based on
-    the output of the transducer tracking algorithms. This function can be updated later to, 
-    for example, initialize a transform node based on a specified openlifu transform returned by the the transducer tracking algorithm
-
     Args:
-        transform_node: The transform node associated with the transducer tracking result.
+        transform_node: The transform node associated with the transducer tracking result. This node is cloned to
+        create the transducer tracking result node. 
         transform_type: The direction of the transform - TRANSDUCER_TO_VOLUME or PHOTOSCAN_TO_VOLUME
         photoscan_id: The ID of the photoscan for which the transducer tracking transform was computed.
         session_id: The ID of the openlifu.Session during which transducer tracking took place.
@@ -72,24 +69,29 @@ def add_transducer_tracking_result(
         else:
             raise RuntimeError("There is already a transducer tracking result node for this transform_type+photoscan+session and replace is False")
     
+    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+    itemIDToClone = shNode.GetItemByDataNode(transform_node)
+    clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+    transducer_tracking_result_node : vtkMRMLTransformNode = shNode.GetItemDataNode(clonedItemID)
+
     if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME:
-        transform_node.SetName(f"TT transducer-volume {photoscan_id}")
-        transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}","1")
+        transducer_tracking_result_node.SetName(f"TT transducer-volume {photoscan_id}")
+        transducer_tracking_result_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}","1")
     elif transform_type == TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME:
-        transform_node.SetName(f"TT photoscan-volume {photoscan_id}")
-        transform_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}","1")
+        transducer_tracking_result_node.SetName(f"TT photoscan-volume {photoscan_id}")
+        transducer_tracking_result_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}","1")
     else:
         raise RuntimeError("Invalid transducer tracking transform type specified")
 
-    transform_node.SetAttribute("TT:approvalStatus", "1" if approval_status else "0")
-    transform_node.SetAttribute("TT:photoscanID", photoscan_id)
+    transducer_tracking_result_node.SetAttribute("TT:approvalStatus", "1" if approval_status else "0")
+    transducer_tracking_result_node.SetAttribute("TT:photoscanID", photoscan_id)
     if session_id is not None:
-        transform_node.SetAttribute("TT:sessionID", session_id)
+        transducer_tracking_result_node.SetAttribute("TT:sessionID", session_id)
 
-    transform_node.CreateDefaultDisplayNodes()
-    transform_node.GetDisplayNode().SetVisibility(False)
+    transducer_tracking_result_node.CreateDefaultDisplayNodes()
+    transducer_tracking_result_node.GetDisplayNode().SetVisibility(False)
     
-    return transform_node
+    return transducer_tracking_result_node
 
 def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, transducer_units:str) -> List["TransducerTrackingResult"]:
     """Parse through transducer tracking transform nodes in the scene and return the information in Session representation.
