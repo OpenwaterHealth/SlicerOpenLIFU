@@ -120,7 +120,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.focusAnalysisTableView.setModel(self.focusAnalysisTableModel)
         self.ui.globalAnalysisTableView.setModel(self.globalAnalysisTableModel)
 
-        # Connections
+        # ---- Inject guided mode workflow controls ----
+
+        self.inject_workflow_controls_into_placeholder()
+
+        # ---- Connections ----
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -157,8 +161,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        self.inject_workflow_controls_into_placeholder()
-
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -168,6 +171,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -307,6 +311,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             finally:
                 self.updateSolutionProgressBar()
 
+        self.updateWorkflowControls()
+
     def onrenderPNPCheckBoxClicked(self, checked:bool):
         if checked:
             self.logic.render_pnp()
@@ -366,6 +372,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         with BusyCursor():
             self.logic.toggle_solution_approval()
 
+        self.updateWorkflowControls()
+
     def onParameterNodeModified(self, caller, event) -> None:
         if not self._updating_solution_analysis: # prevent recursive observer event
             self._updating_solution_analysis = True
@@ -403,6 +411,17 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.populate_solution_analysis_table()
         self.ui.analysisStackedWidget.setCurrentIndex(1) # set the page to analysis
+
+    def updateWorkflowControls(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
+        elif get_openlifu_data_parameter_node().loaded_solution is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Compute a sonication solution to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Sonication solution detected, proceed to the next step."
 
     def clear_solution_analysis_tables(self) -> None:
         """Clear out the solution analysis tables, removing all rows and column headers"""
