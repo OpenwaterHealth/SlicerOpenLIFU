@@ -199,6 +199,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUSonicationControlLogic()
 
+        # ---- Inject guided mode workflow controls ----
+
+        self.inject_workflow_controls_into_placeholder()
+
+        # ---- Connections ----
+
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
@@ -229,8 +235,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # After setup, update the module state from the data parameter node
         self.onDataParameterNodeModified()
-
-        self.inject_workflow_controls_into_placeholder()
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -240,6 +245,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -367,6 +373,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.updateWidgetSolutionHardwareState(SolutionHardwareState.SUCCESSFUL_SEND)
 
+        self.updateWorkflowControls()
+
     def onRunningChanged(self, new_running_state:bool):
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
@@ -382,6 +390,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.ui.runProgressBar.value = 0
         self.logic.run(solution) 
+
+        self.updateWorkflowControls()
         
     def onAbortClicked(self):
         self.logic.abort()
@@ -390,6 +400,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         if returncode:
             run_parameters['note'] = "Run aborted." + run_parameters['note'] # Append a note that the run was aborted.
             self.logic.create_openlifu_run(run_parameters)
+
+        self.updateWorkflowControls()
 
     def updateRunProgressBar(self, new_run_progress_value = None):
         """Update the run progress bar. 0% if there is no existing  run, 100% if there is an existing run."""
@@ -416,6 +428,16 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.solutionStateLabel.setProperty("text", "")  
             self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
             self.updateRunEnabled()
+
+    def updateWorkflowControls(self):
+        session = get_openlifu_data_parameter_node().loaded_session
+
+        if session is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Run the sonication solution on the hardware device."
 
 # OpenLIFUSonicationControlLogic
 #
