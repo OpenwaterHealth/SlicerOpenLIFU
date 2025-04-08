@@ -1314,6 +1314,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
         slicer.util.getModule("OpenLIFUData").widgetRepresentation()
 
+        # ---- Inject guided mode workflow controls ----
+
+        self.inject_workflow_controls_into_placeholder()
+
+        # ---- Connections ----
+
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
@@ -1345,8 +1351,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
-
-        self.inject_workflow_controls_into_placeholder()
+        self.updateWorkflowControls()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -1356,6 +1361,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -1475,6 +1481,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
+        self.updateWorkflowControls()
             
     def onPreviewPhotoscanClicked(self):
 
@@ -1526,6 +1533,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         
         self.wizard.exec_()
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
+
+        self.updateWorkflowControls()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
@@ -1583,6 +1592,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 "Transducer tracking is approved for the following photoscans:\n- "
                 + "\n- ".join(approved_photoscan_ids)
             )
+
+    def updateWorkflowControls(self):
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+
+        if session is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
+        elif not get_photoscan_ids_with_results(session_id=session_id):
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Run transducer tracking to proceed."
+        else:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Transducer tracking result detected, proceed to the next step."
 
 #
 # OpenLIFUTransducerTrackerLogic
