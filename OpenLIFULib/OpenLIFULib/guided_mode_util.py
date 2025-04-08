@@ -235,6 +235,41 @@ class Workflow:
         for workflow_controls in self.workflow_controls.values():
             workflow_controls.update()
 
+    def enforceGuidedModeVisibility(self, enforced: bool = False):
+
+        # ---- Locate widgets ----
+
+        # First, find all widgets that have the dynamic property set in the .ui
+        # file
+        hide_in_guided_mode_widgets = []
+        for moduleName in self.modules:
+            module = slicer.util.getModule(moduleName)
+            widgetRepresentation = module.widgetRepresentation()
+            all_widgets = slicer.util.findChildren(widgetRepresentation)
+            for widget in all_widgets:
+                hide_in_guided_mode = widget.property("slicer.openlifu.hide-in-guided-mode")
+                # If the widget does not have the specified property,
+                # QWidget.property("property-name") returns QVariant()—an
+                # invalid QVariant equivalent to None in Python.
+                if hide_in_guided_mode is not None:
+                    hide_in_guided_mode_widgets.append(widget)
+
+        # Second, find all widgets that we want to call the function to hide in
+        # guided mode, usually more complex widgets
+        complex_widgets = []
+        # TODO
+            
+        # ---- Hide ----
+
+        for widget in hide_in_guided_mode_widgets:
+            widget.hide() if enforced else widget.show()
+
+        for widget in complex_widgets:
+            widget.enforceGuidedModeVisibility(enforced)
+
+        return
+
+
 class GuidedWorkflowMixin:
     """A mixin class to add guided mode workflow related methods to a ScriptedLoadableModuleWidget"""
 

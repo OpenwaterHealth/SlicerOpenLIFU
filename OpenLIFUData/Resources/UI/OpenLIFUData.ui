@@ -317,6 +317,9 @@
      <property name="collapsed">
       <bool>true</bool>
      </property>
+     <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+      <bool>true</bool>
+     </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
        <widget class="QPushButton" name="loadProtocolButton">
