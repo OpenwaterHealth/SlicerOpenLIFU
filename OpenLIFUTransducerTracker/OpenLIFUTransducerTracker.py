@@ -846,7 +846,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializeTPRegistration.enabled = False
             self.ui.approveTransducerPhotoscanTransform.enabled = False
-
         else:
             self.ui.ICPPlaceholderLabel_2.text = ""
             self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
@@ -895,10 +894,8 @@ class TransducerTrackingWizard(qt.QWizard):
 
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setWizardStyle(qt.QWizard.ClassicStyle)
-
         # Connect the currentIdChanged signal
         self.currentIdChanged.connect(self.setPageSpecificNodeDisplaySettings)
-
         # Connect signals for finish and cancel
         self.button(qt.QWizard.FinishButton).clicked.connect(self.onFinish)
         self.button(qt.QWizard.CancelButton).clicked.connect(self.onCancel)
@@ -911,13 +908,13 @@ class TransducerTrackingWizard(qt.QWizard):
             # Display the photoscan. This sets the visibility on the model and fiducial node
             # Reset the view node everytime the photoscan is displayed
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
-            self.photoscan.model_node.SetAndObserveTransformNodeID(None)
+            self.photoscan.model_node.SetAndObserveTransformNodeID(None) # Should be viewed in native space
 
             # Disable editing of the fiducial node position
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.SetLocked(True)
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(True)
-                self.photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(None)
+                self.photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(None) # Should be viewed in native space
 
             # If the user clicks 'Back' from the skin segmentation markup page
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
@@ -962,6 +959,7 @@ class TransducerTrackingWizard(qt.QWizard):
             # Display the photoscan and transducer and hide the skin mesh
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
+            self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(True)
         
@@ -982,7 +980,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self._logic.update_volume_facial_landmarks_from_node(volume_or_skin_mesh = self.skin_mesh_node,
             fiducial_node =  self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         
-        # Add the transducer tracking result noes to the scene
+        # Add the transducer tracking result nodes to the slicer scene
         self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform() 
         self._logic.add_transducer_tracking_result(
             transform_node=self.photoscanVolumeTrackingPage.scaledTransformNode,
@@ -1050,9 +1048,7 @@ class TransducerTrackingWizard(qt.QWizard):
         photoscan_id = self.photoscan.get_id()
         if self.photoscan.view_node is None:
             self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
-        
         self.volume_view_node = get_threeD_transducer_tracking_view_node()
-        
         wizard_view_nodes = [self.photoscan.view_node, self.volume_view_node]
 
         # Set view nodes for the skin mesh, transducer and photoscan
