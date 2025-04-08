@@ -156,7 +156,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.placingLandmarks = True
             self.ui.photoscanMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
-                self.ui.landmarkPlacementStatus.text = "-Landmark positions unlocked. Click on the mesh to adjust.\n" \
+                self.ui.landmarkPlacementStatus.text = "- Landmark positions unlocked. Click on the mesh to adjust.\n" \
                 "- To unset a landmark's position, double-click it in the list."
             else:
                 self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
@@ -301,6 +301,7 @@ class PhotoscanMarkupPage(qt.QWizardPage):
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
         
         self.exitPlaceFiducialMode() # Exit place mode after the point is placed
+        self.currently_placing_node.RemoveAllObservers()
         slicer.mrmlScene.RemoveNode(self.currently_placing_node) # Remove the temporary node
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
         if self._checkAllLandmarksDefined():
@@ -408,7 +409,7 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
             self.placingLandmarks = True
             self.ui.skinSegMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
-                self.ui.landmarkPlacementStatus_2.text = "-Landmark positions unlocked. Click on the mesh to adjust.\n" \
+                self.ui.landmarkPlacementStatus_2.text = "- Landmark positions unlocked. Click on the mesh to adjust.\n" \
                 "- To unset a landmark's position, double-click it in the list."
             else:
                 self.ui.landmarkPlacementStatus_2.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
@@ -530,10 +531,12 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
         
         self.exitPlaceFiducialMode() # Exit place mode after the point is placed
+        self.currently_placing_node.RemoveAllObservers()
         slicer.mrmlScene.RemoveNode(self.currently_placing_node) # Remove the temporary node
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
         if self._checkAllLandmarksDefined():
-            self.ui.landmarkPlacementStatus_2.text = "Landmark positions unlocked. Click on the mesh to adjust." # Update the status message
+            self.ui.landmarkPlacementStatus_2.text = "-Landmark positions unlocked. Click on the mesh to adjust.\n" \
+                "- To unset a landmark's position, double-click it in the list." # Update the status message
     
     @vtk.calldata_type(vtk.VTK_INT)
     def onPointRemoved(self, node, eventID, callData):
@@ -1000,10 +1003,14 @@ class TransducerTrackingWizard(qt.QWizard):
     def clearWizardNodes(self):
         # Ensure any temporary variables are cleared. Nodes in the scene are not updated
         for node in self.photoscanMarkupPage.temp_markup_fiducials.values():
+            if node:
+                node.RemoveAllObservers()
             slicer.mrmlScene.RemoveNode(node)
         slicer.mrmlScene.RemoveNode(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
 
         for node in self.skinSegmentationMarkupPage.temp_markup_fiducials.values():
+            if node:
+                node.RemoveAllObservers()
             slicer.mrmlScene.RemoveNode(node)
         slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         
