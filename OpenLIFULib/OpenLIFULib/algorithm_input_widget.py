@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 @dataclass
 class AlgorithmInput:
     name : str
+    label : qt.QLabel
     combo_box : qt.QComboBox
     most_recent_selection : Any = None
 
@@ -44,10 +45,10 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             if input_name not in ["Protocol", "Transducer", "Volume", "Target", "Photoscan"]:
                 raise ValueError("Invalid algorithm input specified.")
             else:
-                self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QComboBox(self))
+                self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QLabel(f"{input_name}", self), qt.QComboBox(self))
                 
         for input in self.inputs_dict.values():
-            layout.addRow(f"{input.name}:", input.combo_box)
+            layout.addRow(input.label, input.combo_box)
 
     def add_protocol_to_combobox(self, protocol : SlicerOpenLIFUProtocol) -> None:
         self.inputs_dict["Protocol"].combo_box.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
@@ -68,6 +69,22 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         for input in ["Protocol", "Transducer", "Volume"]:
             if input in self.inputs_dict:
                 self.inputs_dict[input].combo_box.setToolTip(text)
+
+    def enforceGuidedModeVisibility(self, enforced: bool):
+        """Enforce visibility of widgets when in guided mode. This function is
+        defined for this Widget because when guided mode is activated, we want
+        to let the parent widget *choose* which sub-widgets to hide. In this
+        specific case, it is simple, but some widgets may be more picky"""
+
+        # In this case we just want to hide these three combo box widgets
+        for widget_key in ["Protocol", "Transducer", "Volume"]:
+            if widget_key in self.inputs_dict:
+                if enforced:
+                    self.inputs_dict[widget_key].label.hide()
+                    self.inputs_dict[widget_key].combo_box.hide()
+                else:
+                    self.inputs_dict[widget_key].label.show()
+                    self.inputs_dict[widget_key].combo_box.show()
 
     def _clear_input_options(self):
         """Clear out input options, remembering what was most recently selected in order to be able to set that again later"""
