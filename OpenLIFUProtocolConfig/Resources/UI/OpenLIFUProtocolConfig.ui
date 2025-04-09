@@ -12,7 +12,7 @@
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
    <item>
-    <widget class="QFrame" name="goToDataModulePushButtonFrame">
+    <widget class="QFrame" name="returnToSubjectSessionManagementPushButtonFrame">
      <property name="frameShape">
       <enum>QFrame::StyledPanel</enum>
      </property>
@@ -21,9 +21,9 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_11">
       <item>
-       <widget class="QPushButton" name="goToDataModulePushButton">
+       <widget class="QPushButton" name="returnToSubjectSessionManagementPushButton">
         <property name="text">
-         <string>Go To Data Module</string>
+         <string>Return to Subject/Session Management</string>
         </property>
        </widget>
       </item>

@@ -266,7 +266,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # Go to data module
-        self.ui.goToDataModulePushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUData"))
+        self.ui.returnToSubjectSessionManagementPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUData"))
 
         # Connect signals to trigger save state update
         trigger_unsaved_changes = lambda: self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES) if not self._is_saving_changes and not self._is_updating_display else None
