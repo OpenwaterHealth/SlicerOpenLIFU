@@ -2,8 +2,7 @@ import logging
 import os
 from pathlib import Path
 from dataclasses import fields, is_dataclass
-from typing import Annotated, Optional, Dict, List, Tuple, Union, Type, Any, Callable, get_type_hints, get_args, get_origin, TYPE_CHECKING
-from typing_extensions import get_type_hints as get_type_hints_ext # for <3.10 compatibility
+from typing import Annotated, Optional, List, Tuple, Type, Any, get_args, get_origin, TYPE_CHECKING
 
 from enum import Enum
 import inspect
@@ -30,14 +29,12 @@ from OpenLIFULib import (
 from OpenLIFULib.util import (
     display_errors,
     replace_widget,
+    get_hints,
 )
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
     import openlifu.db
-
-# Use this to ensure compatibility
-get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext
 
 #
 # OpenLIFUProtocolConfig
