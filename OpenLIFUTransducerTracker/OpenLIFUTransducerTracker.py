@@ -377,12 +377,13 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
             node.GetDisplayNode().SetVisibility(False) 
             # Clear the volume meta data attribute
             node.SetAttribute('OpenLIFUData.volume_id', None) 
-            node.GetDisplayNode().SetColor(0,1,1)
 
         else: # Initialize a new node
             node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","photoscan-wizard-faciallandmarks")
             node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
             node.SetMarkupLabelFormat("%N")
+            node.GetDisplayNode().SetColor(0,0,1)
+            node.GetDisplayNode().SetSelectedColor(0,0,1)
             for landmark_name in self.temp_markup_fiducials:
                 node.AddControlPoint(0,0,0,f"Click to Place {landmark_name}")
                 index = list(self.temp_markup_fiducials.keys()).index(landmark_name)
@@ -981,19 +982,21 @@ class TransducerTrackingWizard(qt.QWizard):
             fiducial_node =  self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         
         # Add the transducer tracking result nodes to the slicer scene
-        self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform() 
-        self._logic.add_transducer_tracking_result(
-            transform_node=self.photoscanVolumeTrackingPage.scaledTransformNode,
-            transform_type= TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-            approval_status=self.photoscanVolumeTrackingPage.transform_approved,
-            photoscan=self.photoscan,
-            transducer=self.transducer)
-        self._logic.add_transducer_tracking_result(
-            transform_node=self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node,
-            transform_type= TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
-            approval_status=self.transducerPhotoscanTrackingPage.transform_approved,
-            photoscan=self.photoscan,
-            transducer=self.transducer)
+        if self.photoscanVolumeTrackingPage.scaledTransformNode:
+            self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform() 
+            self._logic.add_transducer_tracking_result(
+                transform_node=self.photoscanVolumeTrackingPage.scaledTransformNode,
+                transform_type= TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+                approval_status=self.photoscanVolumeTrackingPage.transform_approved,
+                photoscan=self.photoscan,
+                transducer=self.transducer)
+        if self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node:
+            self._logic.add_transducer_tracking_result(
+                transform_node=self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node,
+                transform_type= TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+                approval_status=self.transducerPhotoscanTrackingPage.transform_approved,
+                photoscan=self.photoscan,
+                transducer=self.transducer)
 
         self.clearWizardNodes() #remove the wizard-level node
 
@@ -1832,8 +1835,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             # Ensure that visibility is turned off
             volume_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
             volume_facial_landmarks_node.SetMarkupLabelFormat("%N")
-            volume_facial_landmarks_node.GetDisplayNode().SetSelectedColor(0,1,1)
-            volume_facial_landmarks_node.GetDisplayNode().SetColor(0,1,1)
+            volume_facial_landmarks_node.GetDisplayNode().SetSelectedColor(0,0,1)
+            volume_facial_landmarks_node.GetDisplayNode().SetColor(0,0,1)
             # Set the ID of corresponding volume as a node attribute 
             volume_facial_landmarks_node.SetAttribute('OpenLIFUData.volume_id', volume_tracking_fiducial_id)
                 
