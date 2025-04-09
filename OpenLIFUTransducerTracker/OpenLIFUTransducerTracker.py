@@ -61,19 +61,13 @@ if TYPE_CHECKING:
     from openlifu.db import Database
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
-class PhotoscanMarkupPage(qt.QWizardPage):
-    def __init__(self, parent = None):
-        super().__init__()
-        self.setTitle("Place facial landmarks on photoscan")
-        self.ui = initialize_wizard_ui(self)
-        self.viewWidget = set_threeD_view_widget(self.ui)
-        self.ui.dialogControls.setCurrentIndex(1)
-
+class FacialLandmarksMarkupPageBase(qt.QWizardPage):
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.placingLandmarks = False
         self._pointModifiedObserverTag = None
         self._currentlyPlacingIndex = -1
         self._currentlyUnsettingIndex = -1
-
         # We need to create this dictionary of temporary fiducial nodes because when
         # entering place mode, to use `SetActiveListID` i.e. set the node associated with control point placement,
         # The input must be a fiducial node. However, to be able to list the required facial landmarks
@@ -84,68 +78,204 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             'Right Ear': None,
             'Left Ear': None,
             'Nasion': None}
-        self.facial_landmarks_fiducial_node: vtkMRMLMarkupsFiducialNode = None # Internal to the wizard facial landmarks node
+        self.facial_landmarks_fiducial_node: vtkMRMLMarkupsFiducialNode = None
 
-        # Connect buttons
-        self.ui.placeLandmarksButton.clicked.connect(self.onPlaceLandmarksClicked)
-    
+    def setupMarkupsWidget(self):
+        self.markupsWidget.setMRMLScene(slicer.mrmlScene)
+        self.markupsWidget.enabled = False
+
+        tableWidget = self.markupsWidget.tableWidget()
+        tableWidget.setSelectionMode(tableWidget.SingleSelection)
+        tableWidget.setSelectionBehavior(tableWidget.SelectRows)
+        tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu)
+        tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
+        tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
+
+        if self.facial_landmarks_fiducial_node:
+            self.markupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
+            for row in range(tableWidget.rowCount):
+                item = tableWidget.item(row, 0)
+                item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+
+    def markupTableWidgetSelected(self, item):
+        if not self.placingLandmarks:
+            return
+        currentRow = item.row()
+        if currentRow == -1 or self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
+            self._currentlyPlacingIndex = -1
+            self.exitPlaceFiducialMode()
+            return
+
+        selected_text = self.markupsWidget.tableWidget().item(currentRow, 0).text()
+        self.currently_placing_node = self._getSelectedNode(selected_text=selected_text)
+        if self.currently_placing_node.GetNumberOfControlPoints() == 0:
+            self.enterPlaceFiducialMode()
+            self._currentlyPlacingIndex = currentRow
+
+    def _getSelectedNode(self, selected_text: str):
+        selected_landmark_name = None
+        for landmark_name in self.temp_markup_fiducials:
+            if landmark_name in selected_text:
+                selected_landmark_name = landmark_name
+                break
+        if not selected_landmark_name:
+            slicer.util.infoDisplay(
+                text="Could not find a fiducial node matching the selected control point. Control points labels should include 'Right Ear', 'Left Ear' or 'Nasion'.",
+                windowTitle="Matching fiducial node not found", parent=self.wizard()
+            )
+        if self.temp_markup_fiducials[selected_landmark_name] is None:
+            self.temp_markup_fiducials[selected_landmark_name] = self._initialize_temporary_tracking_fiducial(node_name=selected_landmark_name)
+
+        return self.temp_markup_fiducials[selected_landmark_name]
+
+    def _initialize_temporary_tracking_fiducial(self, node_name: str):
+        initialized_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", node_name)
+        initialized_node.GetDisplayNode().SetVisibility(False)
+        initialized_node.SetMaximumNumberOfControlPoints(1)
+        initialized_node.SetMarkupLabelFormat("%N")
+        initialized_node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(), self.wizard().volume_view_node.GetID()])
+        initialized_node.GetDisplayNode().SetVisibility(True)
+        return initialized_node
+
+    def _initialize_facial_landmarks_fiducial_node(self, node_name: str, existing_landmarks_node=None) -> vtkMRMLMarkupsFiducialNode:
+        if existing_landmarks_node:  # Clone the existing node if valid
+            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+            itemIDToClone = shNode.GetItemByDataNode(existing_landmarks_node)
+            clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+            node = shNode.GetItemDataNode(clonedItemID)
+            node.SetName(node_name)  # Use the provided node name
+            node.GetDisplayNode().SetVisibility(False)
+
+        else:  # Initialize a new node
+            node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", node_name)  # Use the provided node name
+            node.GetDisplayNode().SetVisibility(False)  # Ensure that visibility is turned off
+            node.SetMarkupLabelFormat("%N")
+            for landmark_name in self.temp_markup_fiducials:
+                node.AddControlPoint(0, 0, 0, f"Click to Place {landmark_name}")
+                index = list(self.temp_markup_fiducials.keys()).index(landmark_name)
+                node.UnsetNthControlPointPosition(index)  # Unset all the points initially
+
+        node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(), self.wizard().volume_view_node.GetID()])
+        node.GetDisplayNode().SetVisibility(True)  # Ensure that visibility is turned on after setting biew nodes
+
+        # Add an observer if any of the points are undefined
+        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved)
+        self.facial_landmarks_fiducial_node = node
+        return node
+
+    def unsetControlPoint(self, item):
+        currentRow = item.row()
+        self._currentlyUnsettingIndex = currentRow
+        if not self.placingLandmarks or currentRow == -1:
+            return
+
+        selected_text = self.markupsWidget.tableWidget().item(self._currentlyUnsettingIndex, 0).text()
+        self.currently_placing_node = self._getSelectedNode(selected_text=selected_text)
+        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyUnsettingIndex, 0, 0, 0)
+        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(self._currentlyUnsettingIndex)
+        self.enterPlaceFiducialMode()
+        self._currentlyPlacingIndex = currentRow
+
+    def enterPlaceFiducialMode(self):
+        markupLogic = slicer.modules.markups.logic()
+        markupLogic.SetActiveListID(self.currently_placing_node)
+        markupLogic.StartPlaceMode(0)
+
+        self._pointModifiedObserverTag = self.currently_placing_node.AddObserver(
+            slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onPointPlaced)
+
+    def onPointPlaced(self, caller, event):
+        if caller.GetNumberOfControlPoints() < 1:
+            return
+
+        position = [0.0, 0.0, 0.0]
+        self.currently_placing_node.GetNthControlPointPosition(0, position)
+        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
+        self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
+
+        self.exitPlaceFiducialMode()
+        self.currently_placing_node.RemoveAllObservers()
+        slicer.mrmlScene.RemoveNode(self.currently_placing_node)
+        self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
+        if self._checkAllLandmarksDefined():
+            self.updateLandmarkPlacementStatus()
+
+    @vtk.calldata_type(vtk.VTK_INT)
+    def onPointRemoved(self, node, eventID, callData):
+        slicer.util.infoDisplay(
+            text=f"{node.GetNthControlPointLabel(callData)} is essential for tracking. Deletion blocked.",
+            windowTitle="Control point cannot be deleted", parent=self.wizard()
+        )
+        position = [0.0, 0.0, 0.0]
+        node.GetNthControlPointPosition(callData, position)
+        node.AddControlPoint(position, node.GetNthControlPointLabel(callData))
+
+    def exitPlaceFiducialMode(self):
+        if self._pointModifiedObserverTag:
+            self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
+            self._pointModifiedObserverTag = None
+
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+
+    def _checkAllLandmarksDefined(self):
+        if self.facial_landmarks_fiducial_node is None:
+            return False
+
+        all_points_defined = True
+        for i in range(self.facial_landmarks_fiducial_node.GetNumberOfControlPoints()):
+            if self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(i) == 0:
+                all_points_defined = False
+        return all_points_defined
+
+    def isComplete(self):
+        landmarks_exist = self.facial_landmarks_fiducial_node is not None
+        all_points_defined = self._checkAllLandmarksDefined()
+        return landmarks_exist and all_points_defined and not self.placingLandmarks
+
+    # Abstract methods to be implemented by subclasses
     def initializePage(self):
+        raise NotImplementedError
 
-        set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
-        # Specify controls for adding markups to the dialog
+    def onPlaceLandmarksClicked(self):
+        raise NotImplementedError
+
+    def updateLandmarkPlacementStatus(self):
+        raise NotImplementedError
+
+class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the base class
+    def __init__(self, parent=None):
+        super().__init__(parent)  
+        self.setTitle("Place facial landmarks on photoscan")
+        self.ui = initialize_wizard_ui(self)  
+        self.viewWidget = set_threeD_view_widget(self.ui)  
+        self.ui.dialogControls.setCurrentIndex(1)
+        self.markupsWidget = self.ui.photoscanMarkupsWidget  # Assign the correct markups widget
+        self.ui.placeLandmarksButton.clicked.connect(self.onPlaceLandmarksClicked)
+
+    def initializePage(self):
+        set_threeD_view_node(self.viewWidget, threeD_view_node=self.wizard().photoscan.view_node)
+
         if self.wizard().photoscan.facial_landmarks_fiducial_node:
-            # If an existing node is specified, check that it is valid
             if self.wizard().photoscan.facial_landmarks_fiducial_node.GetNumberOfControlPoints() != 3:
                 slicer.util.infoDisplay(
-                    text= f"Incorrect number of control points detected in the photoscan facial landmarks fiducial node. Transudcer Tracking Wizard will replace the existing node.",
-                    windowTitle="Invalid fiducial node detected", parent = self.wizard()
+                    text="Incorrect number of control points detected in the photoscan facial landmarks fiducial node. "
+                    "Transudcer Tracking Wizard will replace the existing node.",
+                    windowTitle="Invalid fiducial node detected", parent=self.wizard()
                 )
                 slicer.mrmlScene.RemoveNode(self.wizard().photoscan.facial_landmarks_fiducial_node)
                 self.wizard().photoscan.facial_landmarks_fiducial_node = None
             elif self.facial_landmarks_fiducial_node is None:
                 self.wizard().photoscan.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
-                self._initialize_facial_landmarks_fiducial_node(existing_landmarks_node = self.wizard().photoscan.facial_landmarks_fiducial_node)
+                self._initialize_facial_landmarks_fiducial_node(
+                    node_name = "photoscan-wizard-faciallandmarks",
+                    existing_landmarks_node=self.wizard().photoscan.facial_landmarks_fiducial_node)
         self.setupMarkupsWidget()
         self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
-    
-    def _initialize_facial_landmarks_fiducial_node(self, existing_landmarks_node = None) -> vtkMRMLMarkupsFiducialNode:
-            
-        if existing_landmarks_node: # Clone the existing node if valid
-            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-            itemIDToClone = shNode.GetItemByDataNode(existing_landmarks_node)
-            clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-            node = shNode.GetItemDataNode(clonedItemID)
-            node.SetName("photoscan-wizard-faciallandmarks")
-            node.GetDisplayNode().SetVisibility(False) 
 
-        else: # Initialize a new node
-            node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","photoscan-wizard-faciallandmarks")
-            node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
-            node.SetMarkupLabelFormat("%N")
-            for landmark_name in self.temp_markup_fiducials:
-                node.AddControlPoint(0,0,0,f"Click to Place {landmark_name}")
-                index = list(self.temp_markup_fiducials.keys()).index(landmark_name)
-                node.UnsetNthControlPointPosition(index) # Unset all the points initially 
-        
-        node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(),self.wizard().volume_view_node.GetID()])
-        node.GetDisplayNode().SetVisibility(True) # Ensure that visibility is turned on after setting biew nodes
-
-        # Add an observer if any of the points are undefined 
-        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved)
-        self.facial_landmarks_fiducial_node = node
-
-    def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
-        
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        status = "approved" if photoscan_is_approved else "not approved"
-        self.ui.photoscanApprovalStatusLabel_Markup.text = (
-            f"Photoscan is {status} for transducer tracking" if loaded_session else f"Photoscan approval status: {photoscan_is_approved}."
-        )
-    
     def onPlaceLandmarksClicked(self):
-
         if self.facial_landmarks_fiducial_node is None:
-            self._initialize_facial_landmarks_fiducial_node()
+            self._initialize_facial_landmarks_fiducial_node(node_name = "photoscan-wizard-faciallandmarks")
             self.setupMarkupsWidget()
 
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
@@ -154,12 +284,11 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.placingLandmarks = True
             self.ui.photoscanMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
-                self.ui.landmarkPlacementStatus.text = "- Landmark positions unlocked. Click on the mesh to adjust.\n" \
-                "- To unset a landmark's position, double-click it in the list."
+                self.updateLandmarkPlacementStatus()
             else:
                 self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
-                "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
-                "- To unset a landmark's position, double-click it in the list."
+                                                     "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
+                                                     "- To unset a landmark's position, double-click it in the list."
 
         elif self.ui.placeLandmarksButton.text == "Done Placing Landmarks":
             self.facial_landmarks_fiducial_node.SetLocked(True)
@@ -169,187 +298,30 @@ class PhotoscanMarkupPage(qt.QWizardPage):
             self.ui.photoscanMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
             self.ui.landmarkPlacementStatus.text = ""
-        
-        # Emit signal to update the enable/disable state of 'Next button'. 
+
         self.completeChanged()
-    
-    def setupMarkupsWidget(self):
 
-        self.ui.photoscanMarkupsWidget.setMRMLScene(slicer.mrmlScene)
-        self.ui.photoscanMarkupsWidget.enabled = False
-        
-        # If the selected landmark is 'unset', then the cursor is set to 'Place' mode.
-        tableWidget = self.ui.photoscanMarkupsWidget.tableWidget()
-        tableWidget.setSelectionMode(tableWidget.SingleSelection)
-        tableWidget.setSelectionBehavior(tableWidget.SelectRows)
-        tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu) # Prevents context menu that allows point deletion/rearrangement.
-        tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
-        tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
+    def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        status = "approved" if photoscan_is_approved else "not approved"
+        self.ui.photoscanApprovalStatusLabel_Markup.text = (
+            f"Photoscan is {status} for transducer tracking" if loaded_session else f"Photoscan approval status: {photoscan_is_approved}."
+        )
 
-        if self.facial_landmarks_fiducial_node:
-            self.ui.photoscanMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
-            # Make the row  names uneditable
-            for row in range(tableWidget.rowCount):
-                item = tableWidget.item(row, 0)
-                item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+    def updateLandmarkPlacementStatus(self):
+        self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust."
 
-    def markupTableWidgetSelected(self, item):
-
-        if not self.placingLandmarks:
-            return
-        
-        currentRow = item.row()
-        # If a invalid row is selected or the point has already been defined, exit place mode
-        if currentRow == -1 or self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
-            self._currentlyPlacingIndex = -1
-            self.exitPlaceFiducialMode()
-            return
-
-        # Enter place mode if the node has no control points yet
-        selected_text = self.ui.photoscanMarkupsWidget.tableWidget().item(currentRow, 0).text()
-        self.currently_placing_node = self._getSelectedNode(selected_text = selected_text)
-        if self.currently_placing_node.GetNumberOfControlPoints() == 0:
-            self.enterPlaceFiducialMode()
-            self._currentlyPlacingIndex = currentRow
-    
-    def _getSelectedNode(self, selected_text: str):
-        
-        # Initialize temporary fiducial for markup if it doesn't exist
-        selected_landmark_name = None
-        for landmark_name in self.temp_markup_fiducials:
-            if landmark_name in selected_text:
-                selected_landmark_name = landmark_name
-                break  # Stop iterating once a match is found
-        if not selected_landmark_name:
-            slicer.util.infoDisplay(
-                text= f"Invalid control point selected. Control point label must include 'Right Ear', 'Left Ear', or 'Nasion'.",
-                windowTitle="Matching fiducial node not found", parent = self.wizard()
-            )
-
-        if self.temp_markup_fiducials[selected_landmark_name] is None:
-            self.temp_markup_fiducials[selected_landmark_name] = self._initialize_temporary_photoscan_tracking_fiducial(node_name=selected_landmark_name)
-
-        return self.temp_markup_fiducials[selected_landmark_name]
-
-    def _initialize_temporary_photoscan_tracking_fiducial(self, node_name: str):
-
-        initialized_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", node_name)
-        initialized_node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
-        initialized_node.SetMaximumNumberOfControlPoints(1)
-        initialized_node.SetMarkupLabelFormat("%N")
-        initialized_node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(), self.wizard().volume_view_node.GetID()])
-        initialized_node.GetDisplayNode().SetVisibility(True)
-
-        return initialized_node
-    
-    def unsetControlPoint(self, item):
-
-        currentRow = item.row()
-        self._currentlyUnsettingIndex = currentRow
-        if not self.placingLandmarks or currentRow == -1:
-            return
-
-        # Unset the control point and enter fiducial place mode
-        selected_text = self.ui.photoscanMarkupsWidget.tableWidget().item(self._currentlyUnsettingIndex, 0).text() 
-        self.currently_placing_node = self._getSelectedNode(selected_text = selected_text)
-        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyUnsettingIndex, 0,0,0) # First set position to zero
-        # self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyUnsettingIndex, f"Click to Place {self.currently_placing_node.GetName()}")
-        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(self._currentlyUnsettingIndex)
-        self.enterPlaceFiducialMode()
-        self._currentlyPlacingIndex = currentRow
-
-    def _checkAllLandmarksDefined(self):
-
-        if self.facial_landmarks_fiducial_node is None:
-            return False
-
-        # Check that all the landmarks are valid/set control point
-        all_points_defined = True
-        for i in range(self.facial_landmarks_fiducial_node.GetNumberOfControlPoints()):
-            if self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(i) == 0:
-                all_points_defined = False
-        return all_points_defined
-    
-    def isComplete(self):
-        """" Determines if the 'Next' button should be enabled"""
-        landmarks_exist = self.facial_landmarks_fiducial_node is not None
-        all_points_defined = self._checkAllLandmarksDefined()
-        return landmarks_exist and all_points_defined and not self.placingLandmarks
-
-    def enterPlaceFiducialMode(self):
-
-        markupLogic = slicer.modules.markups.logic()
-        markupLogic.SetActiveListID(self.currently_placing_node)
-        markupLogic.StartPlaceMode(0)
-
-        # Add observer to detect when a point is placed
-        self._pointModifiedObserverTag = self.currently_placing_node.AddObserver(
-            slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent , self.onPointPlaced)
-
-    def onPointPlaced(self, caller, event):
-        
-        # Check that a control point was actually added to the fiducial node
-        if caller.GetNumberOfControlPoints() < 1: 
-            return
-
-        # Update the control point associatd with the photoscan
-        position = [0.0, 0.0, 0.0]
-        self.currently_placing_node.GetNthControlPointPosition(0,position)
-        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
-        self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
-        
-        self.exitPlaceFiducialMode() # Exit place mode after the point is placed
-        self.currently_placing_node.RemoveAllObservers()
-        slicer.mrmlScene.RemoveNode(self.currently_placing_node) # Remove the temporary node
-        self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
-        if self._checkAllLandmarksDefined():
-            self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust." # Update the status message
-
-    @vtk.calldata_type(vtk.VTK_INT)
-    def onPointRemoved(self, node, eventID, callData):
-
-        slicer.util.infoDisplay(
-                text= f"{node.GetNthControlPointLabel(callData)} is essential for tracking. Deletion blocked.",
-                windowTitle="Control point cannot be deleted", parent = self.wizard()
-            )
-        
-        # Add node back
-        position = [0.0, 0.0, 0.0]
-        node.GetNthControlPointPosition(callData, position)
-        node.AddControlPoint(position, node.GetNthControlPointLabel(callData))
-
-    def exitPlaceFiducialMode(self):
-        if self._pointModifiedObserverTag:
-            self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
-            self._pointModifiedObserverTag = None
-  
-        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-
-class SkinSegmentationMarkupPage(qt.QWizardPage):
-    def __init__(self, parent = None):
-        super().__init__()
+class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the base
+    def __init__(self, parent=None):
+        super().__init__(parent)  # Call the base class constructor
         self.setTitle("Place facial landmarks on skin surface")
-        self.ui = initialize_wizard_ui(self)
-        self.viewWidget = set_threeD_view_widget(self.ui)
+        self.ui = initialize_wizard_ui(self)  # Initialize your specific UI
+        self.viewWidget = set_threeD_view_widget(self.ui)  # Initialize your specific view widget
         self.ui.dialogControls.setCurrentIndex(2)
-
-        self.placingLandmarks = False
-        self._pointModifiedObserverTag = None
-        self._currentlyPlacingIndex = -1
-        self._currentlyUnsettingIndex = -1
-
-        self.temp_markup_fiducials = {
-            'Right Ear': None,
-            'Left Ear': None,
-            'Nasion': None}
-        self.facial_landmarks_fiducial_node: vtkMRMLMarkupsFiducialNode = None # Internal to the wizard facial landmarks node
-
+        self.markupsWidget = self.ui.skinSegMarkupsWidget  # Assign the correct markups widget
         self.ui.placeLandmarksButtonSkinSeg.clicked.connect(self.onPlaceLandmarksClicked)
 
     def initializePage(self):
-        """ This function is called when the user clicks 'Next'."""
-        
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
@@ -357,49 +329,22 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
         if existing_skin_seg_fiducials:
             if existing_skin_seg_fiducials.GetNumberOfControlPoints() != 3:
                 slicer.util.infoDisplay(
-                    text= f"Incorrect number of control points detected in the volume facial landmarks fiducial node. Transudcer Tracking Wizard will replace the existing node.",
-                    windowTitle="Invalid fiducial node detected", parent = self.wizard()
+                    text="Incorrect number of control points detected in the volume facial landmarks fiducial node. "
+                    "Transudcer Tracking Wizard will replace the existing node.",
+                    windowTitle="Invalid fiducial node detected", parent=self.wizard()
                 )
                 slicer.mrmlScene.RemoveNode(existing_skin_seg_fiducials)
             elif self.facial_landmarks_fiducial_node is None:
                 existing_skin_seg_fiducials.GetDisplayNode().SetVisibility(False)
-                self._initialize_facial_landmarks_fiducial_node(existing_landmarks_node = existing_skin_seg_fiducials)
+                self._initialize_facial_landmarks_fiducial_node(
+                    node_name = "skinseg-wizard-faciallandmarks",
+                    existing_landmarks_node=existing_skin_seg_fiducials)
+
         self.setupMarkupsWidget()
 
-    def _initialize_facial_landmarks_fiducial_node(self, existing_landmarks_node = None) -> vtkMRMLMarkupsFiducialNode:
-
-        if existing_landmarks_node: # Clone the existing node
-            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-            itemIDToClone = shNode.GetItemByDataNode(existing_landmarks_node)
-            clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-            node = shNode.GetItemDataNode(clonedItemID)
-            node.SetName("skinseg-wizard-faciallandmarks")
-            node.GetDisplayNode().SetVisibility(False) 
-            # Clear the volume meta data attribute
-            node.SetAttribute('OpenLIFUData.volume_id', None) 
-
-        else: # Initialize a new node
-            node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","photoscan-wizard-faciallandmarks")
-            node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
-            node.SetMarkupLabelFormat("%N")
-            node.GetDisplayNode().SetColor(0,0,1)
-            node.GetDisplayNode().SetSelectedColor(0,0,1)
-            for landmark_name in self.temp_markup_fiducials:
-                node.AddControlPoint(0,0,0,f"Click to Place {landmark_name}")
-                index = list(self.temp_markup_fiducials.keys()).index(landmark_name)
-                node.UnsetNthControlPointPosition(index) # Unset all the points initially 
-        
-        node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(),self.wizard().volume_view_node.GetID()])
-        node.GetDisplayNode().SetVisibility(True) # Ensure that visibility is turned off
-
-        # Add an observer if any of the points are undefined or removed
-        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved)
-        self.facial_landmarks_fiducial_node = node
-
     def onPlaceLandmarksClicked(self):
-
         if self.facial_landmarks_fiducial_node is None:
-            self._initialize_facial_landmarks_fiducial_node()
+            self._initialize_facial_landmarks_fiducial_node(node_name = "skinseg-wizard-faciallandmarks")
             self.setupMarkupsWidget()
 
         if self.ui.placeLandmarksButtonSkinSeg.text == "Place/Edit Registration Landmarks":
@@ -408,12 +353,11 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
             self.placingLandmarks = True
             self.ui.skinSegMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
-                self.ui.landmarkPlacementStatus_2.text = "- Landmark positions unlocked. Click on the mesh to adjust.\n" \
-                "- To unset a landmark's position, double-click it in the list."
+                self.updateLandmarkPlacementStatus()
             else:
                 self.ui.landmarkPlacementStatus_2.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
-                "- Click on the corresponding location on the skin surface mesh to place the landmark.\n" \
-                "- To unset a landmark's position, double-click it in the list."
+                                                     "- Click on the corresponding location on the skin surface mesh to place the landmark.\n" \
+                                                     "- To unset a landmark's position, double-click it in the list."
 
         elif self.ui.placeLandmarksButtonSkinSeg.text == "Done Placing Landmarks":
             self.facial_landmarks_fiducial_node.SetLocked(True)
@@ -423,160 +367,25 @@ class SkinSegmentationMarkupPage(qt.QWizardPage):
             self.ui.skinSegMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
             self.ui.landmarkPlacementStatus_2.text = ""
-        
-        # Emit signal to update the enable/disable state of 'Next button'. 
+
         self.completeChanged()
     
-    def setupMarkupsWidget(self):
-
-        self.ui.skinSegMarkupsWidget.setMRMLScene(slicer.mrmlScene)
-        self.ui.skinSegMarkupsWidget.enabled = False
+    def _initialize_facial_landmarks_fiducial_node(self, node_name: str, existing_landmarks_node=None) -> vtkMRMLMarkupsFiducialNode:
         
-        # If the selected landmark is 'unset', then the cursor is set to 'Place' mode.
-        tableWidget = self.ui.skinSegMarkupsWidget.tableWidget()
-        tableWidget.setSelectionMode(tableWidget.SingleSelection)
-        tableWidget.setSelectionBehavior(tableWidget.SelectRows)
-        tableWidget.setContextMenuPolicy(qt.Qt.NoContextMenu) # Prevents context menu that allows point deletion/rearrangement.
-        tableWidget.itemClicked.connect(self.markupTableWidgetSelected)
-        tableWidget.itemDoubleClicked.connect(self.unsetControlPoint)
-        if self.facial_landmarks_fiducial_node:
-            self.ui.skinSegMarkupsWidget.setCurrentNode(self.facial_landmarks_fiducial_node)
-            # Make the row  names uneditable
-            for row in range(tableWidget.rowCount):
-                item = tableWidget.item(row, 0)
-                item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
-
-    def markupTableWidgetSelected(self, item):
-
-        if not self.placingLandmarks:
-            return
-        currentRow = item.row()
-        # If the point has already been defined, exit place mode
-        if currentRow == -1 or self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
-            self._currentlyPlacingIndex = -1
-            self.exitPlaceFiducialMode()
-            return
-
-        # Enter place mode if the node has no control points yet
-        selected_text = self.ui.skinSegMarkupsWidget.tableWidget().item(currentRow, 0).text()
-        self.currently_placing_node = self._getSelectedNode(selected_text=selected_text)
-        if self.currently_placing_node.GetNumberOfControlPoints() == 0:
-            self.enterPlaceFiducialMode()
-            self._currentlyPlacingIndex = currentRow
-    
-    def _getSelectedNode(self, selected_text: str):
+        super()._initialize_facial_landmarks_fiducial_node(
+            node_name="skinseg-wizard-faciallandmarks",
+            existing_landmarks_node=existing_landmarks_node
+        )
+        self.facial_landmarks_fiducial_node.GetDisplayNode().SetColor(0, 0, 1)
+        self.facial_landmarks_fiducial_node.GetDisplayNode().SetSelectedColor(0, 0, 1)
+        if existing_landmarks_node:
+            # Clear the volume meta data attribute 
+            self.facial_landmarks_fiducial_node.SetAttribute('OpenLIFUData.volume_id', None)
+                
+    def updateLandmarkPlacementStatus(self):
+        self.ui.landmarkPlacementStatus_2.text = "Landmark positions unlocked. Click on the mesh to adjust.\n" \
+                                             "- To unset a landmark's position, double-click it in the list."
         
-        selected_landmark_name = None
-        for landmark_name in self.temp_markup_fiducials:
-            if landmark_name in selected_text:
-                selected_landmark_name = landmark_name
-                break  # Stop iterating once a match is found
-        if not selected_landmark_name:
-            slicer.util.infoDisplay(
-                text= f"Could not find a fiducial node matching the selected control point. Control points labels should include 'Right Ear', 'Left Ear' or 'Nasion'.",
-                windowTitle="Matching fiducial node not found", parent = self.wizard()
-            )
-        if self.temp_markup_fiducials[selected_landmark_name] is None:
-            self.temp_markup_fiducials[selected_landmark_name] = self._initialize_temporary_skinseg_tracking_fiducial(node_name=selected_landmark_name)
-
-        return self.temp_markup_fiducials[selected_landmark_name]
-
-    def _initialize_temporary_skinseg_tracking_fiducial(self, node_name: str):
-
-        initialized_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", node_name)
-        initialized_node.GetDisplayNode().SetVisibility(False) # Ensure that visibility is turned off
-        initialized_node.SetMaximumNumberOfControlPoints(1)
-        initialized_node.SetMarkupLabelFormat("%N")
-        initialized_node.GetDisplayNode().SetViewNodeIDs([self.wizard().photoscan.view_node.GetID(), self.wizard().volume_view_node.GetID()])
-        initialized_node.GetDisplayNode().SetVisibility(True)
-
-        return initialized_node
-    
-    def unsetControlPoint(self, item):
-
-        currentRow = item.row()
-        self._currentlyUnsettingIndex = currentRow
-        if not self.placingLandmarks or currentRow == -1:
-            return
-
-        # Unset the control point and enter fiducial place mode
-        selected_text = self.ui.skinSegMarkupsWidget.tableWidget().item(self._currentlyUnsettingIndex, 0).text() 
-        self.currently_placing_node = self._getSelectedNode(selected_text = selected_text)
-        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyUnsettingIndex, 0,0,0) # First set position to zero
-        self.facial_landmarks_fiducial_node.UnsetNthControlPointPosition(self._currentlyUnsettingIndex)
-        self.enterPlaceFiducialMode()
-        self._currentlyPlacingIndex = currentRow
-
-    def enterPlaceFiducialMode(self):
-
-        markupLogic = slicer.modules.markups.logic()
-        markupLogic.SetActiveListID(self.currently_placing_node)
-        markupLogic.StartPlaceMode(0)
-
-        # Add observer to detect when a point is placed
-        self._pointModifiedObserverTag = self.currently_placing_node.AddObserver(
-            slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent , self.onPointPlaced)
-
-    def onPointPlaced(self, caller, event):
-        
-        # Check that a control point was actually added to the fiducial node
-        if caller.GetNumberOfControlPoints() < 1: 
-            return
-
-        # Update the control point associated with the skin segmentation
-        position = [0.0, 0.0, 0.0]
-        self.currently_placing_node.GetNthControlPointPosition(0,position)
-        self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
-        self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
-        
-        self.exitPlaceFiducialMode() # Exit place mode after the point is placed
-        self.currently_placing_node.RemoveAllObservers()
-        slicer.mrmlScene.RemoveNode(self.currently_placing_node) # Remove the temporary node
-        self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
-        if self._checkAllLandmarksDefined():
-            self.ui.landmarkPlacementStatus_2.text = "-Landmark positions unlocked. Click on the mesh to adjust.\n" \
-                "- To unset a landmark's position, double-click it in the list." # Update the status message
-    
-    @vtk.calldata_type(vtk.VTK_INT)
-    def onPointRemoved(self, node, eventID, callData):
-
-        slicer.util.infoDisplay(
-                text= f"{node.GetNthControlPointLabel(callData)} is essential for tracking. Deletion blocked.",
-                windowTitle="Control point cannot be deleted", parent = self.wizard()
-            )
-        # Add node back
-        position = [0.0, 0.0, 0.0]
-        node.GetNthControlPointPosition(callData, position)
-        node.AddControlPoint(position, node.GetNthControlPointLabel(callData))
-
-    def exitPlaceFiducialMode(self):
-        if self._pointModifiedObserverTag:
-            self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
-            self._pointModifiedObserverTag = None
-  
-        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
-        interactionNode.SwitchToViewTransformMode()
-
-        # interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-
-    def _checkAllLandmarksDefined(self):
-
-        if self.facial_landmarks_fiducial_node is None:
-            return False
-
-        # Check that all the landmarks are valid/set control point
-        all_points_defined = True
-        for i in range(self.facial_landmarks_fiducial_node.GetNumberOfControlPoints()):
-            if self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(i) == 0:
-                all_points_defined = False
-        return all_points_defined
-
-    def isComplete(self):
-        """" Determines if the 'Next' button should be enabled"""
-        landmarks_exist = self.facial_landmarks_fiducial_node is not None
-        all_points_defined = self._checkAllLandmarksDefined()
-        return landmarks_exist and all_points_defined and not self.placingLandmarks
-
 class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
         super().__init__()
