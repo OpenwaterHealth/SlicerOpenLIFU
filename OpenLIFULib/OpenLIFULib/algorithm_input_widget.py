@@ -79,12 +79,8 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         # In this case we just want to hide these three combo box widgets
         for widget_key in ["Protocol", "Transducer", "Volume"]:
             if widget_key in self.inputs_dict:
-                if enforced:
-                    self.inputs_dict[widget_key].label.hide()
-                    self.inputs_dict[widget_key].combo_box.hide()
-                else:
-                    self.inputs_dict[widget_key].label.show()
-                    self.inputs_dict[widget_key].combo_box.show()
+                self.inputs_dict[widget_key].label.visibility = enforced
+                self.inputs_dict[widget_key].combo_box.visibility = enforced
 
     def _clear_input_options(self):
         """Clear out input options, remembering what was most recently selected in order to be able to set that again later"""
