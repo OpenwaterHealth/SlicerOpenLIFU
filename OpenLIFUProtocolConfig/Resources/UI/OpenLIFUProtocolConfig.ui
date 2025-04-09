@@ -7,10 +7,29 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>1200</height>
+    <height>1262</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
+   <item>
+    <widget class="QFrame" name="goToDataModulePushButtonFrame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_11">
+      <item>
+       <widget class="QPushButton" name="goToDataModulePushButton">
+        <property name="text">
+         <string>Go To Data Module</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item>
     <widget class="ctkComboBox" name="protocolSelector"/>
    </item>
