@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, List, TypeVar, Type, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, get_type_hints, Annotated
+from typing_extensions import get_type_hints as get_type_hints_ext # for <3.10 compatibility
 import logging
 import qt
 import slicer
@@ -9,6 +10,8 @@ if TYPE_CHECKING:
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginLogic
 
+# Use this to ensure compatibility in Python 3.9
+get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext
 class BusyCursor:
     """
     Context manager for showing a busy cursor.  Ensures that cursor reverts to normal in
