@@ -445,7 +445,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         max_len = max(
             len(getattr(analysis_openlifu, f.name))
             for f in fields(analysis_openlifu)
-            if get_origin(f.type) is list or str(f.type) == "list[float]"
+            if "list[" in f.type
         )
 
         self.focusAnalysisTableModel.setHorizontalHeaderLabels(['Metric'] + [f"Focus {i+1}" for  i in range(max_len)])
@@ -456,13 +456,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         for field in fields(analysis_openlifu):
 
             # we expect field.type could be either "List[float]" or "Optional[float]" which is actually "Union[float,NoneType]"
-            # here `origin`` would be the "List" or "Union" part
-            # and `args`` would be the "float" or "None" part
-            origin = get_origin(field.type)
-            args = get_args(field.type)
+            # except now it's actually a string like "Annotated[...]" with a bunch of stuff in it
+            origin_is_list = "list[" in field.type
+            origin_is_union = "|" in field.type
+            type_args_involve_float = "float" in field.type
 
             # lists of floats go into the focusAnalysisTableModel
-            if origin is list and args == (float,) or str(field.type) == "list[float]":
+            if origin_is_list and type_args_involve_float:
                 values = getattr(analysis_openlifu,field.name)
                 value_strs = [
                     str(values[i]) if i<len(values) else ""
@@ -474,7 +474,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 )))
 
             # individual floats go into the globalAnalysisTableModel
-            elif origin is Union and len(args)==2 and float in args and type(None) in args or str(field.type) == "float | None":
+            elif origin_is_union and type_args_involve_float:
                 value = getattr(analysis_openlifu,field.name)
                 value_str = str(value) if value is not None else ""
                 self.globalAnalysisTableModel.appendRow(list(map(
