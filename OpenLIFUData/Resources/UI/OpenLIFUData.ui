@@ -12,7 +12,7 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QFrame" name="goToProtocolConfigurationModulePushButtonFrame">
+    <widget class="QFrame" name="configureProtocolsPushButtonFrame">
      <property name="frameShape">
       <enum>QFrame::StyledPanel</enum>
      </property>
@@ -21,9 +21,9 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_11">
       <item>
-       <widget class="QPushButton" name="goToProtocolConfigurationModulePushButton">
+       <widget class="QPushButton" name="configureProtocolsPushButton">
         <property name="text">
-         <string>Go To Protocol Configuration Module</string>
+         <string>Configure Protocols</string>
         </property>
        </widget>
       </item>

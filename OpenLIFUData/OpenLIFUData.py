@@ -686,7 +686,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
         # Go to protocol config
-        self.ui.goToProtocolConfigurationModulePushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
+        self.ui.configureProtocolsPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
 
         # Add new subject
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
