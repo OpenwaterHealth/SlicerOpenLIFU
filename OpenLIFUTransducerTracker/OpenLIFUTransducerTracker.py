@@ -594,8 +594,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.scalingTransformMRMLSliderWidget.minimum = 0.8
         self.ui.scalingTransformMRMLSliderWidget.maximum = 1.2
         self.ui.scalingTransformMRMLSliderWidget.value = 1
-        self.ui.scalingTransformMRMLSliderWidget.decimals = 2
-        self.ui.scalingTransformMRMLSliderWidget.singleStep = 0.01
+        self.ui.scalingTransformMRMLSliderWidget.decimals = 3
+        self.ui.scalingTransformMRMLSliderWidget.singleStep = 0.002
         self.ui.scalingTransformMRMLSliderWidget.pageStep = 1.0
         self.ui.scalingTransformMRMLSliderWidget.setToolTip(_('Adjust the scale of the photosan mesh."'))
         self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.updateScaledTransformNode)
