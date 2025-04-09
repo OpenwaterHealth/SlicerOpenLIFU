@@ -150,6 +150,7 @@ def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=Non
     # deletion is requested, and the deletion must be requested before the attributes are dropped -- once the attributes are dropped
     # there is a possibility of the widgets getting auto-deleted just because there is no remaining reference to them.
     old_widget.deleteLater()
+    old_widget.hide()  # TODO: Find reason for replaced widgets having dangling reference. See https://github.com/OpenwaterHealth/OpenLIFU-app/pull/18
 
     if ui_object is not None:
         for attr_name in ui_attrs_to_delete:
