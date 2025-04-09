@@ -258,7 +258,7 @@ class Workflow:
         # ---- Enforce visibility of widgets / call function to enforce ----
 
         for widget in hide_in_guided_mode_widgets:
-            widget.hide() if enforced else widget.show()
+            widget.visible = not enforced
 
         for widget in call_enforce_in_guided_mode_widgets:
             widget.enforceGuidedModeVisibility(enforced)
