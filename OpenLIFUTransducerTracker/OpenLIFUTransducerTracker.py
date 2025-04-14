@@ -160,6 +160,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
 
         # Add an observer if any of the points are undefined
         node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved)
+        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onPointAdded)
         self.facial_landmarks_fiducial_node = node
         return node
 
@@ -209,6 +210,22 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         position = [0.0, 0.0, 0.0]
         node.GetNthControlPointPosition(callData, position)
         node.AddControlPoint(position, node.GetNthControlPointLabel(callData))
+        
+    @vtk.calldata_type(vtk.VTK_INT)
+    def onPointAdded(self, node, eventID, callData):
+
+        # Ensures that the original order of control points is maintained i.e. Right Ear - Left Ear - Nasion
+        # This is important for fiducial registration
+        point_label = node.GetNthControlPointLabel(callData)
+        if point_label not in self.temp_markup_fiducials:
+            # This should not happen
+            raise ValueError("Invalid control point added to facial landmarks node.")
+        landmark_labels_list = list(self.temp_markup_fiducials.keys())
+        original_index = landmark_labels_list.index(point_label)
+        current_index = callData
+        while current_index > original_index:
+            node.SwapControlPoints(current_index -1, current_index)
+            current_index -= 1
 
     def exitPlaceFiducialMode(self):
         if self._pointModifiedObserverTag:
@@ -478,12 +495,13 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
 
-        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_transform_node)
+        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_transform_node) # Clear current node
         self.photoscan_to_volume_transform_node = self.wizard()._logic.run_fiducial_registration(
             moving_landmarks = self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node,
             fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
+        self.ui.initializePVRegistration.setText("Re-initialize transducer-photoscan transform")
 
         # Reset scaling transform node
         self.ui.scalingTransformMRMLSliderWidget.value = 1

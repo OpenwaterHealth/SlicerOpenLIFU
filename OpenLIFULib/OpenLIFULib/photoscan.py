@@ -152,7 +152,6 @@ class SlicerOpenLIFUPhotoscan:
         
         # Ensure that visibility is turned off
         self.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
-        self.facial_landmarks_fiducial_node.SetMaximumNumberOfControlPoints(3)
         self.facial_landmarks_fiducial_node.SetMarkupLabelFormat("%N")
 
         return self.facial_landmarks_fiducial_node
