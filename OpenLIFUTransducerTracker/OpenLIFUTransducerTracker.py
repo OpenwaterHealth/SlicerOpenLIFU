@@ -485,6 +485,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
 
+        # Reset scaling transform node
+        self.ui.scalingTransformMRMLSliderWidget.value = 1
+
         # Enable approval and registration fine-tuning buttons
         self.ui.runPhotoscanVolumeRegistration.enabled = True
         self.ui.approvePhotoscanVolumeTransform.enabled = True
@@ -628,6 +631,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             target = self.wizard().target)
         self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
+        self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
 
         # Enable approval and registration fine-tuning buttons
         self.ui.runTransducerPhotoscanRegistration.enabled = True
