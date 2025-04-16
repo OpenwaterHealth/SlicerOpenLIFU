@@ -833,6 +833,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.updateUserAccountModeButton()
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
+        for widget in self._user_account_banners:
+            widget.visible = self._parameterNode.user_account_mode
 
     def enforceUserPermissions(self) -> None:
         
