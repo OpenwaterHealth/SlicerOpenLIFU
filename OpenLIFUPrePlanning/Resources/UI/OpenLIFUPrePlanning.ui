@@ -6,17 +6,30 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>291</width>
-    <height>410</height>
+    <width>387</width>
+    <height>592</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="ctkCollapsibleButton" name="targetsCollapsible" native="true">
-     <property name="text" stdset="0">
+    <widget class="QWidget" name="userAccountBannerPlaceholder" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout_7">
+      <item>
+       <widget class="QLabel" name="userAccountBannerPlaceholderLabel">
+        <property name="text">
+         <string>Placeholder for a UserAccountBanner widget</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="targetsCollapsible">
+     <property name="text">
       <string>Targets</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">

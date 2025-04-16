@@ -27,6 +27,7 @@ from OpenLIFULib import (
 from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -119,6 +120,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.globalAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are for the whole solution, i.e. over all focus points
         self.ui.focusAnalysisTableView.setModel(self.focusAnalysisTableModel)
         self.ui.globalAnalysisTableView.setModel(self.globalAnalysisTableModel)
+
+        # User account banner widget replacement
+        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
+        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
 
         # ---- Inject guided mode workflow controls ----
 

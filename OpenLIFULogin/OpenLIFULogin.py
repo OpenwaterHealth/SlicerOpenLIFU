@@ -2,7 +2,7 @@ from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import json
 from enum import Enum
 
-from OpenLIFULib.user_account_mode_util import set_user_account_mode_state
+from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 import qt
 
 import vtk
@@ -522,6 +522,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._cur_login_state = LoginState.NOT_LOGGED_IN
         self._cur_user_id_enforced : str = ""  # for caching enforced permissions
         self._permissions_widgets : List[qt.QWidget] = []
+        self._user_account_banners : List[UserAccountBanner] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
         self._default_anonymous_user = openlifu_lz().db.User(
@@ -560,6 +561,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
         self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
+        self.logic.call_on_active_user_changed(self.onActiveUserChanged)
 
         # Account management
         
@@ -572,7 +574,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-        self.cacheAllPermissionswidgets()
+        self.cacheAllLoginRelatedWidgets()
 
         self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
@@ -617,7 +619,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.setParameterNode(self.logic.getParameterNode())
 
-    def cacheAllPermissionswidgets(self) -> None:
+    def cacheAllLoginRelatedWidgets(self) -> None:
         all_openlifu_modules = [
             "OpenLIFUDatabase",
             "OpenLIFUData",
@@ -632,6 +634,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             module = slicer.util.getModule(moduleName)
             widgetRepresentation = module.widgetRepresentation()
             self._permissions_widgets.extend(slicer.util.findChildren(widgetRepresentation, name="permissionsWidget*"))
+            self._user_account_banners.extend(slicer.util.findChildren(widgetRepresentation, className="UserAccountBanner"))
 
         self._permissions_widgets.extend([self.ui.permissionsWidget1])
 
@@ -855,6 +858,10 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             user_roles = self.logic.active_user.roles
             widget.setEnabled(any(role in allowed_roles for role in user_roles))
 
+    def onActiveUserChanged(self, new_active_user: Optional["openlifu.db.User"]) -> None:
+        for widget in self._user_account_banners:
+            widget.change_active_user(new_active_user)
+            
 # OpenLIFULoginLogic
 #
 

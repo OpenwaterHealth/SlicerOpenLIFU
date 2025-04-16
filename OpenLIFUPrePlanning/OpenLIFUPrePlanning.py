@@ -39,6 +39,7 @@ from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -130,6 +131,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Prevents possible creation of two OpenLIFUData widgets
         # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
         slicer.util.getModule("OpenLIFUData").widgetRepresentation()
+
+        # User account banner widget replacement
+        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
+        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
 
         # ---- Inject guided mode workflow controls ----
 

@@ -42,26 +42,19 @@ class UserAccountBanner(qt.QWidget):
 
         layout = qt.QHBoxLayout(self)
 
-        self.active_user_label = qt.QLabel()
-        self.active_user_label.setAlignment(qt.Qt.AlignCenter)
-        font = self.active_user_label.font()
-        font.setPointSize(16)
-        self.active_user_label.setFont(font)
-        layout.addWidget(self.active_user_label)
+        self.active_user_label = qt.QLabel("Not signed in")
+        self.active_user_label.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
+        self.active_user_label.setFont(qt.QFont("", 14))
+        layout.addWidget(self.active_user_label, 1)  # stretch=1 as positional argument
 
         self.go_to_login_button = qt.QPushButton("👤")
-        self.go_to_login_button.setFixedSize(30, 30)
-        self.go_to_login_button.clicked.connect(lambda : slicer.util.selectModule("OpenLIFULogin"))
+        self.go_to_login_button.setToolTip("Switch user")
+        self.go_to_login_button.setFixedSize(28, 28)
+        self.go_to_login_button.clicked.connect(lambda: slicer.util.selectModule("OpenLIFULogin"))
         layout.addWidget(self.go_to_login_button)
-
-        # Add connection to change the label when a new account is logged in
-
-        get_openlifu_login_logic().call_on_active_user_changed(self.on_active_user_changed)
-
-
     
-    def on_active_user_changed(self, new_active_user: Optional["openlifu.db.User"]):
-        if new_active_user is None:
-            self.active_user_label.text = ""
+    def change_active_user(self, new_active_user: Optional["openlifu.db.User"]):
+        if new_active_user is None or new_active_user.id == "anonymous":
+            self.active_user_label.setText("Not signed in")
         else:
-            self.active_user_label.text = f"{new_active_user.name} ({new_active_user.id})"
+            self.active_user_label.setText(f"Signed in as {new_active_user.id}")

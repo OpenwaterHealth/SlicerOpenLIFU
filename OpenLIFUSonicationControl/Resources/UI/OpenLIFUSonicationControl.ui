@@ -7,10 +7,23 @@
     <x>0</x>
     <y>0</y>
     <width>325</width>
-    <height>450</height>
+    <height>502</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_3">
+   <item>
+    <widget class="QWidget" name="userAccountBannerPlaceholder" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout_5">
+      <item>
+       <widget class="QLabel" name="userAccountBannerPlaceholderLabel">
+        <property name="text">
+         <string>Placeholder for a UserAccountBanner widget</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item>
     <widget class="QPushButton" name="reinitializeLIFUInterfacePushButton">
      <property name="sizePolicy">
