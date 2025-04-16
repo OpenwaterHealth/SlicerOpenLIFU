@@ -662,9 +662,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUDataLogic()
 
-        # User account banner widget replacement
+        # User account banner widget replacement. Note: the visibility is
+        # initialized to false because this widget will *always* exist before
+        # the login module parameter node.
         self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
         replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
+        self.user_account_banner.visible = False
 
         # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
