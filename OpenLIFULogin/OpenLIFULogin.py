@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import json
 from enum import Enum
 
@@ -860,22 +860,45 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
 class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
-    computation done by your module.  The interface
-    should be such that other python code can import
+    computation done by your module. The interface
+    should be such that other Python code can import
     this class and make use of the functionality without
     requiring an instance of the Widget.
     Uses ScriptedLoadableModuleLogic base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    active_user : "Optional[openlifu.db.User]"
-
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self._active_user: Optional["openlifu.db.User"] = None
+        """The currently active user. Do not set this directly -- use the `active_user` property."""
+
+        self._on_active_user_changed_callbacks: List[Callable[[Optional["openlifu.db.User"]], None]] = []
+        """List of functions to call when the `active_user` property is changed."""
+
     def getParameterNode(self):
         return OpenLIFULoginParameterNode(super().getParameterNode())
+
+    def call_on_active_user_changed(self, f: Callable[[Optional["openlifu.db.User"]], None]) -> None:
+        """Register a function to be called whenever the `active_user` property is updated.
+
+        Args:
+            f: Callback accepting a single argument with the new `active_user` value.
+        """
+        self._on_active_user_changed_callbacks.append(f)
+
+    @property
+    def active_user(self) -> Optional["openlifu.db.User"]:
+        """The currently active user."""
+        return self._active_user
+
+    @active_user.setter
+    def active_user(self, user: Optional["openlifu.db.User"]) -> None:
+        self._active_user = user
+        for callback in self._on_active_user_changed_callbacks:
+            callback(self._active_user)
 
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
