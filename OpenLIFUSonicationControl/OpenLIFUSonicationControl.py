@@ -21,8 +21,9 @@ from OpenLIFULib import (get_openlifu_data_parameter_node,
                          SlicerOpenLIFURun,
 )
 
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import display_errors, replace_widget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
@@ -206,6 +207,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUSonicationControlLogic()
+
+        # User account banner widget replacement
+        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
+        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
 
         # ---- Inject guided mode workflow controls ----
 

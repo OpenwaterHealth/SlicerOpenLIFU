@@ -6,11 +6,24 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>258</width>
-    <height>520</height>
+    <width>358</width>
+    <height>640</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_10">
+   <item>
+    <widget class="QWidget" name="userAccountBannerPlaceholder" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout_11">
+      <item>
+       <widget class="QLabel" name="userAccountBannerPlaceholderLabel">
+        <property name="text">
+         <string>Placeholder for a UserAccountBanner widget</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item>
     <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
      <layout class="QVBoxLayout" name="verticalLayout">
@@ -39,11 +52,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="analysisCollapsible" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="analysisCollapsible">
+     <property name="text">
       <string>Solution analysis</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">

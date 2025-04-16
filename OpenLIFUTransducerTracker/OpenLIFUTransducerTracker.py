@@ -55,6 +55,7 @@ from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.skinseg import generate_skin_mesh
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
 
 if TYPE_CHECKING:
     import openlifu
@@ -1218,6 +1219,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Prevents possible creation of two OpenLIFUData widgets
         # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
         slicer.util.getModule("OpenLIFUData").widgetRepresentation()
+
+        # User account banner widget replacement
+        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
+        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
 
         # ---- Inject guided mode workflow controls ----
 
