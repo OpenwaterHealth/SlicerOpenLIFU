@@ -94,13 +94,6 @@ class SlicerOpenLIFUPhotoscanWrapper:
     def __init__(self, photoscan: "Optional[openlifu.nav.photoscan.Photoscan]" = None):
         self.photoscan = photoscan
 
-# For the same reason we have a thin wrapper around openlifu.User
-class SlicerOpenLIFUUser:
-    """Ultrathin wrapper of openlifu.User. This exists so that users can have parameter node
-    support while we still do lazy-loading of openlifu."""
-    def __init__(self, user: "Optional[openlifu.db.User]" = None):
-        self.user = user
-
 def SlicerOpenLIFUSerializerBaseMaker(
         serialized_type:type,
         default_args:Optional[list[Any]] = None,
@@ -283,25 +276,6 @@ class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLI
         """
         json_string = parameterNode.GetParameter(name)    
         return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().nav.photoscan.Photoscan.from_json(json_string))
-
-@parameterNodeSerializer
-class OpenLIFUUserSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUUser)):
-    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUUser) -> None:
-        """
-        Writes the value to the parameterNode under the given name.
-        """
-        parameterNode.SetParameter(
-            name,
-            value.user.to_json(compact=True)
-        )
-
-    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUUser:
-        """
-        Reads and returns the value with the given name from the parameterNode.
-        """
-        json_string = parameterNode.GetParameter(name)    
-        return SlicerOpenLIFUUser(openlifu_lz().db.User.from_json(json_string))
-
 
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
