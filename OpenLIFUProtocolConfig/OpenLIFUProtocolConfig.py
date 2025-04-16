@@ -26,6 +26,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
 )
 
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
     display_errors,
     replace_widget,
@@ -217,6 +218,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.logic = OpenLIFUProtocolConfigLogic()
 
         # === Instantiation of Placeholder Widgets ====
+        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
+        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
+
         self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
         replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
 

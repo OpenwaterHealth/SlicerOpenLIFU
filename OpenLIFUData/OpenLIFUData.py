@@ -43,8 +43,11 @@ from OpenLIFULib.util import (
     display_errors,
     create_noneditable_QStandardItem,
     ensure_list,
+    replace_widget,
     BusyCursor,
 )
+
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
 
 from OpenLIFULib.virtual_fit_results import (
     clear_virtual_fit_results,
@@ -658,6 +661,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUDataLogic()
+
+        # User account banner widget replacement
+        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
+        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
 
         # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
