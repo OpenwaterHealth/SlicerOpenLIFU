@@ -22,7 +22,6 @@ from slicer import (
 from OpenLIFULib import (
     openlifu_lz,
     bcrypt_lz,
-    SlicerOpenLIFUUser,
     get_cur_db,
     get_openlifu_database_parameter_node,
     get_current_user,
@@ -525,13 +524,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._permissions_widgets : List[qt.QWidget] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self._default_anonymous_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+        self._default_anonymous_user = openlifu_lz().db.User(
                 id = "anonymous", 
                 password_hash = "",
                 roles = [],
                 name = "Anonymous",
                 description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
-        ))
+        )
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -683,7 +682,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
                 return
 
-            self.logic.active_user = SlicerOpenLIFUUser(matched_user)
+            self.logic.active_user = matched_user
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
 
     @display_errors
@@ -777,13 +776,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # if a db is connected, check if there is an admin there. If not, override the state.
         if get_cur_db() and not any('admin' in u.roles for u in get_cur_db().load_all_users()):
             # set the user to admin
-            default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+            default_admin_user = openlifu_lz().db.User(
                     id = "default_admin", 
                     password_hash = "default_admin",
                     roles = ['admin'],
                     name = "default_admin",
                     description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
-                    ))
+                    )
             self.logic.active_user = default_admin_user
 
             self._cur_login_state = LoginState.DEFAULT_ADMIN
@@ -813,7 +812,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             # We want the standard text color to make sense if in night-mode
             palette = qt.QApplication.instance().palette()
             text_color = palette.color(qt.QPalette.WindowText).name()
-            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.user.name}!")
+            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.name}!")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
         elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
             self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please create an admin account for user accounts to work.")
@@ -844,16 +843,16 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # === Check cache if there is an active user ===
 
         if self.logic.active_user is not None:
-            if self._cur_user_id_enforced == self.logic.active_user.user.id and self.logic.active_user.user.id != "anonymous":
+            if self._cur_user_id_enforced == self.logic.active_user.id and self.logic.active_user.id != "anonymous":
                 return
             else:
-                self._cur_user_id_enforced = self.logic.active_user.user.id
+                self._cur_user_id_enforced = self.logic.active_user.id
 
         # === Enforce ===
 
         for widget in self._permissions_widgets:
             allowed_roles = widget.property("slicer.openlifu.allowed-roles")
-            user_roles = self.logic.active_user.user.roles
+            user_roles = self.logic.active_user.roles
             widget.setEnabled(any(role in allowed_roles for role in user_roles))
 
 # OpenLIFULoginLogic
@@ -869,7 +868,7 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    active_user : "Optional[SlicerOpenLIFUUser]"
+    active_user : "Optional[openlifu.db.User]"
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""

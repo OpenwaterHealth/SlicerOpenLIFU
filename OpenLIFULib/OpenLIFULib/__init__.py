@@ -5,7 +5,6 @@ from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFURun,
     SlicerOpenLIFUSolutionAnalysis,
-    SlicerOpenLIFUUser,
 )
 from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
 from OpenLIFULib.photoscan import SlicerOpenLIFUPhotoscan
@@ -42,7 +41,6 @@ __all__ = [
     "SlicerOpenLIFURun",
     "SlicerOpenLIFUSolutionAnalysis",
     "SlicerOpenLIFUPhotoscan",
-    "SlicerOpenLIFUUser",
     "get_cur_db",
     "get_openlifu_database_parameter_node",
     "get_openlifu_data_parameter_node",
