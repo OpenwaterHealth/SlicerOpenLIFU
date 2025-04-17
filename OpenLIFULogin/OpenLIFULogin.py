@@ -1,8 +1,8 @@
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import json
 from enum import Enum
 
-from OpenLIFULib.user_account_mode_util import set_user_account_mode_state
+from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 import qt
 
 import vtk
@@ -22,7 +22,6 @@ from slicer import (
 from OpenLIFULib import (
     openlifu_lz,
     bcrypt_lz,
-    SlicerOpenLIFUUser,
     get_cur_db,
     get_openlifu_database_parameter_node,
     get_current_user,
@@ -523,15 +522,16 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._cur_login_state = LoginState.NOT_LOGGED_IN
         self._cur_user_id_enforced : str = ""  # for caching enforced permissions
         self._permissions_widgets : List[qt.QWidget] = []
+        self._user_account_banners : List[UserAccountBanner] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self._default_anonymous_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+        self._default_anonymous_user = openlifu_lz().db.User(
                 id = "anonymous", 
                 password_hash = "",
                 roles = [],
                 name = "Anonymous",
                 description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
-        ))
+        )
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -561,6 +561,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
         self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
+        self.logic.call_on_active_user_changed(self.onActiveUserChanged)
 
         # Account management
         
@@ -573,7 +574,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-        self.cacheAllPermissionswidgets()
+        self.cacheAllLoginRelatedWidgets()
 
         self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
@@ -618,7 +619,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.setParameterNode(self.logic.getParameterNode())
 
-    def cacheAllPermissionswidgets(self) -> None:
+    def cacheAllLoginRelatedWidgets(self) -> None:
         all_openlifu_modules = [
             "OpenLIFUDatabase",
             "OpenLIFUData",
@@ -633,6 +634,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             module = slicer.util.getModule(moduleName)
             widgetRepresentation = module.widgetRepresentation()
             self._permissions_widgets.extend(slicer.util.findChildren(widgetRepresentation, name="permissionsWidget*"))
+            self._user_account_banners.extend(slicer.util.findChildren(widgetRepresentation, className="UserAccountBanner"))
 
         self._permissions_widgets.extend([self.ui.permissionsWidget1])
 
@@ -683,7 +685,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
                 return
 
-            self.logic.active_user = SlicerOpenLIFUUser(matched_user)
+            self.logic.active_user = matched_user
             self.updateWidgetLoginState(LoginState.LOGGED_IN)
 
     @display_errors
@@ -777,13 +779,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # if a db is connected, check if there is an admin there. If not, override the state.
         if get_cur_db() and not any('admin' in u.roles for u in get_cur_db().load_all_users()):
             # set the user to admin
-            default_admin_user = SlicerOpenLIFUUser(openlifu_lz().db.User(
+            default_admin_user = openlifu_lz().db.User(
                     id = "default_admin", 
                     password_hash = "default_admin",
                     roles = ['admin'],
                     name = "default_admin",
                     description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
-                    ))
+                    )
             self.logic.active_user = default_admin_user
 
             self._cur_login_state = LoginState.DEFAULT_ADMIN
@@ -813,7 +815,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             # We want the standard text color to make sense if in night-mode
             palette = qt.QApplication.instance().palette()
             text_color = palette.color(qt.QPalette.WindowText).name()
-            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.user.name}!")
+            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.name}!")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
         elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
             self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please create an admin account for user accounts to work.")
@@ -831,6 +833,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.updateUserAccountModeButton()
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
+        for widget in self._user_account_banners:
+            widget.visible = self._parameterNode.user_account_mode
 
     def enforceUserPermissions(self) -> None:
         
@@ -844,39 +848,66 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # === Check cache if there is an active user ===
 
         if self.logic.active_user is not None:
-            if self._cur_user_id_enforced == self.logic.active_user.user.id and self.logic.active_user.user.id != "anonymous":
+            if self._cur_user_id_enforced == self.logic.active_user.id and self.logic.active_user.id != "anonymous":
                 return
             else:
-                self._cur_user_id_enforced = self.logic.active_user.user.id
+                self._cur_user_id_enforced = self.logic.active_user.id
 
         # === Enforce ===
 
         for widget in self._permissions_widgets:
             allowed_roles = widget.property("slicer.openlifu.allowed-roles")
-            user_roles = self.logic.active_user.user.roles
+            user_roles = self.logic.active_user.roles
             widget.setEnabled(any(role in allowed_roles for role in user_roles))
 
+    def onActiveUserChanged(self, new_active_user: Optional["openlifu.db.User"]) -> None:
+        for widget in self._user_account_banners:
+            widget.change_active_user(new_active_user)
+            
 # OpenLIFULoginLogic
 #
 
 class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
-    computation done by your module.  The interface
-    should be such that other python code can import
+    computation done by your module. The interface
+    should be such that other Python code can import
     this class and make use of the functionality without
     requiring an instance of the Widget.
     Uses ScriptedLoadableModuleLogic base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    active_user : "Optional[SlicerOpenLIFUUser]"
-
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self._active_user: Optional["openlifu.db.User"] = None
+        """The currently active user. Do not set this directly -- use the `active_user` property."""
+
+        self._on_active_user_changed_callbacks: List[Callable[[Optional["openlifu.db.User"]], None]] = []
+        """List of functions to call when the `active_user` property is changed."""
+
     def getParameterNode(self):
         return OpenLIFULoginParameterNode(super().getParameterNode())
+
+    def call_on_active_user_changed(self, f: Callable[[Optional["openlifu.db.User"]], None]) -> None:
+        """Register a function to be called whenever the `active_user` property is updated.
+
+        Args:
+            f: Callback accepting a single argument with the new `active_user` value.
+        """
+        self._on_active_user_changed_callbacks.append(f)
+
+    @property
+    def active_user(self) -> Optional["openlifu.db.User"]:
+        """The currently active user."""
+        return self._active_user
+
+    @active_user.setter
+    def active_user(self, user: Optional["openlifu.db.User"]) -> None:
+        self._active_user = user
+        for callback in self._on_active_user_changed_callbacks:
+            callback(self._active_user)
 
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
