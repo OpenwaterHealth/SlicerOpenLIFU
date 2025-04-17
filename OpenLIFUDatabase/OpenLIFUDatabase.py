@@ -1,41 +1,38 @@
-from typing import Optional, List, Sequence, Tuple, Callable, TYPE_CHECKING
-from pathlib import Path
-import sys
+# Standard library imports
 import os
 import shutil
+import sys
+from pathlib import Path
+from typing import Optional, List, Sequence, Tuple, Callable, TYPE_CHECKING
 
+# Third-party imports
 import qt
-
 import vtk
 
+# Slicer imports
 import slicer
+from slicer import vtkMRMLScriptedModuleNode
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
+from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
-from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import (
-    vtkMRMLScriptedModuleNode,
-)
-
-from OpenLIFULib import (
-    openlifu_lz,
-)
-
+# OpenLIFULib imports
+from OpenLIFULib import openlifu_lz
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.util import (
     ensure_list,
     display_errors,
     add_slicer_log_handler_for_openlifu_object,
 )
 
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-
+# These imports are deferred at runtime using openlifu_lz, 
+# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu
     import openlifu.db
 
-#
 # OpenLIFUDatabase
 #
 
