@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>298</width>
-    <height>347</height>
+    <height>442</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -30,6 +30,20 @@
       <string>OpenLIFU module navigator</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QPushButton" name="databasePushButton">
+        <property name="text">
+         <string>OpenLIFU Database</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loginPushButton">
+        <property name="text">
+         <string>OpenLIFU Login</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QPushButton" name="dataPushButton">
         <property name="text">

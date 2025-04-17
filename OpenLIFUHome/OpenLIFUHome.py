@@ -104,6 +104,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateGuidedModeButton()
 
         # Switch modules
+        self.ui.databasePushButton.clicked.connect(lambda : self.switchModule(self.ui.databasePushButton.text))
+        self.ui.loginPushButton.clicked.connect(lambda : self.switchModule(self.ui.loginPushButton.text))
         self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
         self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
         self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))
