@@ -1,39 +1,52 @@
+# Standard library imports
+import inspect
 import logging
 import os
-from pathlib import Path
 from dataclasses import fields, is_dataclass
-from typing import Annotated, Optional, List, Tuple, Type, Any, get_args, get_origin, TYPE_CHECKING
-
 from enum import Enum
-import inspect
+from pathlib import Path
+from typing import (
+    Annotated,
+    Any,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TYPE_CHECKING,
+    get_args,
+    get_origin,
+)
 
-import vtk
-import qt
+# Third-party imports
 import ctk
+import qt
+import vtk
 
+# Slicer imports
 import slicer
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer.util import VTKObservationMixin
 
+# OpenLIFULib imports
 from OpenLIFULib import (
-    openlifu_lz,
+    SlicerOpenLIFUProtocol,
     get_cur_db,
     get_openlifu_data_parameter_node,
-    get_openlifu_database_parameter_node,
-    SlicerOpenLIFUProtocol,
+    openlifu_lz,
 )
-
 from OpenLIFULib.util import (
     display_errors,
-    replace_widget,
     get_hints,
+    replace_widget,
 )
 
+# These imports are deferred at runtime using openlifu_lz, 
+# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu
     import openlifu.db
 
 #

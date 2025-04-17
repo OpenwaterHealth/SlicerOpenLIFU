@@ -1,19 +1,23 @@
+# Standard library imports
 from typing import Optional, TYPE_CHECKING
 
+# Third-party imports
 import vtk
+
+# Slicer imports
 import slicer
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer.util import VTKObservationMixin
 
-from OpenLIFULib.lazyimport import (
-    python_requirements_exist,
-    check_and_install_python_requirements,
-)
-
+# OpenLIFULib imports
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
+from OpenLIFULib.lazyimport import (
+    check_and_install_python_requirements,
+    python_requirements_exist,
+)
 
 #
 # OpenLIFUHome
@@ -104,14 +108,14 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateGuidedModeButton()
 
         # Switch modules
+        self.ui.databasePushButton.clicked.connect(lambda : self.switchModule(self.ui.databasePushButton.text))
+        self.ui.loginPushButton.clicked.connect(lambda : self.switchModule(self.ui.loginPushButton.text))
         self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
         self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
         self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))
         self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
-        self.ui.protocolConfigPushButton.clicked.connect(lambda :
-                                                         self.switchModule(self.ui.protocolConfigPushButton.text))
-
+        self.ui.protocolConfigPushButton.clicked.connect(lambda : self.switchModule(self.ui.protocolConfigPushButton.text))
 
     def switchModule(self, moduleButtonText: str) -> None:
         moduleButtonText = moduleButtonText.replace(" ", "")
