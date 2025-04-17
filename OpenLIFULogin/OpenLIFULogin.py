@@ -1,40 +1,38 @@
-from typing import Optional, List, Dict, Callable, TYPE_CHECKING
+# Standard library imports
 import json
 from enum import Enum
+from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 
-from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
+# Third-party imports
 import qt
-
 import vtk
 import numpy as np
 
+# Slicer imports
 import slicer
+from slicer import vtkMRMLScriptedModuleNode
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
+from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
-from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import (
-    vtkMRMLScriptedModuleNode,
-)
-
+# OpenLIFULib imports
 from OpenLIFULib import (
-    openlifu_lz,
     bcrypt_lz,
     get_cur_db,
-    get_openlifu_database_parameter_node,
     get_current_user,
+    openlifu_lz,
 )
-
-from OpenLIFULib.util import (
-    display_errors,
-)
-
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.user_account_mode_util import set_user_account_mode_state
+from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
+from OpenLIFULib.util import display_errors
 
+# These imports are deferred at runtime using openlifu_lz, 
+# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu
     import openlifu.db
 
 #

@@ -1,36 +1,45 @@
-from typing import Optional, Union, TYPE_CHECKING, Tuple, get_origin, get_args
+# Standard library imports
 import warnings
 from dataclasses import fields
+from typing import Optional, Union, Tuple, TYPE_CHECKING, get_origin, get_args
 
+# Third-party imports
 import qt
 import vtk
 
+# Slicer imports
 import slicer
+from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLScalarVolumeNode,vtkMRMLMarkupsFiducialNode
+from slicer.util import VTKObservationMixin
 
+# OpenLIFULib imports
 from OpenLIFULib import (
-    SlicerOpenLIFUProtocol,
-    SlicerOpenLIFUTransducer,
-    SlicerOpenLIFUSolution,
-    fiducial_to_openlifu_point_in_transducer_coords,
-    make_xarray_in_transducer_coords_from_volume,
-    get_openlifu_data_parameter_node,
     BusyCursor,
     OpenLIFUAlgorithmInputWidget,
+    SlicerOpenLIFUProtocol,
+    SlicerOpenLIFUSolution,
     SlicerOpenLIFUSolutionAnalysis,
+    SlicerOpenLIFUTransducer,
+    fiducial_to_openlifu_point_in_transducer_coords,
+    get_openlifu_data_parameter_node,
+    make_xarray_in_transducer_coords_from_volume,
 )
-from OpenLIFULib.util import replace_widget, create_noneditable_QStandardItem, get_openlifu_data_parameter_node
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.util import (
+    create_noneditable_QStandardItem,
+    replace_widget,
+)
 
+# These imports are deferred at runtime using openlifu_lz, 
+# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu
     import openlifu.plan
     import xarray
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic

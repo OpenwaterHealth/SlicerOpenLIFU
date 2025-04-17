@@ -1,6 +1,4 @@
-from pathlib import Path
-from typing import Optional, List,Tuple, Dict, Sequence,TYPE_CHECKING
-from collections import defaultdict
+# Standard library imports
 import json
 import os
 import random
@@ -8,65 +6,66 @@ import shutil
 import string
 import subprocess
 import tempfile
+from collections import defaultdict
+from pathlib import Path
+from typing import Optional, List, Tuple, Dict, Sequence, TYPE_CHECKING
 
-import qt
+# Third-party imports
 import ctk
-
+import qt
 import vtk
 import numpy as np
 
+# Slicer imports
 import slicer
+from slicer import (
+    vtkMRMLMarkupsFiducialNode,
+    vtkMRMLScriptedModuleNode,
+)
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
+from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
-from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import (
-    vtkMRMLScriptedModuleNode,
-    vtkMRMLMarkupsFiducialNode,
-)
-
+# OpenLIFULib imports
 from OpenLIFULib import (
-    openlifu_lz,
-    get_cur_db,
+    SlicerOpenLIFUPhotoscan,
     SlicerOpenLIFUProtocol,
-    SlicerOpenLIFUTransducer,
-    SlicerOpenLIFUSolution,
     SlicerOpenLIFURun,
     SlicerOpenLIFUSession,
-    SlicerOpenLIFUPhotoscan,
-    get_target_candidates,
+    SlicerOpenLIFUSolution,
+    SlicerOpenLIFUTransducer,
     assign_openlifu_metadata_to_volume_node,
+    get_cur_db,
+    get_target_candidates,
+    openlifu_lz,
 )
-from OpenLIFULib.util import (
-    display_errors,
-    create_noneditable_QStandardItem,
-    ensure_list,
-    replace_widget,
-    BusyCursor,
-)
-
-from OpenLIFULib.user_account_mode_util import UserAccountBanner
-
-from OpenLIFULib.virtual_fit_results import (
-    clear_virtual_fit_results,
-    add_virtual_fit_results_from_openlifu_session_format,
-)
-
-from OpenLIFULib.transducer_tracking_results import (
-    add_transducer_tracking_results_from_openlifu_session_format,
-    clear_transducer_tracking_results
-)
-
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.transducer_tracking_results import (
+    add_transducer_tracking_results_from_openlifu_session_format,
+    clear_transducer_tracking_results,
+)
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.util import (
+    BusyCursor,
+    create_noneditable_QStandardItem,
+    display_errors,
+    ensure_list,
+    replace_widget,
+)
+from OpenLIFULib.virtual_fit_results import (
+    add_virtual_fit_results_from_openlifu_session_format,
+    clear_virtual_fit_results,
+)
 
+# These imports are deferred at runtime using openlifu_lz, 
+# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu
     import openlifu.nav.photoscan
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
-
 #
 # OpenLIFUData
 #

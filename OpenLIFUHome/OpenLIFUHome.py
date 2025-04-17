@@ -1,19 +1,23 @@
+# Standard library imports
 from typing import Optional, TYPE_CHECKING
 
+# Third-party imports
 import vtk
+
+# Slicer imports
 import slicer
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer.util import VTKObservationMixin
 
-from OpenLIFULib.lazyimport import (
-    python_requirements_exist,
-    check_and_install_python_requirements,
-)
-
+# OpenLIFULib imports
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
+from OpenLIFULib.lazyimport import (
+    check_and_install_python_requirements,
+    python_requirements_exist,
+)
 
 #
 # OpenLIFUHome

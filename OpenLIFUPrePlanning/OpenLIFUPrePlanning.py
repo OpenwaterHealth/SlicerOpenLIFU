@@ -1,50 +1,63 @@
-from typing import Optional, TYPE_CHECKING, Dict, List,Union
-from functools import partial
+# Standard library imports
 from collections import defaultdict
+from functools import partial
+from typing import Optional, TYPE_CHECKING, Dict, List, Union
 
+# Third-party imports
 import qt
 import vtk
 import numpy as np
 
+# Slicer imports
 import slicer
+from slicer import (
+    vtkMRMLMarkupsFiducialNode,
+    vtkMRMLScalarVolumeNode,
+    vtkMRMLTransformNode,
+)
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode, vtkMRMLTransformNode
+from slicer.util import VTKObservationMixin
 
+# OpenLIFULib imports
 from OpenLIFULib import (
-    openlifu_lz,
-    get_target_candidates,
-    get_openlifu_data_parameter_node,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
+    get_openlifu_data_parameter_node,
+    get_target_candidates,
+    openlifu_lz,
 )
-from OpenLIFULib.util import replace_widget, BusyCursor, add_slicer_log_handler
+from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
+from OpenLIFULib.events import SlicerOpenLIFUEvents
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id
+from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
+from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.util import (
+    BusyCursor,
+    add_slicer_log_handler,
+    replace_widget,
+)
 from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_result,
     clear_virtual_fit_results,
     get_approved_target_ids,
-    get_virtual_fit_result_nodes,
-    get_virtual_fit_approval_for_target,
-    set_virtual_fit_approval_for_target,
-    get_best_virtual_fit_result_node,
     get_approval_from_virtual_fit_result_node,
+    get_best_virtual_fit_result_node,
     get_target_id_from_virtual_fit_result_node,
+    get_virtual_fit_approval_for_target,
+    get_virtual_fit_result_nodes,
+    set_virtual_fit_approval_for_target,
 )
-from OpenLIFULib.targets import fiducial_to_openlifu_point_id
-from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
-from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
-from OpenLIFULib.events import SlicerOpenLIFUEvents
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-from OpenLIFULib.user_account_mode_util import UserAccountBanner
 
+# These imports are done only for IDE and static analysis purposes
 if TYPE_CHECKING:
-    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
     import openlifu
     import openlifu.geo
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
 
