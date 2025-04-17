@@ -111,9 +111,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))
         self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
-        self.ui.protocolConfigPushButton.clicked.connect(lambda :
-                                                         self.switchModule(self.ui.protocolConfigPushButton.text))
-
+        self.ui.protocolConfigPushButton.clicked.connect(lambda : self.switchModule(self.ui.protocolConfigPushButton.text))
 
     def switchModule(self, moduleButtonText: str) -> None:
         moduleButtonText = moduleButtonText.replace(" ", "")
