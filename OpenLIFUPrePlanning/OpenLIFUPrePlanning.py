@@ -272,7 +272,16 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.unwatch_fiducial_node(node)
-            self.revokeApprovalIfAny(node, reason="The target was removed.")
+
+            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            if not data_logic.session_loading_unloading_in_progress:
+                self.revokeApprovalIfAny(node, reason="The target was removed.\n" +
+                "Any virtual fit transforms associated with this target will also be removed.")
+
+                # Clear affiliated virtual fit results if present
+                self.logic.clear_virtual_fit_results(target = node)
+                self.updateWorkflowControls()
+
         self.updateTargetsListView()
         self.updateInputOptions()
 
@@ -292,11 +301,36 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onPointAddedOrRemoved(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetsListView()
         self.updateInputOptions()
-        self.revokeApprovalIfAny(node, reason="The target was modified.")
 
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        if not data_logic.session_loading_unloading_in_progress:
+            reason = "The target was modified."
+            self.revokeApprovalIfAny(node, reason=reason)
+            if slicer.util.confirmYesNoDisplay(
+                text= f"Virtual fit results for {node.GetName()} will be removed for the following reason:\n"+reason + 
+                "\nProceed with deletion?",
+                windowTitle="Confirm virtual fit results deletion"
+                ):
+                # Clear affiliated virtual fit results if present
+                self.logic.clear_virtual_fit_results(target = node)
+                self.updateWorkflowControls()
+                
+                
     def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetPositionInputs()
-        self.revokeApprovalIfAny(node, reason="The target was modified.")
+
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        if not data_logic.session_loading_unloading_in_progress:
+            reason = "The target was modified."
+            self.revokeApprovalIfAny(node, reason=reason)
+            if slicer.util.confirmYesNoDisplay(
+                text= f"Virtual fit results for {node.GetName()} will be removed for the following reason:\n"+reason + 
+                "\nProceed with deletion?",
+                windowTitle="Confirm virtual fit results deletion"
+                ):
+                # Clear affiliated virtual fit results if present
+                self.logic.clear_virtual_fit_results(target = node)
+                self.updateWorkflowControls()
 
     def onLockModified(self, caller, event):
         self.updateLockButtonIcon()
@@ -592,6 +626,14 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         approved_target_ids = get_approved_target_ids(session_id=session_id)
         return approved_target_ids
 
+    def clear_virtual_fit_results(self, target: vtkMRMLMarkupsFiducialNode):
+        """Remove all virtual fit results nodes from the scene that match the given target for the currently active session.
+        Or if there is no session, then sessionless results are cleared."""
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id : Optional[str] = session.get_session_id() if session is not None else None
+        target_id = fiducial_to_openlifu_point_id(target)
+        clear_virtual_fit_results(target_id=target_id,session_id=session_id)
+
     def toggle_virtual_fit_approval(self, target_id: str, session_id: Optional[str]):
         """Toggle approval for the virtual fit of the given target and session. If the session_id is provided
         as None, then the action will apply to a virtual fit result that has no affiliated session."""
@@ -649,7 +691,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         target_id = fiducial_to_openlifu_point_id(target)
-        clear_virtual_fit_results(target_id=target_id,session_id=session_id)
+        self.clear_virtual_fit_results(target = target)
 
         vf_result_nodes = []
 
