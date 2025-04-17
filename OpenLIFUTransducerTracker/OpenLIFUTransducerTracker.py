@@ -1,63 +1,67 @@
-from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
+# Standard library imports
+import itertools
 import warnings
 from subprocess import CalledProcessError
-import itertools
+from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
+
+# Third-party imports
 import numpy as np
-import vtk
 import qt
+import vtk
+
+# Slicer imports
 import slicer
+from slicer import (
+    vtkMRMLMarkupsFiducialNode,
+    vtkMRMLModelNode,
+    vtkMRMLScalarVolumeNode,
+    vtkMRMLTransformNode,
+    vtkMRMLViewNode,
+)
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
-from slicer import (
-    vtkMRMLModelNode,
-    vtkMRMLTransformNode,
-    vtkMRMLScalarVolumeNode,
-    vtkMRMLViewNode,
-    vtkMRMLMarkupsFiducialNode
-    )
+from slicer.util import VTKObservationMixin
 
-from OpenLIFULib.util import replace_widget, BusyCursor, add_slicer_log_handler
+# OpenLIFULib imports
 from OpenLIFULib import (
-    openlifu_lz,
+    OpenLIFUAlgorithmInputWidget,
+    SlicerOpenLIFUPhotoscan,
+    SlicerOpenLIFUTransducer,
     get_cur_db,
     get_openlifu_data_parameter_node,
-    OpenLIFUAlgorithmInputWidget,
-    SlicerOpenLIFUTransducer,
-    SlicerOpenLIFUPhotoscan
+    openlifu_lz,
 )
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
-
+from OpenLIFULib.events import SlicerOpenLIFUEvents
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.skinseg import generate_skin_mesh
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id
+from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.transducer_tracking_results import (
     TransducerTrackingTransformType,
     add_transducer_tracking_result,
-    get_photoscan_id_from_transducer_tracking_result,
-    set_transducer_tracking_approval_for_node,
     get_approval_from_transducer_tracking_result_node,
+    get_photoscan_id_from_transducer_tracking_result,
     get_photoscan_ids_with_results,
-    get_transducer_tracking_result
+    get_transducer_tracking_result,
+    set_transducer_tracking_approval_for_node,
 )
-
 from OpenLIFULib.transducer_tracking_wizard_utils import (
+    create_threeD_photoscan_view_node,
+    hide_displayable_nodes_from_view,
     initialize_wizard_ui,
+    reset_view_node_camera,
     set_threeD_view_node,
     set_threeD_view_widget,
-    hide_displayable_nodes_from_view,
-    reset_view_node_camera,
-    create_threeD_photoscan_view_node,
-    get_threeD_transducer_tracking_view_node
+    get_threeD_transducer_tracking_view_node,
 )
-
-from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
-from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
-from OpenLIFULib.targets import fiducial_to_openlifu_point_id
-from OpenLIFULib.events import SlicerOpenLIFUEvents
-from OpenLIFULib.skinseg import generate_skin_mesh
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, replace_widget
+from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
 
+# These imports are for IDE and static analysis purposes only
 if TYPE_CHECKING:
     import openlifu
     from openlifu.db import Database

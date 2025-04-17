@@ -1,32 +1,38 @@
-from typing import Optional, Callable, Dict, List, TYPE_CHECKING
-from enum import Enum
-import re
-
-import qt
-import vtk
+# Standard library imports
 import asyncio
 import inspect
+import re
 from datetime import datetime
+from enum import Enum
+from typing import Optional, Callable, Dict, List, TYPE_CHECKING
 
+# Third-party imports
+import qt
+import vtk
+
+# Slicer imports
 import slicer
+from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
+from slicer.util import VTKObservationMixin
 
-from OpenLIFULib import (get_openlifu_data_parameter_node, 
-                         SlicerOpenLIFUSolution,
-                         openlifu_lz,
-                         SlicerOpenLIFURun,
+# OpenLIFULib imports
+from OpenLIFULib import (
+    SlicerOpenLIFURun,
+    SlicerOpenLIFUSolution,
+    get_openlifu_data_parameter_node,
+    openlifu_lz,
 )
-
-from OpenLIFULib.util import display_errors, replace_widget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.util import display_errors, replace_widget
 
+# This import is deferred at runtime using openlifu_lz, 
+# but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu
 
 #
 # OpenLIFUSonicationControl
