@@ -502,7 +502,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.logic.toggle_virtual_fit_approval(target_id=target_id, session_id=session_id)
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
-        self.updateWorkflowControls()  # TODO: workflow controls should check for approval too!
+        self.updateWorkflowControls()  
 
     def updateApprovalStatusLabel(self):
         approved_target_ids = self.logic.get_approved_target_ids()
@@ -527,9 +527,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         elif not list(get_virtual_fit_result_nodes(session_id=session_id)):
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Run a virtual fit result for a target to proceed."
+        elif not self.logic.get_approved_target_ids():
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "A virtual fit result needs to be approved for a target to proceed."
         else:
             self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Virtual fit result detected, proceed to the next step."
+            self.workflow_controls.status_text = "Approved virtual fit result detected, proceed to the next step."
 
     def onVirtualfitClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
