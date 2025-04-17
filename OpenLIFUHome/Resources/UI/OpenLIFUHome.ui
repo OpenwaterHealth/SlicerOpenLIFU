@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>298</width>
-    <height>442</height>
+    <height>482</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -31,59 +31,83 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="QPushButton" name="databasePushButton">
-        <property name="text">
-         <string>OpenLIFU Database</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="loginPushButton">
-        <property name="text">
-         <string>OpenLIFU Login</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="dataPushButton">
-        <property name="text">
-         <string>OpenLIFU Data</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="prePlanningPushButton">
-        <property name="text">
-         <string>OpenLIFU Pre-Planning</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="transducerTrackingPushButton">
-        <property name="text">
-         <string>OpenLIFU Transducer Tracking</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="sonicationPlanningPushButton">
-        <property name="text">
-         <string>OpenLIFU Sonication Planning</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="sonicationControlPushButton">
-        <property name="text">
-         <string>OpenLIFU Sonication Control</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="protocolConfigPushButton">
         <property name="text">
          <string>OpenLIFU Protocol Configuration</string>
         </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="guidedWorkflowGroupBox">
+        <property name="title">
+         <string>Guided Workflow Modules</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <property name="spacing">
+          <number>-1</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QPushButton" name="databasePushButton">
+           <property name="text">
+            <string>OpenLIFU Database</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="loginPushButton">
+           <property name="text">
+            <string>OpenLIFU Login</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="dataPushButton">
+           <property name="text">
+            <string>OpenLIFU Data</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="prePlanningPushButton">
+           <property name="text">
+            <string>OpenLIFU Pre-Planning</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="transducerTrackingPushButton">
+           <property name="text">
+            <string>OpenLIFU Transducer Tracking</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="sonicationPlanningPushButton">
+           <property name="text">
+            <string>OpenLIFU Sonication Planning</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="sonicationControlPushButton">
+           <property name="text">
+            <string>OpenLIFU Sonication Control</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
