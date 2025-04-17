@@ -1370,6 +1370,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self._subjects : Dict[str, openlifu.db.subject.Subject] = {} # Mapping from subject id to Subject
         self._folder_deletion_in_progress = False
         self._timer = None 
+        
+        # To avoid triggering certain events related to nodes being added/removed.
+        self.session_loading_unloading_in_progress = False # Used in pre-planning module
 
     def getParameterNode(self):
         return OpenLIFUDataParameterNode(super().getParameterNode())
@@ -1383,6 +1386,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 it was manually loaded without the context of a session. If True then the scene
                 content is removed.
         """
+
+        self.session_loading_unloading_in_progress = True
+
         loaded_session = self.getParameterNode().loaded_session
         if loaded_session is None:
             return # There is no active session to clear
@@ -1408,6 +1414,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     self.remove_photoscan(photoscan_id)
 
             clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
+
+            self.session_loading_unloading_in_progress = False
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
@@ -1680,6 +1688,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.clear_session()
 
+        self.session_loading_unloading_in_progress = True  
+
         volume_info = get_cur_db().get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
        # Create the SlicerOpenLIFU session object; this handles loading volume and targets
@@ -1765,6 +1775,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         for photocollection_reference_number in conflicting_session_photocollections:
             self.remove_photocollection(photocollection_reference_number) 
         self.update_photocollections_affiliated_with_loaded_session()
+
+        self.session_loading_unloading_in_progress = False
 
     # TODO: Don't Need this anymore? Observation should be on the specific TT transforms.
     # def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
