@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>669</width>
+    <width>636</width>
     <height>1262</height>
    </rect>
   </property>
@@ -42,6 +42,9 @@
        </property>
        <property name="text">
         <string>Load Protocol From File</string>
+       </property>
+       <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+        <bool>true</bool>
        </property>
       </widget>
      </item>
@@ -325,6 +328,9 @@ OpenLIFUVirtualFitOptionsDefinitionWidget</string>
          <widget class="QPushButton" name="protocolFileSaveButton">
           <property name="text">
            <string>Save Protocol To File</string>
+          </property>
+          <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+           <bool>true</bool>
           </property>
          </widget>
         </item>

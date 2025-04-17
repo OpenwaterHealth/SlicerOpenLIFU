@@ -242,7 +242,7 @@ class Workflow:
 
         hide_in_guided_mode_widgets = []  # widgets with dynamic property
         call_enforce_in_guided_mode_widgets = []  # widgets with their own defined enforceGuidedModeVisibility()
-        for moduleName in self.modules:
+        for moduleName in self.modules + ["OpenLIFUProtocolConfig"]:
             module = slicer.util.getModule(moduleName)
             widgetRepresentation = module.widgetRepresentation()
             all_widgets = slicer.util.findChildren(widgetRepresentation)
