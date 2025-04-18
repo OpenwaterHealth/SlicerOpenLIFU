@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
     import openlifu.db
     import openlifu.plan
+    import openlifu.nav.photoscan
     import xarray
 
 
@@ -85,12 +86,12 @@ class SlicerOpenLIFUSolutionAnalysis:
     def __init__(self, analysis: "Optional[openlifu.plan.SolutionAnalysis]" = None):
         self.analysis = analysis
 
-# For the same reason we have a thin wrapper around openlifu.Photoscan. But the name SlicerOpenLIFUPhotoscan
+# For the same reason we have a thin wrapper around openlifu.nav.photoscan.Photoscan. But the name SlicerOpenLIFUPhotoscan
 # is reserved for the upcoming parameter pack.
 class SlicerOpenLIFUPhotoscanWrapper:
-    """Ultrathin wrapper of openlifu.Photoscan. This exists so that photoscans can have parameter node
+    """Ultrathin wrapper of openlifu.nav.photoscan.Photoscan. This exists so that photoscans can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, photoscan: "Optional[openlifu.Photoscan]" = None):
+    def __init__(self, photoscan: "Optional[openlifu.nav.photoscan.Photoscan]" = None):
         self.photoscan = photoscan
 
 # For the same reason we have a thin wrapper around openlifu.User
@@ -281,7 +282,7 @@ class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLI
         Reads and returns the value with the given name from the parameterNode.
         """
         json_string = parameterNode.GetParameter(name)    
-        return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().photoscan.Photoscan.from_json(json_string))
+        return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().nav.photoscan.Photoscan.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUUserSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUUser)):

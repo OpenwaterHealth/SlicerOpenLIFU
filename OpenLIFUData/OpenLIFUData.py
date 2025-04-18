@@ -61,6 +61,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu.nav.photoscan
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
 
 #
@@ -1123,7 +1124,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.loadedObjectsItemModel.appendRow(row)
         for photoscan_slicer in parameter_node.loaded_photoscans.values():
             photoscan_slicer : SlicerOpenLIFUPhotoscan
-            photoscan_openlifu : "openlifu.Photoscan" = photoscan_slicer.photoscan.photoscan
+            photoscan_openlifu : "openlifu.nav.photoscan.Photoscan" = photoscan_slicer.photoscan.photoscan
             row = list(map(
                 create_noneditable_QStandardItem,
                 [photoscan_openlifu.name, "Photoscan", photoscan_openlifu.id]
@@ -2158,7 +2159,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # If the user selects a json file,use the photoscan_metadata included in the json file to load the photoscan. 
         elif Path(model_or_json_filepath).suffix == '.json':
-            photoscan_openlifu = openlifu_lz().photoscan.Photoscan.from_file(model_or_json_filepath)
+            photoscan_openlifu = openlifu_lz().nav.photoscan.Photoscan.from_file(model_or_json_filepath)
             return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = str(Path(model_or_json_filepath).parent))
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
@@ -2200,7 +2201,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 loaded_session = self.getParameterNode().loaded_session
                 _, (model_data, texture_data) = get_cur_db().load_photoscan(loaded_session.get_subject_id(),loaded_session.get_session_id(),photoscan_openlifu.id, load_data = True)
             else:
-                model_data, texture_data = openlifu_lz().photoscan.load_data_from_photoscan(photoscan_openlifu,parent_dir = parent_dir)
+                model_data, texture_data = openlifu_lz().nav.photoscan.load_data_from_photoscan(photoscan_openlifu,parent_dir = parent_dir)
 
         newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(
             photoscan_openlifu,
@@ -2361,7 +2362,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         texture_abspath = photoscan_parameters.pop("texture_abspath")
         mtl_abspath = photoscan_parameters.pop("mtl_abspath")
 
-        newOpenLIFUPhotoscan = openlifu_lz().photoscan.Photoscan().from_dict(photoscan_parameters)
+        newOpenLIFUPhotoscan = openlifu_lz().nav.photoscan.Photoscan().from_dict(photoscan_parameters)
         get_cur_db().write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
                                 model_abspath,
                                 texture_abspath,

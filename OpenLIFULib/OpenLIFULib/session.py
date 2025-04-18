@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     import openlifu
     import openlifu.db
     from OpenLIFULib import SlicerOpenLIFUTransducer, SlicerOpenLIFUProtocol
+    import openlifu.nav.photoscan
 
 def assign_openlifu_metadata_to_volume_node(volume_node: vtkMRMLScalarVolumeNode, metadata: dict):
     """ Assign the volume name and ID used by OpenLIFU to a volume node"""
@@ -159,7 +160,7 @@ class SlicerOpenLIFUSession:
         self.affiliated_photocollections = affiliated_photocollections
 
 
-    def set_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.Photoscan"]):
+    def set_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.nav.photoscan.Photoscan"]):
         
         # Wrap the list of affiliated openlifu photoscans using the SlicerOpenLIFUPhotoscanWrapper for 
         # compatability with the SlicerOpenLIFUSession parameter pack. 

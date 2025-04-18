@@ -18,7 +18,7 @@ from slicer import (
     vtkMRMLMarkupsFiducialNode
     )
 
-from OpenLIFULib.util import replace_widget, BusyCursor
+from OpenLIFULib.util import replace_widget, BusyCursor, add_slicer_log_handler
 from OpenLIFULib import (
     openlifu_lz,
     get_cur_db,
@@ -59,6 +59,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 if TYPE_CHECKING:
     import openlifu
     from openlifu.db import Database
+    import openlifu.nav.photoscan
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
@@ -982,7 +983,7 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.updatePhotoscanApproveButton(self.wizard().photoscan.is_approved())
 
 class PhotoscanPreviewWizard(qt.QWizard):
-    def __init__(self, photoscan : "openlifu.Photoscan"):
+    def __init__(self, photoscan : "openlifu.nav.photoscan.Photoscan"):
         super().__init__()
 
         self.logic = OpenLIFUTransducerTrackerLogic()
@@ -1027,6 +1028,50 @@ class PhotoscanPreviewWizard(qt.QWizard):
         
         self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
         self.photoscan.set_view_nodes([])
+
+class PhotoscanGenerationOptionsDialog(qt.QDialog):
+    def __init__(self, meshroom_pipeline_names: list[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configure photoscan generation")
+        self.setModal(True)
+
+        form = qt.QFormLayout(self)
+
+        self.meshroom_pipeline_combobox = qt.QComboBox(self)
+        self.meshroom_pipeline_combobox.addItems(meshroom_pipeline_names)
+        form.addRow("Meshroom pipeline:", self.meshroom_pipeline_combobox)
+        self.meshroom_pipeline_combobox.setToolTip(
+            "Meshroom pipelines are defined in the openlifu python library."
+        )
+
+        self.image_width_line_edit = qt.QLineEdit(self)
+        image_width_validator = qt.QIntValidator(256, 16384, self)
+        self.image_width_line_edit.setValidator(image_width_validator)
+        self.image_width_line_edit.text = "2048" # default value
+        form.addRow("Input image width:", self.image_width_line_edit)
+        self.image_width_line_edit.setToolTip(
+            "The width in pixels to which input photos should be resized before going through mesh reconstruction."
+        )
+
+        buttons = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
+            self
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+        self.ok_button = buttons.button(qt.QDialogButtonBox.Ok)
+        self.image_width_line_edit.textChanged.connect(self._on_image_width_changed)
+
+    def _on_image_width_changed(self, text: str):
+        self.ok_button.setEnabled(self.image_width_line_edit.hasAcceptableInput())
+
+    def get_selected_meshroom_pipeline(self) -> str:
+        return self.meshroom_pipeline_combobox.currentText
+
+    def get_entered_image_width(self) -> int:
+        return int(self.image_width_line_edit.text)
 
 #
 # OpenLIFUTransducerTracker
@@ -1315,6 +1360,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.checkCanPreviewPhotoscan()
 
     def onStartPhotoscanGenerationButtonClicked(self):
+        add_slicer_log_handler("MeshRecon", "Mesh reconstruction")
         reference_numbers = get_openlifu_data_parameter_node().session_photocollections
         if len(reference_numbers) > 1:
             dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
@@ -1333,11 +1379,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         session_openlifu = data_parameter_node.loaded_session.session.session
         session_id = session_openlifu.id
         subject_id = session_openlifu.subject_id
-        self.logic.generate_photoscan(
-            subject_id = subject_id,
-            session_id = session_id,
-            photocollection_reference_number = selected_reference_number,
+        photoscan_generation_options_dialog = PhotoscanGenerationOptionsDialog(
+            openlifu_lz().nav.photoscan.get_meshroom_pipeline_names()
         )
+        if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
+            self.logic.generate_photoscan(
+                subject_id = subject_id,
+                session_id = session_id,
+                photocollection_reference_number = selected_reference_number,
+                meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
+                image_width = photoscan_generation_options_dialog.get_entered_image_width(),
+            )
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
@@ -1493,6 +1545,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         subject_id:str,
         session_id:str,
         photocollection_reference_number:str,
+        meshroom_pipeline:str,
+        image_width:int,
     ) -> None:
         if get_cur_db() is None:
             raise RuntimeError("Cannot generate photoscan without a database connected to write it into.")
@@ -1502,7 +1556,12 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             reference_number=photocollection_reference_number,
         )
         with BusyCursor():
-            photoscan, data_dir = openlifu_lz().photoscan.run_reconstruction(photocollection_filepaths)
+            photoscan, data_dir = openlifu_lz().nav.photoscan.run_reconstruction(
+                images = photocollection_filepaths,
+                pipeline_name = meshroom_pipeline,
+                input_resize_width = image_width,
+                use_masks = True,
+            )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
         photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
         for i in itertools.count(): # Assumes a finite number of photoscans :)
@@ -1551,7 +1610,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         approved_photoscan_ids = get_photoscan_ids_with_results(session_id=session_id, approved_only = True)
         return approved_photoscan_ids
     
-    def load_openlifu_photoscan(self, photoscan: "openlifu.Photoscan") -> SlicerOpenLIFUPhotoscan:
+    def load_openlifu_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan") -> SlicerOpenLIFUPhotoscan:
 
         # In the manual workflow or if the photoscan has been previously loaded as part of a session
         if photoscan.id in get_openlifu_data_parameter_node().loaded_photoscans:
