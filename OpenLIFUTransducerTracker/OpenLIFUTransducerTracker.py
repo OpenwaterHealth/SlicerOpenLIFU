@@ -18,7 +18,7 @@ from slicer import (
     vtkMRMLMarkupsFiducialNode
     )
 
-from OpenLIFULib.util import replace_widget, BusyCursor
+from OpenLIFULib.util import replace_widget, BusyCursor, add_slicer_log_handler
 from OpenLIFULib import (
     openlifu_lz,
     get_cur_db,
@@ -1360,6 +1360,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.checkCanPreviewPhotoscan()
 
     def onStartPhotoscanGenerationButtonClicked(self):
+        add_slicer_log_handler("MeshRecon", "Mesh reconstruction")
         reference_numbers = get_openlifu_data_parameter_node().session_photocollections
         if len(reference_numbers) > 1:
             dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
