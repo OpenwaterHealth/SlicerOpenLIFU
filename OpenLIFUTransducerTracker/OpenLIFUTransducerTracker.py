@@ -59,6 +59,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 if TYPE_CHECKING:
     import openlifu
     from openlifu.db import Database
+    import openlifu.nav.photoscan
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
@@ -982,7 +983,7 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.updatePhotoscanApproveButton(self.wizard().photoscan.is_approved())
 
 class PhotoscanPreviewWizard(qt.QWizard):
-    def __init__(self, photoscan : "openlifu.Photoscan"):
+    def __init__(self, photoscan : "openlifu.nav.photoscan.Photoscan"):
         super().__init__()
 
         self.logic = OpenLIFUTransducerTrackerLogic()
@@ -1502,7 +1503,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             reference_number=photocollection_reference_number,
         )
         with BusyCursor():
-            photoscan, data_dir = openlifu_lz().photoscan.run_reconstruction(photocollection_filepaths)
+            photoscan, data_dir = openlifu_lz().nav.photoscan.run_reconstruction(
+                images = photocollection_filepaths,
+            )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
         photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
         for i in itertools.count(): # Assumes a finite number of photoscans :)
@@ -1551,7 +1554,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         approved_photoscan_ids = get_photoscan_ids_with_results(session_id=session_id, approved_only = True)
         return approved_photoscan_ids
     
-    def load_openlifu_photoscan(self, photoscan: "openlifu.Photoscan") -> SlicerOpenLIFUPhotoscan:
+    def load_openlifu_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan") -> SlicerOpenLIFUPhotoscan:
 
         # In the manual workflow or if the photoscan has been previously loaded as part of a session
         if photoscan.id in get_openlifu_data_parameter_node().loaded_photoscans:
