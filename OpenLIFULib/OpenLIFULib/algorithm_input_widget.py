@@ -11,6 +11,7 @@ from OpenLIFULib.targets import get_target_candidates
 
 if TYPE_CHECKING:
     import openlifu
+    import openlifu.nav.photoscan
 
 @dataclass
 class AlgorithmInput:
@@ -60,7 +61,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def add_volume_to_combobox(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
         self.inputs_dict["Volume"].combo_box.addItem("{} (ID: {})".format(volume_node.GetName(),volume_node.GetID()), volume_node)
 
-    def add_photoscan_to_combobox(self, photoscan_openlifu: "openlifu.Photoscan") -> None:
+    def add_photoscan_to_combobox(self, photoscan_openlifu: "openlifu.nav.photoscan.Photoscan") -> None:
         self.inputs_dict["Photoscan"].combo_box.addItem("{} (ID: {})".format(photoscan_openlifu.name, photoscan_openlifu.id), photoscan_openlifu)
 
     def set_session_related_combobox_tooltip(self, text:str):
@@ -161,7 +162,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         protocol : SlicerOpenLIFUProtocol = session.get_protocol()
         transducer : SlicerOpenLIFUTransducer = session.get_transducer()
         volume_node : vtkMRMLScalarVolumeNode = session.volume_node
-        affiliated_photoscans_list : List["openlifu.Photoscan"] = session.get_affiliated_photoscans()
+        affiliated_photoscans_list : List["openlifu.nav.photoscan.Photoscan"] = session.get_affiliated_photoscans()
 
         # Update protocol combo box
         if "Protocol" in self.inputs_dict:
@@ -226,8 +227,8 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             Transducer: SlicerOpenLIFUTransducer
             Volume: vtkMRMLScalarVolumeNode
             Target: vtkMRMLMarkupsFiducialNode
-            Photoscan: "openlifu.Photoscan"
-            """
+            Photoscan: "openlifu.nav.photoscan.Photoscan"
+        """
         current_data_dict = {
             input.name : input.combo_box.currentData
             for input in self.inputs_dict.values()

@@ -19,6 +19,7 @@ from OpenLIFULib import (
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime using openlifu_lz, but it is done here for IDE and static analysis purposes
+    import openlifu.nav.photoscan
 
 @parameterPack
 class SlicerOpenLIFUPhotoscan:
@@ -56,7 +57,7 @@ class SlicerOpenLIFUPhotoscan:
         return model_node, texture_node
     
     @staticmethod
-    def initialize_from_openlifu_photoscan(photoscan_openlifu : "openlifu.Photoscan",
+    def initialize_from_openlifu_photoscan(photoscan_openlifu : "openlifu.nav.photoscan.Photoscan",
                                            model_data: vtk.vtkPolyData,
                                            texture_data: vtk.vtkImageData
                                            ) -> "SlicerOpenLIFUPhotoscan":
@@ -84,13 +85,13 @@ class SlicerOpenLIFUPhotoscan:
         """
 
         with BusyCursor():
-            model_data, texture_data = openlifu_lz().photoscan.load_data_from_filepaths(model_abspath, texture_abspath)
+            model_data, texture_data = openlifu_lz().nav.photoscan.load_data_from_filepaths(model_abspath, texture_abspath)
 
         node_name_prefix = Path(model_abspath).stem
         model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, node_name_prefix)
 
         # Create a dummy photoscan to keep track of metadata to apply to the openlifu object. This photoscan is not associated with the database
-        photoscan_openlifu = openlifu_lz().photoscan.Photoscan(id = model_node.GetID(), 
+        photoscan_openlifu = openlifu_lz().nav.photoscan.Photoscan(id = model_node.GetID(), 
                                                                   name = node_name_prefix,
                                                                   )
         photoscan = SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu), model_node,texture_node)
