@@ -56,15 +56,26 @@ def display_errors(f):
     return f_with_forwarded_errors
 
 class SlicerLogHandler(logging.Handler):
-    def __init__(self, name_to_print, *args, **kwargs):
+    def __init__(self, name_to_print, use_dialogs=True, *args, **kwargs):
+        """A python logging handler that sends logs to various Slicer places.
+
+        Args:
+            name_to_print: The display name by which to prepend log messages
+            use_dialogs: Whether to involve slicer dialogs for warnings and errors.
+                This is something I needed to turn off in the case where a logger was emitting messages
+                from a different thread, which made Qt very angry when trying to parent the error or warning
+                dialog to the slicer main window on a different thread.
+            args, kwargs: These get forwarded onto the parent class logging.Handler
+        """
         super().__init__(*args, **kwargs)
         self.name_to_print = name_to_print
+        self.use_dialogs = use_dialogs
 
     def emit(self, record):
         if record.levelno == logging.ERROR:
-            method_to_use = self.handle_error
+            method_to_use = self.handle_error_with_dialog if self.use_dialogs else self.handle_error_without_dialog
         elif record.levelno == logging.WARNING:
-            method_to_use = self.handle_warning
+            method_to_use = self.handle_warning_with_dialog if self.use_dialogs else self.handle_warning_without_dialog
         else: # info or any other unaccounted for log message level
             method_to_use = self.handle_info
         
@@ -72,16 +83,23 @@ class SlicerLogHandler(logging.Handler):
         method_to_use(self.format(record))
         slicer.app.processEvents()
 
-    def handle_error(self, msg):
+    def handle_error_with_dialog(self, msg):
         slicer.util.errorDisplay(f"{self.name_to_print}: {msg}")
 
-    def handle_warning(self, msg):
+    def handle_warning_with_dialog(self, msg):
         slicer.util.warningDisplay(f"{self.name_to_print}: {msg}")
+
+    def handle_error_without_dialog(self, msg):
+        slicer.util.showStatusMessage(f"{self.name_to_print} ERROR: {msg}")
+
+    def handle_warning_without_dialog(self, msg):
+        slicer.util.showStatusMessage(f"{self.name_to_print} WARNING: {msg}")
+
 
     def handle_info(self, msg):
         slicer.util.showStatusMessage(f"{self.name_to_print}: {msg}")
 
-def add_slicer_log_handler(logger_name : str, name_to_print : str):
+def add_slicer_log_handler(logger_name : str, name_to_print : str, use_dialogs=True):
     """Adds a SlicerLogHandler to the logger of a given name,
     and only doing so if that logger doesn't already have a SlicerLogHandler.
 
@@ -89,10 +107,14 @@ def add_slicer_log_handler(logger_name : str, name_to_print : str):
         logger_name: The name of the logger that should receive Slicer log handling
         name_to_print: The display name of the logger to put on Slicer messages and 
             dialogs to indicate which logger the messages are coming from.
+        use_dialogs: Whether to involve slicer dialogs for warnings and errors.
+                This is something I needed to turn off in the case where a logger was emitting messages
+                from a different thread, which made Qt very angry when trying to parent the error or warning
+                dialog to the slicer main window on a different thread.
     """
     logger : logging.Logger = logging.getLogger(logger_name)
     if not any(isinstance(h, SlicerLogHandler) for h in logger.handlers):
-        handler = SlicerLogHandler(name_to_print)
+        handler = SlicerLogHandler(name_to_print=name_to_print, use_dialogs=use_dialogs)
         logger.addHandler(handler)
 
 def add_slicer_log_handler_for_openlifu_object(openlifu_object: Any):
