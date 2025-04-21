@@ -6,56 +6,56 @@ Build this extension by following [the usual procedure for Slicer extensions](ht
 
 ![Screenshot](https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/266-Publish-to-Extension-Index/blob/main/Screenshots/1.png)
 
-## Included modules
+## 📦 Included Modules
 
-### OpenLIFUHome
+### 🏠 OpenLIFUHome
 
 The central interface module providing navigation controls for other modules.
 
-### OpenLIFUDatabase
+### 💾 OpenLIFUDatabase
 
 Facilitates communication with a local OpenLIFU database for persistent storage
 and retrieval of user data, protocol configurations, and treatment sessions.
 
-### OpenLIFULogin
+### 🔐 OpenLIFULogin
 
 Manages user authentication and account access within the OpenLIFU database.
 Primarily used by the standalone OpenLIFU application.
 
-### OpenLIFUData
+### 📊 OpenLIFUData
 
 Coordinates subject and session data during treatment workflows. Tracks active
 subjects, sessions, and computed solutions, and makes them available to all
 modules.
 
-### OpenLIFUPrePlanning
+### 🧠 OpenLIFUPrePlanning
 
 Enables initial patient setup, including image loading, target selection, and
 virtual fitting of an OpenLIFU transducer. Prepares the system for transducer
 tracking and sonication planning.
 
-### OpenLIFUTransducerTracker
+### 🛰️ OpenLIFUTransducerTracker
 
 Imports photos from the Openwater Android app to generate photogrammetric
 meshes. These meshes are used to align the transducer with imaging for
 neuronavigation.
 
-### OpenLIFUSonicationPlanner
+### 🔬 OpenLIFUSonicationPlanner
 
 Simulates sonication, checks safety parameters, and generates hardware
 configurations based on target location and transducer setup.
 
-### OpenLIFUSonicationControl
+### 🎯 OpenLIFUSonicationControl
 
 Interfaces with Openwater focused ultrasound transducer hardware to execute
 planned sonications. Supports real-time monitoring and device control.
 
-### OpenLIFUProtocolConfig
+### ⚙️  OpenLIFUProtocolConfig
 
 Manages treatment protocols in the OpenLIFU database, including frequency,
 intensity, and pulse duration settings used in planning and treatment.
 
-### OpenLIFULib
+### 📚 OpenLIFULib
 
 A shared utility library containing core classes and functions used system-wide.
 Includes transducer definitions, solution computations, coordinate
