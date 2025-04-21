@@ -1,5 +1,6 @@
 from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 import warnings
+from subprocess import CalledProcessError
 import itertools
 import numpy as np
 import vtk
@@ -1361,6 +1362,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onStartPhotoscanGenerationButtonClicked(self):
         add_slicer_log_handler("MeshRecon", "Mesh reconstruction")
+        add_slicer_log_handler("Meshroom", "Meshroom process", use_dialogs=False)
         reference_numbers = get_openlifu_data_parameter_node().session_photocollections
         if len(reference_numbers) > 1:
             dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
@@ -1383,13 +1385,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             openlifu_lz().nav.photoscan.get_meshroom_pipeline_names()
         )
         if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
-            self.logic.generate_photoscan(
-                subject_id = subject_id,
-                session_id = session_id,
-                photocollection_reference_number = selected_reference_number,
-                meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
-                image_width = photoscan_generation_options_dialog.get_entered_image_width(),
-            )
+            try:
+                self.logic.generate_photoscan(
+                    subject_id = subject_id,
+                    session_id = session_id,
+                    photocollection_reference_number = selected_reference_number,
+                    meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
+                    image_width = photoscan_generation_options_dialog.get_entered_image_width(),
+                )
+            except CalledProcessError as e:
+                slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
+                raise e
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
@@ -1548,6 +1554,15 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         meshroom_pipeline:str,
         image_width:int,
     ) -> None:
+        """Call mesh reconstruction using openlifu, which should call Meshroom.
+
+        Args:
+            subject_id: The subject ID
+            session_id: The session ID
+            photocollection_reference_number: The photocollection reference number
+            meshroom_pipeline: The name of the meshroom pipeline to use. See openlifu.nav.photoscan.get_meshroom_pipeline_names.
+            image_width: The image width to which to resize input images before sending them into meshroom
+        """
         if get_cur_db() is None:
             raise RuntimeError("Cannot generate photoscan without a database connected to write it into.")
         photocollection_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
