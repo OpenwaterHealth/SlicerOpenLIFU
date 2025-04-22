@@ -496,38 +496,40 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         for field in fields(analysis_openlifu):
 
-            # we expect field.type could be either "List[float]" or "Optional[float]" which is actually "Union[float,NoneType]"
-            # except now it's actually a string like "Annotated[...]" with a bunch of stuff in it
-            origin_is_list = "list[" in field.type
-            origin_is_union = "|" in field.type
-            type_args_involve_float = "float" in field.type
+            # field.type is a string like "Annotated[...]" that may contain "list[float]" or "float | NoneType"
+            type_str = str(field.type)
 
-            # lists of floats go into the focusAnalysisTableModel
-            if origin_is_list and type_args_involve_float:
-                values = getattr(analysis_openlifu,field.name)
+            is_float = "float" in type_str
+            is_list = "list[" in type_str
+            is_optional = "|" in type_str  # indicates a Union (e.g., float | NoneType)
+            is_param_constraints = "ParameterConstraint" in type_str  # we don't process this type
+
+            if is_list and is_float:
+                # lists of floats go into the focusAnalysisTableModel
+                values = getattr(analysis_openlifu, field.name)
                 value_strs = [
-                    str(values[i]) if i<len(values) else ""
+                    str(values[i]) if i < len(values) else ""
                     for i in range(max_len)
                 ]
-                self.focusAnalysisTableModel.appendRow(list(map(
-                    create_noneditable_QStandardItem,
-                    [field.name, *value_strs]
-                )))
+                row = [field.name, *value_strs]
 
-            # individual floats go into the globalAnalysisTableModel
-            elif origin_is_union and type_args_involve_float:
-                value = getattr(analysis_openlifu,field.name)
-                value_str = str(value) if value is not None else ""
-                self.globalAnalysisTableModel.appendRow(list(map(
-                    create_noneditable_QStandardItem,
-                    [field.name, value_str]
-                )))
+            elif is_optional and is_float:
+                # individual optional floats go into the globalAnalysisTableModel
+                value = getattr(analysis_openlifu, field.name)
+                row = [field.name, str(value) if value is not None else ""]
+
+            elif is_param_constraints:
+                continue  # we don't process this type
 
             else:
                 raise RuntimeError(f"Not sure what to do with the SolutionAnalysis field {field.name}")
 
-
-
+            # Qt models (like QStandardItemModel) are data containers used by views (e.g., QTableView)
+            # Each cell must be a QStandardItem, which controls display/edit behavior
+            # map() is used here to quickly wrap each string value into a QStandardItem
+            items = list(map(create_noneditable_QStandardItem, row))
+            model = self.focusAnalysisTableModel if is_list else self.globalAnalysisTableModel
+            model.appendRow(items)
 
 #
 # Solution computation function using openlifu
