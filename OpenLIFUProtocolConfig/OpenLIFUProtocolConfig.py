@@ -1802,16 +1802,6 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         widget.setRange(min_value, max_value)
         widget.setValue(default_value)
 
-    def modify_field_spinbox(self, field: str, default_value=None, min_value=None, max_value=None, num_decimals=None) -> None:
-        """
-        Applies spinbox configuration to a field's associated widget.
-
-        Args:
-            field (str): The field whose widget will be configured.
-        """
-        widget = self._field_widgets[field]
-        self.modify_widget_spinbox(widget, default_value, min_value, max_value, num_decimals)
-
 class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None, custom_abc_title: Optional[str] = None):
         """
