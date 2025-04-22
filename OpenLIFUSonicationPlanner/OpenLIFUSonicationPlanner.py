@@ -1,6 +1,7 @@
 # Standard library imports
 import warnings
 from dataclasses import fields
+import math
 from typing import Optional, Union, Tuple, TYPE_CHECKING, get_origin, get_args
 
 # Third-party imports
@@ -471,55 +472,45 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Fill the solution analysis table models with the information from the current solution analysis.
         Assumes that there is a valid solution analysis, raises error if not.
         """
+
         analysis = self._parameterNode.solution_analysis
         if analysis is None:
             raise RuntimeError("Cannot populate solution analysis tables because there is no solution analysis.")
-        analysis_openlifu = analysis.analysis
 
+        def format_value(val):
+            """
+            Format numeric values:
+            - Floats >= 0.01 → rounded to 2 decimal places
+            - Floats < 0.01  → 3 significant digits
+            - Non-floats     → converted to string as-is
+            """
+            if isinstance(val, float):
+                return f"{val:.2f}" if abs(val) >= 0.01 else f"{val:.3g}"
+            return str(val)
+
+        analysis_openlifu = analysis.analysis
         self.clear_solution_analysis_tables()
 
-        # Max length of list type fields in the dataclass
-        max_len = max(
-            len(getattr(analysis_openlifu, f.name))
-            for f in fields(analysis_openlifu)
-            if "list[" in f.type
-        )
+        # Extract the DataFrame with the desired columns
+        df = analysis_openlifu.to_table()[["Param", "Value", "Units", "Status"]]
 
-        self.globalAnalysisTableModel.setHorizontalHeaderLabels(['Metric', 'Value'])
-        self.ui.globalAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
+        # Set headers
+        self.globalAnalysisTableModel.setHorizontalHeaderLabels(df.columns.tolist())
 
-        for field in fields(analysis_openlifu):
+        # Adjust column widths to be more compact
+        self.ui.globalAnalysisTableView.setColumnWidth(0, 180)  # Param
+        self.ui.globalAnalysisTableView.setColumnWidth(1, 80)  # Value
+        self.ui.globalAnalysisTableView.setColumnWidth(2, 80)   # Units
+        self.ui.globalAnalysisTableView.setColumnWidth(3, 40)  # Status
 
-            # field.type is a string like "Annotated[...]" that may contain "list[float]" or "float | NoneType"
-            type_str = str(field.type)
+        # Increase table view height
+        self.ui.globalAnalysisTableView.setMinimumHeight(400)  # adjust as needed
 
-            is_float = "float" in type_str
-            is_list = "list[" in type_str
-            is_optional = "|" in type_str  # indicates a Union (e.g., float | NoneType)
-            is_param_constraints = "ParameterConstraint" in type_str  # we don't process this type
+        # Populate the model
+        for _, row in df.iterrows():
+            items = [create_noneditable_QStandardItem(format_value(cell)) for cell in row]
+            self.globalAnalysisTableModel.appendRow(items)#
 
-            if is_list and is_float:
-                values = getattr(analysis_openlifu, field.name)
-                row = [field.name, str(values) if values is not None else ""] # list as string
-
-            elif is_optional and is_float:
-                # individual optional floats go into the globalAnalysisTableModel
-                value = getattr(analysis_openlifu, field.name)
-                row = [field.name, str(value) if value is not None else ""]
-
-            elif is_param_constraints:
-                continue  # we don't process this type
-
-            else:
-                raise RuntimeError(f"Not sure what to do with the SolutionAnalysis field {field.name}")
-
-            # Qt models (like QStandardItemModel) are data containers used by views (e.g., QTableView)
-            # Each cell must be a QStandardItem, which controls display/edit behavior
-            # map() is used here to quickly wrap each string value into a QStandardItem
-            items = list(map(create_noneditable_QStandardItem, row))
-            self.globalAnalysisTableModel.appendRow(items)
-
-#
 # Solution computation function using openlifu
 #
 
