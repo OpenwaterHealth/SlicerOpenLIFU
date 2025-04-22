@@ -1767,44 +1767,50 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                     elif isinstance(child, qt.QCheckBox):
                         child.stateChanged.connect(callback)
 
-    def modify_field_spinbox(self, field: str, default_value = None, min_value = None, max_value = None, num_decimals = None) -> None:
+    def modify_widget_spinbox(self, widget: qt.QWidget, default_value=None, min_value=None, max_value=None, num_decimals=None) -> None:
         """
-        Sets the default, minimum & maximum values, and number of decimals (if
-        applicable) for a spin box widget associated with a specific field.
+        Configures a QSpinBox or QDoubleSpinBox widget with specified default, min/max values, and decimal precision.
 
         Args:
-            field (str): The name of the field associated with the widget.
+            widget (qt.QWidget): The widget to configure.
 
         Raises:
-            TypeError: If the widget is not a QSpinBox or QDoubleSpinBox, as
-            only these types support numeric range control.
+            TypeError: If the widget is not a QSpinBox or QDoubleSpinBox.
         """
-        w: qt.QWidget = self._field_widgets[field]
-
-        if isinstance(w, qt.QSpinBox):
+        if isinstance(widget, qt.QSpinBox):
             if default_value is None:
                 default_value = self.DEFAULT_INT_VALUE
             if min_value is None:
                 min_value = self.DEFAULT_INT_RANGE[0]
             if max_value is None:
-                min_value = self.DEFAULT_INT_RANGE[1]
-        elif isinstance(w, qt.QDoubleSpinBox):
+                max_value = self.DEFAULT_INT_RANGE[1]
+        elif isinstance(widget, qt.QDoubleSpinBox):
             if default_value is None:
                 default_value = self.DEFAULT_FLOAT_VALUE
             if min_value is None:
                 min_value = self.DEFAULT_FLOAT_RANGE[0]
             if max_value is None:
-                min_value = self.DEFAULT_FLOAT_RANGE[1]
+                max_value = self.DEFAULT_FLOAT_RANGE[1]
             if num_decimals is None:
                 num_decimals = self.DEFAULT_FLOAT_NUM_DECIMALS
-            w.setDecimals(num_decimals)
+            widget.setDecimals(num_decimals)
         else:
             raise TypeError(
-                f"Widget for field '{field}' must be a QSpinBox or QDoubleSpinBox to set range and default."
-                f"Got {type(w).__name__} instead."
+                f"Expected QSpinBox or QDoubleSpinBox, got {type(widget).__name__} instead."
             )
-        w.setRange(min_value, max_value)
-        w.setValue(default_value)
+
+        widget.setRange(min_value, max_value)
+        widget.setValue(default_value)
+
+    def modify_field_spinbox(self, field: str, default_value=None, min_value=None, max_value=None, num_decimals=None) -> None:
+        """
+        Applies spinbox configuration to a field's associated widget.
+
+        Args:
+            field (str): The field whose widget will be configured.
+        """
+        widget = self._field_widgets[field]
+        self.modify_widget_spinbox(widget, default_value, min_value, max_value, num_decimals)
 
 class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None, custom_abc_title: Optional[str] = None):
