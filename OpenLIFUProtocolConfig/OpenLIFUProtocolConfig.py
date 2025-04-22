@@ -1397,6 +1397,12 @@ class ListTableWidget(qt.QWidget):
             self._add_row(obj)
 
 class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
+    DEFAULT_INT_VALUE = 0
+    DEFAULT_INT_RANGE = (-1_000_000, 1_000_000)
+    DEFAULT_FLOAT_VALUE = 0.
+    DEFAULT_FLOAT_RANGE = (-1e6, 1e6)
+    DEFAULT_FLOAT_NUM_DECIMALS = 4
+
     def __init__(self, cls: Type[Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
         """
         Initializes a QWidget containing a form layout with labeled inputs for
@@ -1428,7 +1434,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             raise TypeError(f"{cls.__name__} is not a dataclass. This class form widget only works for dataclasses.")
 
         super().__init__(parent)
-        self._fields: dict[str, qt.QWidget] = {}
+        self._field_widgets: dict[str, qt.QWidget] = {}
         self._cls = cls
 
         if is_collapsible:
@@ -1481,7 +1487,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                 widget.setToolTip(tooltip_text)
 
                 form_layout.addRow(label, widget)
-                self._fields[name] = widget
+                self._field_widgets[name] = widget
 
     def _create_widget_for_type(self, annotated_type: Any) -> Optional[qt.QWidget]:
         origin = get_origin(annotated_type)
@@ -1490,12 +1496,14 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         def create_basic_widget(typ: Any) -> Optional[qt.QWidget]:
             if typ is int:
                 w = qt.QSpinBox()
-                w.setRange(-1_000_000, 1_000_000)
+                w.setRange(*self.DEFAULT_INT_RANGE)
+                w.setValue(self.DEFAULT_INT_VALUE)
                 return w
             elif typ is float:
                 w = qt.QDoubleSpinBox()
-                w.setDecimals(4)
-                w.setRange(-1e6, 1e6)
+                w.setDecimals(self.DEFAULT_FLOAT_NUM_DECIMALS)
+                w.setRange(*self.DEFAULT_FLOAT_RANGE)
+                w.setValue(self.DEFAULT_FLOAT_VALUE)
                 return w
             elif typ is str:
                 return qt.QLineEdit()
@@ -1602,9 +1610,9 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                 raise TypeError(f"Unsupported widget-value combination: {type(widget)} and {type(value)}")
     
         for name, val in values.items():
-            if name not in self._fields:
+            if name not in self._field_widgets:
                 continue
-            w = self._fields[name]
+            w = self._field_widgets[name]
             if isinstance(w, qt.QSpinBox):
                 w.setValue(int(val))
             elif isinstance(w, qt.QDoubleSpinBox):
@@ -1662,7 +1670,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             return None
 
         values: dict[str, Any] = {}
-        for name, w in self._fields.items():
+        for name, w in self._field_widgets.items():
             if isinstance(w, qt.QSpinBox):
                 values[name] = w.value
             elif isinstance(w, qt.QDoubleSpinBox):
@@ -1737,7 +1745,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         Args:
             callback: Function to call on value change.
         """
-        for w in self._fields.values():
+        for w in self._field_widgets.values():
             if isinstance(w, qt.QSpinBox):
                 w.valueChanged.connect(callback)
             elif isinstance(w, qt.QDoubleSpinBox):
