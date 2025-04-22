@@ -1515,6 +1515,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.wizard.exec_()
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
+        self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
