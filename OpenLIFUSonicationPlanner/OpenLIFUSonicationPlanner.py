@@ -125,9 +125,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic = OpenLIFUSonicationPlannerLogic()
 
         # Create and set solution analysis table models
-        self.focusAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are per focus point
         self.globalAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are for the whole solution, i.e. over all focus points
-        self.ui.focusAnalysisTableView.setModel(self.focusAnalysisTableModel)
         self.ui.globalAnalysisTableView.setModel(self.globalAnalysisTableModel)
 
         # User account banner widget replacement
@@ -466,8 +464,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def clear_solution_analysis_tables(self) -> None:
         """Clear out the solution analysis tables, removing all rows and column headers"""
-        self.focusAnalysisTableModel.removeRows(0,self.focusAnalysisTableModel.rowCount())
-        self.focusAnalysisTableModel.setColumnCount(0)
         self.globalAnalysisTableModel.removeRows(0,self.globalAnalysisTableModel.rowCount())
         self.globalAnalysisTableModel.setColumnCount(0)
 
@@ -489,9 +485,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             if "list[" in f.type
         )
 
-        self.focusAnalysisTableModel.setHorizontalHeaderLabels(['Metric'] + [f"Focus {i+1}" for  i in range(max_len)])
         self.globalAnalysisTableModel.setHorizontalHeaderLabels(['Metric', 'Value'])
-        self.ui.focusAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
         self.ui.globalAnalysisTableView.setColumnWidth(0, 200) # widen the metrcs column
 
         for field in fields(analysis_openlifu):
@@ -505,13 +499,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             is_param_constraints = "ParameterConstraint" in type_str  # we don't process this type
 
             if is_list and is_float:
-                # lists of floats go into the focusAnalysisTableModel
                 values = getattr(analysis_openlifu, field.name)
-                value_strs = [
-                    str(values[i]) if i < len(values) else ""
-                    for i in range(max_len)
-                ]
-                row = [field.name, *value_strs]
+                row = [field.name, str(values) if values is not None else ""] # list as string
 
             elif is_optional and is_float:
                 # individual optional floats go into the globalAnalysisTableModel
@@ -528,8 +517,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # Each cell must be a QStandardItem, which controls display/edit behavior
             # map() is used here to quickly wrap each string value into a QStandardItem
             items = list(map(create_noneditable_QStandardItem, row))
-            model = self.focusAnalysisTableModel if is_list else self.globalAnalysisTableModel
-            model.appendRow(items)
+            self.globalAnalysisTableModel.appendRow(items)
 
 #
 # Solution computation function using openlifu
