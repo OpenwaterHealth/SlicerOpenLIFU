@@ -1585,15 +1585,24 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
 
+        current_data = self.algorithm_input_widget.get_current_data()
+        selected_photoscan_openlifu = current_data['Photoscan']
+
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
-        elif not get_photoscan_ids_with_results(session_id=session_id):
+        elif not selected_photoscan_openlifu:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Run transducer tracking to proceed."
+            self.workflow_controls.status_text = "Select a photoscan to proceed."
+        elif not selected_photoscan_openlifu.photoscan_approved:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Approve a photoscan to proceed."
+        elif not self.logic.get_approved_photoscan_ids():
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Run transducer tracking and approve the result to proceed."
         else:
             self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Transducer tracking result detected, proceed to the next step."
+            self.workflow_controls.status_text = "Approved transducer tracking result detected, proceed to the next step."
 
 #
 # OpenLIFUTransducerTrackerLogic
