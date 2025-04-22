@@ -137,8 +137,8 @@ class SlicerOpenLIFUPhotoscan:
     def get_id(self) -> 'str':
         return self.photoscan.photoscan.id
     
-    def toggle_approval(self) -> None:
-        self.photoscan.photoscan.photoscan_approved = not self.photoscan.photoscan.photoscan_approved 
+    def set_approval(self, approval_state: bool) -> None:
+        self.photoscan.photoscan.photoscan_approved = approval_state
                      
     def initialize_facial_landmarks_from_node(self, fiducial_node: vtkMRMLMarkupsFiducialNode):
         """ Clones the provided vtkMRMLMarkupsFiducialNode and assigns the clone to the photoscan attribute. The input fiducial node

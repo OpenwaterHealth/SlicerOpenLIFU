@@ -1061,7 +1061,7 @@ class PhotoscanPreviewWizard(qt.QWizard):
         # Update the photoscan approval status in the underlying openlifu photoscan object
         self.logic.updatePhotoscanApproval(
             photoscan = self.photoscan,
-            approval_status = self.photoscanPreviewPage._photoscan_approved)
+            approval_state = self.photoscanPreviewPage._photoscan_approved)
 
         self.accept()  # Closes the wizard
     
@@ -1479,6 +1479,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update 
         self.updateInputOptions()
         self.updateWorkflowControls()
+        self.updateApprovalStatusLabel()
 
     def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
         # If the photoscan combo box has valid data selected then enable the preview photoscan button
@@ -1572,14 +1573,24 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def updateApprovalStatusLabel(self):
         
-        approved_photoscan_ids = self.logic.get_approved_photoscan_ids()
+        approved_photoscan_ids = self.logic.get_photoscan_ids_with_approval()
         if len(approved_photoscan_ids) == 0:
-            self.ui.approvalStatusLabel.text = "There are currently no transducer tracking approvals."
+            photoscan_approval_status = "There are currently no photoscan approvals."
         else:
-            self.ui.approvalStatusLabel.text = (
-                "Transducer tracking is approved for the following photoscans:\n- "
+            photoscan_approval_status = (
+                "The following photoscans are approved for transducer tracking:\n- "
                 + "\n- ".join(approved_photoscan_ids)
             )
+
+        photoscan_ids_with_approved_tt_results = self.logic.get_photoscan_ids_with_approved_tt_results()
+        if len(photoscan_ids_with_approved_tt_results ) == 0:
+            tt_approval_status = "There are currently no transducer tracking approvals."
+        else:
+            tt_approval_status = (
+                "Transducer tracking is approved for the following photoscans:\n- "
+                + "\n- ".join(photoscan_ids_with_approved_tt_results)
+            )
+        self.ui.approvalStatusLabel.text = photoscan_approval_status + "\n" + tt_approval_status
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
@@ -1597,7 +1608,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         elif not selected_photoscan_openlifu.photoscan_approved:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Approve a photoscan to proceed."
-        elif not self.logic.get_approved_photoscan_ids():
+        elif not self.logic.get_photoscan_ids_with_approved_tt_results():
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Run transducer tracking and approve the result to proceed."
         else:
@@ -1672,28 +1683,30 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             mtl_data_filepath = data_dir/photoscan.mtl_filename,
         )
 
-    def updatePhotoscanApproval(self, photoscan: SlicerOpenLIFUPhotoscan, approval_status: bool) -> None:
+    def updatePhotoscanApproval(self, photoscan: SlicerOpenLIFUPhotoscan, approval_state: bool) -> None:
         """Updates the approval status of the specified photoscan. """
         
-        photoscan.toggle_approval()
-        
-        # Update the loaded SlicerOpenLIFUPhotoscan.
-        data_parameter_node = get_openlifu_data_parameter_node()
-        data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan 
-        
-        #  If this is a session-based workflow, update the list of photoscans affiliated with the session
-        session = data_parameter_node.loaded_session
-        if session:
-            session.update_affiliated_photoscan(photoscan.photoscan.photoscan)
+        current_state = photoscan.is_approved()
+        photoscan.set_approval(approval_state = approval_state)
+
+        if current_state != approval_state: # If the approval state has changed
+            # Update the loaded SlicerOpenLIFUPhotoscan.
+            data_parameter_node = get_openlifu_data_parameter_node()
+            data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan 
+            
+            #  If this is a session-based workflow, update the list of photoscans affiliated with the session
+            session = data_parameter_node.loaded_session
+            if session:
+                session.update_affiliated_photoscan(photoscan.photoscan.photoscan)
         
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
         tracking result for the photoscan, this returns False."""
         
-        approved_photoscan_ids = self.get_approved_photoscan_ids()
+        approved_photoscan_ids = self.get_photoscan_ids_with_approved_tt_results()
         return photoscan_id in approved_photoscan_ids
     
-    def get_approved_photoscan_ids(self) -> List[str]:
+    def get_photoscan_ids_with_approved_tt_results(self) -> List[str]:
         """Return a list of photoscan IDs that have approved transducer_tracking, for the currently active session.
         Or if there is no session, then sessionless approved photoscan IDs are returned."""
         
@@ -1701,6 +1714,15 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session_id = None if session is None else session.get_session_id()
         approved_photoscan_ids = get_photoscan_ids_with_results(session_id=session_id, approved_only = True)
         return approved_photoscan_ids
+    
+    def get_photoscan_ids_with_approval(self) -> List[str]:
+        """Return a list of photoscan IDs that are approved for transducer tracking"""
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session:
+            approved_photoscans = [id for id, wrapped_photoscan in session.affiliated_photoscans.items() if wrapped_photoscan.photoscan.photoscan_approved]
+        else:
+            approved_photoscans = [photoscan.id for photoscan in get_openlifu_data_parameter_node().loaded_photoscans if photoscan.is_approved()]
+        return approved_photoscans
     
     def load_openlifu_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan") -> SlicerOpenLIFUPhotoscan:
 
