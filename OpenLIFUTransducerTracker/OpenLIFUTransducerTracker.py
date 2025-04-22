@@ -58,7 +58,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, replace_widget
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, replace_widget, clone_node
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node
 
 # These imports are for IDE and static analysis purposes only
@@ -146,10 +146,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
 
     def _initialize_facial_landmarks_fiducial_node(self, node_name: str, existing_landmarks_node=None) -> vtkMRMLMarkupsFiducialNode:
         if existing_landmarks_node:  # Clone the existing node if valid
-            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-            itemIDToClone = shNode.GetItemByDataNode(existing_landmarks_node)
-            clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-            node = shNode.GetItemDataNode(clonedItemID)
+            node = clone_node(existing_landmarks_node)
             node.SetName(node_name)  # Use the provided node name
             node.GetDisplayNode().SetVisibility(False)
 
@@ -449,8 +446,18 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        # Always starts the registration process from scratch even if there is an existing transform
-        # node in the scene
+        # Show the existing transform node if the tt_result has not yet been modified by the wizard
+        if self.wizard()._valid_result_exists:
+            # Clone the existing node
+            existing_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
+                photoscan_id = self.wizard().photoscan.get_id(),
+                transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
+            self.photoscan_to_volume_transform_node = clone_node(existing_transform_node)
+            self.photoscan_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
+            self.photoscan_to_volume_transform_node.RemoveAttribute('isTT-PHOTOSCAN_TO_VOLUME')
+            self.transform_approved = get_approval_from_transducer_tracking_result_node(existing_transform_node)
+            self.ui.runPhotoscanVolumeRegistration.enabled = False
+
         if self.photoscan_to_volume_transform_node:
             self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
             self.setupTransformNode()
@@ -485,6 +492,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.approvePhotoscanVolumeTransform.setText("Revoke approval")
             self.ui.approvePhotoscanVolumeTransform.setToolTip(
                     "Revoke approval that the current transducer tracking result is correct")
+        else:
             self.ui.approvePhotoscanVolumeTransform.setText("Approve photoscan-volume transform")
             self.ui.approvePhotoscanVolumeTransform.setToolTip("Approve the current transducer tracking result")
 
@@ -603,6 +611,17 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
+
+        if self.wizard()._valid_result_exists:
+            # Clone the existing node
+            existing_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
+                photoscan_id = self.wizard().photoscan.get_id(),
+                transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+            self.transducer_to_volume_transform_node = clone_node(existing_transform_node)
+            self.transducer_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
+            self.transducer_to_volume_transform_node.RemoveAttribute('isTT-TRANSDUCER_TO_VOLUME')
+            self.transform_approved = get_approval_from_transducer_tracking_result_node(existing_transform_node)
+            self.ui.runTransducerPhotoscanRegistration.enabled = False
 
         if self.transducer_to_volume_transform_node:
             self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
@@ -738,6 +757,19 @@ class TransducerTrackingWizard(qt.QWizard):
         # Connect signals for finish and cancel
         self.button(qt.QWizard.FinishButton).clicked.connect(self.onFinish)
         self.button(qt.QWizard.CancelButton).clicked.connect(self.onCancel)
+
+        # Check the scene for previously computed tt results for the specified photoscan
+        self._valid_result_exists = False
+        self.previous_photoscan_to_volume_transform_node = self._logic.get_transducer_tracking_result_node(
+            photoscan_id = self.photoscan.get_id(),
+            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
+
+        self.previous_transducer_to_volume_transform_node = self._logic.get_transducer_tracking_result_node(
+            photoscan_id = self.photoscan.get_id(),
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+        
+        if self.previous_photoscan_to_volume_transform_node and self.previous_transducer_to_volume_transform_node:
+            self._valid_result_exists = True
 
     def setPageSpecificNodeDisplaySettings(self, page_id: int):
         current_page = self.page(page_id)
@@ -1743,10 +1775,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         if volume_facial_landmarks_node is None:
             # By default, turn visibility off so that the node is visible before the 
             # appropriate view node IDs are set. 
-            shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-            itemIDToClone = shNode.GetItemByDataNode(fiducial_node)
-            clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-            volume_facial_landmarks_node : vtkMRMLMarkupsFiducialNode = shNode.GetItemDataNode(clonedItemID)
+            volume_facial_landmarks_node : vtkMRMLMarkupsFiducialNode = clone_node(fiducial_node)
             volume_facial_landmarks_node.SetName(f"{volume_name}-faciallandmarks")
 
             # Ensure that visibility is turned off
