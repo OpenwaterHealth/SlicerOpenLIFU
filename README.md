@@ -4,7 +4,7 @@
 
 Build this extension by following [the usual procedure for Slicer extensions](https://slicer.readthedocs.io/en/latest/developer_guide/extensions.html#build-an-extension).
 
-![Screenshot](https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/266-Publish-to-Extension-Index/blob/main/Screenshots/1.png)
+![Screenshot](screenshots/1.png)
 
 ## 📦 Included Modules
 
