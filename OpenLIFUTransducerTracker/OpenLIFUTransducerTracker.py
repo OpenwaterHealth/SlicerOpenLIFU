@@ -165,6 +165,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         # Add an observer if any of the points are undefined
         node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved)
         node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onPointAdded)
+        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onPointModified)
         self.facial_landmarks_fiducial_node = node
         return node
 
@@ -231,6 +232,16 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             node.SwapControlPoints(current_index -1, current_index)
             current_index -= 1
 
+    @vtk.calldata_type(vtk.VTK_INT)
+    def onPointModified(self, node, eventID, callData):
+        
+        # If the fiducial node was initiaized based on a previously computed tt result, modifying the fiducial 
+        # invalidates the result and resets previously initialized transform nodes
+        if self.wizard()._valid_tt_result_exists:
+            self.wizard()._valid_tt_result_exists = False
+            self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
+            self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
+
     def exitPlaceFiducialMode(self):
         if self._pointModifiedObserverTag:
             self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
@@ -277,8 +288,9 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
     def initializePage(self):
         set_threeD_view_node(self.viewWidget, threeD_view_node=self.wizard().photoscan.view_node)
 
-        if self.wizard().photoscan.facial_landmarks_fiducial_node:
-            if self.wizard().photoscan.facial_landmarks_fiducial_node.GetNumberOfControlPoints() != 3:
+        existing_fiducial_node = self.wizard().photoscan.facial_landmarks_fiducial_node
+        if existing_fiducial_node and self.facial_landmarks_fiducial_node is None:
+            if existing_fiducial_node .GetNumberOfControlPoints() != 3:
                 slicer.util.infoDisplay(
                     text="Incorrect number of control points detected in the photoscan facial landmarks fiducial node. "
                     "Transudcer Tracking Wizard will replace the existing node.",
@@ -286,11 +298,12 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
                 )
                 slicer.mrmlScene.RemoveNode(self.wizard().photoscan.facial_landmarks_fiducial_node)
                 self.wizard().photoscan.facial_landmarks_fiducial_node = None
-            elif self.facial_landmarks_fiducial_node is None:
-                self.wizard().photoscan.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
+            else:
+                existing_fiducial_node.GetDisplayNode().SetVisibility(False)
                 self._initialize_facial_landmarks_fiducial_node(
                     node_name = "photoscan-wizard-faciallandmarks",
-                    existing_landmarks_node=self.wizard().photoscan.facial_landmarks_fiducial_node)
+                    existing_landmarks_node=existing_fiducial_node)
+
         self.setupMarkupsWidget()
         self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
 
@@ -347,7 +360,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         set_threeD_view_node(self.viewWidget, view_node)
 
         existing_skin_seg_fiducials = self.wizard()._logic.get_volume_facial_landmarks(self.wizard().skin_mesh_node)
-        if existing_skin_seg_fiducials:
+        if existing_skin_seg_fiducials and self.facial_landmarks_fiducial_node is None:
             if existing_skin_seg_fiducials.GetNumberOfControlPoints() != 3:
                 slicer.util.infoDisplay(
                     text="Incorrect number of control points detected in the volume facial landmarks fiducial node. "
@@ -355,7 +368,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
                     windowTitle="Invalid fiducial node detected", parent=self.wizard()
                 )
                 slicer.mrmlScene.RemoveNode(existing_skin_seg_fiducials)
-            elif self.facial_landmarks_fiducial_node is None:
+            else:  
                 existing_skin_seg_fiducials.GetDisplayNode().SetVisibility(False)
                 self._initialize_facial_landmarks_fiducial_node(
                     node_name = "skinseg-wizard-faciallandmarks",
@@ -447,7 +460,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         set_threeD_view_node(self.viewWidget, view_node)
 
         # Show the existing transform node if the tt_result has not yet been modified by the wizard
-        if self.wizard()._valid_result_exists:
+        if self.wizard()._valid_tt_result_exists:
             # Clone the existing node
             existing_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
                 photoscan_id = self.wizard().photoscan.get_id(),
@@ -612,7 +625,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        if self.wizard()._valid_result_exists:
+        if self.wizard()._valid_tt_result_exists:
             # Clone the existing node
             existing_transform_node = self.wizard()._logic.get_transducer_tracking_result_node(
                 photoscan_id = self.wizard().photoscan.get_id(),
@@ -759,7 +772,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.button(qt.QWizard.CancelButton).clicked.connect(self.onCancel)
 
         # Check the scene for previously computed tt results for the specified photoscan
-        self._valid_result_exists = False
+        self._valid_tt_result_exists = False
         self.previous_photoscan_to_volume_transform_node = self._logic.get_transducer_tracking_result_node(
             photoscan_id = self.photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
@@ -769,7 +782,7 @@ class TransducerTrackingWizard(qt.QWizard):
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
         
         if self.previous_photoscan_to_volume_transform_node and self.previous_transducer_to_volume_transform_node:
-            self._valid_result_exists = True
+            self._valid_tt_result_exists = True
 
     def setPageSpecificNodeDisplaySettings(self, page_id: int):
         current_page = self.page(page_id)
