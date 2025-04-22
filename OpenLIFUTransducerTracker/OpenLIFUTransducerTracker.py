@@ -496,7 +496,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         
         status = "approved" if self.transform_approved else "not approved"
         self.ui.photoscanVolumeTransformApprovalStatusLabel.text = (
-            f"The photoscan-volume transform is {status} for transducer tracking"
+            f"The photoscan-volume transform is {status} for transducer tracking."
         )
 
     def updateTransformApproveButton(self):
@@ -659,7 +659,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         
         status = "approved" if self.transform_approved else "not approved"
         self.ui.transducerPhotoscanTransformApprovalStatusLabel.text = (
-            f"The transducer-volume transform is {status} for transducer tracking"
+            f"The transducer-volume transform is {status} for transducer tracking."
         )
 
     def updateTransformApproveButton(self):
@@ -991,12 +991,16 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(0)
+        self._photoscan_approved = None
 
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
 
         # Connect buttons and signals
-        self.updatePhotoscanApproveButton(self.wizard().photoscan.is_approved())
+        if self._photoscan_approved is None:
+            self._photoscan_approved = self.wizard().photoscan.is_approved()
+        self.updatePhotoscanApproveButton()
+        self.updatePhotoscanApprovalStatusLabel()
         self.ui.photoscanApprovalButton.clicked.connect(self.onPhotoscanApproveClicked)
 
         set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
@@ -1006,19 +1010,15 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         # Reset the camera associated with the view node based on the photoscan model
         reset_view_node_camera(self.wizard().photoscan.view_node)
 
-        self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
-
-    def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
+    def updatePhotoscanApprovalStatusLabel(self):
         
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        status = "approved" if photoscan_is_approved else "not approved"
+        status = "approved" if self._photoscan_approved else "not approved"
         self.ui.photoscanApprovalStatusLabel.text = (
-            f"Photoscan is {status} for transducer tracking" if loaded_session else f"Photoscan approval status: {photoscan_is_approved}."
+            f"Photoscan is {status} for transducer tracking."
         )
 
-    def updatePhotoscanApproveButton(self, photoscan_is_approved: bool):
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        if photoscan_is_approved:
+    def updatePhotoscanApproveButton(self):
+        if self._photoscan_approved:
             self.ui.photoscanApprovalButton.setText("Revoke photoscan approval")
             self.ui.photoscanApprovalButton.setToolTip(
                     "Revoke approval that the current photoscan is of sufficient quality to be used for transducer tracking")
@@ -1026,18 +1026,14 @@ class PhotoscanPreviewPage(qt.QWizardPage):
             self.ui.photoscanApprovalButton.setText("Approve photoscan")
             self.ui.photoscanApprovalButton.setToolTip("Approve that the current photoscan can be used for transducer tracking")
 
-        if loaded_session is None:
-            self.ui.photoscanApprovalButton.setEnabled(False)
-            self.ui.photoscanApprovalButton.setToolTip("Cannot toggle photoscan approval because there is no active session to write the approval")
-
     def onPhotoscanApproveClicked(self):
 
-        # Update the approval status in the underlying openlifu object
-        self.wizard().logic.togglePhotoscanApproval(self.wizard().photoscan)
+        # Update the approval status at a wizard-level
+        self._photoscan_approved = not self._photoscan_approved 
         
         # Update the wizard page
-        self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
-        self.updatePhotoscanApproveButton(self.wizard().photoscan.is_approved())
+        self.updatePhotoscanApprovalStatusLabel()
+        self.updatePhotoscanApproveButton()
 
 class PhotoscanPreviewWizard(qt.QWizard):
     def __init__(self, photoscan : "openlifu.nav.photoscan.Photoscan"):
@@ -1061,6 +1057,12 @@ class PhotoscanPreviewWizard(qt.QWizard):
 
     def onFinish(self):
         self.resetViewNodes()
+
+        # Update the photoscan approval status in the underlying openlifu photoscan object
+        self.logic.updatePhotoscanApproval(
+            photoscan = self.photoscan,
+            approval_status = self.photoscanPreviewPage._photoscan_approved)
+
         self.accept()  # Closes the wizard
     
     def setupViewNode(self):
@@ -1474,6 +1476,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.wizard.exec_() 
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
 
+        # Update 
+        self.updateInputOptions()
+        self.updateWorkflowControls()
+
     def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
         # If the photoscan combo box has valid data selected then enable the preview photoscan button
         current_data = self.algorithm_input_widget.get_current_data()
@@ -1657,22 +1663,20 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             mtl_data_filepath = data_dir/photoscan.mtl_filename,
         )
 
-    def togglePhotoscanApproval(self, photoscan: SlicerOpenLIFUPhotoscan) -> None:
-        """Approve the specified photoscan if it was not approved. Revoke approval if it was approved. Write changes
-        to the underlying openlifu photoscan object to the database. """
-        data_parameter_node = get_openlifu_data_parameter_node()
-        session = data_parameter_node.loaded_session
-        if session is None: # We should never be calling togglePhotoscanApproval if there's no active session.
-            raise RuntimeError("Cannot toggle photoscan approval because there is no active session.")
-        photoscan.toggle_approval()
-        data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan # remember to write the updated photoscan into the parameter node
+    def updatePhotoscanApproval(self, photoscan: SlicerOpenLIFUPhotoscan, approval_status: bool) -> None:
+        """Updates the approval status of the specified photoscan. """
         
-        # Write changes to the database
-        if get_cur_db() is None: # This shouldn't happen
-            raise RuntimeError("Cannot toggle photoscan approval because there is a session but no database connection to write the approval.")
-        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
-        get_cur_db().write_photoscan(session.get_subject_id(), session.get_session_id(), photoscan.photoscan.photoscan, on_conflict=OnConflictOpts.OVERWRITE)
-
+        photoscan.toggle_approval()
+        
+        # Update the loaded SlicerOpenLIFUPhotoscan.
+        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan 
+        
+        #  If this is a session-based workflow, update the list of photoscans affiliated with the session
+        session = data_parameter_node.loaded_session
+        if session:
+            session.update_affiliated_photoscan(photoscan.photoscan.photoscan)
+        
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
         tracking result for the photoscan, this returns False."""
