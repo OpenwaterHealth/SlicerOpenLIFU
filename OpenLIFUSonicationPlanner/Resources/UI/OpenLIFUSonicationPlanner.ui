@@ -63,7 +63,7 @@
       <item>
        <widget class="QStackedWidget" name="analysisStackedWidget">
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <widget class="QWidget" name="noSolutionPage">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -91,25 +91,9 @@
         <widget class="QWidget" name="analysisPage">
          <layout class="QVBoxLayout" name="verticalLayout_6">
           <item>
-           <widget class="QGroupBox" name="focusAnalysisGroupBox">
-            <property name="title">
-             <string>Metrics by focus point</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_8">
-             <item>
-              <widget class="QTableView" name="focusAnalysisTableView">
-               <attribute name="verticalHeaderVisible">
-                <bool>false</bool>
-               </attribute>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
            <widget class="QGroupBox" name="globalAnalysisGroupBox">
             <property name="title">
-             <string>Overall metrics</string>
+             <string>Global analysis</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_9">
              <item>
