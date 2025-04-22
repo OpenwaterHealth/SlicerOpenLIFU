@@ -135,6 +135,13 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QLabel" name="approvalWarningLabel">
+        <property name="text">
+         <string>(approval warnings here)</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

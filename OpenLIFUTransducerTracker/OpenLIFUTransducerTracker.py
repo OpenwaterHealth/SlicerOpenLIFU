@@ -35,7 +35,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.events import SlicerOpenLIFUEvents
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state
 from OpenLIFULib.skinseg import generate_skin_mesh
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
@@ -1316,6 +1316,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.checkCanRunTracking)
+        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateApprovalStatusLabel)
 
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
@@ -1496,17 +1497,23 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if self.algorithm_input_widget.has_valid_selections():
             current_data = self.algorithm_input_widget.get_current_data()
             transducer = current_data['Transducer']
+            photoscan = current_data['Photoscan']
+
             # Check that the selected transducer has an affiliated registration surface model
-            if transducer.surface_model_node:
-                self.ui.runTrackingButton.enabled = True
-                self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
-            else:
+            if transducer.surface_model_node is None:
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
+            elif get_guided_mode_state() and (photoscan is None or not photoscan.photoscan_approved):
+                # Check that the selected photoscan is approved
+                self.ui.runTrackingButton.enabled = False
+                self.ui.runTrackingButton.setToolTip("The selected photoscan has not been approved for transducer tracking.")
+            else:
+                self.ui.runTrackingButton.enabled = True
+                self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
         else:
             self.ui.runTrackingButton.enabled = False
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
-
+        
     def onRunTrackingClicked(self):
 
         activeData = self.algorithm_input_widget.get_current_data()
@@ -1581,7 +1588,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 "The following photoscans are approved for transducer tracking:\n- "
                 + "\n- ".join(approved_photoscan_ids)
             )
-
         photoscan_ids_with_approved_tt_results = self.logic.get_photoscan_ids_with_approved_tt_results()
         if len(photoscan_ids_with_approved_tt_results ) == 0:
             tt_approval_status = "There are currently no transducer tracking approvals."
@@ -1591,6 +1597,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 + "\n- ".join(photoscan_ids_with_approved_tt_results)
             )
         self.ui.approvalStatusLabel.text = photoscan_approval_status + "\n" + tt_approval_status
+        
+        current_data = self.algorithm_input_widget.get_current_data()
+        selected_photoscan = current_data['Photoscan']
+        if selected_photoscan and not selected_photoscan.photoscan_approved:
+            self.ui.approvalWarningLabel.text = f"WARNING: The selected photoscan is not approved for transducer tracking!"
+            self.ui.approvalWarningLabel.styleSheet = "color:red;"
+        else:
+            self.ui.approvalWarningLabel.text = ""
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
@@ -1721,7 +1735,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         if session:
             approved_photoscans = [id for id, wrapped_photoscan in session.affiliated_photoscans.items() if wrapped_photoscan.photoscan.photoscan_approved]
         else:
-            approved_photoscans = [photoscan.id for photoscan in get_openlifu_data_parameter_node().loaded_photoscans if photoscan.is_approved()]
+            approved_photoscans = [id for id, slicer_photoscan in get_openlifu_data_parameter_node().loaded_photoscans if slicer_photoscan.is_approved()]
         return approved_photoscans
     
     def load_openlifu_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan") -> SlicerOpenLIFUPhotoscan:
