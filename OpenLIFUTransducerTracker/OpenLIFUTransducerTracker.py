@@ -519,6 +519,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         # Update the wizard page
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
+
+        # Emit signal to update the enable/disable state of 'Next' button. 
+        self.completeChanged()
     
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
@@ -600,7 +603,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
-        return not self.runningRegistration
+        return not self.runningRegistration and self.transform_approved
 
 class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -679,6 +682,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         # Update the wizard page
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
+
+        # Emit signal to update the enable/disable state of 'Finish' button. 
+        self.completeChanged()
     
     def onInitializeRegistrationClicked(self):
 
@@ -729,7 +735,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
-        return not self.runningRegistration
+        return not self.runningRegistration and self.transform_approved
 
 class TransducerTrackingWizard(qt.QWizard):
     def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
