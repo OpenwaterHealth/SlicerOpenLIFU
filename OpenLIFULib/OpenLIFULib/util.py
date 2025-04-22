@@ -3,6 +3,7 @@ from typing_extensions import get_type_hints as get_type_hints_ext # for <3.10 c
 import logging
 import qt
 import slicer
+from slicer import vtkMRMLNode
 if TYPE_CHECKING:
     from openlifu.db import Database
     from OpenLIFUDatabase.OpenLIFUDatabase import OpenLIFUDatabaseParameterNode
@@ -184,3 +185,12 @@ def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=Non
     new_widget.setParent(parent)
     new_widget.show()
     layout.insertWidget(index, new_widget)
+
+def clone_node(node_to_clone: vtkMRMLNode) -> vtkMRMLNode:
+
+    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+    itemIDToClone = shNode.GetItemByDataNode(node_to_clone)
+    clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+    cloned_node = shNode.GetItemDataNode(clonedItemID)
+
+    return cloned_node
