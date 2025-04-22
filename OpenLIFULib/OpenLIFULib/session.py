@@ -159,13 +159,20 @@ class SlicerOpenLIFUSession:
         
         self.affiliated_photocollections = affiliated_photocollections
 
-
     def set_affiliated_photoscans(self, affiliated_photoscans : Dict[str, "openlifu.nav.photoscan.Photoscan"]):
         
         # Wrap the list of affiliated openlifu photoscans using the SlicerOpenLIFUPhotoscanWrapper for 
         # compatability with the SlicerOpenLIFUSession parameter pack. 
         wrapped_openlifu_photoscans = {photoscan.id:SlicerOpenLIFUPhotoscanWrapper(photoscan) for photoscan in affiliated_photoscans.values()}
         self.affiliated_photoscans = wrapped_openlifu_photoscans
+
+    def update_affiliated_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan"):
+        """Update the openlifu photoscan object in the dictionary of photoscans affiliated with this session"""
+        if not self.affiliated_photoscans:
+            raise RuntimeError("No affiliated photoscans found. Call set_affiliated_photoscans first.") # This shouldn't happen 
+        if photoscan.id not in self.affiliated_photoscans.keys():
+            raise RuntimeError("The specified photoscan is not affiliated with this session") 
+        self.affiliated_photoscans[photoscan.id] = SlicerOpenLIFUPhotoscanWrapper(photoscan)
 
     def update_underlying_openlifu_session(self, targets : List[vtkMRMLMarkupsFiducialNode]) -> "openlifu.db.Session":
         """Update the underlying openlifu session and the list of target nodes that are considered to be affiliated with this session.
