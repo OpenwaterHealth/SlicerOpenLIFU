@@ -40,18 +40,25 @@ class UserAccountBanner(qt.QWidget):
         """
         super().__init__(parent)
 
-        layout = qt.QHBoxLayout(self)
+        top_level_layout = qt.QVBoxLayout(self)
+
+        # ---- top_level_layout contains a group box with the label and icon ----
+
+        group_box = qt.QGroupBox()
+        group_layout = qt.QHBoxLayout(group_box)
 
         self.active_user_label = qt.QLabel("Not signed in")
         self.active_user_label.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
         self.active_user_label.setFont(qt.QFont("", 14))
-        layout.addWidget(self.active_user_label, 1)  # stretch=1 as positional argument
+        group_layout.addWidget(self.active_user_label, 1)  # stretch=1 as positional argument
 
         self.go_to_login_button = qt.QPushButton("👤")
         self.go_to_login_button.setToolTip("Switch user")
         self.go_to_login_button.setFixedSize(28, 28)
         self.go_to_login_button.clicked.connect(lambda: slicer.util.selectModule("OpenLIFULogin"))
-        layout.addWidget(self.go_to_login_button)
+        group_layout.addWidget(self.go_to_login_button)
+
+        top_level_layout.addWidget(group_box)  # Add the group box to the top_level_layout
     
     def change_active_user(self, new_active_user: Optional["openlifu.db.User"]):
         if new_active_user is None or new_active_user.id == "anonymous":
