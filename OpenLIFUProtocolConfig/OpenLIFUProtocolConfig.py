@@ -1767,7 +1767,8 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                     elif isinstance(child, qt.QCheckBox):
                         child.stateChanged.connect(callback)
 
-    def modify_widget_spinbox(self, widget: qt.QWidget, default_value=None, min_value=None, max_value=None, num_decimals=None) -> None:
+    @classmethod
+    def modify_widget_spinbox(cls, widget: qt.QWidget, default_value=None, min_value=None, max_value=None, num_decimals=None) -> None:
         """
         Configures a QSpinBox or QDoubleSpinBox widget with specified default, min/max values, and decimal precision.
 
@@ -1779,20 +1780,20 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         """
         if isinstance(widget, qt.QSpinBox):
             if default_value is None:
-                default_value = self.DEFAULT_INT_VALUE
+                default_value = cls.DEFAULT_INT_VALUE
             if min_value is None:
-                min_value = self.DEFAULT_INT_RANGE[0]
+                min_value = cls.DEFAULT_INT_RANGE[0]
             if max_value is None:
-                max_value = self.DEFAULT_INT_RANGE[1]
+                max_value = cls.DEFAULT_INT_RANGE[1]
         elif isinstance(widget, qt.QDoubleSpinBox):
             if default_value is None:
-                default_value = self.DEFAULT_FLOAT_VALUE
+                default_value = cls.DEFAULT_FLOAT_VALUE
             if min_value is None:
-                min_value = self.DEFAULT_FLOAT_RANGE[0]
+                min_value = cls.DEFAULT_FLOAT_RANGE[0]
             if max_value is None:
-                max_value = self.DEFAULT_FLOAT_RANGE[1]
+                max_value = cls.DEFAULT_FLOAT_RANGE[1]
             if num_decimals is None:
-                num_decimals = self.DEFAULT_FLOAT_NUM_DECIMALS
+                num_decimals = cls.DEFAULT_FLOAT_NUM_DECIMALS
             widget.setDecimals(num_decimals)
         else:
             raise TypeError(
