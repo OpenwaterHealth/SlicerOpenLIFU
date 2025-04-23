@@ -1420,7 +1420,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
         This first writes the transducer and target information into the in-memory openlifu Session object,
-        and then it writes that Session object to the database.
+        and then it writes that Session object and any affiliated Photoscan objects to the database.
         """
 
         if get_cur_db() is None:
@@ -1433,6 +1433,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
         get_cur_db().write_session(self._subjects[session_openlifu.subject_id],session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
+
+        # Write any affiliated photoscan objects
+        for photoscan in self.getParameterNode().loaded_session.get_affiliated_photoscans():
+            get_cur_db().write_photoscan(session_openlifu.subject_id, session_openlifu.id, photoscan, on_conflict=OnConflictOpts.OVERWRITE)
 
     def update_underlying_openlifu_session(self) -> "openlifu.db.Session":
         """Update the underlying openlifu session of the currently loaded session, if there is one.
