@@ -251,7 +251,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget = OpenLIFUSimSetupDefinitionFormWidget(parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
 
-        self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
+        self.abstract_delay_method_definition_widget = OpenLIFUAbstractDelayMethodDefinitionFormWidget()
         replace_widget(self.ui.abstractDelayMethodDefinitionWidgetPlaceholder, self.abstract_delay_method_definition_widget, self.ui)
 
         self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
@@ -1898,3 +1898,19 @@ class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFo
         # Modify the default and range for spacing
         spacing_spinbox = self._field_widgets['spacing']
         self.modify_widget_spinbox(spacing_spinbox, default_value=1.0, min_value=0.1, max_value=2.0)
+
+class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
+    def __init__(self):
+        super().__init__([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
+
+        # Select Direct as the default. Note: `get_default_delay_method` should
+        # make sure Direct is also set.
+        self.forms.setCurrentIndex(0)
+
+        # ---- Configure Direct class ----
+
+        direct_definition_form_widget = self.forms.widget(0)
+
+        # Modify the default and range for c0
+        c0_spinbox = direct_definition_form_widget._field_widgets['c0']
+        direct_definition_form_widget.modify_widget_spinbox(c0_spinbox, default_value=1480, min_value=1000, max_value=3000)
