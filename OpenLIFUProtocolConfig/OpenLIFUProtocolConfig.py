@@ -248,7 +248,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint], is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern")
         replace_widget(self.ui.abstractFocalPatternDefinitionWidgetPlaceholder, self.abstract_focal_pattern_definition_widget, self.ui)
 
-        self.sim_setup_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().sim.SimSetup, parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Sim Setup")
+        self.sim_setup_definition_widget = OpenLIFUSimSetupDefinitionFormWidget(parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.simSetupDefinitionWidgetPlaceholder, self.sim_setup_definition_widget, self.ui)
 
         self.abstract_delay_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
@@ -1878,3 +1878,23 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
         for w_idx in range(self.forms.count):
             form = self.forms.widget(w_idx)
             form.add_value_changed_signals(callback)
+
+class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
+    def __init__(self, parent: Optional[qt.QWidget] = None):
+        super().__init__(openlifu_lz().sim.SimSetup, parent, is_collapsible=True, collapsible_title="Sim Setup")
+
+        # Modify the defaults and ranges for x_extent, y_extent, and z_extent
+        x_ext_hbox = self._field_widgets['x_extent'].layout()
+        y_ext_hbox = self._field_widgets['y_extent'].layout()
+        z_ext_hbox = self._field_widgets['z_extent'].layout()
+        
+        self.modify_widget_spinbox(x_ext_hbox.itemAt(0).widget(), default_value=-30, min_value=-200, max_value=-1)
+        self.modify_widget_spinbox(x_ext_hbox.itemAt(1).widget(), default_value=30, min_value=1, max_value=200)
+        self.modify_widget_spinbox(y_ext_hbox.itemAt(0).widget(), default_value=-30, min_value=-200, max_value=-1)
+        self.modify_widget_spinbox(y_ext_hbox.itemAt(1).widget(), default_value=30, min_value=1, max_value=200)
+        self.modify_widget_spinbox(z_ext_hbox.itemAt(0).widget(), default_value=-4, min_value=-4, max_value=-4)
+        self.modify_widget_spinbox(z_ext_hbox.itemAt(1).widget(), default_value=60, min_value=1, max_value=200)
+
+        # Modify the default and range for spacing
+        spacing_spinbox = self._field_widgets['spacing']
+        self.modify_widget_spinbox(spacing_spinbox, default_value=1.0, min_value=0.1, max_value=2.0)
