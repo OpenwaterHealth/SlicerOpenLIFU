@@ -254,7 +254,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_delay_method_definition_widget = OpenLIFUAbstractDelayMethodDefinitionFormWidget()
         replace_widget(self.ui.abstractDelayMethodDefinitionWidgetPlaceholder, self.abstract_delay_method_definition_widget, self.ui)
 
-        self.abstract_apodization_method_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
+        self.abstract_apodization_method_definition_widget = OpenLIFUAbstractApodizationMethodDefinitionFormWidget()
         replace_widget(self.ui.abstractApodizationMethodDefinitionWidgetPlaceholder, self.abstract_apodization_method_definition_widget, self.ui)
 
         self.segmentation_method_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Segmentation Method")
@@ -1914,3 +1914,19 @@ class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleAB
         # Modify the default and range for c0
         c0_spinbox = direct_definition_form_widget._field_widgets['c0']
         direct_definition_form_widget.modify_widget_spinbox(c0_spinbox, default_value=1480, min_value=1000, max_value=3000)
+
+class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
+    def __init__(self):
+        super().__init__([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
+
+        # Select Uniform as the default. Note: `get_default_apodization_method`
+        # should make sure Uniform also set.
+        self.forms.setCurrentIndex(2)
+
+        # ---- Configure MaxAngle class ----
+
+        maxangle_definition_form_widget = self.forms.widget(0)
+
+        # Modify the default and range for max_angle
+        max_angle_spinbox = maxangle_definition_form_widget._field_widgets['max_angle']
+        maxangle_definition_form_widget.modify_widget_spinbox(max_angle_spinbox, default_value=30, min_value=0, max_value=90)
