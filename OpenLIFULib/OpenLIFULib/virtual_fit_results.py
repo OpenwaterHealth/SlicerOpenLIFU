@@ -3,6 +3,7 @@ from slicer import vtkMRMLTransformNode
 from typing import Optional, Iterable, List, Tuple, Dict, TYPE_CHECKING, Union
 from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu, transducer_transform_node_from_openlifu
 from OpenLIFULib.lazyimport import openlifu_lz
+from OpenLIFULib.util import get_cloned_node
 
 if TYPE_CHECKING:
     from openlifu.geo import ArrayTransform
@@ -69,10 +70,7 @@ def add_virtual_fit_result(
         raise ValueError("Only the rank 1 (best) virtual fit result can be approved")
 
     if clone_node:
-        shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-        itemIDToClone = shNode.GetItemByDataNode(transform_node)
-        clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-        virtual_fit_result : vtkMRMLTransformNode = shNode.GetItemDataNode(clonedItemID)
+        virtual_fit_result : vtkMRMLTransformNode = get_cloned_node(transform_node)
     else:
         virtual_fit_result = transform_node
 
