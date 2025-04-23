@@ -186,7 +186,7 @@ def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=Non
     new_widget.show()
     layout.insertWidget(index, new_widget)
 
-def clone_node(node_to_clone: vtkMRMLNode) -> vtkMRMLNode:
+def get_cloned_node(node_to_clone: vtkMRMLNode) -> vtkMRMLNode:
 
     shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
     itemIDToClone = shNode.GetItemByDataNode(node_to_clone)

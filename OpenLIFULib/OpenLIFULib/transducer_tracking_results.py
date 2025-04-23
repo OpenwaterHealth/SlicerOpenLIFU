@@ -11,6 +11,7 @@ from OpenLIFULib.transform_conversion import (
 from OpenLIFULib.lazyimport import openlifu_lz
 import numpy as np
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
+from OpenLIFULib.util import get_cloned_node
 
 if TYPE_CHECKING:
     from openlifu.db.session import TransducerTrackingResult
@@ -27,6 +28,7 @@ def add_transducer_tracking_result(
         session_id: Optional[str] = None,
         approval_status: bool = False,
         replace = False,
+        clone_node = False,
         ) -> vtkMRMLTransformNode:
     """Add a  transducer tracking result node by giving it the appropriate attributes.
     This means the transform node will be named appropriately
@@ -47,6 +49,11 @@ def add_transducer_tracking_result(
         replace: Whether to replace any existing transducer tracking results that have the
             same session ID, photoscan ID, and transform type. If this is off, then an error is raised
             in the event that there is already a matching transducer tracking result in the scene.
+        clone_node: Whether to clone or to take the `transform_node`. If True, then the node is cloned
+            to create the transducer tracking result node, and the passed in `transform_node` is left unharmed.
+            If False then the node is taken and turned into a transducer tracking result node (renamed, given attributes, etc.).
+            Set clone_node to False if you no longer need the original `transform_node`; set it to True if you want to
+            preserve the integrity of the original `transform_node`
 
     Returns: The the transducer tracking result transform node with the required attributes
     """
@@ -69,10 +76,11 @@ def add_transducer_tracking_result(
         else:
             raise RuntimeError("There is already a transducer tracking result node for this transform_type+photoscan+session and replace is False")
     
-    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
-    itemIDToClone = shNode.GetItemByDataNode(transform_node)
-    clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
-    transducer_tracking_result_node : vtkMRMLTransformNode = shNode.GetItemDataNode(clonedItemID)
+    if clone_node:
+        transducer_tracking_result_node : vtkMRMLTransformNode = get_cloned_node(transform_node)
+    else:
+        transducer_tracking_result_node = transform_node
+
 
     if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME:
         transducer_tracking_result_node.SetName(f"TT transducer-volume {photoscan_id}")
