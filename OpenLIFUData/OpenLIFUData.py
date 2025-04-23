@@ -968,7 +968,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         if loaded_session is not None and session_id == loaded_session.get_session_id():
             self.logic.update_photoscans_affiliated_with_loaded_session()
             # Update the transducer tracking drop down to reflect new photoscans 
-            transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerTracker').widgetRepresentation()
+            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
             transducer_tracking_widget.self().algorithm_input_widget.update()
 
     def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
@@ -1747,6 +1747,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
 
         for (transducer_to_volume_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
+            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+            transducer_tracking_widget.watchTransducerTrackingNode(transducer_to_volume_node)
+            transducer_tracking_widget.watchTransducerTrackingNode(photoscan_to_volume_node)
+
             newly_loaded_transducer.move_node_into_transducer_sh_folder(transducer_to_volume_node)
             newly_loaded_transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_node)
 

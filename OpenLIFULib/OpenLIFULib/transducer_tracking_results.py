@@ -344,6 +344,21 @@ def set_transducer_tracking_approval_for_node(approval_state: bool, transform_no
         raise ValueError("The specified transform node is a not a transducer tracking result node")
     transform_node.SetAttribute("TT:approvalStatus", "1" if approval_state else "0")
 
+def set_transducer_tracking_approval_for_photoscan(approval_state: bool, photoscan_id: str, session_id: str):
+    """Set approval state on both the transform nodes affiliated with the given photoscan.
+    
+    Args:
+    approval_state: new approval state to apply
+    photoscan_id: photoscan ID for which to apply new approval state to the transducer tracking result nodes
+    session_id: session ID to help identify the correct transducer tracking result ndoes, or None to work with
+    only transducer tracking result nodes that do not have an affiliated session"""
+
+    pv_node = get_transducer_tracking_result(photoscan_id, TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME, session_id) 
+    set_transducer_tracking_approval_for_node(approval_state, pv_node)
+   
+    tv_node = get_transducer_tracking_result(photoscan_id, TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME, session_id) 
+    set_transducer_tracking_approval_for_node(approval_state, tv_node)
+
 def get_approval_from_transducer_tracking_result_node(node : vtkMRMLTransformNode) -> bool:
     if node.GetAttribute("TT:approvalStatus") is None:
         raise RuntimeError("Node does not have a transducer tracking approval status.")
