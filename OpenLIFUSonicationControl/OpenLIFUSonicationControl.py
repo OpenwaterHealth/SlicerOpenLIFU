@@ -1,6 +1,7 @@
 # Standard library imports
 import asyncio
 import inspect
+import logging
 import re
 from datetime import datetime
 from enum import Enum
@@ -636,6 +637,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # Allow us to change the task between self.cur_lifu_interface.start_monitoring() and self.test_mode_start_monitoring()
         self.current_monitoring_task = self.monitoring_loop.create_task(self.cur_lifu_interface.start_monitoring())
+
+        # Set logging
+        logging.getLogger("LIFUInterface").setLevel(logging.WARNING)
 
     def __del__(self):
         self.cur_lifu_interface.stop_monitoring()
