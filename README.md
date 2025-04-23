@@ -1,8 +1,19 @@
 # SlicerOpenLIFU
 
-3D Slicer Extension for Openwater's OpenLIFU project
+Low intensity focused ultrasound (LIFU) is a method of neuromodulation. This
+uses ultrasound as a non-destructive treatment as opposed to using it for
+imaging.
 
-Build this extension by following [the usual procedure for Slicer extensions](https://slicer.readthedocs.io/en/latest/developer_guide/extensions.html#build-an-extension).
+Build this extension by following [the usual procedure for Slicer
+extensions](https://slicer.readthedocs.io/en/latest/developer_guide/extensions.html#build-an-extension).
+
+This project is licensed under the GNU Affero General Public License (AGPL).
+Please note that this is a copyleft license and may impose restrictions on
+combined works. Users intending to integrate this extension into their own
+projects should review AGPL compatibility and obligations.
+
+For more information, please visit: [Openwater Early Access
+Systems](https://www.openwater.health/early-access-systems)
 
 ![Screenshot](screenshots/1.png)
 
