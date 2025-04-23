@@ -1059,7 +1059,6 @@ class PhotoscanPreviewWizard(qt.QWizard):
         self.resetViewNodes()
 
         # Update the photoscan approval status in the underlying openlifu photoscan object
-        print("Approval state:", self.photoscanPreviewPage._photoscan_approved)
         self.logic.updatePhotoscanApproval(
             photoscan = self.photoscan,
             approval_state = self.photoscanPreviewPage._photoscan_approved)
@@ -1504,19 +1503,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             photoscan = current_data['Photoscan']
             target = current_data["Target"]
             
-            session = get_openlifu_data_parameter_node().loaded_session
-            session_id = None if session is None else session.get_session_id()
-            target_is_approved = get_virtual_fit_approval_for_target(
-                target_id = fiducial_to_openlifu_point_id(target),
-                session_id = session_id)
+            if target:
+                target_id = fiducial_to_openlifu_point_id(target)
+                target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
 
             if transducer.surface_model_node is None: # Check that the selected transducer has an affiliated registration surface model
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
-            elif get_guided_mode_state() and not photoscan.photoscan_approved: # GM: Check that the selected photoscan is approved
+            elif get_guided_mode_state() and (photoscan and not photoscan.photoscan_approved): # GM: Check that the selected photoscan is approved
                 self.ui.runTrackingButton.enabled = False 
                 self.ui.runTrackingButton.setToolTip("The selected photoscan has not been approved for transducer tracking.")
-            elif get_guided_mode_state() and not target_is_approved: # GM: Check that virtual fit is approved for the selected target
+            elif get_guided_mode_state() and (target and not target_is_approved): # GM: Check that virtual fit is approved for the selected target
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
             else:
@@ -1615,17 +1612,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         approved for the selected target or if the selected photoscan is not
         approved for transducer tracking"""
         
-        session = get_openlifu_data_parameter_node().loaded_session
-        session_id = None if session is None else session.get_session_id()
-
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan = current_data['Photoscan']
         selected_target = current_data["Target"]
         warnings = ''
         if selected_target:
             target_id = fiducial_to_openlifu_point_id(selected_target)
-            if (get_best_virtual_fit_result_node(target_id, session_id) 
-                and not get_virtual_fit_approval_for_target(target_id,session_id)):
+            target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
+            if not target_is_approved:
                 warnings += '\n-Virtual fit is not approved for the selected target.'
         if selected_photoscan and not selected_photoscan.photoscan_approved:
             warnings += '\n-The selected photoscan is not approved for transducer tracking.'
@@ -1762,10 +1756,13 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def get_photoscan_ids_with_approval(self) -> List[str]:
         """Return a list of photoscan IDs that are approved for transducer tracking"""
         session = get_openlifu_data_parameter_node().loaded_session
+        if not session and not get_openlifu_data_parameter_node().loaded_photoscans:
+            return []
         if session:
             approved_photoscans = [id for id, wrapped_photoscan in session.affiliated_photoscans.items() if wrapped_photoscan.photoscan.photoscan_approved]
-        else:
-            approved_photoscans = [id for id, slicer_photoscan in get_openlifu_data_parameter_node().loaded_photoscans if slicer_photoscan.is_approved()]
+        elif get_openlifu_data_parameter_node().loaded_photoscans:
+            print()
+            approved_photoscans = [id for id, slicer_photoscan in get_openlifu_data_parameter_node().loaded_photoscans.items() if slicer_photoscan.is_approved()]
         return approved_photoscans
     
     def load_openlifu_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan") -> SlicerOpenLIFUPhotoscan:
