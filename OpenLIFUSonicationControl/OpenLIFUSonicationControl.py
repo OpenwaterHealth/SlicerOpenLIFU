@@ -1,6 +1,5 @@
 # Standard library imports
 import asyncio
-import inspect
 import logging
 import re
 from datetime import datetime
@@ -22,13 +21,12 @@ from slicer.util import VTKObservationMixin
 # OpenLIFULib imports
 from OpenLIFULib import (
     SlicerOpenLIFURun,
-    SlicerOpenLIFUSolution,
     get_openlifu_data_parameter_node,
     openlifu_lz,
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import display_errors, replace_widget
+from OpenLIFULib.util import display_errors, replace_widget, add_slicer_log_handler
 
 # This import is deferred at runtime using openlifu_lz, 
 # but is done here for IDE and static analysis purposes
@@ -221,6 +219,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
         replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
         self.user_account_banner.visible = False
+
+        # ---- Connect loggers into Slicer ----
+
+        add_slicer_log_handler("LIFUInterface", "LIFUInterface", use_dialogs=False)
+        add_slicer_log_handler("UART", "UART", use_dialogs=False)
+        add_slicer_log_handler("LIFUHVController", "LIFUHVController", use_dialogs=False)
+        add_slicer_log_handler("LIFUTXDevice", "LIFUTXDevice", use_dialogs=False)
 
         # ---- Inject guided mode workflow controls ----
 
@@ -640,6 +645,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # Set logging
         logging.getLogger("LIFUInterface").setLevel(logging.WARNING)
+        logging.getLogger("UART").setLevel(logging.WARNING)
+        logging.getLogger("LIFUHVController").setLevel(logging.WARNING)
+        logging.getLogger("LIFUTXDevice").setLevel(logging.WARNING)
+
 
     def __del__(self):
         self.cur_lifu_interface.stop_monitoring()
