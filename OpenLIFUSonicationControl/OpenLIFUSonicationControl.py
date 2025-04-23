@@ -722,16 +722,18 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             f(self._run_hardware_status)
 
     def on_lifu_device_connected(self, *args, **kwargs):
-        print("on_lifu_device_connected called in sonication control module. The arguments given in were:") # TODO: Remove when hardware device works without issues
-        print("Positional arguments:", args) # TODO: Remove when hardware device works without issues
-        print("Keyword arguments:", kwargs) # TODO: Remove when hardware device works without issues
+        # This would be useful to uncomment if debugging hardware/software integration
+        #print("on_lifu_device_connected called in sonication control module. The arguments given in were:")
+        #print("Positional arguments:", args)
+        #print("Keyword arguments:", kwargs)
         for f in self._on_lifu_device_connected_callbacks:
             f()
 
     def on_lifu_device_disconnected(self, *args, **kwargs):
-        print("on_lifu_device_disconnected called in sonication control module. The arguments given in were:") # TODO: Remove when hardware device works without issues
-        print("Positional arguments:", args) # TODO: Remove when hardware device works without issues
-        print("Keyword arguments:", kwargs) # TODO: Remove when hardware device works without issues
+        # This would be useful to uncomment if debugging hardware/software integration
+        #print("on_lifu_device_disconnected called in sonication control module. The arguments given in were:")
+        #print("Positional arguments:", args)
+        #print("Keyword arguments:", kwargs)
         for f in self._on_lifu_device_disconnected_callbacks:
             f()
             
@@ -876,5 +878,6 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """Simulate an asynchronous, repeating call (meant for USB device
         monitoring)"""
         while True:
-            print(f"{__file__}:{inspect.currentframe().f_lineno} - test_mode_start_monitoring() loop iteration to simulate LIFUInterface USB device monitoring")
+            # This would be useful to uncomment if debugging hardware/software integration
+            #print(f"{__file__}:{inspect.currentframe().f_lineno} - test_mode_start_monitoring() loop iteration to simulate LIFUInterface USB device monitoring")
             await asyncio.sleep(interval)
