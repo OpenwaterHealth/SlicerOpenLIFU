@@ -26,7 +26,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import display_errors, replace_widget, add_slicer_log_handler
+from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_widget
 
 # This import is deferred at runtime using openlifu_lz, 
 # but is done here for IDE and static analysis purposes
