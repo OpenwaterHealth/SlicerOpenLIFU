@@ -301,21 +301,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onPointAddedOrRemoved(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetsListView()
         self.updateInputOptions()
-
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if not data_logic.session_loading_unloading_in_progress:
             reason = "The target was modified."
             self.revokeApprovalIfAny(node, reason=reason)
-            if slicer.util.confirmYesNoDisplay(
-                text= f"Virtual fit results for {node.GetName()} will be removed for the following reason:\n"+reason + 
-                "\nProceed with deletion?",
-                windowTitle="Confirm virtual fit results deletion"
-                ):
-                # Clear affiliated virtual fit results if present
-                self.logic.clear_virtual_fit_results(target = node)
-                self.updateWorkflowControls()
-                
-                
+            self.clearVirtualFitResultsIfAny(node, reason = reason)
+                        
     def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetPositionInputs()
 
@@ -323,18 +314,27 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not data_logic.session_loading_unloading_in_progress:
             reason = "The target was modified."
             self.revokeApprovalIfAny(node, reason=reason)
-            if slicer.util.confirmYesNoDisplay(
-                text= f"Virtual fit results for {node.GetName()} will be removed for the following reason:\n"+reason + 
-                "\nProceed with deletion?",
-                windowTitle="Confirm virtual fit results deletion"
-                ):
-                # Clear affiliated virtual fit results if present
-                self.logic.clear_virtual_fit_results(target = node)
-                self.updateWorkflowControls()
+            self.clearVirtualFitResultsIfAny(node, reason = reason)
 
     def onLockModified(self, caller, event):
         self.updateLockButtonIcon()
         self.updateEditTargetEnabled()
+
+    def clearVirtualFitResultsIfAny(self,target: vtkMRMLMarkupsFiducialNode, reason:str):
+        """Clear virtual fit results for the target from the scene if any, and show a message dialog for the user to confirm deletion.
+        """
+        target_id = fiducial_to_openlifu_point_id(target)
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        
+        if list(get_virtual_fit_result_nodes(target_id, session_id)):
+            if slicer.util.confirmYesNoDisplay(
+                text= f"Virtual fit results for {target_id} will be removed for the following reason:\n"+reason + 
+                "\nProceed with deletion?",
+                windowTitle="Confirm virtual fit results deletion"
+                ):
+                self.logic.clear_virtual_fit_results(target = target)
+                self.updateWorkflowControls()
 
     def revokeApprovalIfAny(self, target : Union[str,vtkMRMLMarkupsFiducialNode], reason:str):
         """Revoke virtual fit approval for the target if there was an approval, and show a message dialog to that effect.
@@ -348,7 +348,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         else:
             raise ValueError("Invalid target type.")
 
-
         if self.logic.get_virtual_fit_approval(target_id):
             slicer.util.infoDisplay(
                 text= "Virtual fit approval has been revoked for the following reason:\n"+reason,
@@ -357,7 +356,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.logic.revoke_virtual_fit_approval(target_id)
             self.updateApproveButton()
             self.updateApprovalStatusLabel()
-
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
