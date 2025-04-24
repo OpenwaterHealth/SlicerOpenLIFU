@@ -46,6 +46,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results,
+    get_photoscan_id_from_transducer_tracking_result,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
@@ -1803,6 +1804,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
         )
+        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
 
         # === Load protocol ===
 
@@ -1876,21 +1878,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.session_loading_unloading_in_progress = False
 
-    # TODO: Don't Need this anymore? Observation should be on the specific TT transforms.
-    # def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
-    #     session = self.getParameterNode().loaded_session
+    # TODO: This should be a widget level function
+    def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
-    #     if session is None:
-    #         return
-
-    #     # Revoke transducer tracking approval if there was any
-    #     if session.transducer_tracking_is_approved():
-    #         slicer.util.infoDisplay(
-    #             text= "Transducer tracking approval has been revoked because the transducer was moved.",
-    #             windowTitle="Approval revoked"
-    #         )
-    #         session.toggle_transducer_tracking_approval() # revoke approval
-    #         self.getParameterNode().loaded_session = session # remember to write the updated session object into the parameter node
+        matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
+        if matching_transform_id:
+            # If its a transducer tracking node, revoke approval if approved
+            transform_node = slicer.mrmlScene.GetNodeByID(matching_transform_id)
+            if transform_node:
+                photoscan_id = get_photoscan_id_from_transducer_tracking_result(transform_node)
+                transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+                transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
+                    photoscan_id = photoscan_id,
+                    reason = "The transducer transform was modified"
+                )
 
     def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
@@ -1956,7 +1957,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ]
         }
         
-        self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
+        newly_loaded_transducer = self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
+        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
 
     def load_transducer_from_openlifu(
             self,
