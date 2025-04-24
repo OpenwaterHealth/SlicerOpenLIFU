@@ -35,7 +35,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.events import SlicerOpenLIFUEvents
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state
+from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMixin
 from OpenLIFULib.skinseg import generate_skin_mesh
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
@@ -58,7 +58,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, replace_widget, get_cloned_node
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget 
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node,  get_virtual_fit_approval_for_target
 
 # These imports are for IDE and static analysis purposes only
@@ -980,14 +980,12 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(0)
-        self._photoscan_approved = None
 
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
 
+        self._photoscan_approved = self.wizard().photoscan_approved
         # Connect buttons and signals
-        if self._photoscan_approved is None:
-            self._photoscan_approved = self.wizard().photoscan.is_approved()
         self.updatePhotoscanApproveButton()
         self.updatePhotoscanApprovalStatusLabel()
         self.ui.photoscanApprovalButton.clicked.connect(self.onPhotoscanApproveClicked)
@@ -1030,6 +1028,7 @@ class PhotoscanPreviewWizard(qt.QWizard):
 
         self.logic = OpenLIFUTransducerTrackerLogic()
         self.photoscan = self.logic.load_openlifu_photoscan(photoscan)
+        self.photoscan_approved: bool = self.photoscan.is_approved()
 
         self.setupViewNode()
 
@@ -1047,10 +1046,13 @@ class PhotoscanPreviewWizard(qt.QWizard):
     def onFinish(self):
         self.resetViewNodes()
 
+        # Update final photoscan approval state
+        self.photoscan_approved = self.photoscanPreviewPage._photoscan_approved
+
         # Update the photoscan approval status in the underlying openlifu photoscan object
         self.logic.update_photoscan_approval(
             photoscan = self.photoscan,
-            approval_state = self.photoscanPreviewPage._photoscan_approved)
+            approval_state = self.photoscan_approved)
 
         self.accept()  # Closes the wizard
     
@@ -1495,6 +1497,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             photoscan = current_data['Photoscan']
             target = current_data["Target"]
             
+            target_is_approved = False
             if target:
                 target_id = fiducial_to_openlifu_point_id(target)
                 target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
@@ -1766,12 +1769,12 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def get_photoscan_ids_with_approval(self) -> List[str]:
         """Return a list of photoscan IDs that are approved for transducer tracking"""
         session = get_openlifu_data_parameter_node().loaded_session
+        approved_photoscans = []
         if not session and not get_openlifu_data_parameter_node().loaded_photoscans:
-            return []
+            return approved_photoscans
         if session:
             approved_photoscans = [id for id, wrapped_photoscan in session.affiliated_photoscans.items() if wrapped_photoscan.photoscan.photoscan_approved]
         elif get_openlifu_data_parameter_node().loaded_photoscans:
-            print()
             approved_photoscans = [id for id, slicer_photoscan in get_openlifu_data_parameter_node().loaded_photoscans.items() if slicer_photoscan.is_approved()]
         return approved_photoscans
     
