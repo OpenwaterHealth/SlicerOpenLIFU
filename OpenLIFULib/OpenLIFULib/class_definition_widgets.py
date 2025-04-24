@@ -23,6 +23,58 @@ from slicer.i18n import tr as _
 # OpenLIFULib imports
 from OpenLIFULib.util import get_hints
 
+class CreateStringDialog(qt.QDialog):
+    """
+    Dialog for entering a strings, typically used for adding to a list of
+    strings.
+    """
+
+    def __init__(self, name: str, parent="mainWindow"):
+        """
+        Args:
+            name (str): Label for the input field (what the string represents).
+            parent (QWidget or str): Parent widget or "mainWindow". Defaults to "mainWindow".
+        """
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle(f"Add {name}")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.name = name
+        self.setup()
+
+    def setup(self):
+        self.setMinimumWidth(300)
+        self.setContentsMargins(15, 15, 15, 15)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(10)
+        self.setLayout(formLayout)
+
+        self.input = qt.QLineEdit()
+        formLayout.addRow(_(f"{self.name}:"), self.input)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        typed = self.input.text
+
+        if not typed:
+            slicer.util.errorDisplay(f"{self.name} field cannot be empty.", parent=self)
+            return
+
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            return (returncode, self.input.text)
+        return (returncode, None)
+
 class ListTableWidget(qt.QWidget):
     """
     A widget for displaying and editing a list of items in a single-column
@@ -72,7 +124,10 @@ class ListTableWidget(qt.QWidget):
         top_level_layout.addLayout(buttons_layout)
 
     def _open_add_dialog(self):
-        createDlg = CreateAbstractClassDialog(self.object_name, self.object_type)
+        if self.object_type is str:
+            createDlg = CreateStringDialog(self.object_name)
+        else:
+            createDlg = CreateAbstractClassDialog(self.object_name, self.object_type)
         returncode, new_object = createDlg.customexec_()
 
         if not returncode:
