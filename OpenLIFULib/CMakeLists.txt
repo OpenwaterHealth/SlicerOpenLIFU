@@ -4,6 +4,7 @@ set(MODULE_NAME OpenLIFULib)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/__init__.py
+  OpenLIFULib/class_definition_widgets.py
   OpenLIFULib/util.py
   OpenLIFULib/guided_mode_util.py
   OpenLIFULib/user_account_mode_util.py
