@@ -24,6 +24,7 @@ from OpenLIFULib import (
     get_current_user,
     openlifu_lz,
 )
+from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 from OpenLIFULib.util import display_errors
@@ -392,18 +393,20 @@ class ManageAccountsDialog(qt.QDialog):
         buttonsLayout = qt.QHBoxLayout()
 
         self.createUserButton = qt.QPushButton("Create New User")
-        self.deleteUserButton = qt.QPushButton("Delete User")
         self.changePasswordButton = qt.QPushButton("Change User Password")
+        self.editRolesButton = qt.QPushButton("Edit User Roles")
+        self.deleteUserButton = qt.QPushButton("Delete User")
 
-        for button in [self.createUserButton, self.deleteUserButton, self.changePasswordButton]:
+        for button in [self.createUserButton, self.changePasswordButton, self.editRolesButton, self.deleteUserButton]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
             buttonsLayout.addWidget(button)
 
         self.boxLayout.addLayout(buttonsLayout)
 
         self.createUserButton.clicked.connect(self.onCreateNewUserClicked)
-        self.deleteUserButton.clicked.connect(self.onDeleteUserClicked)
         self.changePasswordButton.clicked.connect(self.onChangePasswordClicked)
+        self.editRolesButton.clicked.connect(self.onEditUserRolesClicked)
+        self.deleteUserButton.clicked.connect(self.onDeleteUserClicked)
 
         # ---- Ok button ----
 
@@ -440,6 +443,45 @@ class ManageAccountsDialog(qt.QDialog):
     def onCreateNewUserClicked(self):
         slicer.util.getModuleWidget("OpenLIFULogin").onCreateNewAccountClicked()
         self.updateUsersList()
+
+    def onEditUserRolesClicked(self):
+
+        # --- Spawn a dialog for editing user roles as list ---
+
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a user to edit roles.")
+            return
+
+        selected_row = selected_items[0].row()
+        user_id = self.tableWidget.item(selected_row, 0).text()
+        user = self.db.load_user(user_id)
+
+        dialog = qt.QDialog(self)
+        dialog.setWindowTitle(f"Edit Roles for {user.id}")
+        dialog.setModal(True)
+        dialog.resize(400, 300)
+
+        layout = qt.QVBoxLayout(dialog)
+        roles_widget = ListTableWidget(dialog, object_name="Role", object_type=str)
+        roles_widget.from_list(user.roles)
+        layout.addWidget(roles_widget)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
+                                          qt.QDialogButtonBox.Cancel)
+        def on_accept():
+            user.roles = roles_widget.to_list()
+            self.db.write_user(user, on_conflict=openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+            self.updateUsersList()
+            dialog.accept()
+
+        self.buttonBox.accepted.connect(on_accept)
+        self.buttonBox.rejected.connect(dialog.reject)
+
+        layout.addWidget(self.buttonBox)
+
+        dialog.exec_()
 
     def onDeleteUserClicked(self):
 
