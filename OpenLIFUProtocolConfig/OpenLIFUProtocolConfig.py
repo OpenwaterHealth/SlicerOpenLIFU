@@ -260,7 +260,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.segmentation_method_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Segmentation Method")
         replace_widget(self.ui.segmentationMethodDefinitionWidgetPlaceholder, self.segmentation_method_definition_widget, self.ui)
 
-        self.parameter_constraints_widget = DictTableWidget(key_name="Parameter", val_name="Constraint")
+        self.parameter_constraints_widget = OpenLIFUParameterConstraintsWidget()
         replace_widget(self.ui.parameterConstraintsWidgetPlaceholder, self.parameter_constraints_widget, self.ui)
 
         self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
@@ -1930,3 +1930,153 @@ class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMult
         # Modify the default and range for max_angle
         max_angle_spinbox = maxangle_definition_form_widget._field_widgets['max_angle']
         maxangle_definition_form_widget.modify_widget_spinbox(max_angle_spinbox, default_value=30, min_value=0, max_value=90)
+
+class OpenLIFUParameterConstraintsWidget(DictTableWidget):
+
+    class CreateParameterParameterConstraintDialog(qt.QDialog):
+        """
+        Dialog for creating a parameter constraint, allowing users to define warning and error thresholds
+        for a specific parameter using different operators (e.g., <, <=, within, outside).
+
+        The operator dropdown determines whether the constraint uses a single value (e.g., < 5)
+        or a range of values (e.g., within [4, 6]). When a range is needed, two spin boxes are shown
+        for both warning and error values. Otherwise, only one is visible for each. Therefore, there 
+        is some logic in here for updating between showing 2 spinboxes and 1. Furthermore, there is a
+        mapping to the text that is displayed vs the operator as defined in "openlifu.plan.ParameterConstraint"
+        """
+
+        def __init__(self, existing_keys: List[str], parent="mainWindow"):
+            super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+            self.existing_keys = existing_keys
+            self.setWindowTitle("Create Parameter Constraint")
+            self.setMinimumWidth(350)
+
+            self.operator_display_map = {
+                "<": "is less than (<)",
+                "<=": "is less than or equal to (<=)",
+                ">": "is greater than (>)",
+                ">=": "is greater than or equal to (>=)",
+                "within": "is within",
+                "inside": "is inside",
+                "outside": "is outside",
+                "outside_inclusive": "is outside inclusive"
+            }
+            self.inverse_operator_display_map = {v: k for k, v in self.operator_display_map.items()}
+
+            self.setup()
+
+        def setup(self):
+            self.setMinimumWidth(400)
+            self.setContentsMargins(15, 15, 15, 15)
+
+            formLayout = qt.QFormLayout()
+            formLayout.setSpacing(5)
+            self.setLayout(formLayout)
+
+            self.parameter_name_input = qt.QLineEdit()
+            formLayout.addRow(_(f"Parameter Name:"), self.parameter_name_input)
+
+            self.operator_selector = qt.QComboBox()
+            self.operator_selector.addItems(list(self.operator_display_map.values()))
+            self.operator_selector.currentTextChanged.connect(self._update_visible_spinboxes)
+            formLayout.addRow(_(f"Operator:"), self.operator_selector)
+
+            self.warning_spinboxes = []
+            self.error_spinboxes = []
+            self.warning_and_label = qt.QLabel("and")
+            self.warning_and_label.setAlignment(qt.Qt.AlignCenter)
+            self.error_and_label = qt.QLabel("and")
+            self.error_and_label.setAlignment(qt.Qt.AlignCenter)
+
+            self.warning_box_layout = qt.QHBoxLayout()
+            self.error_box_layout = qt.QHBoxLayout()
+
+            warning_container = qt.QWidget()
+            warning_container.setLayout(self.warning_box_layout)
+            formLayout.addRow(_(f"Warning Value(s):"), warning_container)
+
+            error_container = qt.QWidget()
+            error_container.setLayout(self.error_box_layout)
+            formLayout.addRow(_(f"Error Value(s):"), error_container)
+
+            self._init_spinboxes()
+
+            self.buttonBox = qt.QDialogButtonBox()
+            self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
+            formLayout.addWidget(self.buttonBox)
+
+            self.buttonBox.rejected.connect(self.reject)
+            self.buttonBox.accepted.connect(self._on_accept)
+
+        def _init_spinboxes(self):
+            for _ in range(2):
+                warning_spinbox = qt.QDoubleSpinBox()
+                error_spinbox = qt.QDoubleSpinBox()
+                warning_spinbox.setRange(-1e6, 1e6)
+                error_spinbox.setRange(-1e6, 1e6)
+                self.warning_spinboxes.append(warning_spinbox)
+                self.error_spinboxes.append(error_spinbox)
+                self.warning_box_layout.addWidget(warning_spinbox)
+                self.error_box_layout.addWidget(error_spinbox)
+
+            self.warning_box_layout.insertWidget(1, self.warning_and_label)
+            self.error_box_layout.insertWidget(1, self.error_and_label)
+
+            self._update_visible_spinboxes(self.operator_selector.currentText)
+
+        def _update_visible_spinboxes(self, display_operator: str):
+            operator = self.inverse_operator_display_map[display_operator]
+            use_two_values = operator in ['within', 'inside', 'outside', 'outside_inclusive']
+            for i in range(2):
+                self.warning_spinboxes[i].setVisible(use_two_values or i == 0)
+                self.error_spinboxes[i].setVisible(use_two_values or i == 0)
+            self.warning_and_label.setVisible(use_two_values)
+            self.error_and_label.setVisible(use_two_values)
+
+        def _get_parameter_constraint_as_class(self) -> "openlifu.plan.ParameterConstraint":
+            display_operator = self.operator_selector.currentText
+            operator = self.inverse_operator_display_map[display_operator]
+            is_range_operator = operator in ['within', 'inside', 'outside', 'outside_inclusive']
+
+            warning_value = (
+                (self.warning_spinboxes[0].value, self.warning_spinboxes[1].value)
+                if is_range_operator else self.warning_spinboxes[0].value
+            )
+            error_value = (
+                (self.error_spinboxes[0].value, self.error_spinboxes[1].value)
+                if is_range_operator else self.error_spinboxes[0].value
+            )
+
+            return openlifu_lz().plan.ParameterConstraint(operator, warning_value, error_value)
+
+        def _on_accept(self):
+            parameter_name = self.parameter_name_input.text
+
+            if not parameter_name:
+                slicer.util.errorDisplay("Parameter name cannot be empty.", parent=self)
+                return
+            if parameter_name in self.existing_keys:
+                slicer.util.errorDisplay("You cannot define multiple constraints for the same parameter.", parent=self)
+                return
+
+            self.accept()
+
+        def customexec_(self):
+            returncode = self.exec_()
+            if returncode == qt.QDialog.Accepted:
+                return returncode, self.parameter_name_input.text, self._get_parameter_constraint_as_class()
+            return returncode, None, None
+
+    def __init__(self):
+        super().__init__(key_name="Parameter", val_name="Parameter Constraint")
+
+    # Override the add dialog to use a special dialog just for the parameter
+    # constraint
+    def _open_add_dialog(self):
+        existing_keys = list(self.to_dict().keys())
+        createDlg = self.CreateParameterParameterConstraintDialog(existing_keys)
+        returncode, param, param_constraint = createDlg.customexec_()
+        if not returncode:
+            return
+
+        self._add_row(param, param_constraint)
