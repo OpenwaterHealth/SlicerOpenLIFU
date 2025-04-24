@@ -364,12 +364,20 @@ def get_approval_from_transducer_tracking_result_node(node : vtkMRMLTransformNod
         raise RuntimeError("Node does not have a transducer tracking approval status.")
     return node.GetAttribute("TT:approvalStatus") == "1"
 
+def get_transform_type_from_transducer_tracking_result_node(node : vtkMRMLTransformNode) -> TransducerTrackingTransformType:
+    if node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1":
+        return TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME
+    elif node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1":
+        return TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME
+    else:
+        raise RuntimeError("The given node is not a transducer tracking result transform.")
+
 def get_photoscan_id_from_transducer_tracking_result(result: Union[vtkMRMLTransformNode, Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]) -> str:
     """Returns the photoscan ID associated with a transducer tracking transform node. 
     If a transducer tracking result i.e. tuple of transform nodes is provided, this function
     includes a check to ensure that the paired transform nodes are associated with the same photoscan ID."""
     
-    if isinstance(result, vtkMRMLTransformNode):
+    if isinstance(result, vtkMRMLTransformNode) and result.GetAttribute("TT:photoscanID") is not None:
         transform_node = result
     elif isinstance(result,tuple):
         if result[0].GetAttribute("TT:photoscanID") != result[1].GetAttribute("TT:photoscanID"):

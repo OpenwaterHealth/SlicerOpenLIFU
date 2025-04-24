@@ -167,6 +167,15 @@ class SlicerOpenLIFUTransducer:
         transform_node.GetMatrixTransformToParent(transform_matrix)
         self.transform_node.SetMatrixTransformToParent(transform_matrix)
 
+        # Add an attribute which specifies the ID of the transform being matched
+        self.set_matching_transform(transform_node)
+
+    def set_matching_transform(self, node: vtkMRMLTransformNode = None) -> None:
+        if node:
+            self.transform_node.SetAttribute("matching_transform", node.GetID())
+        else:
+            self.transform_node.SetAttribute("matching_transform", None)
+
     def move_node_into_transducer_sh_folder(self, node : vtkMRMLNode) -> None:
         """In the subject hiearchy, move the given `node` into this transducer's transform node folder."""
         shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
