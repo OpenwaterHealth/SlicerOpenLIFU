@@ -1963,6 +1963,28 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             }
             self.inverse_operator_display_map = {v: k for k, v in self.operator_display_map.items()}
 
+            self.parameter_key_map = {
+                "Thermal Index (TIC)": "TIC",
+                "Mechanical Index (MI)": "MI",
+                "Mainlobe PNP (MPa)": "mainlobe_pnp_MPa",
+                "Mainlobe I_SPPA (W/cm^2)": "mainlobe_isppa_Wcm2",
+                "Mainlobe I_SPTA (W/cm^2)": "mainloba_ispta_Wcm2",
+                "3 dB Lateral Beamwidth (mm)": "beamwidth_lat_3dB_mm",
+                "3 dB Elevational Beamwidth (mm)": "beamwidth_ele_3dB_mm",
+                "3 dB Axial Beamwidth (mm)": "beamwidth_ax_3dB_mm",
+                "6 dB Lateral Beamwidth (mm)": "beamwidth_lat_6dB_mm",
+                "6 dB Elevational Beamwidth (mm)": "beamwidth_ele_6dB_mm",
+                "6 dB Axial Beamwidth (mm)": "beamwidth_ax_6dB_mm",
+                "Sidelobe PNP (MPa)": "sidelobe_pnp_MPa",
+                "Sidelobe I_SPPA (W/cm2)": "sidelobe_isppa_Wcm2",
+                "Global PNP (MPa)": "global_pnp_MPa",
+                "Global I_SPPA (W/cm^2)": "global_isppa_Wcm2",
+                "Global I_SPTA (W/cm^2)": "global_ispta_Wcm2",
+                "Emitted Pressure (MPa)": "p0_MPa",
+                "Emitted Power (W)": "power_W"
+            }
+            self.inverse_parameter_key_map = {v: k for k, v in self.parameter_key_map.items()}
+
             self.setup()
 
         def setup(self):
@@ -1973,7 +1995,8 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             formLayout.setSpacing(5)
             self.setLayout(formLayout)
 
-            self.parameter_name_input = qt.QLineEdit()
+            self.parameter_name_input = qt.QComboBox()
+            self.parameter_name_input.addItems(list(self.parameter_key_map.keys()))
             formLayout.addRow(_(f"Parameter Name:"), self.parameter_name_input)
 
             self.operator_selector = qt.QComboBox()
@@ -2050,7 +2073,8 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             return openlifu_lz().plan.ParameterConstraint(operator, warning_value, error_value)
 
         def _on_accept(self):
-            parameter_name = self.parameter_name_input.text
+            display_name = self.parameter_name_input.currentText
+            parameter_name = self.parameter_key_map[display_name]
 
             if not parameter_name:
                 slicer.util.errorDisplay("Parameter name cannot be empty.", parent=self)
@@ -2064,7 +2088,9 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
         def customexec_(self):
             returncode = self.exec_()
             if returncode == qt.QDialog.Accepted:
-                return returncode, self.parameter_name_input.text, self._get_parameter_constraint_as_class()
+                display_name = self.parameter_name_input.currentText
+                parameter_name = self.parameter_key_map[display_name]
+                return returncode, parameter_name, self._get_parameter_constraint_as_class()
             return returncode, None, None
 
     def __init__(self):
