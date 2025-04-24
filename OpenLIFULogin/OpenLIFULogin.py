@@ -245,6 +245,101 @@ class CreateNewAccountDialog(qt.QDialog):
             return (returncode, user_dict)
         return (returncode, None)
 
+class ChangePasswordDialog(qt.QDialog):
+    """ Change password dialog """
+
+    def __init__(self, user: "openlifu.db.User", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Change password")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.user = user
+        self.setup()
+
+    def setup(self):
+
+        self.setMinimumWidth(400)
+        self.setContentsMargins(20, 20, 20, 20)
+
+        mainLayout = qt.QVBoxLayout()
+        mainLayout.setSpacing(15)
+        self.setLayout(mainLayout)
+
+        self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
+        self.infoLabel.setWordWrap(True)
+        self.infoLabel.setStyleSheet("""
+            font-size: 14pt;
+            font-weight: bold;
+            padding: 5px 0;
+        """)
+        self.infoLabel.setWordWrap(True)
+        mainLayout.addWidget(self.infoLabel)
+
+        formLayout = qt.QFormLayout()
+        formLayout.setSpacing(12)
+        formLayout.setFormAlignment(qt.Qt.AlignTop)
+        mainLayout.addLayout(formLayout)
+
+        # ---- Password fields ----
+
+        self.createPasswordField = qt.QLineEdit()
+        self.createPasswordField.setEchoMode(qt.QLineEdit.Password)
+        createPasswordLabel = qt.QLabel(_('Create Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(createPasswordLabel, self.createPasswordField)
+
+        self.confirmPasswordField = qt.QLineEdit()
+        self.confirmPasswordField.setEchoMode(qt.QLineEdit.Password)
+        confirmPasswordLabel = qt.QLabel(_('Confirm Password:') + ' <span style="color: red;">*</span>')
+        formLayout.addRow(confirmPasswordLabel, self.confirmPasswordField)
+
+        # ---- Field restrictions ----
+
+        self.createPasswordField.setMaxLength(50)
+        self.confirmPasswordField.setMaxLength(50)
+
+        # ---- Closing buttons ----
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        mainLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """
+        Ensure the password is valid and the passwords match
+        """
+        create_password_text = self.createPasswordField.text
+        confirm_password_text = self.confirmPasswordField.text
+
+        if not create_password_text or len(create_password_text) < 6:
+            slicer.util.errorDisplay("Password must be at least 6 characters.", parent=self)
+            return
+        if create_password_text != confirm_password_text:
+            slicer.util.errorDisplay("Passwords do not match.", parent=self)
+            return
+
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        if returncode == qt.QDialog.Accepted:
+            password_text = self.createPasswordField.text
+            salt = bcrypt_lz().gensalt()
+            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+
+            user_dict = {
+                "id": self.user.id,
+                "password_hash": password_hash,
+                "roles": self.user.roles,
+                "name": self.user.name,
+                "description": self.user.description
+            }
+            return (returncode, user_dict)
+        return (returncode, None)
+
 class ManageAccountsDialog(qt.QDialog):
     """ Interface for managing user accounts """
 
@@ -408,100 +503,6 @@ class ManageAccountsDialog(qt.QDialog):
         self.updateUsersList()
         slicer.util.infoDisplay(f"Password changed for: \'{user_id}\'")
 
-class ChangePasswordDialog(qt.QDialog):
-    """ Change password dialog """
-
-    def __init__(self, user: "openlifu.db.User", parent="mainWindow"):
-        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-        self.setWindowTitle("Change password")
-        self.setWindowModality(qt.Qt.ApplicationModal)
-        self.user = user
-        self.setup()
-
-    def setup(self):
-
-        self.setMinimumWidth(400)
-        self.setContentsMargins(20, 20, 20, 20)
-
-        mainLayout = qt.QVBoxLayout()
-        mainLayout.setSpacing(15)
-        self.setLayout(mainLayout)
-
-        self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
-        self.infoLabel.setWordWrap(True)
-        self.infoLabel.setStyleSheet("""
-            font-size: 14pt;
-            font-weight: bold;
-            padding: 5px 0;
-        """)
-        self.infoLabel.setWordWrap(True)
-        mainLayout.addWidget(self.infoLabel)
-
-        formLayout = qt.QFormLayout()
-        formLayout.setSpacing(12)
-        formLayout.setFormAlignment(qt.Qt.AlignTop)
-        mainLayout.addLayout(formLayout)
-
-        # ---- Password fields ----
-
-        self.createPasswordField = qt.QLineEdit()
-        self.createPasswordField.setEchoMode(qt.QLineEdit.Password)
-        createPasswordLabel = qt.QLabel(_('Create Password:') + ' <span style="color: red;">*</span>')
-        formLayout.addRow(createPasswordLabel, self.createPasswordField)
-
-        self.confirmPasswordField = qt.QLineEdit()
-        self.confirmPasswordField.setEchoMode(qt.QLineEdit.Password)
-        confirmPasswordLabel = qt.QLabel(_('Confirm Password:') + ' <span style="color: red;">*</span>')
-        formLayout.addRow(confirmPasswordLabel, self.confirmPasswordField)
-
-        # ---- Field restrictions ----
-
-        self.createPasswordField.setMaxLength(50)
-        self.confirmPasswordField.setMaxLength(50)
-
-        # ---- Closing buttons ----
-
-        self.buttonBox = qt.QDialogButtonBox()
-        self.buttonBox.setStandardButtons(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        mainLayout.addWidget(self.buttonBox)
-
-        self.buttonBox.rejected.connect(self.reject)
-        self.buttonBox.accepted.connect(self.validateInputs)
-
-    def validateInputs(self):
-        """
-        Ensure the password is valid and the passwords match
-        """
-        create_password_text = self.createPasswordField.text
-        confirm_password_text = self.confirmPasswordField.text
-
-        if not create_password_text or len(create_password_text) < 6:
-            slicer.util.errorDisplay("Password must be at least 6 characters.", parent=self)
-            return
-        if create_password_text != confirm_password_text:
-            slicer.util.errorDisplay("Passwords do not match.", parent=self)
-            return
-
-        self.accept()
-
-    def customexec_(self):
-        returncode = self.exec_()
-        if returncode == qt.QDialog.Accepted:
-            password_text = self.createPasswordField.text
-            salt = bcrypt_lz().gensalt()
-            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
-
-            user_dict = {
-                "id": self.user.id,
-                "password_hash": password_hash,
-                "roles": self.user.roles,
-                "name": self.user.name,
-                "description": self.user.description
-            }
-            return (returncode, user_dict)
-        return (returncode, None)
 #
 # OpenLIFULoginWidget
 #
