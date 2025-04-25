@@ -1642,18 +1642,22 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
 
+        photoscans_with_approved_tt = set(self.logic.get_photoscan_ids_with_approved_tt_results())
+        approved_photoscans = set(self.logic.get_photoscan_ids_with_approval())
+        approved_photoscan_with_approved_tt_exists = bool(approved_photoscans.intersection(photoscans_with_approved_tt))
+
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
         elif not selected_photoscan_openlifu:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Select a photoscan to proceed."
-        elif not selected_photoscan_openlifu.photoscan_approved:
+        elif not approved_photoscans:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Approve a photoscan to proceed."
-        elif not self.logic.get_photoscan_ids_with_approved_tt_results():
+        elif not approved_photoscan_with_approved_tt_exists:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Run transducer tracking and approve the result to proceed."
+            self.workflow_controls.status_text = "Run transducer tracking for an approved photoscan and approve the result to proceed."
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Approved transducer tracking result detected, proceed to the next step."
