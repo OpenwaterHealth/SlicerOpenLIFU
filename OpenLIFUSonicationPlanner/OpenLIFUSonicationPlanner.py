@@ -433,9 +433,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         elif get_openlifu_data_parameter_node().loaded_solution is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Compute a sonication solution to proceed."
+        elif  not get_openlifu_data_parameter_node().loaded_solution.is_approved():
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Approve a sonication solution to proceed."
         else:
             self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Sonication solution detected, proceed to the next step."
+            self.workflow_controls.status_text = "Approved sonication solution detected, proceed to the next step."
 
     def clear_solution_analysis_tables(self) -> None:
         """Clear out the solution analysis tables, removing all rows and column headers"""
