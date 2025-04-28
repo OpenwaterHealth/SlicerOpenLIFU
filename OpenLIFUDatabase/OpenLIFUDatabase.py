@@ -120,7 +120,6 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.initializeParameterNode()
 
         # Call the routine to update from data parameter node
-        self.onDataParameterNodeModified()
         self.updateWorkflowControls()
 
     def cleanup(self) -> None:
@@ -150,9 +149,6 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
-
-    def onDataParameterNodeModified(self, caller = None, event = None):
-        pass
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
