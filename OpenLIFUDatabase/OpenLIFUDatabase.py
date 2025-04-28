@@ -213,6 +213,16 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def onParameterNodeModified(self, caller, event) -> None:
+        # Update QSettings from changed parameter node
+        for parameter_name in [
+            "databaseDirectory",
+        ]:
+            self.updateSettingFromParameter(parameter_name)
+
+        # Make sure the line edit showing the directory path matches the parameter node state (if changed)
+        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).text = self._parameterNode.databaseDirectory
+
+        # Update workflow controls
         self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
