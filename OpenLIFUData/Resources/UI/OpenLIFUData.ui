@@ -95,9 +95,9 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="addPhotocollectionToSessionButton">
+          <widget class="QPushButton" name="startPhotocollectionCaptureButton">
            <property name="text">
-            <string>Add Photocollection To Session</string>
+            <string>Start Photocollection Capture</string>
            </property>
           </widget>
          </item>
