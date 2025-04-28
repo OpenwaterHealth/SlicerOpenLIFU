@@ -472,6 +472,77 @@ class AddNewPhotoscanDialog(qt.QDialog):
         }
         return (returncode, photoscan_dict)
 
+class ImportPhotocollectionFromDiskDialog(qt.QDialog):
+    """Import photocollection from disk dialog."""
+
+    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN = 20
+
+    def __init__(self, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.reference_number = ""
+        self.setWindowTitle("Import Photocollection")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.photo_files = []
+        self.setup()
+
+    def setup(self):
+        self.setMinimumWidth(600)
+        self.setContentsMargins(15, 15, 15, 15)
+
+        self.formLayout = qt.QFormLayout()
+        self.setLayout(self.formLayout)
+
+        # Reference number input
+        self.referenceNumberLineEdit = qt.QLineEdit()
+        self.referenceNumberLineEdit.setPlaceholderText("Enter reference number (alphanumeric)")
+        self.formLayout.addRow(_("Reference Number:"), self.referenceNumberLineEdit)
+
+        # Directory path selector
+        self.photocollectionDirectoryPath = ctk.ctkPathLineEdit()
+        self.photocollectionDirectoryPath.filters = ctk.ctkPathLineEdit.Dirs
+        self.formLayout.addRow(_("Photocollection Directory:"), self.photocollectionDirectoryPath)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
+        self.formLayout.addWidget(self.buttonBox)
+
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.validateInputs)
+
+    def validateInputs(self):
+        """Validate the reference number and selected directory."""
+        ref_number = self.referenceNumberLineEdit.text.strip()
+        if not ref_number.isalnum():
+            slicer.util.errorDisplay("Reference number must be alphanumeric.", parent=self)
+            return
+
+        directory = self.photocollectionDirectoryPath.currentPath
+        if not os.path.isdir(directory):
+            slicer.util.errorDisplay("Selected path is not a valid directory.", parent=self)
+            return
+
+        photo_files = [
+            os.path.join(directory, f)
+            for f in os.listdir(directory)
+            if f.lower().endswith((".jpg", ".jpeg", ".png"))
+        ]
+
+        if len(photo_files) < self.MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN:
+            slicer.util.errorDisplay(f"Not enough photos were found in the directory (found {len(photo_files)}).", parent=self)
+            return
+
+        self.reference_number = ref_number
+        self.photo_files = photo_files
+        self.accept()
+
+    def customexec_(self):
+        returncode = self.exec_()
+        photocollection_dict = {
+            "reference_number": self.reference_number,
+            "photo_paths": self.photo_files,
+        }
+        return returncode, photocollection_dict
+
 class AddNewSubjectDialog(qt.QDialog):
     """ Add new subject dialog """
 
@@ -970,6 +1041,25 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             # Update the transducer tracking drop down to reflect new photoscans 
             transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
             transducer_tracking_widget.self().algorithm_input_widget.update()
+
+    @display_errors
+    def onImportPhotocollectionFromDiskClicked(self, checked:bool):
+        importDlg = ImportPhotocollectionFromDiskDialog()
+        returncode, photocollection_dict = importDlg.customexec_()
+        if not returncode:
+            return False
+
+        currentIndex = self.ui.subjectSessionView.currentIndex()
+        _, session_id = self.getSubjectSessionAtIndex(currentIndex)
+        _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
+        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        self.logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
+        
+        # If the photocollection is being added to a currently active session,
+        # update the session 
+        loaded_session = self._parameterNode.loaded_session
+        if loaded_session is not None and session_id == loaded_session.get_session_id():
+            self.logic.update_photocollections_affiliated_with_loaded_session()
 
     def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
         """ Adds sessions to the Subject/Session selector for the subject specified by 'index'.

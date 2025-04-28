@@ -80,6 +80,16 @@
           </layout>
          </item>
          <item>
+          <widget class="QPushButton" name="importPhotocollectionFromDiskButton">
+           <property name="toolTip">
+            <string>Import a photocollection from a directory of photos on disk</string>
+           </property>
+           <property name="text">
+            <string>Import Photocollection From Disk</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QProgressBar" name="photoscanGeneratorProgressBar">
            <property name="enabled">
             <bool>true</bool>
