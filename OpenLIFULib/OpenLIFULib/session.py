@@ -212,18 +212,33 @@ class SlicerOpenLIFUSession:
 
         return self.session.session
 
-    def get_transducer_tracking_approvals(self):
+    def get_transducer_tracking_approvals(self, approved_photoscans_only = False) -> List[str]:
         """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
-        transducer tracking is approved.
+        transducer tracking is approved. If approved_photoscans_only is True, only the photoscan ID with approval is returned.
         """
         session_openlifu = self.session.session
-        approved_tt_photoscans = [
-            photoscan_id for photoscan_id in self.get_affiliated_photoscan_ids()
+        approved_tt_results = [
+            tt_result
             for tt_result in session_openlifu.transducer_tracking_results
-            if photoscan_id == tt_result.photoscan_id 
-            and tt_result.transducer_to_volume_tracking_approved 
-            and tt_result.photoscan_to_volume_tracking_approved 
-        ]
+            if tt_result.transducer_to_volume_tracking_approved
+            and tt_result.photoscan_to_volume_tracking_approved
+            ]
+        
+        if approved_photoscans_only:
+            approved_tt_photoscans = [
+            photoscan.id
+            for photoscan in self.get_affiliated_photoscans()
+            if photoscan.photoscan_approved
+            and any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
+            ]
+            if len(approved_tt_photoscans) > 1:
+                raise RuntimeError("Multiple approved photoscans detected (IDs: {approved_photoscans}). Only one should be approved per session.")
+        else:
+            approved_tt_photoscans = [
+            photoscan.id
+            for photoscan in self.get_affiliated_photoscans()
+            if any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
+            ]
 
         return approved_tt_photoscans
     

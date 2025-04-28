@@ -1671,11 +1671,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
-
-        photoscans_with_approved_tt = set(self.logic.get_photoscan_ids_with_approved_tt_results())
-        approved_photoscans = set(self.logic.get_photoscan_ids_with_approval())
-        approved_photoscan_with_approved_tt_exists = bool(approved_photoscans.intersection(photoscans_with_approved_tt))
-
+        approved_photoscans = self.logic.get_photoscan_ids_with_approval()
+        photoscans_with_approved_tt = self.logic.get_photoscan_ids_with_approved_tt_results(approved_photoscans_only = True)
+        
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
@@ -1685,7 +1683,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         elif not approved_photoscans:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Approve a photoscan to proceed."
-        elif not approved_photoscan_with_approved_tt_exists:
+        elif not photoscans_with_approved_tt:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Run transducer tracking for an approved photoscan and approve the result to proceed."
         else:
@@ -1791,14 +1789,19 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         approved_photoscan_ids = self.get_photoscan_ids_with_approved_tt_results()
         return photoscan_id in approved_photoscan_ids
     
-    def get_photoscan_ids_with_approved_tt_results(self) -> List[str]:
+    def get_photoscan_ids_with_approved_tt_results(self, approved_photoscans_only = False) -> List[str]:
         """Return a list of photoscan IDs that have approved transducer_tracking, for the currently active session.
         Or if there is no session, then sessionless approved photoscan IDs are returned."""
         
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
-        approved_photoscan_ids = get_photoscan_ids_with_results(session_id=session_id, approved_only = True)
-        return approved_photoscan_ids
+        photoscans_with_approved_tt = get_photoscan_ids_with_results(session_id=session_id, approved_only = True)
+
+        if approved_photoscans_only:
+            approved_photoscans = set(self.get_photoscan_ids_with_approval())
+            photoscans_with_approved_tt = approved_photoscans.intersection(set(photoscans_with_approved_tt))
+
+        return list(photoscans_with_approved_tt)
     
     def get_photoscan_ids_with_approval(self) -> List[str]:
         """Return a list of photoscan IDs that are approved for transducer tracking"""
