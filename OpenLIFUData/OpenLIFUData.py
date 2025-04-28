@@ -275,7 +275,7 @@ class AddNewVolumeDialog(qt.QDialog):
 
         return (returncode, volume_filepath,volume_name, volume_id)
 
-class AddNewPhotocollectionDialog(qt.QDialog):
+class StartPhotocollectionCaptureDialog(qt.QDialog):
     """ Add new photocollection dialog """
 
     MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN=20
@@ -710,7 +710,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_subjectLevelButtons_enabled()
 
         # Add new photocollection to session
-        self.ui.addPhotocollectionToSessionButton.clicked.connect(self.onAddPhotocollectionToSessionClicked)
+        self.ui.startPhotocollectionCaptureButton.clicked.connect(self.onStartPhotocollectionCaptureClicked)
         self.update_sessionLevelButtons_enabled()
 
         # Add new photoscan to session
@@ -834,13 +834,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         selected in the tree view"""
 
         if get_cur_db() and self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
-            self.ui.addPhotocollectionToSessionButton.setEnabled(True)
-            self.ui.addPhotocollectionToSessionButton.toolTip = 'Add new photocollection to selected session'
+            self.ui.startPhotocollectionCaptureButton.setEnabled(True)
+            self.ui.startPhotocollectionCaptureButton.toolTip = 'Add new photocollection to selected session'
             self.ui.addPhotoscanToSessionButton.setEnabled(True)
             self.ui.addPhotoscanToSessionButton.toolTip = 'Add new photoscan to selected session'
         else:
-            self.ui.addPhotocollectionToSessionButton.setEnabled(False)
-            self.ui.addPhotocollectionToSessionButton.toolTip = 'Requires a loaded database and session to be selected'
+            self.ui.startPhotocollectionCaptureButton.setEnabled(False)
+            self.ui.startPhotocollectionCaptureButton.toolTip = 'Requires a loaded database and session to be selected'
             self.ui.addPhotoscanToSessionButton.setEnabled(False)
             self.ui.addPhotoscanToSessionButton.toolTip = 'Requires a loaded database and session to be selected'
 
@@ -932,8 +932,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.logic.load_session(subject_id, session_parameters['id'])
 
     @display_errors
-    def onAddPhotocollectionToSessionClicked(self, checked:bool):
-        photocollectiondlg = AddNewPhotocollectionDialog()
+    def onStartPhotocollectionCaptureClicked(self, checked:bool):
+        photocollectiondlg = StartPhotocollectionCaptureDialog()
         returncode, photocollection_dict = photocollectiondlg.customexec_()
         if not returncode:
             return False

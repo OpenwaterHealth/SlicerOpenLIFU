@@ -1297,7 +1297,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # ---- Photoscan generation connections ----
         data_module = slicer.util.getModuleWidget('OpenLIFUData')
-        self.ui.addPhotocollectionToSessionButton.clicked.connect(data_module.onAddPhotocollectionToSessionClicked)
+        self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.onStartPhotocollectionCaptureClicked)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         # ------------------------------------------
 
@@ -1568,13 +1568,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             )
             self.logic.revoke_transducer_tracking_approval(photoscan_id = photoscan_id)
         
-    def updateAddPhotocollectionToSessionButton(self):
+    def updateStartPhotocollectionCaptureButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.addPhotocollectionToSessionButton.setEnabled(False)
-            self.ui.addPhotocollectionToSessionButton.setToolTip("Adding a photocollection requires an active session.")
+            self.ui.startPhotocollectionCaptureButton.setEnabled(False)
+            self.ui.startPhotocollectionCaptureButton.setToolTip("Adding a photocollection requires an active session.")
         else:
-            self.ui.addPhotocollectionToSessionButton.setEnabled(True)
-            self.ui.addPhotocollectionToSessionButton.setToolTip("Add a photocollection to the active session.")
+            self.ui.startPhotocollectionCaptureButton.setEnabled(True)
+            self.ui.startPhotocollectionCaptureButton.setToolTip("Add a photocollection to the active session.")
 
     def updateStartPhotoscanGenerationButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
@@ -1588,7 +1588,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
 
     def updatePhotoscanGenerationButtons(self):
-        self.updateAddPhotocollectionToSessionButton()
+        self.updateStartPhotocollectionCaptureButton()
         self.updateStartPhotoscanGenerationButton()
 
     def updateApprovalStatusLabel(self):
