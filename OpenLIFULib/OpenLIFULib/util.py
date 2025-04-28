@@ -150,20 +150,15 @@ def create_noneditable_QStandardItem(text:str) -> qt.QStandardItem:
             return item
 
 def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=None):
-    """Replace a widget by another. Meant for use in a scripted module, to replace widgets inside a layout.
+    """Replace a widget by another, supporting both standard layouts and QFormLayout.
 
     Args:
         old_widget: The widget to replace. It is assumed to be inside a layout.
         new_widget: The new widget that should replace old_widget.
         ui_object: The ui object from which to erase the replaced widget, if there is one.
-            This is referring to the `ui` attribute that is often defined in the setup of scripted
-            modules and constructed via `slicer.util.childWidgetVariables`.
-
     """
     parent = old_widget.parentWidget()
     layout = parent.layout()
-    index = layout.indexOf(old_widget)
-    layout.removeWidget(old_widget)
 
     if ui_object is not None:
         ui_attrs_to_delete = [
@@ -172,19 +167,38 @@ def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=Non
             if hasattr(child,"name")
         ]
 
-    # The order of deleteLater and delattr matters here. The attribute names to remove from the ui_object must be collected before the
-    # deletion is requested, and the deletion must be requested before the attributes are dropped -- once the attributes are dropped
-    # there is a possibility of the widgets getting auto-deleted just because there is no remaining reference to them.
-    old_widget.deleteLater()
-    old_widget.hide()  # TODO: Find reason for replaced widgets having dangling reference. See https://github.com/OpenwaterHealth/OpenLIFU-app/pull/18
+    if isinstance(layout, qt.QFormLayout):
+        # Find the correct row and replace the field widget, preserving the label
+        for row in range(layout.rowCount()):
+            field_item = layout.itemAt(row, qt.QFormLayout.FieldRole)
+            if field_item and field_item.widget() == old_widget:
+                label_item = layout.itemAt(row, qt.QFormLayout.LabelRole)
+                label_widget = label_item.widget() if label_item else None
+
+                layout.removeWidget(old_widget)
+                old_widget.deleteLater()
+                old_widget.hide()
+
+                new_widget.setParent(parent)
+                new_widget.show()
+
+                layout.setWidget(row, qt.QFormLayout.LabelRole, label_widget)  # re-set label if needed (safety)
+                layout.setWidget(row, qt.QFormLayout.FieldRole, new_widget)
+                break
+    else:
+        index = layout.indexOf(old_widget)
+        layout.removeWidget(old_widget)
+
+        old_widget.deleteLater()
+        old_widget.hide()
+
+        new_widget.setParent(parent)
+        new_widget.show()
+        layout.insertWidget(index, new_widget)
 
     if ui_object is not None:
         for attr_name in ui_attrs_to_delete:
             delattr(ui_object, attr_name)
-            
-    new_widget.setParent(parent)
-    new_widget.show()
-    layout.insertWidget(index, new_widget)
 
 def get_cloned_node(node_to_clone: vtkMRMLNode) -> vtkMRMLNode:
 
