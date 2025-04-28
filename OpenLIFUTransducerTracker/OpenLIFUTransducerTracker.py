@@ -1761,16 +1761,28 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def update_photoscan_approval(self, photoscan: SlicerOpenLIFUPhotoscan, approval_state: bool) -> None:
         """Updates the approval status of the given photoscan. """
         
+        data_parameter_node = get_openlifu_data_parameter_node()
+        session = data_parameter_node.loaded_session
         current_state = photoscan.is_approved()
-        photoscan.set_approval(approval_state = approval_state)
 
         if current_state != approval_state: # If the approval state has changed
+
+            # Check that the session doesn't have another approved photoscan
+            if approval_state and session: # Only a single photoscan in a session can be approved
+                approved_photoscans = self.get_photoscan_ids_with_approval()
+                if approved_photoscans:
+                    if len(approved_photoscans) > 1:
+                        raise RuntimeError("Multiple approved photoscans detected (IDs: {approved_photoscans}). Only one should be approved per session.")
+                    slicer.util.infoDisplay(
+                    text= f"Only one photoscan can be approved per session. Photoscan ID {approved_photoscans[0]} is already approved. Revoke it to approve another.",
+                    windowTitle="Approved photoscan exists"
+                    )
+                    return
+
+            photoscan.set_approval(approval_state = approval_state)
             # Update the loaded SlicerOpenLIFUPhotoscan.
-            data_parameter_node = get_openlifu_data_parameter_node()
             data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan 
-            
             #  If this is a session-based workflow, update the list of photoscans affiliated with the session
-            session = data_parameter_node.loaded_session
             if session:
                 session.update_affiliated_photoscan(photoscan.photoscan.photoscan)
             
