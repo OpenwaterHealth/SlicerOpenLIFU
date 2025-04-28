@@ -43,6 +43,9 @@
         <property name="filters">
          <set>ctkPathLineEdit::Dirs</set>
         </property>
+        <property name="showHistoryButton">
+         <bool>false</bool>
+        </property>
         <property name="SlicerParameterName" stdset="0">
          <string>databaseDirectory</string>
         </property>
