@@ -183,3 +183,18 @@ class SlicerOpenLIFUTransducer:
             shNode.GetItemByDataNode(node),
             shNode.GetItemParent(shNode.GetItemByDataNode(self.transform_node)),
         )
+
+    def is_matching_transform(self, query_transform_node: vtkMRMLTransformNode) -> bool:
+        """Returns true if the transform associated with the transducer matches the given transform node"""
+
+        current_transform_matrix = vtk.vtkMatrix4x4()
+        self.transform_node.GetMatrixTransformToParent(current_transform_matrix)
+
+        query_transform_matrix = vtk.vtkMatrix4x4()
+        query_transform_node.GetMatrixTransformToParent(query_transform_matrix)
+
+        is_matching = (
+            slicer.util.arrayFromVTKMatrix(current_transform_matrix) == slicer.util.arrayFromVTKMatrix(query_transform_matrix)
+            ).all()
+        
+        return is_matching
