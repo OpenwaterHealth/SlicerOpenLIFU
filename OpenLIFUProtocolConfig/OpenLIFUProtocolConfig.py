@@ -266,7 +266,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
         replace_widget(self.ui.targetConstraintsWidgetPlaceholder, self.target_constraints_widget, self.ui)
 
-        self.solution_analysis_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().plan.SolutionAnalysisOptions, parent=self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Solution Analysis Options")
+        self.solution_analysis_options_definition_widget = OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget()
         replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
 
         self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
@@ -2106,3 +2106,17 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             return
 
         self._add_row(param, param_constraint)
+
+class OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
+    def __init__(self, parent: Optional[qt.QWidget] = None):
+        super().__init__(openlifu_lz().plan.SolutionAnalysisOptions, parent, collapsible_title="Solution Analysis Options")
+
+        # Modify the widget for configuring SolutionAnalysis.param_constraints
+        # so that it uses the OpenLIFUParameterConstraintsWidget
+        old_param_constraints_dicttablewidget = self._field_widgets['param_constraints']
+        new_param_constraints_widget = OpenLIFUParameterConstraintsWidget()
+
+        replace_widget(old_param_constraints_dicttablewidget, new_param_constraints_widget)
+
+        # Update internal mapping
+        self._field_widgets['param_constraints'] = new_param_constraints_widget
