@@ -63,7 +63,7 @@
            <item>
             <widget class="QPushButton" name="startPhotocollectionCaptureButton">
              <property name="toolTip">
-              <string>Load an openlifu protocol from json</string>
+              <string>Start a photocollection capture from the 3D Open Water app</string>
              </property>
              <property name="text">
               <string>Start Photocollection Capture</string>
