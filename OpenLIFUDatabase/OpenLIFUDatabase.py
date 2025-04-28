@@ -114,6 +114,13 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             lambda : self.onLoadDatabaseClicked(checked=True)
         )
 
+        # You do not need to connect databaseDirectoryLineEdit
+        # currentPathChanged to something that updates the parameter node
+        # because the SlicerParameterName dynamic property was given to the
+        # ctkPathLineEdit and given a bidirectional connection in
+        # self._parameterNode.connectGui(self.ui) (the line edit inside of the
+        # widget always matches the parameter node)
+
         # ====================================
         
         # Make sure parameter node is initialized (needed for module reload)
@@ -204,7 +211,9 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
-            # ui element that needs connection.
+            # ui element that needs connection. This creates a bidirectional
+            # connection between, e.g. the content within the ctk line edit and
+            # the parameter node will always update each other
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
@@ -214,9 +223,6 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             "databaseDirectory",
         ]:
             self.updateSettingFromParameter(parameter_name)
-
-        # Make sure the line edit showing the directory path matches the parameter node state (if changed)
-        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).text = self._parameterNode.databaseDirectory
 
         # Update workflow controls
         self.updateWorkflowControls()
