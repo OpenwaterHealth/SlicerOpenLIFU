@@ -1448,6 +1448,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 0)
             self.ui.photoscanGenerationStatusMessage.show()
             self.ui.photoscanGenerationStatusMessage.text = ("Generating mesh... this process can take up to 20 minutes.")
+            self.ui.photoscanGenerationStatusMessage.styleSheet = "color:red;"
             try:
                 self.logic.generate_photoscan(
                     subject_id = subject_id,
@@ -1456,11 +1457,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
                     image_width = photoscan_generation_options_dialog.get_entered_image_width(),
                 )
+                self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 100)
             except CalledProcessError as e:
                 slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
                 raise e
-            self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 100)
-            self.ui.photoscanGenerationStatusMessage.hide()
+            finally:
+                self.ui.photoscanGenerationStatusMessage.hide()
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
