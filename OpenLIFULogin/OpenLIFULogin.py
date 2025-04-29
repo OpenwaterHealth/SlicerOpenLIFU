@@ -572,6 +572,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 name = "Anonymous",
                 description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
         )
+        self._last_active_user = self._default_anonymous_user
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -903,6 +904,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         for widget in self._user_account_banners:
             widget.change_active_user(new_active_user)
 
+        if self._last_active_user == new_active_user:
+            return  # If it's the same user, we don't need to delete data
+
         # Clear Data module items
         slicer.util.getModuleLogic('OpenLIFUData').clear_session()
         for protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
@@ -913,6 +917,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             slicer.util.getModuleLogic('OpenLIFUProtocolConfig').delete_protocol_from_cache(protocol_id)
         slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
 
+        self._last_active_user = new_active_user
             
 # OpenLIFULoginLogic
 #
