@@ -32,7 +32,7 @@ from OpenLIFULib.class_definition_widgets import (
     OpenLIFUAbstractDataclassDefinitionFormWidget,
     OpenLIFUAbstractMultipleABCDefinitionFormWidget,
 )
-from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.user_account_mode_util import get_current_user, UserAccountBanner
 from OpenLIFULib.util import (
     display_errors,
     replace_widget,
@@ -395,12 +395,29 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 protocol_text = f"{protocol_w.protocol.name} (ID: {protocol_id})"
                 if protocol_id in self.logic.cached_protocols:
                     protocol_text = "[  +  ]  " + protocol_text
-                self.ui.protocolSelector.addItem(protocol_text, protocol_w.protocol)
+
+                if (
+                    'admin' in get_current_user().roles
+                    or any(
+                        user_role in protocol_w.protocol.allowed_roles
+                        for user_role in get_current_user().roles
+                    )
+                ):
+                    self.ui.protocolSelector.addItem(protocol_text, protocol_w.protocol)
+                    
             self.setProtocolEditButtonEnabled(True)
 
         for protocol_id in self.logic.new_protocol_ids:
             protocol = self.logic.cached_protocols[protocol_id]
-            self.ui.protocolSelector.addItem(f"[  +  ]  {protocol.name} (ID: {protocol.id})", protocol)
+
+            if (
+                'admin' in get_current_user().roles
+                or any(
+                    user_role in protocol.allowed_roles
+                    for user_role in get_current_user().roles
+                )
+            ):
+                self.ui.protocolSelector.addItem(f"[  +  ]  {protocol.name} (ID: {protocol.id})", protocol)
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
@@ -947,7 +964,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             id=DefaultProtocolValues.ID.value,
             description=DefaultProtocolValues.DESCRIPTION.value,
 
-            allowed_roles=cls.get_default_allowed_roles(),
+            allowed_roles=cls.get_default_allowed_roles(),  # default protocols use defaults
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
             focal_pattern=cls.get_default_focal_pattern(),
@@ -968,7 +985,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             id=DefaultNewProtocolValues.ID.value,
             description=DefaultNewProtocolValues.DESCRIPTION.value,
 
-            allowed_roles=cls.get_default_allowed_roles(),
+            allowed_roles=[r for r in get_current_user().roles if r != "admin"],  # new protocols copy current roles
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
             focal_pattern=cls.get_default_focal_pattern(),
