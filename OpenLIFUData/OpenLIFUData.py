@@ -278,7 +278,7 @@ class AddNewVolumeDialog(qt.QDialog):
 class StartPhotocollectionCaptureDialog(qt.QDialog):
     """ Add new photocollection dialog """
 
-    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN=20
+    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN=1
 
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
@@ -475,7 +475,7 @@ class AddNewPhotoscanDialog(qt.QDialog):
 class ImportPhotocollectionFromDiskDialog(qt.QDialog):
     """Import photocollection from disk dialog."""
 
-    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN = 20
+    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN = 1
 
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
