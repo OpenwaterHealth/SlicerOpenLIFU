@@ -1300,6 +1300,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.onStartPhotocollectionCaptureClicked)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         self.ui.importPhotocollectionFromDiskButton.clicked.connect(data_module.onImportPhotocollectionFromDiskClicked)
+        self.ui.photoscanGenerationStatusMessage.hide() # Only displayed when running photoscan generation
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
@@ -1444,6 +1445,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             openlifu_lz().nav.photoscan.get_meshroom_pipeline_names()
         )
         if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
+            self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 0)
+            self.ui.photoscanGenerationStatusMessage.show()
+            self.ui.photoscanGenerationStatusMessage.text = ("Please note that this process can take up to 20 minutes."
+            "The progress bar is currently not fully functional and will update only upon completion.")
             try:
                 self.logic.generate_photoscan(
                     subject_id = subject_id,
@@ -1455,11 +1460,24 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             except CalledProcessError as e:
                 slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
                 raise e
+            self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 100)
+            self.ui.photoscanGenerationStatusMessage.hide()
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
         self.updateWorkflowControls()
-            
+    
+    def updatePhotoscanGeneratorProgressBar(self,  new_photoscan_generator_progress_value = None):
+        """Update the photoscan generation progress bar. 
+        Currently this function is called before and after photoscan generation is run.
+        The progress bar needs to be connected to updates from the meshroom reconstruction pipeline. """
+        self.ui.photoscanGeneratorProgressBar.maximum = 100 
+        if new_photoscan_generator_progress_value is not None:
+            self.ui.photoscanGeneratorProgressBar.value = new_photoscan_generator_progress_value
+        else:
+            self.ui.photoscanGeneratorProgressBar.value = 0
+
+
     def onPreviewPhotoscanClicked(self):
 
         current_data = self.algorithm_input_widget.get_current_data()
