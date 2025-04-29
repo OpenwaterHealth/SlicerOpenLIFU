@@ -144,7 +144,14 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
 
         for protocol in self.protocols:
             display_text = f"{protocol.name} (ID: {protocol.id})"
-            self.listWidget.addItem(display_text)
+            if (
+                'admin' in get_current_user().roles
+                or any(
+                    user_role in protocol.allowed_roles
+                    for user_role in get_current_user().roles
+                )
+            ):
+                self.listWidget.addItem(display_text)
 
     def onItemDoubleClicked(self, item):
         self.validateInputs()
