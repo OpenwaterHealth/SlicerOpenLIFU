@@ -101,7 +101,17 @@
             <number>0</number>
            </property>
            <property name="textVisible">
-            <bool>false</bool>
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="photoscanGenerationStatusMessage">
+           <property name="text">
+            <string>(placeholder_photoscangeneration_status_label)</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
            </property>
           </widget>
          </item>
