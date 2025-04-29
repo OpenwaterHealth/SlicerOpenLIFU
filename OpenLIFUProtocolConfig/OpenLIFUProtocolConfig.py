@@ -107,19 +107,18 @@ class OpenLIFUProtocolConfigParameterNode:
 class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
     """ Create new protocol selection from database dialog """
 
-    def __init__(self, protocol_names_and_IDs : List[Tuple[str,str]], parent="mainWindow"):
+    def __init__(self, protocols: List["openlifu.plan.Protocol"], parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         """ Args:
-                protocol_names_and_IDs: list of pairs containing the protocol
-                names and ids (name,id) that will populate the dialog
+                protocols: list of Protocol objects that will populate the dialog
         """
 
         self.setWindowTitle("Select a Protocol")
         self.setWindowModality(qt.Qt.WindowModal)
         self.resize(600, 400)
 
-        self.protocol_names_and_IDs : List[Tuple[str,str]] = protocol_names_and_IDs
-        self.selected_protocol_id : str = None
+        self.protocols: List["openlifu.plan.Protocol"] = protocols
+        self.selected_protocol: "openlifu.plan.Protocol" = None
 
         self.setup()
 
@@ -143,26 +142,22 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
 
         # display protocols and protocol ids
 
-        for name, id in self.protocol_names_and_IDs:
-            display_text = f"{name} (ID: {id})"
+        for protocol in self.protocols:
+            display_text = f"{protocol.name} (ID: {protocol.id})"
             self.listWidget.addItem(display_text)
-
 
     def onItemDoubleClicked(self, item):
         self.validateInputs()
 
     def validateInputs(self):
-
         selected_idx = self.listWidget.currentRow
         if selected_idx >= 0:
-            _, self.selected_protocol_id = self.protocol_names_and_IDs[selected_idx]
+            self.selected_protocol = self.protocols[selected_idx]
         self.accept()
 
-    def get_selected_protocol_id(self) -> str:
+    def get_selected_protocol(self) -> "openlifu.plan.Protocol":
+        return self.selected_protocol#
 
-        return self.selected_protocol_id
-
-#
 # OpenLIFUProtocolConfigWidget
 #
 
@@ -611,21 +606,18 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             raise RuntimeError("Cannot load protocol from database because there is no database connection")
 
         # Open the protocol selection dialog
-        protocols : "List[openlifu.plan.Protocol]" = get_cur_db().load_all_protocols()
-        protocol_names_and_IDs = [(p.name, p.id) for p in protocols]
+        protocols: List["openlifu.plan.Protocol"] = get_cur_db().load_all_protocols()
 
-        dialog = ProtocolSelectionFromDatabaseDialog(protocol_names_and_IDs)
+        dialog = ProtocolSelectionFromDatabaseDialog(protocols)
         if dialog.exec_() == qt.QDialog.Accepted:
-            selected_protocol_id = dialog.get_selected_protocol_id()
-            if not selected_protocol_id:
+            selected_protocol = dialog.get_selected_protocol()
+            if not selected_protocol:
                 return
 
-            protocol = get_cur_db().load_protocol(selected_protocol_id)
-
-            if not self.load_protocol_from_openlifu(protocol):
+            if not self.load_protocol_from_openlifu(selected_protocol):
                 return
 
-            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # Update UI
+            self.ui.protocolSelector.setCurrentText(f"{selected_protocol.name} (ID: {selected_protocol.id})")  # Update UI
             self.setProtocolEditorEnabled(False)
 
     def updateWidgetSaveState(self, state: SaveState):
