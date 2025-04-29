@@ -744,6 +744,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         new_account_dlg.exec_()
         self.updateWidgetLoginState() # reload in case an admin user was added when there previously wasn't one
 
+        # In case the currently logged in user was edited in the management
+        # dialog, we reload it.
+        cur_user_id = self.logic.active_user.id
+        users = get_cur_db().load_all_users()
+        potentially_updated_user = next((u for u in users if u.id == cur_user_id), None)
+        self.logic.active_user = potentially_updated_user
+
     def updateWorkflowControls(self):
         if not self._parameterNode.user_account_mode:
             self.workflow_controls.can_proceed = True
