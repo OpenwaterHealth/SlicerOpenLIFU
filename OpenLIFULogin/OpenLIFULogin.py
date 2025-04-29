@@ -885,14 +885,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 widget.setEnabled(True)
             return
 
-        # === Check cache if there is an active user ===
-
-        if self.logic.active_user is not None:
-            if self._cur_user_id_enforced == self.logic.active_user.id and self.logic.active_user.id != "anonymous":
-                return
-            else:
-                self._cur_user_id_enforced = self.logic.active_user.id
-
         # === Enforce ===
 
         for widget in self._permissions_widgets:
