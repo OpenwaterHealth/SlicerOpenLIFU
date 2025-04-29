@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>1318</height>
+    <height>1408</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -154,6 +154,27 @@
           <widget class="QPlainTextEdit" name="protocolDescriptionTextEdit">
            <property name="toolTip">
             <string>A more detailed description of the protocol</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="allowedRolesLabel">
+        <property name="text">
+         <string>Allowed Roles</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="allowedRolesWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_18">
+         <item>
+          <widget class="QLabel" name="allowedRolesWidgetPlaceholderLabel">
+           <property name="text">
+            <string>Placeholder for an
+OpenLIFUAllowedRolesWidget</string>
            </property>
           </widget>
          </item>

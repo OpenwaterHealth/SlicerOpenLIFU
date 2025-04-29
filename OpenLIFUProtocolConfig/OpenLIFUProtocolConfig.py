@@ -233,6 +233,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
         self.user_account_banner.visible = False
 
+        self.allowed_roles_widget = ListTableWidget(parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), object_name="Role", object_type=str)
+        replace_widget(self.ui.allowedRolesWidgetPlaceholder, self.allowed_roles_widget, self.ui)
+
         self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
         replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
 
@@ -288,6 +291,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
         self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
 
+        self.allowed_roles_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
         self.pulse_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.sequence_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_focal_pattern_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
@@ -640,6 +644,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolIdLineEdit.setText(protocol.id)
         self.ui.protocolDescriptionTextEdit.setPlainText(protocol.description)
 
+        self.allowed_roles_widget.from_list(protocol.allowed_roles)
         self.pulse_definition_widget.update_form_from_class(protocol.pulse)
         self.sequence_definition_widget.update_form_from_class(protocol.sequence)
         self.abstract_focal_pattern_definition_widget.update_form_from_class(protocol.focal_pattern)
@@ -678,6 +683,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def getProtocolFromGUI(self) -> "openlifu.plan.Protocol":
         # Get the classes from dynamic widgets
+        allowed_roles = self.allowed_roles_widget.to_list()
         pulse = self.pulse_definition_widget.get_form_as_class()
         sequence = self.sequence_definition_widget.get_form_as_class()
         focal_pattern = self.abstract_focal_pattern_definition_widget.get_form_as_class()
@@ -695,6 +701,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             name = self.ui.protocolNameLineEdit.text,
             id = self.ui.protocolIdLineEdit.text,
             description = self.ui.protocolDescriptionTextEdit.toPlainText(),
+            allowed_roles = allowed_roles,
             pulse = pulse,
             sequence = sequence,
             focal_pattern = focal_pattern,
@@ -719,6 +726,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
 
         # Dynamic widgets
+        self.allowed_roles_widget.setEnabled(enabled)
         self.pulse_definition_widget.setEnabled(enabled)
         self.sequence_definition_widget.setEnabled(enabled)
         self.abstract_focal_pattern_definition_widget.setEnabled(enabled)
@@ -885,6 +893,10 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             return True
     
     @classmethod
+    def get_default_allowed_roles(cls):
+        return []
+
+    @classmethod
     def get_default_pulse(cls):
         return openlifu_lz().bf.Pulse()
 
@@ -935,6 +947,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             id=DefaultProtocolValues.ID.value,
             description=DefaultProtocolValues.DESCRIPTION.value,
 
+            allowed_roles=cls.get_default_allowed_roles(),
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
             focal_pattern=cls.get_default_focal_pattern(),
@@ -955,6 +968,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
             id=DefaultNewProtocolValues.ID.value,
             description=DefaultNewProtocolValues.DESCRIPTION.value,
 
+            allowed_roles=cls.get_default_allowed_roles(),
             pulse=cls.get_default_pulse(),
             sequence=cls.get_default_sequence(),
             focal_pattern=cls.get_default_focal_pattern(),
