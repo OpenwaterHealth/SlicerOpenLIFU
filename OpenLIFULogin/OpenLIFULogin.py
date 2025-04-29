@@ -27,7 +27,7 @@ from OpenLIFULib import (
 from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node
 
 # These imports are deferred at runtime using openlifu_lz, 
 # but are done here for IDE and static analysis purposes
@@ -895,6 +895,17 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
     def onActiveUserChanged(self, new_active_user: Optional["openlifu.db.User"]) -> None:
         for widget in self._user_account_banners:
             widget.change_active_user(new_active_user)
+
+        # Clear Data module items
+        slicer.util.getModuleLogic('OpenLIFUData').clear_session()
+        for protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
+            slicer.util.getModuleLogic('OpenLIFUData').remove_protocol(protocol_id)
+
+        # Clear Protocol config cached items (e.g. new protocols)
+        for protocol_id in list(slicer.util.getModuleLogic('OpenLIFUProtocolConfig').cached_protocols.keys()):
+            slicer.util.getModuleLogic('OpenLIFUProtocolConfig').delete_protocol_from_cache(protocol_id)
+        slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
+
             
 # OpenLIFULoginLogic
 #
