@@ -1447,8 +1447,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
             self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 0)
             self.ui.photoscanGenerationStatusMessage.show()
-            self.ui.photoscanGenerationStatusMessage.text = ("Please note that this process can take up to 20 minutes."
-            "The progress bar is currently not fully functional and will update only upon completion.")
+            self.ui.photoscanGenerationStatusMessage.text = ("Generating mesh... this process can take up to 20 minutes.")
             try:
                 self.logic.generate_photoscan(
                     subject_id = subject_id,
