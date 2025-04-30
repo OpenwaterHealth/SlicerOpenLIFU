@@ -47,6 +47,7 @@ from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results,
     get_photoscan_id_from_transducer_tracking_result,
+    is_transducer_tracking_result_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
@@ -1041,7 +1042,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.logic.update_photoscans_affiliated_with_loaded_session()
             # Update the transducer tracking drop down to reflect new photoscans 
             transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
-            transducer_tracking_widget.self().algorithm_input_widget.update()
+            transducer_tracking_widget.algorithm_input_widget.update()
 
     @display_errors
     def onImportPhotocollectionFromDiskClicked(self, checked:bool):
@@ -1910,13 +1911,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if matching_transform_id:
             # If its a transducer tracking node, revoke approval if approved
             transform_node = slicer.mrmlScene.GetNodeByID(matching_transform_id)
-            if transform_node:
+            if transform_node and is_transducer_tracking_result_node(transform_node):
                 photoscan_id = get_photoscan_id_from_transducer_tracking_result(transform_node)
                 transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
                 transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
                     photoscan_id = photoscan_id,
                     reason = "The transducer transform was modified"
                 )
+            
+            transducer.set_matching_transform(None)
 
     def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
