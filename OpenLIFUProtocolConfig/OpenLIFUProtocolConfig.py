@@ -32,7 +32,7 @@ from OpenLIFULib.class_definition_widgets import (
     OpenLIFUAbstractDataclassDefinitionFormWidget,
     OpenLIFUAbstractMultipleABCDefinitionFormWidget,
 )
-from OpenLIFULib.user_account_mode_util import get_current_user, UserAccountBanner
+from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state, UserAccountBanner
 from OpenLIFULib.util import (
     display_errors,
     replace_widget,
@@ -145,7 +145,8 @@ class ProtocolSelectionFromDatabaseDialog(qt.QDialog):
         for protocol in self.protocols:
             display_text = f"{protocol.name} (ID: {protocol.id})"
             if (
-                'admin' in get_current_user().roles
+                not get_user_account_mode_state()
+                or 'admin' in get_current_user().roles
                 or any(
                     user_role in protocol.allowed_roles
                     for user_role in get_current_user().roles
@@ -399,7 +400,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                     protocol_text = "[  +  ]  " + protocol_text
 
                 if (
-                    'admin' in get_current_user().roles
+                    not get_user_account_mode_state()
+                    or 'admin' in get_current_user().roles
                     or any(
                         user_role in protocol_w.protocol.allowed_roles
                         for user_role in get_current_user().roles
@@ -413,7 +415,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             protocol = self.logic.cached_protocols[protocol_id]
 
             if (
-                'admin' in get_current_user().roles
+                not get_user_account_mode_state()
+                or 'admin' in get_current_user().roles
                 or any(
                     user_role in protocol.allowed_roles
                     for user_role in get_current_user().roles
