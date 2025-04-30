@@ -749,7 +749,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # dialog, we reload it.
         cur_user_id = self.logic.active_user.id
         users = get_cur_db().load_all_users()
-        potentially_updated_user = next((u for u in users if u.id == cur_user_id), None)
+        potentially_updated_user = next((u for u in users if u.id == cur_user_id), self._default_anonymous_user)
         self.logic.active_user = potentially_updated_user
 
     def updateWorkflowControls(self):
@@ -878,12 +878,11 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 )
     
     def onParameterNodeModified(self, caller, event) -> None:
-        if self.logic.active_user is not None:
-            self.updateUserAccountModeButton()
-            self.updateAccountManagementButtons()
-            self.enforceUserPermissions()
-            for widget in self._user_account_banners:
-                widget.visible = self._parameterNode.user_account_mode
+        self.updateUserAccountModeButton()
+        self.updateAccountManagementButtons()
+        self.enforceUserPermissions()
+        for widget in self._user_account_banners:
+            widget.visible = self._parameterNode.user_account_mode
 
     def enforceUserPermissions(self) -> None:
         
@@ -937,7 +936,13 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
-        self._active_user: Optional["openlifu.db.User"] = None
+        self._active_user: "openlifu.db.User" = openlifu_lz().db.User(
+                id = "anonymous", 
+                password_hash = "",
+                roles = [],
+                name = "Anonymous",
+                description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
+        )
         """The currently active user. Do not set this directly -- use the `active_user` property."""
 
         self._on_active_user_changed_callbacks: List[Callable[[Optional["openlifu.db.User"]], None]] = []
@@ -955,12 +960,12 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
         self._on_active_user_changed_callbacks.append(f)
 
     @property
-    def active_user(self) -> Optional["openlifu.db.User"]:
+    def active_user(self) -> "openlifu.db.User":
         """The currently active user."""
         return self._active_user
 
     @active_user.setter
-    def active_user(self, user: Optional["openlifu.db.User"]) -> None:
+    def active_user(self, user: "openlifu.db.User") -> None:
         self._active_user = user
         for callback in self._on_active_user_changed_callbacks:
             callback(self._active_user)

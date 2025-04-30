@@ -11,7 +11,7 @@ from OpenLIFULib.util import (
 if TYPE_CHECKING:
     import openlifu.db
 
-def get_current_user() -> "Optional[openlifu.db.User]":
+def get_current_user() -> "openlifu.db.User":
     """Get the active openlifu user. If no user is logged in or user account
     mode is off, a default user is returned, with the intention of being the most
     restricted"""
