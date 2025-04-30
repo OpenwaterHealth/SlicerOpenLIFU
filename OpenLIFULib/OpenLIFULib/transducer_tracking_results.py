@@ -310,9 +310,19 @@ def get_complete_transducer_tracking_results(session_id: Optional[str], photosca
         tp_nodes = filter(lambda t : t.GetAttribute("TT:sessionID") is None, tp_nodes)
         pv_nodes = filter(lambda t : t.GetAttribute("TT:sessionID") is None, pv_nodes)
 
-    # Both transform nodes need to be there for a complete tracking result
-    tt_results : Iterable[Tuple[vtkMRMLTransformNode,vtkMRMLTransformNode]] = [
-        (t, p) for t in tp_nodes for p in pv_nodes if t.GetAttribute("TT:photoscanID") == p.GetAttribute("TT:photoscanID")]
+    tp_nodes = list(tp_nodes)
+    pv_nodes = list(pv_nodes)
+
+    pv_nodes_by_id = {}
+    for pv_node in pv_nodes:
+        photoscan_id = pv_node.GetAttribute("TT:photoscanID")
+        pv_nodes_by_id[photoscan_id] = pv_node
+
+    tt_results = []
+    for tp_node in tp_nodes:
+        photoscan_id = tp_node.GetAttribute("TT:photoscanID")
+        if photoscan_id in pv_nodes_by_id:
+            tt_results.append((tp_node, pv_nodes_by_id[photoscan_id]))
 
     return tt_results
 
