@@ -322,7 +322,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         else:
             self.ui.trackingApprovalWidget.show()
             self.ui.approveTransformButton.hide()
-            self.ui.approvalStatusLabel.text = ("Transducer tracking is currently approved for this photoscan."
+            self.ui.approvalStatusLabel.text = ("A transducer tracking is currently approved for this photoscan."
             "To re-do or edit fiducial landmarks, navigate to the "
             "'Register photoscan to skin surface' page and revoke the existing approval.")
 
@@ -728,7 +728,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
 
-        if self.wizard()._valid_tt_result_exists and not self.wizard()._existing_approval_revoked:
+        if self.wizard()._valid_tt_result_exists and not self.wizard()._existing_approval_revoked and self.transform_approved:
             self.ui.controlsWidget.enabled = False
         else:
             self.ui.controlsWidget.enabled = True
@@ -887,11 +887,14 @@ class TransducerTrackingWizard(qt.QWizard):
             photoscan_id = self.photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
         
+        self._existing_approval_revoked = False
         if self.photoscan_to_volume_transform_node and self.transducer_to_volume_transform_node:
             self._valid_tt_result_exists = True
-        
-        # Flag to keep track of when approval is revoked and an existing result can be modified
-        self._existing_approval_revoked = False
+            if not (
+                get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node) 
+                and get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
+            ): #Flag to keep track of when approval is revoked and an existing result can be modified
+                self._existing_approval_revoked = True            
         
     def customexec_(self):
         returncode = self.exec_()
@@ -1509,7 +1512,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
-        # self.updateApprovalWarningsIfAny()
+        self.updateApprovalWarningsIfAny()
         self.updateInputOptions()
         
     @vtk.calldata_type(vtk.VTK_OBJECT)
@@ -1727,7 +1730,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.revoke_transducer_tracking_approval(photoscan_id = photoscan_id)
             self.updateApprovalStatusLabel()
 
-        
+
     def updateStartPhotocollectionCaptureButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
             self.ui.startPhotocollectionCaptureButton.setEnabled(False)
@@ -1930,8 +1933,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
         set_transducer_tracking_approval_for_photoscan(approval_state = False, photoscan_id = photoscan_id, session_id = session_id)
-        # data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        # data_logic.update_underlying_openlifu_session()
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic.update_underlying_openlifu_session()
             
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
@@ -2130,6 +2133,12 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
+
+        # Check if there is already a transducer tracking result associated with the session. If there is, revoke approval first
+        approved_photoscan_id = session.get_transducer_tracking_approvals()
+        if approved_photoscan_id and (photoscan_id != approved_photoscan_id[0]):
+            self.revoke_transducer_tracking_approval(photoscan_id = approved_photoscan_id[0]) # This does not trigger an info box
+            transducer.set_matching_transform(None)
 
         pv_transform_node = add_transducer_tracking_result(
             transform_node = photoscan_to_volume_transform,

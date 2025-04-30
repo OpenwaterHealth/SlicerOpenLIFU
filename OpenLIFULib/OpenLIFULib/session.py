@@ -231,14 +231,14 @@ class SlicerOpenLIFUSession:
             if photoscan.photoscan_approved
             and any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
             ]
-            if len(approved_tt_photoscans) > 1:
-                raise RuntimeError("Multiple approved photoscans detected (IDs: {approved_photoscans}). Only one should be approved per session.")
         else:
             approved_tt_photoscans = [
             photoscan.id
             for photoscan in self.get_affiliated_photoscans()
             if any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
             ]
+        if len(approved_tt_photoscans) > 1:
+            raise RuntimeError("Multiple  photoscans with approved transducer tracking results detected (IDs: {approved_photoscans}). Only one tracking result should be approved per session.")
 
         return approved_tt_photoscans
     
