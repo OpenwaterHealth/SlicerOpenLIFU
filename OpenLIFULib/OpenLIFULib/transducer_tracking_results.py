@@ -81,7 +81,6 @@ def add_transducer_tracking_result(
     else:
         transducer_tracking_result_node = transform_node
 
-
     if transform_type == TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME:
         transducer_tracking_result_node.SetName(f"TT transducer-volume {photoscan_id}")
         transducer_tracking_result_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}","1")
@@ -229,7 +228,7 @@ def get_transducer_tracking_result_nodes_in_scene(
     """
 
     tt_result_nodes = [
-        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if t.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1" or t.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
+        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if is_transducer_tracking_result_node(t)
         ]
 
     if session_id is not None:
@@ -348,9 +347,7 @@ def set_transducer_tracking_approval_for_node(approval_state: bool, transform_no
         approval_state: new approval state to apply
         transform_node: vtkMRMLTransformNode
     """
-    if (transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") != "1" 
-        and transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") != "1"
-    ):
+    if not is_transducer_tracking_result_node(transform_node):
         raise ValueError("The specified transform node is a not a transducer tracking result node")
     transform_node.SetAttribute("TT:approvalStatus", "1" if approval_state else "0")
 
@@ -422,3 +419,13 @@ def clear_transducer_tracking_results(
 
     for node in nodes_to_remove:
         slicer.mrmlScene.RemoveNode(node)
+    
+def is_transducer_tracking_result_node(transform_node) -> bool:
+    """Returns True if the given node is a transducer tracking result node"""
+    if (
+        transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1" 
+        or transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
+        ):
+        return True
+    else:
+        False
