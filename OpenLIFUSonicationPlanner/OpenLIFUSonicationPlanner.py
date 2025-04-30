@@ -393,22 +393,21 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             raise RuntimeError("Cannot approve solution because there is no solution analysis.")
         analysis_openlifu = analysis.analysis
 
-        if any(
-            any(param_constraint.is_error(value) for value in getattr(analysis_openlifu, param)) # each param returns a list (each foci)
-            for param, param_constraint in analysis_openlifu.param_constraints.items() # if any params return an error
-        ):
+        # Get the analysis table with constraint flags
+        table = analysis_openlifu.to_table()
+
+        # Check for any errors in the table
+        if table['_error'].any():
             slicer.util.errorDisplay(
-                "The solution could not be approved because the solution analysis had values is outside its allowed constraints.",
+                "The solution could not be approved because the solution analysis had values outside its allowed constraints.",
                 "Solution not approved",
             )
             return
 
-        if any(
-            any(param_constraint.is_warning(value) for value in getattr(analysis_openlifu, param)) # each param returns a list (each foci)
-            for param, param_constraint in analysis_openlifu.param_constraints.items() # if any params return an warning
-        ):
+        # Check for any warnings in the table
+        if table['_warning'].any():
             if not slicer.util.confirmYesNoDisplay(
-                text=f"Warning: The solution analysis has values outside of recommended constraints. Are you sure you want to approve?",
+                text="Warning: The solution analysis has values outside of recommended constraints. Are you sure you want to approve?",
                 windowTitle="Solution approval warning",
             ):
                 return
