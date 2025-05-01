@@ -1877,30 +1877,28 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             self.remove_photocollection(photocollection_reference_number) 
         self.update_photocollections_affiliated_with_loaded_session()
 
-        # Check if there are any approved photoscans with approved transducer tracking results
+        # Check if there are any photoscans with approved transducer tracking results
         approved_photoscan_id = self.getParameterNode().loaded_session.get_transducer_tracking_approvals()
-        if not approved_photoscan_id:
-            return  # No approved photoscan ID, so we can stop here
+        if approved_photoscan_id:
+            approved_photoscan_id = approved_photoscan_id[0]
+            approved_tracking_result = None
 
-        approved_photoscan_id = approved_photoscan_id[0]
-        approved_tracking_result = None
+            for transducer_to_volume_node, _ in newly_added_tt_result_nodes:
+                current_photoscan_id = get_photoscan_id_from_transducer_tracking_result(transducer_to_volume_node)
+                if current_photoscan_id == approved_photoscan_id:
+                    if newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
+                        approved_tracking_result = transducer_to_volume_node
+                        break  # Found a match, no need to continue searching
 
-        for transducer_to_volume_node, _ in newly_added_tt_result_nodes:
-            current_photoscan_id = get_photoscan_id_from_transducer_tracking_result(transducer_to_volume_node)
-            if current_photoscan_id == approved_photoscan_id:
-                if newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
-                    approved_tracking_result = transducer_to_volume_node
-                    break  # Found a match, no need to continue searching
-
-        if approved_tracking_result:
-            newly_loaded_transducer.set_current_transform_to_match_transform_node(approved_tracking_result)
-        else:
-            # revoke transducer tracking approval
-            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
-            transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
-                photoscan_id=approved_photoscan_id,
-                reason="The transducer transform does not match the approved tracking result."
-            )
+            if approved_tracking_result:
+                newly_loaded_transducer.set_current_transform_to_match_transform_node(approved_tracking_result)
+            else:
+                # revoke transducer tracking approval
+                transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+                transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
+                    photoscan_id=approved_photoscan_id,
+                    reason="The transducer transform does not match the approved tracking result."
+                )
 
         self.session_loading_unloading_in_progress = False  
 
