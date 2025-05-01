@@ -428,10 +428,27 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateWorkflowControls()
 
     def onParameterNodeModified(self, caller, event) -> None:
+        # ---- Update the solution analysis ----
         if not self._updating_solution_analysis: # prevent recursive observer event
             self._updating_solution_analysis = True
             self.updateSolutionAnalysis()
             self._updating_solution_analysis = False
+
+        # ---- Revoke the solution approval in certain cases ----
+        if get_openlifu_data_parameter_node().loaded_solution is not None:
+            solution_is_approved = get_openlifu_data_parameter_node().loaded_solution.is_approved()
+            if solution_is_approved and not self.logic.solution_analysis_exists():
+                self.logic.toggle_solution_approval()
+                slicer.util.infoDisplay(
+                    text= "Solution approval has been revoked due there being no solution analysis.",
+                    windowTitle="Approval revoked"
+                )
+            elif solution_is_approved and self.logic.solution_analysis_has_errors():
+                self.logic.toggle_solution_approval()
+                slicer.util.infoDisplay(
+                    text= "Solution approval has been revoked due to errors in the solution analysis.",
+                    windowTitle="Approval revoked"
+                )
 
     def updateSolutionAnalysis(self) -> None:
         """Update the solution analysis widgets"""
