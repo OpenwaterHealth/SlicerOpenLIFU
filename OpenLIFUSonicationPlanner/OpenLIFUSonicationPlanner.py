@@ -309,9 +309,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
 
-    def onTargetModified(self):
-        self.deleteSolutionAndSolutionAnalysisIfAny(reason="The target was moved.")
-
     def onComputeSolutionClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
 

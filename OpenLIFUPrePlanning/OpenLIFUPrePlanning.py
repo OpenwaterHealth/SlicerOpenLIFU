@@ -306,7 +306,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             reason = "The target was modified."
             self.revokeApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
-            slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').onTargetModified()
+            slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
                         
     def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetPositionInputs()
@@ -316,7 +316,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             reason = "The target was modified."
             self.revokeApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
-            slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').onTargetModified()
+            slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
 
     def onLockModified(self, caller, event):
         self.updateLockButtonIcon()
