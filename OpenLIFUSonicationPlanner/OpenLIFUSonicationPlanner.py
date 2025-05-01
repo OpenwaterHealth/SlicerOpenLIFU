@@ -433,6 +433,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._updating_solution_analysis = True
             self.updateSolutionAnalysis()
             self._updating_solution_analysis = False
+        self.updateApproveButton()
 
         # ---- Revoke the solution approval in certain cases ----
         if get_openlifu_data_parameter_node().loaded_solution is not None:
