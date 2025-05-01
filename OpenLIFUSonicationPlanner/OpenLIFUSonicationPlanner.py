@@ -390,29 +390,24 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         if not solution.is_approved():
 
-            # Check constraints here (as this is GUI-level) and don't approve. It is
-            # assumed that information regarding which parameters are warnings and
-            # which are errors is displayed elsewhere, so we only notify of error or
-            # warnings in the values as according to the analysis.
-
-            analysis = self._parameterNode.solution_analysis
-            if analysis is None:
-                raise RuntimeError("Cannot approve solution because there is no solution analysis.")
-            analysis_openlifu = analysis.analysis
-
-            # Get the analysis table with constraint flags
-            table = analysis_openlifu.to_table()
-
-            # Check for any errors in the table
-            if table['_error'].any():
+            # Check if solution analysis exists, return if not
+            if not self.logic.solution_analysis_exists():
                 slicer.util.errorDisplay(
-                    "The solution could not be approved because its solution analysis has values outside its allowed constraints.",
+                    "The solution could not be approved because there is no solution analysis.",
                     "Solution not approved",
                 )
                 return
 
-            # Check for any warnings in the table
-            if table['_warning'].any():
+            # Check for errors in solution analysis, return if so
+            if self.logic.solution_analysis_has_errors():
+                slicer.util.errorDisplay(
+                    "The solution could not be approved because the solution analysis had values outside its allowed constraints.",
+                    "Solution not approved",
+                )
+                return
+
+            # Check for warnings in solution analysis and warn
+            if self.logic.solution_analysis_has_warnings():
                 if not slicer.util.confirmYesNoDisplay(
                     text="Warning: The solution analysis has values outside of recommended constraints. Are you sure you want to approve?",
                     windowTitle="Solution approval warning",
@@ -636,6 +631,64 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         if not displayNode:
             displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
         displayNode.SetVisibility(False)
+
+    def solution_analysis_exists(self) -> bool:
+        """
+        Check if a valid solution analysis exists.
+
+        Returns:
+            bool: True if both the solution_analysis and its internal analysis are present, False otherwise.
+        """
+        analysis = self.getParameterNode().solution_analysis
+        if analysis is None or analysis.analysis is None:
+            return False
+        else:
+            return True
+
+    def solution_analysis_has_warnings(self) -> bool:
+        """
+        Check whether the solution_analysis of the OpenLIFUSonicationPlanner parameter node 
+        has a warning status for any of the parameters.
+
+        Returns:
+            bool: True if any parameter has a warning flag, False otherwise.
+
+        Raises:
+            RuntimeError: If there is no solution analysis or analysis data available.
+        """
+        analysis = self.getParameterNode().solution_analysis
+        if analysis is None:
+            raise RuntimeError("Cannot check warnings because there is no solution analysis wrapper.")
+        
+        analysis_openlifu = analysis.analysis
+        if analysis_openlifu is None:
+            raise RuntimeError("Cannot check warnings because there is no solution analysis.")
+
+        table = analysis_openlifu.to_table()
+        return table['_warning'].any()
+
+
+    def solution_analysis_has_errors(self) -> bool:
+        """
+        Check whether the solution_analysis of the OpenLIFUSonicationPlanner parameter node 
+        has an error status for any of the parameters.
+
+        Returns:
+            bool: True if any parameter has an error flag, False otherwise.
+
+        Raises:
+            RuntimeError: If there is no solution analysis or analysis data available.
+        """
+        analysis = self.getParameterNode().solution_analysis
+        if analysis is None:
+            raise RuntimeError("Cannot check warnings because there is no solution analysis wrapper.")
+        
+        analysis_openlifu = analysis.analysis
+        if analysis_openlifu is None:
+            raise RuntimeError("Cannot check warnings because there is no solution analysis.")
+
+        table = analysis_openlifu.to_table()
+        return table['_error'].any()
 
     def toggle_solution_approval(self):
         """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
