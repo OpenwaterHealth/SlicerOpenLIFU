@@ -1805,7 +1805,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
         )
-        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
 
         # === Load protocol ===
 
@@ -1986,7 +1985,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         }
         
         newly_loaded_transducer = self.load_transducer_from_openlifu(transducer, transducer_abspaths_info)
-        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
 
     def load_transducer_from_openlifu(
             self,
@@ -2036,6 +2034,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix_units=transducer_matrix_units,
         )
         self.getParameterNode().loaded_transducers[transducer.id] = newly_loaded_transducer
+        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
         return newly_loaded_transducer
 
     def remove_transducer(self, transducer_id:str, clean_up_scene:bool = True) -> None:
