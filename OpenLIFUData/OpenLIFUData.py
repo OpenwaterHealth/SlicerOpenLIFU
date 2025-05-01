@@ -1906,6 +1906,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     # TODO: This should be a widget level function
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
+        slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').onTransducerTransformModified
+
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:
             # If its a transducer tracking node, revoke approval if approved
@@ -2034,7 +2036,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix_units=transducer_matrix_units,
         )
         self.getParameterNode().loaded_transducers[transducer.id] = newly_loaded_transducer
+
         newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
+
         return newly_loaded_transducer
 
     def remove_transducer(self, transducer_id:str, clean_up_scene:bool = True) -> None:
