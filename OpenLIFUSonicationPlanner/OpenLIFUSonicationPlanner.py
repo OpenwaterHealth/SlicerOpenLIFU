@@ -383,34 +383,41 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 )
 
     def onApproveClicked(self):
-        # Check constraints here (as this is GUI-level) and don't approve. It is
-        # assumed that information regarding which parameters are warnings and
-        # which are errors is displayed elsewhere, so we only notify of error or
-        # warnings in the values as according to the analysis.
+        data_parameter_node = get_openlifu_data_parameter_node()
+        solution = data_parameter_node.loaded_solution
+        if solution is None:
+            raise RuntimeError("Cannot approve/unapprove solution because there is no solution.")
 
-        analysis = self._parameterNode.solution_analysis
-        if analysis is None:
-            raise RuntimeError("Cannot approve solution because there is no solution analysis.")
-        analysis_openlifu = analysis.analysis
+        if not solution.is_approved():
 
-        # Get the analysis table with constraint flags
-        table = analysis_openlifu.to_table()
+            # Check constraints here (as this is GUI-level) and don't approve. It is
+            # assumed that information regarding which parameters are warnings and
+            # which are errors is displayed elsewhere, so we only notify of error or
+            # warnings in the values as according to the analysis.
 
-        # Check for any errors in the table
-        if table['_error'].any():
-            slicer.util.errorDisplay(
-                "The solution could not be approved because the solution analysis had values outside its allowed constraints.",
-                "Solution not approved",
-            )
-            return
+            analysis = self._parameterNode.solution_analysis
+            if analysis is None:
+                raise RuntimeError("Cannot approve solution because there is no solution analysis.")
+            analysis_openlifu = analysis.analysis
 
-        # Check for any warnings in the table
-        if table['_warning'].any():
-            if not slicer.util.confirmYesNoDisplay(
-                text="Warning: The solution analysis has values outside of recommended constraints. Are you sure you want to approve?",
-                windowTitle="Solution approval warning",
-            ):
+            # Get the analysis table with constraint flags
+            table = analysis_openlifu.to_table()
+
+            # Check for any errors in the table
+            if table['_error'].any():
+                slicer.util.errorDisplay(
+                    "The solution could not be approved because its solution analysis has values outside its allowed constraints.",
+                    "Solution not approved",
+                )
                 return
+
+            # Check for any warnings in the table
+            if table['_warning'].any():
+                if not slicer.util.confirmYesNoDisplay(
+                    text="Warning: The solution analysis has values outside of recommended constraints. Are you sure you want to approve?",
+                    windowTitle="Solution approval warning",
+                ):
+                    return
 
         with BusyCursor():
             self.logic.toggle_solution_approval()
