@@ -387,7 +387,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             else:
                 self.ui.approveButton.setText("Approve solution")
                 self.ui.approveButton.setToolTip(
-                    "Approve the sonicaiton solution"
+                    "Approve the sonication solution"
                 )
 
     def onApproveClicked(self):
