@@ -322,7 +322,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         else:
             self.ui.trackingApprovalWidget.show()
             self.ui.approveTransformButton.hide()
-            self.ui.approvalStatusLabel.text = ("A transducer tracking is currently approved for this photoscan."
+            self.ui.approvalStatusLabel.text = ("A transducer tracking is currently approved for this photoscan. "
             "To re-do or edit fiducial landmarks, navigate to the "
             "'Register photoscan to skin surface' page and revoke the existing approval.")
 
@@ -844,7 +844,7 @@ class TransducerTrackingWizard(qt.QWizard):
                  target: vtkMRMLMarkupsFiducialNode):
         super().__init__()
 
-        self._logic = OpenLIFUTransducerTrackerLogic()
+        self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerTracker')
         
         with BusyCursor():
 
@@ -1167,8 +1167,8 @@ class PhotoscanPreviewWizard(qt.QWizard):
     def __init__(self, photoscan : "openlifu.nav.photoscan.Photoscan"):
         super().__init__()
 
-        self.logic = OpenLIFUTransducerTrackerLogic()
-        self.photoscan = self.logic.load_openlifu_photoscan(photoscan)
+        self._logic = self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerTracker')
+        self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
         self.photoscan_approved: bool = self.photoscan.is_approved()
 
         self.setupViewNode()
@@ -1191,7 +1191,7 @@ class PhotoscanPreviewWizard(qt.QWizard):
         self.photoscan_approved = self.photoscanPreviewPage._photoscan_approved
 
         # Update the photoscan approval status in the underlying openlifu photoscan object
-        self.logic.update_photoscan_approval(
+        self._logic.update_photoscan_approval(
             photoscan = self.photoscan,
             approval_state = self.photoscan_approved)
 
