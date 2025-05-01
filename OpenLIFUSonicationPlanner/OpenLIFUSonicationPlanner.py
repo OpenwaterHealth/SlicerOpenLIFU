@@ -369,6 +369,14 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.approveButton.setEnabled(False)
             self.ui.approveButton.setToolTip("There is no active solution to write the approval")
             self.ui.approveButton.setText("Approve solution")
+        elif not self.logic.solution_analysis_exists():
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setToolTip("The solution cannot be approved because there is no solution analysis.")
+            self.ui.approveButton.setText("Approve solution")
+        elif self.logic.solution_analysis_has_errors():
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setToolTip("The solution cannot be approved because the solution analysis has errors.")
+            self.ui.approveButton.setText("Approve solution")
         else:
             self.ui.approveButton.setEnabled(True)
             if data_parameter_node.loaded_solution.is_approved():
