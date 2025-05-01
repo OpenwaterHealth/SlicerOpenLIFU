@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     import openlifu
     import openlifu.nav.photoscan
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
-    from OpenLIFUSonicationPlanner.OpenLIFUSonicationPlanner import OpenLIFUSonicationPlannerLogic
 
 #
 # OpenLIFUData
@@ -1908,15 +1907,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     # TODO: This should be a widget level function
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        sonication_planner_logic : "OpenLIFUSonicationPlannerLogic" = slicer.util.getModuleLogic('OpenLIFUSonicationPlanner')
-        if sonication_planner_logic.solution_analysis_exists():
-            data_logic.clear_solution(clean_up_scene=False)
-            self._parameterNode.solution_analysis = None
-            slicer.util.infoDisplay(
-                text= "Computed solution has been deleted due to moving the transducer.",
-                windowTitle="Solution deleted"
-            )
+        slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
 
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:
