@@ -309,6 +309,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
 
+    def onTransducerTransformModified(self, transducer):
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        if self.logic.solution_analysis_exists():
+            data_logic.clear_solution(clean_up_scene=False)
+            self._parameterNode.solution_analysis = None
+            slicer.util.infoDisplay(
+                text= "Computed solution has been deleted due to moving the transducer.",
+                windowTitle="Solution deleted"
+            )
+
     def onComputeSolutionClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
 
