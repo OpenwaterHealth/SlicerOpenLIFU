@@ -104,6 +104,14 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             for row in range(tableWidget.rowCount):
                 item = tableWidget.item(row, 0)
                 item.setFlags(~qt.Qt.ItemIsEditable | qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+        
+        #  Adjust table height to fit the contents
+        tableWidget.resizeRowsToContents()
+        total_height = tableWidget.horizontalHeader().height  # Account for header
+        for row in range(tableWidget.rowCount):
+            total_height += tableWidget.rowHeight(row)
+        tableWidget.setFixedHeight(total_height)
+        tableWidget.setSizePolicy(tableWidget.sizePolicy.horizontalPolicy(), qt.QSizePolicy.Fixed)
 
     def markupTableWidgetSelected(self, item):
         if not self.placingLandmarks:

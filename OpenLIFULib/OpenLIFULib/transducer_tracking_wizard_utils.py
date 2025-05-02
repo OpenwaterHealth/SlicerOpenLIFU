@@ -16,14 +16,20 @@ def initialize_wizard_ui(wizard: qt.QWizard):
     return slicer.util.childWidgetVariables(uiWidget)
 
 def set_threeD_view_widget(ui):
-     
+
     viewWidget = slicer.qMRMLThreeDWidget()
     viewWidget.setMRMLScene(slicer.mrmlScene)
     viewWidget.setMinimumHeight(200)
+    viewWidget.setSizePolicy(viewWidget.sizePolicy.horizontalPolicy(), qt.QWidget().sizePolicy.Expanding)
+
+    parent = ui.viewWidgetPlaceholder.parentWidget()
+    layout = parent.layout()
+    index = layout.indexOf(ui.viewWidgetPlaceholder)
 
     # Add the threeD view widget to specified ui
     # In the layout, the UI should have the same name
     replace_widget(ui.viewWidgetPlaceholder, viewWidget, ui)
+    layout.setStretch(index, 14) # Sets the stretch factor to 14/70% 
 
     return viewWidget
 
