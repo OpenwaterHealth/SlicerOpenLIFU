@@ -49,7 +49,7 @@ from OpenLIFULib.transducer_tracking_results import (
     get_photoscan_id_from_transducer_tracking_result,
     is_transducer_tracking_result_node,
 )
-from OpenLIFULib.user_account_mode_util import UserAccountBanner
+from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state, UserAccountBanner
 from OpenLIFULib.util import (
     BusyCursor,
     create_noneditable_QStandardItem,
@@ -990,8 +990,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             raise RuntimeError("Cannot create session because there is no database connection")
 
         db_transducer_ids = get_cur_db().get_transducer_ids()
-        db_protocol_ids = get_cur_db().get_protocol_ids()
         db_volume_ids = get_cur_db().get_volume_ids(subject_id)
+
+        # ---- Don't show unallowed protocols; requires loading protocols ----
+        db_protocol_ids = get_cur_db().get_protocol_ids()
+        protocols: List["openlifu.plan.Protocol"] = get_cur_db().load_all_protocols()
+
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No filtering needed
+        else:
+            # Filter protocol IDs where any user role is in the protocol's allowed roles
+            db_protocol_ids = [
+                protocol.id for protocol in protocols
+                if any(role in protocol.allowed_roles for role in get_current_user().roles)
+            ]
+        # --------------------------------------------------------------------
+
         sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
         returncode, session_parameters = sessiondlg.customexec_()
         if not returncode:
