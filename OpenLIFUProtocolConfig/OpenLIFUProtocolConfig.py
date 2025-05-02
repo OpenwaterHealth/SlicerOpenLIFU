@@ -398,31 +398,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 protocol_text = f"{protocol_w.protocol.name} (ID: {protocol_id})"
                 if protocol_id in self.logic.cached_protocols:
                     protocol_text = "[  +  ]  " + protocol_text
-
-                if (
-                    not get_user_account_mode_state()
-                    or 'admin' in get_current_user().roles
-                    or any(
-                        user_role in protocol_w.protocol.allowed_roles
-                        for user_role in get_current_user().roles
-                    )
-                ):
-                    self.ui.protocolSelector.addItem(protocol_text, protocol_w.protocol)
+                self.ui.protocolSelector.addItem(protocol_text, protocol_w.protocol)
                     
             self.setProtocolEditButtonEnabled(True)
 
         for protocol_id in self.logic.new_protocol_ids:
             protocol = self.logic.cached_protocols[protocol_id]
-
-            if (
-                not get_user_account_mode_state()
-                or 'admin' in get_current_user().roles
-                or any(
-                    user_role in protocol.allowed_roles
-                    for user_role in get_current_user().roles
-                )
-            ):
-                self.ui.protocolSelector.addItem(f"[  +  ]  {protocol.name} (ID: {protocol.id})", protocol)
+            self.ui.protocolSelector.addItem(f"[  +  ]  {protocol.name} (ID: {protocol.id})", protocol)
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
