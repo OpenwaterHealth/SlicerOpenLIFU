@@ -934,8 +934,20 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def on_item_double_clicked(self, index : qt.QModelIndex):
 
         if self.itemIsSession(index):
-            _, session_id = self.getSubjectSessionAtIndex(index)
+            session_name, session_id = self.getSubjectSessionAtIndex(index)
             _, subject_id = self.getSubjectSessionAtIndex(index.parent())
+
+            # ---- Prevent loading sessions with unallowed protocols ----
+            if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+                pass  # No enforcement needed
+            else:
+                session_info = get_cur_db().load_session_info(subject_id, session_id)
+                protocol: openlifu.plan.Protocol = get_cur_db().load_protocol(session_info["protocol_id"]) 
+                if not any(role in protocol.allowed_roles for role in get_current_user().roles):
+                    slicer.util.errorDisplay(f"Could not load the session '{session_name}' ({session_id}) because it uses a protocol that you are not allowed to use.")
+                    return
+            # -----------------------------------------------------------
+
             self.logic.load_session(subject_id, session_id)
 
         else: # If the item was a subject:
