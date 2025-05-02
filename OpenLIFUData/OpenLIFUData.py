@@ -944,7 +944,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 session_info = get_cur_db().load_session_info(subject_id, session_id)
                 protocol: openlifu.plan.Protocol = get_cur_db().load_protocol(session_info["protocol_id"]) 
                 if not any(role in protocol.allowed_roles for role in get_current_user().roles):
-                    slicer.util.errorDisplay(f"Could not load the session '{session_name}' ({session_id}) because it uses a protocol that you are not allowed to use.")
+                    slicer.util.errorDisplay(
+                        f"Could not load the session '{session_name}' ({session_id}) because it uses a protocol that does not allow any of the logged in user's roles."
+                    )
                     return
             # -----------------------------------------------------------
 
