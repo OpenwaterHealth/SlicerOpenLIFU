@@ -301,6 +301,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onPointAddedOrRemoved(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         self.updateTargetsListView()
         self.updateInputOptions()
+        self.updateWorkflowControls()
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if not data_logic.session_loading_unloading_in_progress:
             reason = "The target was modified."
