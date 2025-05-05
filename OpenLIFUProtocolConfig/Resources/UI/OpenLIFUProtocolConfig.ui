@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>669</width>
-    <height>1408</height>
+    <height>1499</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -91,6 +91,274 @@
        <number>0</number>
       </property>
       <item>
+       <widget class="QScrollArea" name="scrollArea">
+        <property name="widgetResizable">
+         <bool>true</bool>
+        </property>
+        <widget class="QWidget" name="scrollAreaWidgetContents">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>0</y>
+           <width>616</width>
+           <height>1063</height>
+          </rect>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_2">
+          <item>
+           <widget class="QGroupBox" name="protocolEditorSectionGroupBox">
+            <property name="title">
+             <string>Protocol editor</string>
+            </property>
+            <layout class="QFormLayout" name="protocolEditorSectionLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="protocolNameLabel">
+               <property name="toolTip">
+                <string>The name of the protocol</string>
+               </property>
+               <property name="text">
+                <string>Name</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="protocolNameLineEdit">
+               <property name="toolTip">
+                <string>The name of the protocol</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="protocolIdLabel">
+               <property name="toolTip">
+                <string>The unique identifier of the protocol</string>
+               </property>
+               <property name="text">
+                <string>Protocol ID</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLineEdit" name="protocolIdLineEdit">
+               <property name="toolTip">
+                <string>The unique identifier of the protocol</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="protocolDescriptionLabel">
+               <property name="toolTip">
+                <string>A more detailed description of the protocol</string>
+               </property>
+               <property name="text">
+                <string>Description</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QPlainTextEdit" name="protocolDescriptionTextEdit">
+               <property name="toolTip">
+                <string>A more detailed description of the protocol</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="allowedRolesLabel">
+            <property name="text">
+             <string>Allowed Roles</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="allowedRolesWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_18">
+             <item>
+              <widget class="QLabel" name="allowedRolesWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUAllowedRolesWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="pulseDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_3">
+             <item>
+              <widget class="QLabel" name="pulseDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUPulseDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="sequenceDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_4">
+             <item>
+              <widget class="QLabel" name="sequenceDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUSequenceDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="abstractFocalPatternDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_8">
+             <item>
+              <widget class="QLabel" name="abstractFocalBatternDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUAbstractFocalPatternDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="simSetupDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_7">
+             <item>
+              <widget class="QLabel" name="simSetupDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUSimSetupDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="abstractDelayMethodDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_9">
+             <item>
+              <widget class="QLabel" name="abstractDelayMethodDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUAbstractDelayMethodDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="abstractApodizationMethodDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_10">
+             <item>
+              <widget class="QLabel" name="abstractApodizationMethodDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUAbstractApodizationMethodDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="segmentationMethodDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_13">
+             <item>
+              <widget class="QLabel" name="segmentationMethodDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUSegmentationMethodDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="parameterConstraintsLabel">
+            <property name="text">
+             <string>Parameter Constraints</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="parameterConstraintsWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_14">
+             <item>
+              <widget class="QLabel" name="parameterConstraintsWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUParameterConstraintsWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="targetConstraintsLabel">
+            <property name="text">
+             <string>Target Constraints</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="targetConstraintsWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_15">
+             <item>
+              <widget class="QLabel" name="targetConstraintsWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUTargetConstraintsWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="solutionAnalysisOptionsDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_16">
+             <item>
+              <widget class="QLabel" name="solutionAnalysisOptionsDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUSolutionAnalysisOptionsDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="virtualFitOptionsDefinitionWidgetPlaceholder" native="true">
+            <layout class="QVBoxLayout" name="verticalLayout_17">
+             <item>
+              <widget class="QLabel" name="virtualFitOptionsDefinitionWidgetPlaceholderLabel">
+               <property name="text">
+                <string>Placeholder for an
+OpenLIFUVirtualFitOptionsDefinitionWidget</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="createNewProtocolButton">
         <property name="toolTip">
          <string>Create a new openlifu protocol</string>
@@ -98,255 +366,6 @@
         <property name="text">
          <string>Create New Protocol</string>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="protocolEditorSectionGroupBox">
-        <property name="title">
-         <string>Protocol editor</string>
-        </property>
-        <layout class="QFormLayout" name="protocolEditorSectionLayout">
-         <item row="0" column="0">
-          <widget class="QLabel" name="protocolNameLabel">
-           <property name="toolTip">
-            <string>The name of the protocol</string>
-           </property>
-           <property name="text">
-            <string>Name</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QLineEdit" name="protocolNameLineEdit">
-           <property name="toolTip">
-            <string>The name of the protocol</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="protocolIdLabel">
-           <property name="toolTip">
-            <string>The unique identifier of the protocol</string>
-           </property>
-           <property name="text">
-            <string>Protocol ID</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QLineEdit" name="protocolIdLineEdit">
-           <property name="toolTip">
-            <string>The unique identifier of the protocol</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="protocolDescriptionLabel">
-           <property name="toolTip">
-            <string>A more detailed description of the protocol</string>
-           </property>
-           <property name="text">
-            <string>Description</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QPlainTextEdit" name="protocolDescriptionTextEdit">
-           <property name="toolTip">
-            <string>A more detailed description of the protocol</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="allowedRolesLabel">
-        <property name="text">
-         <string>Allowed Roles</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="allowedRolesWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_18">
-         <item>
-          <widget class="QLabel" name="allowedRolesWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUAllowedRolesWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="pulseDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_3">
-         <item>
-          <widget class="QLabel" name="pulseDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUPulseDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="sequenceDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_4">
-         <item>
-          <widget class="QLabel" name="sequenceDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUSequenceDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="abstractFocalPatternDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_8">
-         <item>
-          <widget class="QLabel" name="abstractFocalBatternDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUAbstractFocalPatternDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="simSetupDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_7">
-         <item>
-          <widget class="QLabel" name="simSetupDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUSimSetupDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="abstractDelayMethodDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_9">
-         <item>
-          <widget class="QLabel" name="abstractDelayMethodDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUAbstractDelayMethodDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="abstractApodizationMethodDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_10">
-         <item>
-          <widget class="QLabel" name="abstractApodizationMethodDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUAbstractApodizationMethodDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="segmentationMethodDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_13">
-         <item>
-          <widget class="QLabel" name="segmentationMethodDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUSegmentationMethodDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="parameterConstraintsLabel">
-        <property name="text">
-         <string>Parameter Constraints</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="parameterConstraintsWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_14">
-         <item>
-          <widget class="QLabel" name="parameterConstraintsWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUParameterConstraintsWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="targetConstraintsLabel">
-        <property name="text">
-         <string>Target Constraints</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="targetConstraintsWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_15">
-         <item>
-          <widget class="QLabel" name="targetConstraintsWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUTargetConstraintsWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="solutionAnalysisOptionsDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_16">
-         <item>
-          <widget class="QLabel" name="solutionAnalysisOptionsDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUSolutionAnalysisOptionsDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="virtualFitOptionsDefinitionWidgetPlaceholder" native="true">
-        <layout class="QVBoxLayout" name="verticalLayout_17">
-         <item>
-          <widget class="QLabel" name="virtualFitOptionsDefinitionWidgetPlaceholderLabel">
-           <property name="text">
-            <string>Placeholder for an
-OpenLIFUVirtualFitOptionsDefinitionWidget</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
        </widget>
       </item>
       <item>
@@ -393,6 +412,19 @@ OpenLIFUVirtualFitOptionsDefinitionWidget</string>
       </item>
      </layout>
     </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>
