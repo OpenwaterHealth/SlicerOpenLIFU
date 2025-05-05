@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>548</width>
-    <height>489</height>
+    <height>539</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -71,24 +71,24 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="startPhotoscanGenerationButton">
+            <widget class="QPushButton" name="importPhotocollectionFromDiskButton">
+             <property name="toolTip">
+              <string>Import a photocollection from a directory of photos on disk</string>
+             </property>
              <property name="text">
-              <string>Start Photoscan Generation</string>
+              <string>Import Photocollection From Disk</string>
+             </property>
+             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+              <bool>true</bool>
              </property>
             </widget>
            </item>
           </layout>
          </item>
          <item>
-          <widget class="QPushButton" name="importPhotocollectionFromDiskButton">
-           <property name="toolTip">
-            <string>Import a photocollection from a directory of photos on disk</string>
-           </property>
+          <widget class="QPushButton" name="startPhotoscanGenerationButton">
            <property name="text">
-            <string>Import Photocollection From Disk</string>
-           </property>
-           <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-            <bool>true</bool>
+            <string>Start Photoscan Generation</string>
            </property>
           </widget>
          </item>
