@@ -159,6 +159,7 @@ def replace_widget(old_widget: qt.QWidget, new_widget: qt.QWidget, ui_object=Non
     """
     parent = old_widget.parentWidget()
     layout = parent.layout()
+    ui_attrs_to_delete = []
 
     if ui_object is not None:
         ui_attrs_to_delete = [
