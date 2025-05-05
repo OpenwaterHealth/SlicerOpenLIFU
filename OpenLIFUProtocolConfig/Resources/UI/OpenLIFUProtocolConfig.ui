@@ -274,13 +274,13 @@ OpenLIFUAbstractApodizationMethodDefinitionWidget</string>
            </widget>
           </item>
           <item>
-           <widget class="QWidget" name="segmentationMethodDefinitionWidgetPlaceholder" native="true">
+           <widget class="QWidget" name="abstractSegmentationMethodDefinitionWidgetPlaceholder" native="true">
             <layout class="QVBoxLayout" name="verticalLayout_13">
              <item>
-              <widget class="QLabel" name="segmentationMethodDefinitionWidgetPlaceholderLabel">
+              <widget class="QLabel" name="abstractSegmentationMethodDefinitionWidgetPlaceholderLabel">
                <property name="text">
                 <string>Placeholder for an
-OpenLIFUSegmentationMethodDefinitionWidget</string>
+OpenLIFUAbstractSegmentationMethodDefinitionWidget</string>
                </property>
               </widget>
              </item>
