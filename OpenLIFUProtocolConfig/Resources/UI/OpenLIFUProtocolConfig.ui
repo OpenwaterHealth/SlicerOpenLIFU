@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>669</width>
-    <height>1499</height>
+    <width>803</width>
+    <height>1257</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="protocolConfigLayout">
@@ -100,7 +100,7 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>616</width>
+           <width>750</width>
            <height>1063</height>
           </rect>
          </property>
@@ -359,19 +359,19 @@ OpenLIFUVirtualFitOptionsDefinitionWidget</string>
        </widget>
       </item>
       <item>
+       <widget class="QLabel" name="saveStateLabel">
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="createNewProtocolButton">
         <property name="toolTip">
          <string>Create a new openlifu protocol</string>
         </property>
         <property name="text">
          <string>Create New Protocol</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="saveStateLabel">
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
         </property>
        </widget>
       </item>
