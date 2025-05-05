@@ -236,7 +236,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
         self.user_account_banner.visible = False
 
-        self.allowed_roles_widget = ListTableWidget(parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), object_name="Role", object_type=str)
+        self.allowed_roles_widget = ListTableWidget(parent=self.ui.allowedRolesWidgetPlaceholder.parentWidget(), object_name="Role", object_type=str)
         replace_widget(self.ui.allowedRolesWidgetPlaceholder, self.allowed_roles_widget, self.ui)
 
         self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
