@@ -1,6 +1,7 @@
 # Standard library imports
 from enum import Enum
 from pathlib import Path
+import types
 from typing import (
     List,
     Optional,
@@ -256,8 +257,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.abstract_apodization_method_definition_widget = OpenLIFUAbstractApodizationMethodDefinitionFormWidget()
         replace_widget(self.ui.abstractApodizationMethodDefinitionWidgetPlaceholder, self.abstract_apodization_method_definition_widget, self.ui)
 
-        self.segmentation_method_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().seg.SegmentationMethod, parent=self.ui.segmentationMethodDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Segmentation Method")
-        replace_widget(self.ui.segmentationMethodDefinitionWidgetPlaceholder, self.segmentation_method_definition_widget, self.ui)
+        self.abstract_segmentation_method_definition_widget = OpenLIFUAbstractSegmentationMethodDefinitionFormWidget()
+        replace_widget(self.ui.abstractSegmentationMethodDefinitionWidgetPlaceholder, self.abstract_segmentation_method_definition_widget, self.ui)
 
         self.parameter_constraints_widget = OpenLIFUParameterConstraintsWidget()
         replace_widget(self.ui.parameterConstraintsWidgetPlaceholder, self.parameter_constraints_widget, self.ui)
@@ -300,7 +301,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_delay_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.abstract_apodization_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.segmentation_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+        self.abstract_segmentation_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
         self.parameter_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
         self.target_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
         self.solution_analysis_options_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
@@ -665,7 +666,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
         self.abstract_delay_method_definition_widget.update_form_from_class(protocol.delay_method)
         self.abstract_apodization_method_definition_widget.update_form_from_class(protocol.apod_method)
-        self.segmentation_method_definition_widget.update_form_from_class(protocol.seg_method)
+        self.abstract_segmentation_method_definition_widget.update_form_from_class(protocol.seg_method)
         self.parameter_constraints_widget.from_dict(protocol.param_constraints)
         self.target_constraints_widget.from_list(protocol.target_constraints)
         self.solution_analysis_options_definition_widget.update_form_from_class(protocol.analysis_options)
@@ -717,7 +718,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         sim_setup = self.sim_setup_definition_widget.get_form_as_class(post_init=post_init)
         delay_method = self.abstract_delay_method_definition_widget.get_form_as_class(post_init=post_init)
         apodization_method = self.abstract_apodization_method_definition_widget.get_form_as_class(post_init=post_init)
-        segmentation_method = self.segmentation_method_definition_widget.get_form_as_class(post_init=post_init)
+        segmentation_method = self.abstract_segmentation_method_definition_widget.get_form_as_class(post_init=post_init)
         parameter_constraints = self.parameter_constraints_widget.to_dict()
         target_constraints = self.target_constraints_widget.to_list()
         solution_analysis_options = self.solution_analysis_options_definition_widget.get_form_as_class(post_init=post_init)
@@ -762,7 +763,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.sim_setup_definition_widget.setEnabled(enabled)
         self.abstract_delay_method_definition_widget.setEnabled(enabled)
         self.abstract_apodization_method_definition_widget.setEnabled(enabled)
-        self.segmentation_method_definition_widget.setEnabled(enabled)
+        self.abstract_segmentation_method_definition_widget.setEnabled(enabled)
         self.parameter_constraints_widget.setEnabled(enabled)
         self.target_constraints_widget.setEnabled(enabled)
         self.solution_analysis_options_definition_widget.setEnabled(enabled)
@@ -951,7 +952,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def get_default_segmentation_method(cls):
-        return openlifu_lz().seg.seg_methods.Water()
+        return openlifu_lz().seg.seg_methods.UniformWater()
 
     @classmethod
     def get_default_parameter_constraints(cls):
@@ -1085,6 +1086,81 @@ class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMult
         # Modify the default and range for max_angle
         max_angle_spinbox = maxangle_definition_form_widget._field_widgets['max_angle']
         maxangle_definition_form_widget.modify_widget_spinbox(max_angle_spinbox, default_value=30, min_value=0, max_value=90)
+
+def _get_form_as_segmentation_method(self):
+    """
+    Custom replacement for get_form_as_class, used to override
+    widgets inside the segmentation method form.
+    """
+    d = self.get_form_as_dict()
+
+    # Remove ref_material if class is UniformWater or UniformTissue
+    if self._cls.__name__ in ["UniformWater", "UniformTissue"]:
+        d.pop("ref_material")
+
+    return self._cls(**d)
+
+class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
+
+
+    def __init__(self):
+        """
+        Overwrite of __init__ that mimics most of super()'s behavior, except
+        accounts for the unique inheritance structure of SegmentationMethod.
+        """
+        # ---- Begin constructor overwrite ----
+
+        cls_list = [openlifu_lz().seg.seg_methods.UniformSegmentation, openlifu_lz().seg.seg_methods.UniformTissue, openlifu_lz().seg.seg_methods.UniformWater]
+        is_collapsible = False
+        parent: Optional[qt.QWidget] = None
+        collapsible_title = "Segmentation Method"
+        custom_abc_title = "Segmentation Method"
+
+        self.cls_list = cls_list
+        self.base_class_name = cls_list[0].__bases__[0].__name__
+        self.custom_abc_title = self.base_class_name if custom_abc_title is None else custom_abc_title
+
+        qt.QWidget.__init__(self, parent)
+
+        top_level_layout = qt.QFormLayout(self)
+
+        self.selector = qt.QComboBox()
+        self.forms = qt.QStackedWidget()
+
+        for cls in cls_list:
+            self.selector.addItem(cls.__name__)
+            widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls, parent, is_collapsible, collapsible_title)
+            # Override get_form_as_class
+            widget.get_form_as_class = types.MethodType(_get_form_as_segmentation_method, widget)
+            self.forms.addWidget(widget)
+
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} type"), self.selector) 
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} options"), self.forms) 
+
+        # Connect combo box to setting the widget. Assumes indices match
+        self.selector.currentIndexChanged.connect(self._on_index_changed)
+
+        # ---- Configure selector behavior ----
+
+        # Select UniformWater as the default
+        self.forms.setCurrentIndex(2)
+
+        # ---- Configure UniformTissue editor ----
+
+        uniformtissue_definition_form_widget = self.forms.widget(1)
+
+        # Disable editing the reference material
+        ref_material_line_edit = uniformtissue_definition_form_widget._field_widgets['ref_material']
+        ref_material_line_edit.setEnabled(False)
+
+        # ---- Configure UniformWater editor ----
+
+        uniformwater_definition_form_widget = self.forms.widget(2)
+
+        # Disable editing the reference material
+        ref_material_line_edit = uniformwater_definition_form_widget._field_widgets['ref_material']
+        ref_material_line_edit.setEnabled(False)
+
 
 class OpenLIFUParameterConstraintsWidget(DictTableWidget):
 
