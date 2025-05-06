@@ -43,7 +43,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>1</number>
+         <number>3</number>
         </property>
         <widget class="QWidget" name="photoscanPreview">
          <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -205,9 +205,16 @@
               </widget>
              </item>
              <item>
-              <widget class="QPushButton" name="runPhotoscanVolumeRegistration">
+              <widget class="QPushButton" name="runICPRegistrationPV">
                <property name="text">
                 <string>Run ICP-based registration fine-tuning</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="enableManualPVRegistration">
+               <property name="text">
+                <string>Enable manual transform interaction </string>
                </property>
               </widget>
              </item>
