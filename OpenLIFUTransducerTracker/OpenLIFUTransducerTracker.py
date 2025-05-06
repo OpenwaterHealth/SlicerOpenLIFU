@@ -515,6 +515,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node
             and self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         if self.has_facial_landmarks:
+            self.ui.initializePVRegistration.enabled = True
             if self.photoscan_to_volume_transform_node:
                 self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
                 self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration between the photoscan mesh and skin surface.")
