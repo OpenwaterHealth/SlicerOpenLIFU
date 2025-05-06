@@ -426,10 +426,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if protocol.id in self.logic.cached_protocols:
             cached_protocol = self.logic.cached_protocols[protocol.id]
             self.updateProtocolDisplayFromProtocol(cached_protocol)
+            self.ui.scrollArea.verticalScrollBar().setValue(0)
             self.setProtocolEditorEnabled(True)
             self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
         else:
             self.updateProtocolDisplayFromProtocol(protocol)
+            self.ui.scrollArea.verticalScrollBar().setValue(0)
             self.setProtocolEditorEnabled(False)
             if self._is_saving_changes:
                 self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
@@ -450,6 +452,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         protocol.id = unique_default_id
 
         self.updateProtocolDisplayFromProtocol(protocol)
+        self.ui.scrollArea.verticalScrollBar().setValue(0)
 
         self._cur_protocol_id = protocol.id
         self.logic.cache_protocol(self._cur_protocol_id, protocol)
