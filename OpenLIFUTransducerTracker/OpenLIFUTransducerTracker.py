@@ -473,7 +473,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.dialogControls.setCurrentIndex(3)
 
         self.ui.approveTransformButton.clicked.connect(self.onTransformApproveClicked)
-        self.ui.runPhotoscanVolumeRegistration.clicked.connect(self.onRunRegistrationClicked)
+        self.ui.enableManualPVRegistration.clicked.connect(self.onManualRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.runningRegistration = False
 
@@ -528,7 +528,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.photoscan_to_volume_transform_node:
             self.setupTransformNode()
         else:
-            self.ui.runPhotoscanVolumeRegistration.enabled = False
+            self.ui.enableManualPVRegistration.enabled = False
             self.ui.approveTransformButton.enabled = False
             self.transform_approved = False
         
@@ -624,7 +624,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.scalingTransformMRMLSliderWidget.value = 1
 
         # Enable approval and registration fine-tuning buttons
-        self.ui.runPhotoscanVolumeRegistration.enabled = True
+        self.ui.enableManualPVRegistration.enabled = True
         self.ui.approveTransformButton.enabled = True
 
     def setupTransformNode(self):
@@ -653,15 +653,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         # Add observer after setup
         self.photoscan_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
         
-    def onRunRegistrationClicked(self):
+    def onManualRegistrationClicked(self):
         """ This is a temporary implementation that allows the user to manually edit the photoscan-volume transform. In the 
         future, ICP registration will be integrated here. """
         if not self.photoscan_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
-    
-            self.ui.ICPPlaceholderLabel.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
-            "Use the interaction handles to manually align the photoscan and volume mesh." \
-            "You can click the run button again to remove the interaction handles."
-            self.ui.ICPPlaceholderLabel.setProperty("styleSheet", "color: red;")
+
+            self.ui.enableManualPVRegistration.text = "Disable manual transform interaction"
 
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
@@ -674,7 +671,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.scalingTransformWidget.show()
 
         else:
-            self.ui.ICPPlaceholderLabel.text = ""
+            self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
             self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
