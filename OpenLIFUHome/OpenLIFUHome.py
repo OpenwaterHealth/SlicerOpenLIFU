@@ -267,7 +267,6 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
 # OpenLIFUHomeTest
 #
 
-
 class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
     """
     This is the test case for your scripted module.
@@ -282,3 +281,15 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
+        self.test_openlifu_workflow()
+
+    def test_openlifu_workflow(self):
+        slicer.util.getModuleTest("OpenLIFUDatabase").runTest()
+        slicer.util.getModuleTest("OpenLIFULogin").runTest()
+        slicer.util.getModuleTest("OpenLIFUData").runTest()
+        slicer.util.getModuleTest("OpenLIFUProtocolConfig").runTest()
+        slicer.util.getModuleTest("OpenLIFUPrePlanning").runTest()
+        slicer.util.getModuleTest("OpenLIFUTransducerTracker").runTest()
+        slicer.util.getModuleTest("OpenLIFUSonicationPlanner").runTest()
+        slicer.util.getModuleTest("OpenLIFUSonicationControl").runTest()
+

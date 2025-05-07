@@ -386,3 +386,28 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         else:
             for path in copied_paths:
                 os.chmod(path, 0o644 if path.is_file() else 0o755)
+#
+# OpenLIFUDatabaseTest
+#
+
+class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
+    """
+    This is the test case for your scripted module.
+    Uses ScriptedLoadableModuleTest base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+
+    def setUp(self):
+        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
+        slicer.mrmlScene.Clear()
+
+    def runTest(self):
+        """Run as few or as many tests as needed here."""
+        for test in [
+            self.test_stuff
+        ]:
+            self.setUp()
+            test()
+
+    def test_stuff(self):
+        return 0
