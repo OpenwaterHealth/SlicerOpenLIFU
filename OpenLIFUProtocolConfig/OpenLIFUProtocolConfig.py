@@ -482,8 +482,14 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onSaveProtocolToFileClicked(self, checked:bool) -> None:
+        # Try getting entered protocol object from GUI. If it fails, print an error.
+        try:
+            protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}")
+            return
+
         initial_dir = slicer.app.defaultScenePath
-        protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI()
 
         safe_protocol_id = "".join(c if c.isalnum() or c in (' ', '-', '_') else "_" for c in protocol.id)
 
@@ -514,7 +520,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
-        protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI()
+        # Try getting entered protocol object from GUI. If it fails, print an error.
+        try:
+            protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}")
+            return
 
         if protocol.id == "":
             slicer.util.errorDisplay("You cannot save a protocol without entering in a Protocol ID.")
