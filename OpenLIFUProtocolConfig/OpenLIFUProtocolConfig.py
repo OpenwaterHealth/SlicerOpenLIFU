@@ -343,7 +343,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # Cache a WIP (other modules might load one)
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
@@ -412,7 +412,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def onProtocolSelectorIndexChanged(self):
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         protocol = self.ui.protocolSelector.currentData
@@ -566,7 +566,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # You could load a non-cached protocol if you edit one, don't change
         # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         qsettings = qt.QSettings()
@@ -593,7 +593,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # You could load a non-cached protocol if you edit one, don't change
         # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         if not get_cur_db():
