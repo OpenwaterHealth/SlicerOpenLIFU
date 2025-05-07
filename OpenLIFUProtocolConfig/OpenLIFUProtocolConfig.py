@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import (
     List,
     Optional,
-    Tuple,
     TYPE_CHECKING,
 )
 
@@ -42,7 +41,6 @@ from OpenLIFULib.util import (
 # but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
-    import openlifu.db
 
 #
 # OpenLIFUProtocolConfig
