@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>633</width>
-    <height>599</height>
+    <width>635</width>
+    <height>610</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -192,7 +192,7 @@
         <widget class="QWidget" name="PhotoscanVolumeTracking">
          <layout class="QVBoxLayout" name="verticalLayout_5">
           <item>
-           <widget class="QGroupBox" name="groupBox_3">
+           <widget class="QGroupBox" name="automatedRegistration">
             <property name="title">
              <string/>
             </property>
@@ -211,10 +211,22 @@
                </property>
               </widget>
              </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleGroupBox" name="ManualRegistrationGroupBox">
+            <property name="title">
+             <string>Manual registration refinement</string>
+            </property>
+            <property name="collapsed">
+             <bool>true</bool>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_9">
              <item>
               <widget class="QPushButton" name="enableManualPVRegistration">
                <property name="text">
-                <string>Enable manual transform interaction </string>
+                <string>Enable interaction handles</string>
                </property>
               </widget>
              </item>
@@ -249,29 +261,6 @@
                 </item>
                </layout>
               </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="ICPPlaceholderLabel">
-               <property name="text">
-                <string/>
-               </property>
-               <property name="wordWrap">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="verticalSpacer_6">
-               <property name="orientation">
-                <enum>Qt::Vertical</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>20</width>
-                 <height>40</height>
-                </size>
-               </property>
-              </spacer>
              </item>
             </layout>
            </widget>
@@ -405,6 +394,12 @@
    <class>qSlicerSimpleMarkupsWidget</class>
    <extends>qSlicerWidget</extends>
    <header>qSlicerSimpleMarkupsWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleGroupBox</class>
+   <extends>QGroupBox</extends>
+   <header>ctkCollapsibleGroupBox.h</header>
+   <container>1</container>
   </customwidget>
   <customwidget>
    <class>ctkSliderWidget</class>
