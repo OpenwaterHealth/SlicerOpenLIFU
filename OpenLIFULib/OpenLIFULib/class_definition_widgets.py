@@ -940,9 +940,9 @@ class CreateAbstractClassDialog(qt.QDialog):
         top_level_layout.addWidget(self.buttonBox)
 
         self.buttonBox.rejected.connect(self.reject)
-        self.buttonBox.accepted.connect(self.objectidateInputs)
+        self.buttonBox.accepted.connect(self.validateInputs)
 
-    def objectidateInputs(self):
+    def validateInputs(self):
         """
         Ensure object is valid
         """
