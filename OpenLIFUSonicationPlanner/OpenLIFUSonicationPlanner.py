@@ -322,6 +322,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 slicer.app.processEvents()
                 self.logic.computeSolution(activeData["Volume"], activeData["Target"],
                                            activeData["Transducer"], activeData["Protocol"])
+            except Exception as e:
+                slicer.util.errorDisplay(f"Solution computation failed due to the following reason:\n{e}")
             finally:
                 self.updateSolutionProgressBar()
 
