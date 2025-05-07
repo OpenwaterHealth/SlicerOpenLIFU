@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import (
     List,
     Optional,
-    Tuple,
     TYPE_CHECKING,
 )
 
@@ -28,6 +27,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.class_definition_widgets import (
     DictTableWidget,
+    instantiate_without_post_init,
     ListTableWidget,
     OpenLIFUAbstractDataclassDefinitionFormWidget,
     OpenLIFUAbstractMultipleABCDefinitionFormWidget,
@@ -42,7 +42,6 @@ from OpenLIFULib.util import (
 # but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
-    import openlifu.db
 
 #
 # OpenLIFUProtocolConfig
@@ -344,7 +343,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # Cache a WIP (other modules might load one)
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
@@ -413,7 +412,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def onProtocolSelectorIndexChanged(self):
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         protocol = self.ui.protocolSelector.currentData
@@ -483,8 +482,14 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onSaveProtocolToFileClicked(self, checked:bool) -> None:
+        # Try getting entered protocol object from GUI. If it fails, print an error.
+        try:
+            protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}")
+            return
+
         initial_dir = slicer.app.defaultScenePath
-        protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI()
 
         safe_protocol_id = "".join(c if c.isalnum() or c in (' ', '-', '_') else "_" for c in protocol.id)
 
@@ -515,7 +520,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
-        protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI()
+        # Try getting entered protocol object from GUI. If it fails, print an error.
+        try:
+            protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}")
+            return
 
         if protocol.id == "":
             slicer.util.errorDisplay("You cannot save a protocol without entering in a Protocol ID.")
@@ -567,7 +577,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # You could load a non-cached protocol if you edit one, don't change
         # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         qsettings = qt.QSettings()
@@ -594,7 +604,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # You could load a non-cached protocol if you edit one, don't change
         # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
-            protocol_changed = self.getProtocolFromGUI()
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
         if not get_cur_db():
@@ -685,41 +695,56 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
-    def getProtocolFromGUI(self) -> "openlifu.plan.Protocol":
-        # Get the classes from dynamic widgets
+    def getProtocolFromGUI(self, post_init: bool = True) -> "openlifu.plan.Protocol":
+        """
+        Constructs and returns a `Protocol` instance based on the current state of the GUI.
+
+        This method gathers all form inputs and dynamic widget states to populate a `Protocol` object.
+        By default, it validates the result via `__post_init__`, but this can be bypassed by setting
+        `post_init=False`—useful when constructing intermediate or invalid protocol states during editing.
+
+        Args:
+            post_init (bool, optional): Whether to invoke the `__post_init__` method on the Protocol. 
+                Set to False to bypass validation. Defaults to True.
+
+        Returns:
+            openlifu.plan.Protocol: A fully constructed Protocol instance representing the current GUI state.
+        """
         allowed_roles = self.allowed_roles_widget.to_list()
-        pulse = self.pulse_definition_widget.get_form_as_class()
-        sequence = self.sequence_definition_widget.get_form_as_class()
-        focal_pattern = self.abstract_focal_pattern_definition_widget.get_form_as_class()
-        sim_setup = self.sim_setup_definition_widget.get_form_as_class()
-        delay_method = self.abstract_delay_method_definition_widget.get_form_as_class()
-        apodization_method = self.abstract_apodization_method_definition_widget.get_form_as_class()
-        segmentation_method = self.segmentation_method_definition_widget.get_form_as_class()
+        pulse = self.pulse_definition_widget.get_form_as_class(post_init=post_init)
+        sequence = self.sequence_definition_widget.get_form_as_class(post_init=post_init)
+        focal_pattern = self.abstract_focal_pattern_definition_widget.get_form_as_class(post_init=post_init)
+        sim_setup = self.sim_setup_definition_widget.get_form_as_class(post_init=post_init)
+        delay_method = self.abstract_delay_method_definition_widget.get_form_as_class(post_init=post_init)
+        apodization_method = self.abstract_apodization_method_definition_widget.get_form_as_class(post_init=post_init)
+        segmentation_method = self.segmentation_method_definition_widget.get_form_as_class(post_init=post_init)
         parameter_constraints = self.parameter_constraints_widget.to_dict()
         target_constraints = self.target_constraints_widget.to_list()
-        solution_analysis_options = self.solution_analysis_options_definition_widget.get_form_as_class()
-        virtual_fit_options = self.virtual_fit_options_definition_widget.get_form_as_class()
+        solution_analysis_options = self.solution_analysis_options_definition_widget.get_form_as_class(post_init=post_init)
+        virtual_fit_options = self.virtual_fit_options_definition_widget.get_form_as_class(post_init=post_init)
 
-        # Then get the protocol class and return it
-        protocol = openlifu_lz().plan.Protocol(
-            name = self.ui.protocolNameLineEdit.text,
-            id = self.ui.protocolIdLineEdit.text,
-            description = self.ui.protocolDescriptionTextEdit.toPlainText(),
-            allowed_roles = allowed_roles,
-            pulse = pulse,
-            sequence = sequence,
-            focal_pattern = focal_pattern,
-            sim_setup = sim_setup,
-            delay_method = delay_method,
-            apod_method = apodization_method,
-            seg_method = segmentation_method,
-            param_constraints = parameter_constraints,
-            target_constraints = target_constraints,
-            analysis_options = solution_analysis_options,
-            virtual_fit_options = virtual_fit_options,
+        protocol_fields = dict(
+            name=self.ui.protocolNameLineEdit.text,
+            id=self.ui.protocolIdLineEdit.text,
+            description=self.ui.protocolDescriptionTextEdit.toPlainText(),
+            allowed_roles=allowed_roles,
+            pulse=pulse,
+            sequence=sequence,
+            focal_pattern=focal_pattern,
+            sim_setup=sim_setup,
+            delay_method=delay_method,
+            apod_method=apodization_method,
+            seg_method=segmentation_method,
+            param_constraints=parameter_constraints,
+            target_constraints=target_constraints,
+            analysis_options=solution_analysis_options,
+            virtual_fit_options=virtual_fit_options,
         )
 
-        return protocol
+        if post_init:
+            return openlifu_lz().plan.Protocol(**protocol_fields)
+        else:
+            return instantiate_without_post_init(openlifu_lz().plan.Protocol, **protocol_fields)
 
     def setNewProtocolWidgets(self) -> None:
         self.setProtocolEditButtonEnabled(True)  # enable edit button (consistency)
