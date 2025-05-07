@@ -247,6 +247,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         # invalidates the result and resets previously initialized transform nodes
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
+            self.wizard().photoscanVolumeTrackingPage.resetScalingTransform()
             self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
             self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
 
@@ -338,7 +339,6 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         if self.facial_landmarks_fiducial_node is None:
             self._initialize_facial_landmarks_fiducial_node(node_name = "photoscan-wizard-faciallandmarks")
             self.setupMarkupsWidget()
-            # self.wizard()._valid_tt_result_exists = False # TODO: Do I need this here?
 
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
             self.facial_landmarks_fiducial_node.SetLocked(False)
@@ -474,6 +474,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         self.ui.approveTransformButton.clicked.connect(self.onTransformApproveClicked)
         self.ui.enableManualPVRegistration.clicked.connect(self.onManualRegistrationClicked)
+        self.ui.runICPRegistrationPV.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.runningRegistration = False
 
@@ -487,11 +488,10 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.scalingTransformMRMLSliderWidget.pageStep = 1.0
         self.ui.scalingTransformMRMLSliderWidget.setToolTip(_('Adjust the scale of the photosan mesh."'))
         self.ui.scalingTransformMRMLSliderWidget.connect("valueChanged(double)", self.updateScaledTransformNode)
-        self.ui.scalingTransformWidget.hide()
 
-        self.scaledTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-        self.scaledTransformNode.SetName("wizard_photoscan_volume-scaled")
         self.photoscan_to_volume_transform_node: vtkMRMLTransformNode = None
+        self.scaling_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        self.scaling_transform_node.SetName("wizard_photoscan_volume-scaling_factor")
     
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
@@ -506,6 +506,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             # Clone the existing node
             existing_transform_node = self.wizard().photoscan_to_volume_transform_node
             self.photoscan_to_volume_transform_node = get_cloned_node(existing_transform_node)
+            self.photoscan_to_volume_transform_node.CreateDefaultDisplayNodes()
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
             self.photoscan_to_volume_transform_node.RemoveAttribute('isTT-PHOTOSCAN_TO_VOLUME')
             self.transform_approved = get_approval_from_transducer_tracking_result_node(existing_transform_node)
@@ -528,14 +529,10 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.photoscan_to_volume_transform_node:
             self.setupTransformNode()
         else:
-            self.ui.enableManualPVRegistration.enabled = False
+            self.ui.runICPRegistrationPV.enabled = False
+            self.ui.ManualRegistrationGroupBox.enabled = False
             self.ui.approveTransformButton.enabled = False
             self.transform_approved = False
-        
-        self.updateScaledTransformNode() 
-        self.wizard().photoscan.model_node.SetAndObserveTransformNodeID(self.scaledTransformNode.GetID())
-        if self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node:
-            self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(self.scaledTransformNode.GetID())
         
         self.updateTransformApprovalStatusLabel()
         self.updateTransformApproveButton()
@@ -579,9 +576,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
     def onTransformApproveClicked(self):
 
-        if self.photoscan_to_volume_transform_node is None: # should not happen
-            raise RuntimeError("Photoscan-volume transform not found.")
-
         self.transform_approved = not self.transform_approved
 
         if self.transform_approved:
@@ -609,22 +603,22 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         """ This function is called when the user clicks 'Next'."""
 
         # Clear previous result
-        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_transform_node) # Clear current node
+        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_transform_node) # Clear current result node if it exists (restarting process)
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
 
         self.photoscan_to_volume_transform_node = self.wizard()._logic.run_fiducial_registration(
             moving_landmarks = self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node,
             fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
-        self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
-        self.ui.initializePVRegistration.setText("Re-initialize transducer-photoscan transform")
+        self.resetScalingTransform()
 
-        # Reset scaling transform node
-        self.ui.scalingTransformMRMLSliderWidget.value = 1
+        self.updateTransformApprovalStatusLabel()
+        self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
 
         # Enable approval and registration fine-tuning buttons
-        self.ui.enableManualPVRegistration.enabled = True
+        self.ui.runICPRegistrationPV.enabled = True
+        self.ui.ManualRegistrationGroupBox.enabled = True
         self.ui.approveTransformButton.enabled = True
 
     def setupTransformNode(self):
@@ -633,7 +627,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             [self.wizard().volume_view_node.GetID()]
             ) # Specify a view node for display
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
-
+        
+        # Update photoscan model and fiducial to observe transform
+        self.wizard().photoscan.model_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
+        if self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node:
+            self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
+        
         # Set the center of the transformation to the center of the photocan model node
         bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.wizard().photoscan.model_node.GetRASBounds(bounds)
@@ -648,35 +647,60 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
         transform_from_world.TransformPoint(center_world,center_local )
         self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
-        self.scaledTransformNode.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
 
+        self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
         # Add observer after setup
         self.photoscan_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
+
+    def resetScalingTransform(self):
+        self.ui.scalingTransformMRMLSliderWidget.value = 1
+        self.updateScaledTransformNode()
+
+    def onRunICPRegistrationClicked(self):
+
+        self.photoscan_to_volume_transform_node.HardenTransform()
+        # Clone photoscan model node to harden transform since ICP uses the coordinate space of the model
+        photoscan_hardened = get_cloned_node(self.wizard().photoscan.model_node)
+        photoscan_hardened.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
+        photoscan_hardened.HardenTransform()
+
+        self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+            input_fixed_model = self.wizard().skin_mesh_node,
+            input_moving_model = photoscan_hardened)
         
+        if self.photoscan_to_volume_icp_transform_node:
+            self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
+            self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
+        
+            # Reset the photoscan to volume transform and now observe the ICP result
+            self.resetScalingTransform()
+            self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
+
+        # Remove hardened photoscan node and icp transform node
+        slicer.mrmlScene.RemoveNode(photoscan_hardened)
+        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
+
     def onManualRegistrationClicked(self):
-        """ This is a temporary implementation that allows the user to manually edit the photoscan-volume transform. In the 
-        future, ICP registration will be integrated here. """
+        """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
+
         if not self.photoscan_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
 
             self.ui.enableManualPVRegistration.text = "Disable manual transform interaction"
-
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
             
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializePVRegistration.enabled = False
+            self.ui.runICPRegistrationPV.enabled = False
             self.ui.approveTransformButton.enabled = False
-
-            # Enabling scaling of transform node
-            self.ui.scalingTransformWidget.show()
 
         else:
             self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
             self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
+            self.ui.runICPRegistrationPV.enabled = True
             self.ui.approveTransformButton.enabled = True
-            self.ui.scalingTransformWidget.hide()
 
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
@@ -685,7 +709,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         scaling_value = self.ui.scalingTransformMRMLSliderWidget.value
         scaling_matrix = np.diag([scaling_value, scaling_value, scaling_value, 1])
-        self.scaledTransformNode.SetMatrixTransformToParent(numpy_to_vtk_4x4(scaling_matrix))
+        self.scaling_transform_node.SetMatrixTransformToParent(numpy_to_vtk_4x4(scaling_matrix))
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
@@ -900,7 +924,7 @@ class TransducerTrackingWizard(qt.QWizard):
                 get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node) 
                 and get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
             ): #Flag to keep track of when approval is revoked and an existing result can be modified
-                self._existing_approval_revoked = True            
+                self._existing_approval_revoked = True    
         
     def customexec_(self):
         returncode = self.exec_()
@@ -1015,11 +1039,14 @@ class TransducerTrackingWizard(qt.QWizard):
         
         # Add the transducer tracking result nodes to the slicer scene
         # Shouldn't be able to get to this final stage without both transform nodes
-        if self.photoscanVolumeTrackingPage.scaledTransformNode and self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node:
-            self.photoscanVolumeTrackingPage.scaledTransformNode.HardenTransform() 
+        if self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node and self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node:
+            
+            # Remove observer
+            self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.RemoveAllObservers()
+            self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.HardenTransform() 
             
             self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node = self._logic.add_transducer_tracking_result(
-                photoscan_to_volume_transform = self.photoscanVolumeTrackingPage.scaledTransformNode,
+                photoscan_to_volume_transform = self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node,
                 photoscan_to_volume_approval_state = self.photoscanVolumeTrackingPage.transform_approved,
                 transducer_to_volume_transform = self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node,
                 transducer_to_volume_approval_state = self.transducerPhotoscanTrackingPage.transform_approved,
@@ -1065,8 +1092,8 @@ class TransducerTrackingWizard(qt.QWizard):
         slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
 
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
-        slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.scaledTransformNode)
         slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
+        slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.scaling_transform_node)
 
     def setupViewNodes(self):
                 
@@ -2109,7 +2136,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             fixed_landmarks: vtkMRMLMarkupsFiducialNode) -> vtkMRMLTransformNode:
         """Runs fiducial registration between the provided fixed and moving fiducial node landmarks and returns the result as a `vtkMRMLTransformNode`."""
         
-        fiducial_result_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        fiducial_result_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode","fiducial_transform_result")
         fiducial_registration_cli = slicer.modules.fiducialregistration
         parameters = {}
         parameters["fixedLandmarks"] = fixed_landmarks
@@ -2118,6 +2145,65 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         parameters["transformType"] = "Similarity"
         slicer.cli.run(fiducial_registration_cli, node = None, parameters = parameters, wait_for_completion = True, update_display = False)
         return fiducial_result_node
+
+    def run_icp_model_registration(
+        self,
+        input_fixed_model: vtkMRMLModelNode,
+        input_moving_model: vtkMRMLModelNode,
+        transformType: int = 1,
+        numLandmarks: int = 200,
+        numIterations: int = 100
+    ):
+        """Registers a moving model to a fixed model using the Iterative Closest Point (ICP) algorithm.
+        Note: This function operates directly on the point sets of the
+        input models and does not consider any parent transforms. Therefore,
+        both input models should be defined within the coordinate system intended for registration.
+
+        Args:
+            input_fixed_model (vtkMRMLModelNode): The fixed model (target) to which the moving model will be registered.
+            input_moving_model (vtkMRMLModelNode): The moving model (source) that will be transformed to align with the fixed model.
+            transformType (int, optional): The type of transformation to be estimated.
+                - 0: Rigid body transformation
+                - 1: Similarity transformation
+                - 2: Affine transformation 
+                Defaults to 1 (Similarity).
+            numLandmarks: Maximum number of landmarks sampled from the moving model. The default is 200.
+            numIterations: Maximum number of iterations. The default is 100.
+
+        Returns:
+            vtkMRMLTransformNode or None: A new vtkMRMLTransformNode containing the computed
+            transformation that aligns the moving model with the fixed model. Returns None
+            if the registration fails. The transform node will be automatically added to the
+            scene.
+        """
+        
+        icp_result_node =  slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "icp_transform_result")
+
+        try:
+            icpTransform = vtk.vtkIterativeClosestPointTransform()
+            icpTransform.SetSource( input_moving_model.GetPolyData() )
+            icpTransform.SetTarget( input_fixed_model.GetPolyData() )
+            icpTransform.GetLandmarkTransform().SetModeToRigidBody()
+            if transformType == 1:
+                icpTransform.GetLandmarkTransform().SetModeToSimilarity()
+            if transformType == 2:
+                icpTransform.GetLandmarkTransform().SetModeToAffine()
+            icpTransform.SetMaximumNumberOfIterations( numIterations )
+            icpTransform.SetMaximumNumberOfLandmarks( numLandmarks )
+            icpTransform.Modified()
+            icpTransform.Update()
+
+            icp_result_node.SetMatrixTransformToParent( icpTransform.GetMatrix() )
+
+            if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+                icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), input_moving_model.GetID())
+                icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), input_fixed_model.GetID())
+
+        except Exception as e:
+            print("Exception thrown:", e)
+            return None
+        
+        return icp_result_node
 
     def add_transducer_tracking_result(
         self,
