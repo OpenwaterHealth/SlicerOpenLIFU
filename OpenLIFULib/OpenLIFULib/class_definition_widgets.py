@@ -1,6 +1,6 @@
 # Standard library imports
 import inspect
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, MISSING
 from typing import (
     Annotated,
     Any,
@@ -22,6 +22,36 @@ from slicer.i18n import tr as _
 
 # OpenLIFULib imports
 from OpenLIFULib.util import get_hints
+
+
+def instantiate_without_post_init(cls: Type, **kwargs) -> Any:
+    """
+    Creates an instance of a dataclass without invoking its __init__ or __post_init__ methods.
+
+    This is useful when you need to construct an object for intermediate or invalid states
+    (e.g., during GUI editing) where strict validation in __post_init__ would raise exceptions.
+
+    Args:
+        cls (Type): The dataclass type to instantiate.
+        **kwargs: Field values to assign directly to the instance.
+
+    Returns:
+        Any: An instance of the given dataclass with fields populated.
+
+    Raises:
+        TypeError: If a required field is not provided and has no default or default_factory.
+    """
+    obj = cls.__new__(cls)  # type: ignore
+    for field in fields(cls):
+        if field.name in kwargs:
+            setattr(obj, field.name, kwargs[field.name])
+        elif field.default is not MISSING:
+            setattr(obj, field.name, field.default)
+        elif field.default_factory is not MISSING:  # type: ignore
+            setattr(obj, field.name, field.default_factory())  # type: ignore
+        else:
+            raise TypeError(f"Missing required field: {field.name}")
+    return obj
 
 class CreateStringDialog(qt.QDialog):
     """
@@ -753,14 +783,20 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         values = vars(instance)
         self.update_form_from_values(values)
 
-    def get_form_as_class(self) -> Any:
+    def get_form_as_class(self, post_init: bool = True) -> Any:
         """
         Constructs and returns a new instance of the class using the current form values.
+        
+        Args:
+            post_init (bool): If True (default), runs __post_init__. If False, skips it.
 
         Returns:
             A new instance of the class populated with the form's current values.
         """
-        return self._cls(**self.get_form_as_dict())
+        if post_init:
+            return self._cls(**self.get_form_as_dict())
+        else:
+            return instantiate_without_post_init(self._cls, **self.get_form_as_dict())
 
     def add_value_changed_signals(self, callback) -> None:
         """
@@ -880,14 +916,14 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
 
         self.forms.currentWidget().update_form_from_class(instance_of_derived)
 
-    def get_form_as_class(self) -> Any:
+    def get_form_as_class(self, post_init: bool = True) -> Any:
         """
         Constructs and returns a new instance of the derived class using the current form values.
 
         Returns:
             A new instance of the derived class populated with the form's current values.
         """
-        return self.forms.currentWidget().get_form_as_class()
+        return self.forms.currentWidget().get_form_as_class(post_init)
 
 
     def add_value_changed_signals(self, callback) -> None:
