@@ -669,17 +669,18 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
             input_fixed_model = self.wizard().skin_mesh_node,
             input_moving_model = photoscan_hardened)
-
-        self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
-        self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
         
+        if self.photoscan_to_volume_icp_transform_node:
+            self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
+            self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
+        
+            # Reset the photoscan to volume transform and now observe the ICP result
+            self.resetScalingTransform()
+            self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
+
         # Remove hardened photoscan node and icp transform node
         slicer.mrmlScene.RemoveNode(photoscan_hardened)
         slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
-
-        # Reset the photoscan to volume transform and now observe the ICP result
-        self.resetScalingTransform()
-        self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
 
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
@@ -2176,13 +2177,18 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         icp_result_node =  slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "icp_transform_result")
         model_registration_logic = ModelRegistration.ModelRegistrationLogic()
-        model_registration_logic.run(
-            inputSourceModel = input_moving_model,
-            inputTargetModel = input_fixed_model,
-            outputSourceToTargetTransform = icp_result_node,
-            transformType = transformType
-        )
-
+        
+        try:
+            model_registration_logic.run(
+                inputSourceModel = input_moving_model,
+                inputTargetModel = input_fixed_model,
+                outputSourceToTargetTransform = icp_result_node,
+                transformType = transformType
+            )
+        except Exception as e:
+            print("Exception thrown:", e)
+            return None
+        
         return icp_result_node
 
     def add_transducer_tracking_result(
