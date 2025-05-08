@@ -409,5 +409,8 @@ class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
             self.setUp()
             test()
 
-    def test_stuff(self):
+    def test_load_database(self):
+        logic = OpenLIFUDatabaseLogic()
+        subject_id_subject_name_tuple = logic.load_database(Path(")
+
         return 0
