@@ -1199,7 +1199,7 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
                 "Mechanical Index (MI)": "MI",
                 "Mainlobe PNP (MPa)": "mainlobe_pnp_MPa",
                 "Mainlobe I_SPPA (W/cm^2)": "mainlobe_isppa_Wcm2",
-                "Mainlobe I_SPTA (W/cm^2)": "mainloba_ispta_Wcm2",
+                "Mainlobe I_SPTA (W/cm^2)": "mainlobe_ispta_Wcm2",
                 "3 dB Lateral Beamwidth (mm)": "beamwidth_lat_3dB_mm",
                 "3 dB Elevational Beamwidth (mm)": "beamwidth_ele_3dB_mm",
                 "3 dB Axial Beamwidth (mm)": "beamwidth_ax_3dB_mm",
