@@ -879,6 +879,7 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
         if not cls_list:
             raise ValueError("cls_list cannot be empty.")
 
+        self.cls_list = cls_list
         self.base_class_name = cls_list[0].__bases__[0].__name__
         self.custom_abc_title = self.base_class_name if custom_abc_title is None else custom_abc_title
         
@@ -896,11 +897,23 @@ class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
             self.selector.addItem(cls.__name__)
             self.forms.addWidget(OpenLIFUAbstractDataclassDefinitionFormWidget(cls, parent, is_collapsible, collapsible_title))
 
-        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} type"), self.selector) 
-        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} options"), self.forms) 
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} type"), self.selector)
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} options"), self.forms)
 
-        # Connect combo box to setting the widget. Assumes indices match
-        self.selector.currentIndexChanged.connect(self.forms.setCurrentIndex)
+        # Connect to custom handler that updates form from class
+        self.selector.currentIndexChanged.connect(self._on_index_changed)
+
+    def _on_index_changed(self, index: int) -> None:
+        """
+        Called when the combo box index changes.
+        Updates the stacked widget and populates it with a new default instance
+        (we assume that input data is *not* saved across selections between
+        derived classes).
+        """
+        self.forms.setCurrentIndex(index)
+        cls = self.cls_list[index]
+        instance = cls()  # Default constructor for cls to populate the form
+        self.forms.currentWidget().update_form_from_class(instance)
 
     def update_form_from_class(self, instance_of_derived: Any) -> None:
         """
