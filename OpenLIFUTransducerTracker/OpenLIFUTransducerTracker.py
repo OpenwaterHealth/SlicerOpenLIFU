@@ -543,7 +543,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.controlsWidget.enabled = False
         else:
             self.ui.controlsWidget.enabled = True
-
+        
     def onTransformModified(self, node, eventID,):
         
         # If the transform node was initiaized based on a previously computed tt result, modifying the transform
@@ -661,14 +661,25 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def onRunICPRegistrationClicked(self):
 
         self.photoscan_to_volume_transform_node.HardenTransform()
+        
         # Clone photoscan model node to harden transform since ICP uses the coordinate space of the model
         photoscan_hardened = get_cloned_node(self.wizard().photoscan.model_node)
         photoscan_hardened.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
         photoscan_hardened.HardenTransform()
 
+        # Clone photoscan fiducial node to harden transform for select by points
+        photoscan_landmarks_hardened = get_cloned_node(self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node)
+        photoscan_landmarks_hardened.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
+        photoscan_landmarks_hardened.HardenTransform()
+
+        photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
+            fiducial_node = photoscan_landmarks_hardened,
+            surface_model_node = photoscan_hardened
+        )
+
         self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
             input_fixed_model = self.wizard().skin_mesh_node,
-            input_moving_model = photoscan_hardened)
+            input_moving_model = photoscan_roi_submesh)
         
         if self.photoscan_to_volume_icp_transform_node:
             self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
@@ -678,8 +689,10 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.resetScalingTransform()
             self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
 
-        # Remove hardened photoscan node and icp transform node
+        # Remove temporary hardened nodes and icp transform node
         slicer.mrmlScene.RemoveNode(photoscan_hardened)
+        slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
+        slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
         slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
 
     def onManualRegistrationClicked(self):
@@ -711,6 +724,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         scaling_value = self.ui.scalingTransformMRMLSliderWidget.value
         scaling_matrix = np.diag([scaling_value, scaling_value, scaling_value, 1])
+        # Need to also update the origin of the scaling transform
         self.scaling_transform_node.SetMatrixTransformToParent(numpy_to_vtk_4x4(scaling_matrix))
 
     def isComplete(self):
@@ -2147,6 +2161,97 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         parameters["transformType"] = "Similarity"
         slicer.cli.run(fiducial_registration_cli, node = None, parameters = parameters, wait_for_completion = True, update_display = False)
         return fiducial_result_node
+
+    def extract_facial_roi_submesh(
+        self,
+        surface_model_node: vtkMRMLModelNode,
+        fiducial_node: vtkMRMLMarkupsFiducialNode, 
+        num_points: int = 8,
+        surface_selection_distance: int = 40):
+
+        """
+        Extracts a facial region of interest (ROI) submesh from a surface model based on fiducial points.
+
+        This function takes a fiducial node containing facial landmarks (specifically right ear,
+        nasion, and left ear) and a surface model node of the face. It interpolates a specified
+        number of points along the lines defined by these landmarks to create a denser set of
+        control points around the eyes and nose. These interpolated points are then used to
+        select and extract a submesh from the input surface model using the dynamic modeler's
+        "Select by points" tool.
+
+        Args:
+            fiducial_node: The input fiducial node containing the original facial landmarks.
+                        It is expected to have the 'RightEar', 'Nasion', and
+                        'LeftEar' landmarks defined.
+            surface_model_node: The surface model node of the face from which to extract the submesh.
+            num_points: The number of points to interpolate *between* each pair of original
+                        fiducial points (e.g., between RightEar and Nasion). This determines
+                        the density of the interpolated control points. Defaults to 11.
+            surface_selection_distance: The distance (in millimeters) from the interpolated fiducial
+             points within which model points will be selected as part of the submesh. 
+
+        Returns:
+            A new vtkMRMLModelNode containing the extracted facial submesh. Returns None if the required 
+            landmarks are not found in the fiducial node.
+        """
+
+        try:
+            # Check for required landmarks
+            required_landmarks = ['Right Ear', 'Nasion', 'Left Ear']
+            for landmark_label in required_landmarks:
+                if fiducial_node.GetControlPointIndexByLabel(landmark_label) == -1:
+                    raise ValueError(f"Landmark '{landmark_label}' not found in fiducial node.")
+                    return None
+
+            # Interpolate between the  right ear/nasion and nasion/left ear fiducial pairs to generate a dense sampling of
+            # control points across the face
+            interpolated_facial_landmarks = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', fiducial_node.GetName() + '_interp')
+            
+            # Create a cell locator for the mesh
+            pointsLocator = vtk.vtkPointLocator() # could try using vtk.vtkStaticPointLocator() if need to optimize
+            pointsLocator.SetDataSet(surface_model_node.GetPolyData())
+            pointsLocator.BuildLocator()
+
+            def linear_interpolate_3d(p1, p2, num_points):
+                x = (1 - t) * p1[0] + t * p2[0]
+                y = (1 - t) * p1[1] + t * p2[1]
+                z = (1 - t) * p1[2] + t * p2[2]
+                return [x, y, z]
+
+            for landmark_1, landmark_2 in [['Right Ear','Nasion'],['Nasion','Left Ear']]:
+
+                p1 = [0.0, 0.0, 0.0]
+                fiducial_node.GetNthControlPointPositionWorld(fiducial_node.GetControlPointIndexByLabel(landmark_1),p1)
+                p2 = [0.0,0.0,0.0]
+                fiducial_node.GetNthControlPointPositionWorld(fiducial_node.GetControlPointIndexByLabel(landmark_2),p2)
+
+                for t in np.linspace(0,1,num_points):
+
+                    interpolated_position = linear_interpolate_3d(p1, p2,t)
+                    # Find the closest point on the surface model
+                    closestPointId = pointsLocator.FindClosestPoint(interpolated_position)
+                    closest_point = surface_model_node.GetPolyData().GetPoint(closestPointId)
+                    interpolated_facial_landmarks.AddControlPoint(closest_point)
+
+            # Extract submesh using the dynamic modeler, select by points tool
+            selectByPointsModeler = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLDynamicModelerNode")
+            selectByPointsModeler.SetToolName("Select by points")
+            selectByPointsModeler.SetNodeReferenceID("SelectByPoints.InputModel", surface_model_node.GetID())
+            selectByPointsModeler.SetNodeReferenceID("SelectByPoints.InputFiducial", interpolated_facial_landmarks.GetID())
+            submesh_model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", 'Result_SP')  # this node will store the submesh
+            selectByPointsModeler.SetNodeReferenceID("SelectByPoints.SelectedFacesModel", submesh_model_node.GetID())
+            selectByPointsModeler.SetAttribute("SelectionDistance", "40")  
+            selectByPointsModeler.SetAttribute("SelectionAlgorithm", "SphereRadius")  
+            slicer.modules.dynamicmodeler.logic().RunDynamicModelerTool(selectByPointsModeler)
+
+            slicer.mrmlScene.RemoveNode(interpolated_facial_landmarks)
+            slicer.mrmlScene.RemoveNode(selectByPointsModeler)
+
+            return submesh_model_node
+        
+        except Exception as e:
+            raise RuntimeError(f"Error extracting facial ROI submesh: {e}")
+            return None
 
     def run_icp_model_registration(
         self,
