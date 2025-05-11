@@ -62,8 +62,6 @@ from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget 
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node,  get_virtual_fit_approval_for_target
 
-import ModelRegistration
-
 # These imports are for IDE and static analysis purposes only
 if TYPE_CHECKING:
     import openlifu
@@ -2302,7 +2300,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         self,
         input_fixed_model: vtkMRMLModelNode,
         input_moving_model: vtkMRMLModelNode,
-        transformType: int = 1
+        transformType: int = 1,
+        numLandmarks: int = 200,
+        numIterations: int = 100
     ):
         """Registers a moving model to a fixed model using the Iterative Closest Point (ICP) algorithm.
         Note: This function operates directly on the point sets of the
@@ -2317,6 +2317,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                 - 1: Similarity transformation
                 - 2: Affine transformation 
                 Defaults to 1 (Similarity).
+            numLandmarks: Maximum number of landmarks sampled from the moving model. The default is 200.
+            numIterations: Maximum number of iterations. The default is 100.
 
         Returns:
             vtkMRMLTransformNode or None: A new vtkMRMLTransformNode containing the computed
@@ -2326,15 +2328,27 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         """
         
         icp_result_node =  slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "icp_transform_result")
-        model_registration_logic = ModelRegistration.ModelRegistrationLogic()
-        
+
         try:
-            model_registration_logic.run(
-                inputSourceModel = input_moving_model,
-                inputTargetModel = input_fixed_model,
-                outputSourceToTargetTransform = icp_result_node,
-                transformType = transformType
-            )
+            icpTransform = vtk.vtkIterativeClosestPointTransform()
+            icpTransform.SetSource( input_moving_model.GetPolyData() )
+            icpTransform.SetTarget( input_fixed_model.GetPolyData() )
+            icpTransform.GetLandmarkTransform().SetModeToRigidBody()
+            if transformType == 1:
+                icpTransform.GetLandmarkTransform().SetModeToSimilarity()
+            if transformType == 2:
+                icpTransform.GetLandmarkTransform().SetModeToAffine()
+            icpTransform.SetMaximumNumberOfIterations( numIterations )
+            icpTransform.SetMaximumNumberOfLandmarks( numLandmarks )
+            icpTransform.Modified()
+            icpTransform.Update()
+
+            icp_result_node.SetMatrixTransformToParent( icpTransform.GetMatrix() )
+
+            if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+                icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), input_moving_model.GetID())
+                icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), input_fixed_model.GetID())
+
         except Exception as e:
             print("Exception thrown:", e)
             return None
