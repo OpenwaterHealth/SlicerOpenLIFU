@@ -555,6 +555,11 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         
     def onTransformModified(self, node, eventID,):
         
+        # Check that this function was triggered by actions on this page
+        current_page = self.wizard().page(self.wizard().currentId)
+        if not isinstance(current_page, PhotoscanVolumeTrackingPage):
+            return
+
         # If the transform node was initiaized based on a previously computed tt result, modifying the transform
         # invalidates the result 
         if self.wizard()._valid_tt_result_exists:
@@ -750,8 +755,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.dialogControls.setCurrentIndex(4)
 
         self.ui.approveTransformButton.clicked.connect(self.onTransformApproveClicked)
-        self.ui.runTransducerPhotoscanRegistration.clicked.connect(self.onRunRegistrationClicked)
+        self.ui.enableManualTPRegistration.clicked.connect(self.onManualRegistrationClicked)
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
+        self.ui.runICPRegistrationTP.clicked.connect(self.onRunICPRegistrationClicked)
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
 
@@ -777,8 +783,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             self.setupTransformNode()
         else:
             self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
-            self.ui.runTransducerPhotoscanRegistration.enabled = False
+            self.ui.runICPRegistrationTP.enabled = False
             self.ui.approveTransformButton.enabled = False
+            self.ui.enableManualTPRegistration.enabled = False
             self.transform_approved = False
         
         self.updateTransformApprovalStatusLabel()
@@ -791,7 +798,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
     def onTransformModified(self, node, eventID,):
         
-        # If the transform node was initiaized based on a previously computed tt result, modifying the transform
+        # If the transform node was initialized based on a previously computed tt result, modifying the transform
         # invalidates the result 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
@@ -852,7 +859,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
 
         # Enable approval and registration fine-tuning buttons
-        self.ui.runTransducerPhotoscanRegistration.enabled = True
+        self.ui.runICPRegistrationTP.enabled = True
+        self.ui.enableManualTPRegistration.enabled = True
         self.ui.approveTransformButton.enabled = True
             
     def setupTransformNode(self):
@@ -863,31 +871,56 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
         self.transducer_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
 
-    def onRunRegistrationClicked(self):
+    def onManualRegistrationClicked(self):
         """ This is a temporary implementation that allows the user to manually edit the transducer-volume transform. In the 
         future, ICP registration will be integrated here. """
         
         if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
-            
-            self.ui.ICPPlaceholderLabel_2.text = "This run button is a placeholder. The transducer tracking algorithm is under development. " \
-            "Use the interaction handles to manually align the transducer and photoscan." \
-            "You can click the run button again to remove the interaction handles."
-            self.ui.ICPPlaceholderLabel_2.setProperty("styleSheet", "color: red;")
-
+            self.ui.enableManualTPRegistration.text = "Disable manual transform interaction"
             self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
             self.runningRegistration = True
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializeTPRegistration.enabled = False
+            self.ui.runICPRegistrationTP.enabled = False
             self.ui.approveTransformButton.enabled = False
         else:
-            self.ui.ICPPlaceholderLabel_2.text = ""
+            self.ui.enableManualTPRegistration.text = "Enable manual transform interaction"
             self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
             self.ui.initializeTPRegistration.enabled = True
             self.ui.approveTransformButton.enabled = True
+            self.ui.runICPRegistrationTP.enabled = True
     
         # Emit signal to update the enable/disable state of 'Finish' button. 
         self.completeChanged()
+    
+    def onRunICPRegistrationClicked(self):
+
+        # Harden the photoscan to volume registration result
+        self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.HardenTransform()
+
+        # Clone photoscan model node and harden transform since ICP uses the coordinate space of the model
+        photoscan_hardened = get_cloned_node(self.wizard().photoscan.model_node)
+        photoscan_hardened.SetAndObserveTransformNodeID(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.GetID())
+        photoscan_hardened.HardenTransform()
+
+        # Clone transducer surface model node and harden tansform after virtual fit initialization
+        transducer_hardened = get_cloned_node(self.wizard().transducer_surface)
+        transducer_hardened.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
+        transducer_hardened.HardenTransform()
+ 
+        self.transducer_to_photoscan_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+            input_fixed_model = photoscan_hardened,
+            input_moving_model = transducer_hardened)
+        
+        if self.transducer_to_photoscan_icp_transform_node:
+            self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
+            self.transducer_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
+
+        # Remove hardened photoscan and transducer node and icp transform node
+        slicer.mrmlScene.RemoveNode(photoscan_hardened)
+        slicer.mrmlScene.RemoveNode(self.transducer_to_photoscan_icp_transform_node)
+        slicer.mrmlScene.RemoveNode(transducer_hardened)
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
