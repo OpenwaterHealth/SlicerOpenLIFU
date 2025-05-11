@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>635</width>
-    <height>610</height>
+    <width>843</width>
+    <height>1094</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -43,7 +43,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>3</number>
+         <number>4</number>
         </property>
         <widget class="QWidget" name="photoscanPreview">
          <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -192,26 +192,17 @@
         <widget class="QWidget" name="PhotoscanVolumeTracking">
          <layout class="QVBoxLayout" name="verticalLayout_5">
           <item>
-           <widget class="QGroupBox" name="automatedRegistration">
-            <property name="title">
-             <string/>
+           <widget class="QPushButton" name="initializePVRegistration">
+            <property name="text">
+             <string>Initialize photoscan-volume transform</string>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_11">
-             <item>
-              <widget class="QPushButton" name="initializePVRegistration">
-               <property name="text">
-                <string>Initialize photoscan-volume transform</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="runICPRegistrationPV">
-               <property name="text">
-                <string>Run ICP-based registration fine-tuning</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runICPRegistrationPV">
+            <property name="text">
+             <string>Run ICP-based registration fine-tuning</string>
+            </property>
            </widget>
           </item>
           <item>
@@ -270,56 +261,37 @@
         <widget class="QWidget" name="TransducerPhotoscanTracking">
          <layout class="QVBoxLayout" name="verticalLayout_7">
           <item>
-           <widget class="QGroupBox" name="groupBox">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
+           <widget class="QPushButton" name="initializeTPRegistration">
+            <property name="text">
+             <string>Initialize transducer-photoscan transform</string>
             </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runICPRegistrationTP">
+            <property name="text">
+             <string>Run ICP-based registration fine-tuning</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
             <property name="title">
-             <string/>
+             <string>Manual registration refinement</string>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_8">
+            <property name="collapsed">
+             <bool>true</bool>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_12">
              <item>
-              <widget class="QPushButton" name="initializeTPRegistration">
+              <widget class="QPushButton" name="enableManualTPRegistration">
                <property name="text">
-                <string>Initialize transducer-photoscan transform</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="runTransducerPhotoscanRegistration">
-               <property name="text">
-                <string>Run ICP-based registration fine-tuning</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="ICPPlaceholderLabel_2">
-               <property name="text">
-                <string/>
-               </property>
-               <property name="wordWrap">
-                <bool>true</bool>
+                <string>Enable interaction handles</string>
                </property>
               </widget>
              </item>
             </layout>
            </widget>
-          </item>
-          <item>
-           <spacer name="verticalSpacer_2">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
           </item>
          </layout>
         </widget>
