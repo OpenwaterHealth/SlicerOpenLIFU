@@ -245,6 +245,9 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def onPointModified(self, node, eventID, callData):
         # If the fiducial node was initiaized based on a previously computed tt result, modifying the fiducial 
         # invalidates the result and resets previously initialized transform nodes
+        self._clear_downstream_results_if_any()
+            
+    def _clear_downstream_results_if_any(self):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
             self.wizard().photoscanVolumeTrackingPage.resetScalingTransform()
@@ -252,7 +255,8 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             slicer.mrmlScene.RemoveNode(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
             slicer.mrmlScene.RemoveNode(self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
             self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
-            self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
+            # self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
+
 
     def exitPlaceFiducialMode(self):
         if self._pointModifiedObserverTag:
@@ -344,6 +348,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         if self.facial_landmarks_fiducial_node is None:
             self._initialize_facial_landmarks_fiducial_node(node_name = "photoscan-wizard-faciallandmarks")
             self.setupMarkupsWidget()
+            self._clear_downstream_results_if_any()
 
         if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
             self.facial_landmarks_fiducial_node.SetLocked(False)
@@ -564,7 +569,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         # invalidates the result 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
-            self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
+            # self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
 
     def updateTransformApprovalStatusLabel(self):
 
@@ -598,12 +603,14 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.controlsWidget.enabled = False
             if self.wizard()._valid_tt_result_exists:
                 self.wizard()._existing_approval_revoked = False
+                self.wizard().transducerPhotoscanTrackingPage.transform_approved = True
                 self.wizard().photoscanMarkupPage.enablePageControls(enabled = False)
                 self.wizard().skinSegmentationMarkupPage.enablePageControls(enabled = False)
         else:
             self.ui.controlsWidget.enabled = True
             if self.wizard()._valid_tt_result_exists:
                 self.wizard()._existing_approval_revoked = True
+                self.wizard().transducerPhotoscanTrackingPage.transform_approved = False
                 self.wizard().photoscanMarkupPage.enablePageControls(enabled = True)
                 self.wizard().skinSegmentationMarkupPage.enablePageControls(enabled = True)
 
@@ -770,7 +777,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        if not self.transducer_to_volume_transform_node and self.wizard()._valid_tt_result_exists:
+        if not self.transducer_to_volume_transform_node and self.wizard().transducer_to_volume_transform_node:
             # Clone the existing node
             existing_transform_node = self.wizard().transducer_to_volume_transform_node
             self.transducer_to_volume_transform_node = get_cloned_node(existing_transform_node)
