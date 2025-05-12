@@ -676,28 +676,29 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         photoscan_landmarks_hardened.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
         photoscan_landmarks_hardened.HardenTransform()
 
-        photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
-            fiducial_node = photoscan_landmarks_hardened,
-            surface_model_node = photoscan_hardened
-        )
+        with BusyCursor():
+            photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
+                fiducial_node = photoscan_landmarks_hardened,
+                surface_model_node = photoscan_hardened
+            )
 
-        self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
-            input_fixed_model = self.wizard().skin_mesh_node,
-            input_moving_model = photoscan_roi_submesh)
-        
-        if self.photoscan_to_volume_icp_transform_node:
-            self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
-            self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
-        
-            # Reset the photoscan to volume transform and now observe the ICP result
-            self.resetScalingTransform()
-            self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
+            self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+                input_fixed_model = self.wizard().skin_mesh_node,
+                input_moving_model = photoscan_roi_submesh)
+            
+            if self.photoscan_to_volume_icp_transform_node:
+                self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
+                self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
+            
+                # Reset the photoscan to volume transform and now observe the ICP result
+                self.resetScalingTransform()
+                self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
 
-        # Remove temporary hardened nodes and icp transform node
-        slicer.mrmlScene.RemoveNode(photoscan_hardened)
-        slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
-        slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
-        slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
+            # Remove temporary hardened nodes and icp transform node
+            slicer.mrmlScene.RemoveNode(photoscan_hardened)
+            slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
+            slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
+            slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
 
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
