@@ -79,20 +79,6 @@
         <widget class="QWidget" name="photoscanMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_4">
           <item>
-           <widget class="QLabel" name="photoscanApprovalStatusLabel_Markup">
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QPushButton" name="placeLandmarksButton">
-            <property name="text">
-             <string>Place/Edit Registration Landmarks</string>
-            </property>
-           </widget>
-          </item>
-          <item>
            <widget class="QLabel" name="landmarkPlacementStatus">
             <property name="text">
              <string/>
@@ -121,30 +107,10 @@
             </property>
            </widget>
           </item>
-          <item>
-           <spacer name="verticalSpacer_5">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
          </layout>
         </widget>
         <widget class="QWidget" name="skinSegmentationMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_2">
-          <item>
-           <widget class="QPushButton" name="placeLandmarksButtonSkinSeg">
-            <property name="text">
-             <string>Place/Edit Registration Landmarks</string>
-            </property>
-           </widget>
-          </item>
           <item>
            <widget class="QLabel" name="landmarkPlacementStatus_2">
             <property name="text">
@@ -174,19 +140,6 @@
             </property>
            </widget>
           </item>
-          <item>
-           <spacer name="verticalSpacer_4">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
          </layout>
         </widget>
         <widget class="QWidget" name="PhotoscanVolumeTracking">
@@ -211,7 +164,7 @@
              <string>Manual registration refinement</string>
             </property>
             <property name="collapsed">
-             <bool>true</bool>
+             <bool>false</bool>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_9">
              <item>
@@ -280,7 +233,7 @@
              <string>Manual registration refinement</string>
             </property>
             <property name="collapsed">
-             <bool>true</bool>
+             <bool>false</bool>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_12">
              <item>
@@ -295,35 +248,6 @@
           </item>
          </layout>
         </widget>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QWidget" name="trackingApprovalWidget" native="true">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-       <horstretch>0</horstretch>
-       <verstretch>1</verstretch>
-      </sizepolicy>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_10">
-      <item>
-       <widget class="QPushButton" name="approveTransformButton">
-        <property name="text">
-         <string>Approve tracking result</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="approvalStatusLabel">
-        <property name="text">
-         <string>(placeholder approval status)</string>
-        </property>
-        <property name="wordWrap">
-         <bool>true</bool>
-        </property>
        </widget>
       </item>
      </layout>
