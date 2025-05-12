@@ -255,7 +255,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             slicer.mrmlScene.RemoveNode(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
             slicer.mrmlScene.RemoveNode(self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
             self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
-            # self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
+            self.wizard()._existing_approval_revoked = True
 
     def exitPlaceFiducialMode(self):
         if self._pointModifiedObserverTag:
@@ -303,8 +303,8 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         self.viewWidget = set_threeD_view_widget(self.ui)  
         self.ui.dialogControls.setCurrentIndex(1)
         self.markupsWidget = self.ui.photoscanMarkupsWidget  # Assign the correct markups widget
-        self.ui.placeLandmarksButton.clicked.connect(self.onPlaceLandmarksClicked)
-        self.page_locked = False
+        self.ui.pageLockButton.clicked.connect(self.onPageUnlocked)
+        self.page_locked = True
 
     def initializePage(self):
         set_threeD_view_node(self.viewWidget, threeD_view_node=self.wizard().photoscan.view_node)
@@ -326,36 +326,30 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
                     existing_landmarks_node=existing_fiducial_node)
 
         self.setupMarkupsWidget()
-        self.updatePhotoscanApprovalStatusLabel(self.wizard().photoscan.is_approved())
-
-        if self.wizard()._valid_tt_result_exists and not self.wizard()._existing_approval_revoked:
-            self.page_locked = True
-        else:
-            self.page_locked = False
         self.updatePageLock()
     
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
         self.ui.controlsWidget.enabled = not self.page_locked
-        if not self.page_locked:
-            self.ui.trackingApprovalWidget.hide()
-        else:
-            self.ui.trackingApprovalWidget.show()
-            self.ui.approveTransformButton.hide()
-            self.ui.approvalStatusLabel.text = ("A transducer tracking is currently approved for this photoscan. "
-            "To re-do or edit fiducial landmarks, navigate to the "
-            "'Register photoscan to skin surface' page and revoke the existing approval.")
 
-    def onPlaceLandmarksClicked(self):
+    def onPageUnlocked(self):
+
         if self.facial_landmarks_fiducial_node is None:
             self._initialize_facial_landmarks_fiducial_node(node_name = "photoscan-wizard-faciallandmarks")
             self.setupMarkupsWidget()
             self._clear_downstream_results_if_any()
 
-        if self.ui.placeLandmarksButton.text == "Place/Edit Registration Landmarks":
+        self.page_locked = not self.page_locked
+        self.updatePageLock()
+
+        #If the result in the scene remains valid, i.e. points aren't modified, the existing approval can be toggled. 
+        if self.wizard()._valid_tt_result_exists:
+            self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
+        self.wizard().updateWarningLabel()
+
+        if not self.page_locked:
             self.facial_landmarks_fiducial_node.SetLocked(False)
-            self.ui.placeLandmarksButton.setText("Done Placing Landmarks")
             self.placingLandmarks = True
             self.ui.photoscanMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
@@ -364,27 +358,18 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
                 self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
                                                      "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
                                                      "- To unset a landmark's position, double-click it in the list."
-
-        elif self.ui.placeLandmarksButton.text == "Done Placing Landmarks":
+        else:
             self.facial_landmarks_fiducial_node.SetLocked(True)
-            self.ui.placeLandmarksButton.setText("Place/Edit Registration Landmarks")
             self.placingLandmarks = False
             self.ui.photoscanMarkupsWidget.tableWidget().clearSelection()
             self.ui.photoscanMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
-            self.ui.landmarkPlacementStatus.text = ""
 
         self.completeChanged()
 
-    def updatePhotoscanApprovalStatusLabel(self, photoscan_is_approved: bool):
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        status = "approved" if photoscan_is_approved else "not approved"
-        self.ui.photoscanApprovalStatusLabel_Markup.text = (
-            f"Photoscan is {status} for transducer tracking" if loaded_session else f"Photoscan approval status: {photoscan_is_approved}."
-        )
-
     def updateLandmarkPlacementStatus(self):
-        self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust."
+        self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust.\n" \
+                                             "- To unset a landmark's position, double-click it in the list."
 
 class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the base
     def __init__(self, parent=None):
@@ -394,8 +379,8 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         self.viewWidget = set_threeD_view_widget(self.ui)  # Initialize your specific view widget
         self.ui.dialogControls.setCurrentIndex(2)
         self.markupsWidget = self.ui.skinSegMarkupsWidget  # Assign the correct markups widget
-        self.ui.placeLandmarksButtonSkinSeg.clicked.connect(self.onPlaceLandmarksClicked)
-        self.page_locked: bool = False
+        self.ui.pageLockButton.clicked.connect(self.onPageUnlocked)
+        self.page_locked: bool = True
 
     def initializePage(self):
         view_node = self.wizard().volume_view_node
@@ -417,34 +402,28 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
                     existing_landmarks_node=existing_skin_seg_fiducials)
 
         self.setupMarkupsWidget()
-        if self.wizard()._valid_tt_result_exists and not self.wizard()._existing_approval_revoked:
-            self.page_locked = True
-        else:
-            self.page_locked = False
         self.updatePageLock()
     
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
         self.ui.controlsWidget.enabled = not self.page_locked
-        if not self.page_locked:
-            self.ui.trackingApprovalWidget.hide()
-        else:
-            self.ui.trackingApprovalWidget.show()
-            self.ui.approveTransformButton.hide()
-            self.ui.approvalStatusLabel.text = ("Transducer tracking is currently approved for this photoscan. "
-            "To re-do or edit fiducial landmarks, navigate to the "
-            "'Register photoscan to skin surface' page and revoke the existing approval.")
 
-    def onPlaceLandmarksClicked(self):
+    def onPageUnlocked(self):
         if self.facial_landmarks_fiducial_node is None:
             self._initialize_facial_landmarks_fiducial_node(node_name = "skinseg-wizard-faciallandmarks")
             self.setupMarkupsWidget()
-            # self.wizard()._valid_tt_result_exists = False
+        
+        self.page_locked = not self.page_locked
+        self.updatePageLock()
 
-        if self.ui.placeLandmarksButtonSkinSeg.text == "Place/Edit Registration Landmarks":
+        #If the result in the scene remains valid, i.e. points aren't modified, the existing approval can be toggled. 
+        if self.wizard()._valid_tt_result_exists:
+            self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
+        self.wizard().updateWarningLabel()
+
+        if not self.page_locked:
             self.facial_landmarks_fiducial_node.SetLocked(False)
-            self.ui.placeLandmarksButtonSkinSeg.setText("Done Placing Landmarks")
             self.placingLandmarks = True
             self.ui.skinSegMarkupsWidget.enabled = True
             if self._checkAllLandmarksDefined():
@@ -453,15 +432,12 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
                 self.ui.landmarkPlacementStatus_2.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
                                                      "- Click on the corresponding location on the skin surface mesh to place the landmark.\n" \
                                                      "- To unset a landmark's position, double-click it in the list."
-
-        elif self.ui.placeLandmarksButtonSkinSeg.text == "Done Placing Landmarks":
+        else:
             self.facial_landmarks_fiducial_node.SetLocked(True)
-            self.ui.placeLandmarksButtonSkinSeg.setText("Place/Edit Registration Landmarks")
             self.placingLandmarks = False
             self.ui.skinSegMarkupsWidget.tableWidget().clearSelection()
             self.ui.skinSegMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
-            self.ui.landmarkPlacementStatus_2.text = ""
 
         self.completeChanged()
     
@@ -489,12 +465,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(3)
 
-        self.ui.approveTransformButton.clicked.connect(self.onTransformApproveClicked)
         self.ui.enableManualPVRegistration.clicked.connect(self.onManualRegistrationClicked)
         self.ui.runICPRegistrationPV.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
+        self.ui.pageLockButton.clicked.connect(self.togglePageLock)
         self.runningRegistration = False
-        self.page_locked: bool = False
+        self.page_locked: bool = True
 
         # Transform scale slider
         self.ui.scalingTransformMRMLSliderWidget.setMRMLScene(slicer.mrmlScene)
@@ -527,7 +503,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.photoscan_to_volume_transform_node.CreateDefaultDisplayNodes()
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
             self.photoscan_to_volume_transform_node.RemoveAttribute('isTT-PHOTOSCAN_TO_VOLUME')
-            self.transform_approved = get_approval_from_transducer_tracking_result_node(existing_transform_node)
 
         # Check for facial landmarks
         self.has_facial_landmarks = (
@@ -554,18 +529,17 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         else:
             self.ui.runICPRegistrationPV.enabled = False
             self.ui.ManualRegistrationGroupBox.enabled = False
-            self.ui.approveTransformButton.enabled = False
-            self.transform_approved = False
         
-        self.updateTransformApprovalStatusLabel()
-        self.updateTransformApproveButton()
-
-        if self.wizard()._valid_tt_result_exists and not self.wizard()._existing_approval_revoked:
-            self.page_locked = True
-        else:
-            self.page_locked = False
         self.updatePageLock()
     
+    def togglePageLock(self):
+        self.page_locked = not self.page_locked
+        self.updatePageLock()
+        if self.wizard()._valid_tt_result_exists:
+            self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
+        self.completeChanged()
+        self.wizard().updateWarningLabel()
+
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
@@ -582,58 +556,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         # invalidates the result 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
-            # self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
-
-    def updateTransformApprovalStatusLabel(self):
-
-        self.ui.approvalStatusLabel.show()
-
-        if self.transform_approved is None:
-            self.ui.approvalStatusLabel.text = ""
-            return
-        
-        status = "approved" if self.transform_approved else "not approved"
-        self.ui.approvalStatusLabel.text = (
-            f"The photoscan-volume transform is {status} for transducer tracking."
-        )
-
-    def updateTransformApproveButton(self):
-        
-        self.ui.approveTransformButton.show()
-        if self.transform_approved:
-            self.ui.approveTransformButton.setText("Revoke approval")
-            self.ui.approveTransformButton.setToolTip(
-                    "Revoke approval that the current transducer tracking result is correct")
-        else:
-            self.ui.approveTransformButton.setText("Approve photoscan-volume transform")
-            self.ui.approveTransformButton.setToolTip("Approve the current transducer tracking result")
-
-    def onTransformApproveClicked(self):
-
-        self.transform_approved = not self.transform_approved
-
-        if self.transform_approved:
-            self.ui.controlsWidget.enabled = False
-            if self.wizard()._valid_tt_result_exists:
-                self.wizard()._existing_approval_revoked = False
-                self.wizard().transducerPhotoscanTrackingPage.transform_approved = True
-                # self.wizard().photoscanMarkupPage.enablePageControls(enabled = False)
-                # self.wizard().skinSegmentationMarkupPage.enablePageControls(enabled = False)
-        else:
-            self.ui.controlsWidget.enabled = True
-            if self.wizard()._valid_tt_result_exists:
-                self.wizard()._existing_approval_revoked = True
-                self.wizard().transducerPhotoscanTrackingPage.transform_approved = False
-                # self.wizard().photoscanMarkupPage.enablePageControls(enabled = True)
-                # self.wizard().skinSegmentationMarkupPage.enablePageControls(enabled = True)
-
-        # Update the wizard page
-        self.updateTransformApprovalStatusLabel()
-        self.updateTransformApproveButton()
-        self.wizard().updateWarningLabel()
-
-        # Emit signal to update the enable/disable state of 'Next' button. 
-        self.completeChanged()
 
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
@@ -649,13 +571,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.setupTransformNode()
         self.resetScalingTransform()
 
-        self.updateTransformApprovalStatusLabel()
+        # self.updateTransformApprovalStatusLabel()
         self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
 
         # Enable approval and registration fine-tuning buttons
         self.ui.runICPRegistrationPV.enabled = True
         self.ui.ManualRegistrationGroupBox.enabled = True
-        self.ui.approveTransformButton.enabled = True
 
     def setupTransformNode(self):
 
@@ -748,7 +669,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializePVRegistration.enabled = False
             self.ui.runICPRegistrationPV.enabled = False
-            self.ui.approveTransformButton.enabled = False
 
         else:
             self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
@@ -756,7 +676,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.runningRegistration = False
             self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
             self.ui.runICPRegistrationPV.enabled = True
-            self.ui.approveTransformButton.enabled = True
 
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
@@ -770,7 +689,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
-        return not self.runningRegistration and self.transform_approved
+        return not self.runningRegistration and self.page_locked
 
 class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -780,13 +699,13 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(4)
 
-        self.ui.approveTransformButton.clicked.connect(self.onTransformApproveClicked)
         self.ui.enableManualTPRegistration.clicked.connect(self.onManualRegistrationClicked)
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.ui.runICPRegistrationTP.clicked.connect(self.onRunICPRegistrationClicked)
+        self.ui.pageLockButton.clicked.connect(self.togglePageLock)
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
-        self.page_locked: bool = False
+        self.page_locked: bool = True
 
         self.ui.initializeTPRegistration.setToolTip("Use the best virtual fit result to initialize the transducer position. If virtual fit has not been run,"
         "the transform is initialized to idenity.")
@@ -803,7 +722,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             self.transducer_to_volume_transform_node = get_cloned_node(existing_transform_node)
             self.transducer_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
             self.transducer_to_volume_transform_node.RemoveAttribute('isTT-TRANSDUCER_TO_VOLUME')
-            self.transform_approved = get_approval_from_transducer_tracking_result_node(existing_transform_node)
 
         if self.transducer_to_volume_transform_node:
             self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
@@ -811,19 +729,18 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         else:
             self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
             self.ui.runICPRegistrationTP.enabled = False
-            self.ui.approveTransformButton.enabled = False
             self.ui.enableManualTPRegistration.enabled = False
-            self.transform_approved = False
         
-        self.updateTransformApprovalStatusLabel()
-        self.updateTransformApproveButton()
-
-        if self.wizard()._valid_tt_result_exists and not self.wizard()._existing_approval_revoked and self.transform_approved:
-            self.page_locked = True
-        else:
-            self.page_locked = False
         self.updatePageLock()
     
+    def togglePageLock(self):
+        self.page_locked = not self.page_locked
+        self.updatePageLock()
+        if self.wizard()._valid_tt_result_exists:
+            self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
+        self.completeChanged()
+        self.wizard().updateWarningLabel()
+
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
@@ -835,51 +752,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         # invalidates the result 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
-
-    def updateTransformApprovalStatusLabel(self):
-
-        if self.transform_approved is None:
-            self.ui.approvalStatusLabel.text = ""
-            return
-        
-        status = "approved" if self.transform_approved else "not approved"
-        self.ui.approvalStatusLabel.text = (
-            f"The transducer-volume transform is {status} for transducer tracking."
-        )
-
-    def updateTransformApproveButton(self):
-
-        if self.transform_approved:
-            self.ui.approveTransformButton.setText("Revoke approval")
-            self.ui.approveTransformButton.setToolTip(
-                    "Revoke approval that the current transducer tracking result is correct")
-        else:
-            self.ui.approveTransformButton.setText("Approve transducer-volume transform")
-            self.ui.approveTransformButton.setToolTip("Approve the current transducer tracking result")
-
-    def onTransformApproveClicked(self):
-
-        if self.transducer_to_volume_transform_node is None:
-            raise RuntimeError("Transducer-photoscan transform not found.")
-        
-        self.transform_approved = not self.transform_approved
-             
-        if self.transform_approved:
-            self.ui.controlsWidget.enabled = False
-            if self.wizard()._valid_tt_result_exists:
-                self.wizard()._existing_approval_revoked = False
-        else:
-            self.ui.controlsWidget.enabled = True
-            if self.wizard()._valid_tt_result_exists:
-                self.wizard()._existing_approval_revoked = True
-
-        # Update the wizard page
-        self.updateTransformApprovalStatusLabel()
-        self.updateTransformApproveButton()
-        self.wizard().updateWarningLabel()
-
-        # Emit signal to update the enable/disable state of 'Finish' button. 
-        self.completeChanged()
     
     def onInitializeRegistrationClicked(self):
 
@@ -887,14 +759,12 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node = self.wizard()._logic.initialize_node_from_virtual_fit_result(
             transducer = self.wizard().transducer,
             target = self.wizard().target)
-        self.updateTransformApprovalStatusLabel()
         self.setupTransformNode()
         self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
 
         # Enable approval and registration fine-tuning buttons
         self.ui.runICPRegistrationTP.enabled = True
         self.ui.enableManualTPRegistration.enabled = True
-        self.ui.approveTransformButton.enabled = True
             
     def setupTransformNode(self):
 
@@ -914,13 +784,11 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializeTPRegistration.enabled = False
             self.ui.runICPRegistrationTP.enabled = False
-            self.ui.approveTransformButton.enabled = False
         else:
             self.ui.enableManualTPRegistration.text = "Enable manual transform interaction"
             self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
             self.ui.initializeTPRegistration.enabled = True
-            self.ui.approveTransformButton.enabled = True
             self.ui.runICPRegistrationTP.enabled = True
     
         # Emit signal to update the enable/disable state of 'Finish' button. 
@@ -963,7 +831,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
-        return not self.runningRegistration and self.transform_approved
+        return not self.runningRegistration and self.page_locked
 
 class TransducerTrackingWizard(qt.QWizard):
     def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
@@ -1096,7 +964,6 @@ class TransducerTrackingWizard(qt.QWizard):
         # Reset the wizard volume view node based on the display settings
         reset_view_node_camera(self.volume_view_node)
         self.updateWarningLabel()
-        # self.updateCurrentPageLockButton()
 
     def updateWarningLabel(self):
 
@@ -1174,9 +1041,9 @@ class TransducerTrackingWizard(qt.QWizard):
             
             self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node = self._logic.add_transducer_tracking_result(
                 photoscan_to_volume_transform = self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node,
-                photoscan_to_volume_approval_state = self.photoscanVolumeTrackingPage.transform_approved,
+                photoscan_to_volume_approval_state = True,
                 transducer_to_volume_transform = self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node,
-                transducer_to_volume_approval_state = self.transducerPhotoscanTrackingPage.transform_approved,
+                transducer_to_volume_approval_state = True,
                 photoscan_id = self.photoscan.get_id(),
                 transducer = self.transducer)
         else:
@@ -1279,7 +1146,7 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(0)
-        self.ui.trackingApprovalWidget.hide()
+        # self.ui.trackingApprovalWidget.hide()
         self.ui.warningTrackingResultLabel.hide()
         self.ui.lockPanel.hide()
 
