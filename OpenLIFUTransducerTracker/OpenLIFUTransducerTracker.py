@@ -248,6 +248,9 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
             self.wizard().photoscanVolumeTrackingPage.resetScalingTransform()
+            # Clear downstream nodes
+            slicer.mrmlScene.RemoveNode(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
+            slicer.mrmlScene.RemoveNode(self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
             self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
             self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
 
@@ -270,12 +273,14 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         return all_points_defined
 
     def isComplete(self):
-        if self.wizard()._valid_tt_result_exists:
+        if self.placingLandmarks:
+            return False
+        elif self.wizard()._valid_tt_result_exists:
             return True
         elif self.facial_landmarks_fiducial_node is not None:
-            return self._checkAllLandmarksDefined() and not self.placingLandmarks
+            return self._checkAllLandmarksDefined()
         else:
-            return not self.placingLandmarks
+            True
 
     # Abstract methods to be implemented by subclasses
     def initializePage(self):
@@ -608,7 +613,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
 
-        # Clear previous result
+        # Clear previous result if it exists
         slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_transform_node) # Clear current result node if it exists (restarting process)
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
