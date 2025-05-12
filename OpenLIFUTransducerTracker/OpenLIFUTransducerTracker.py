@@ -517,14 +517,20 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             and self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         if self.has_facial_landmarks:
             self.ui.initializePVRegistration.enabled = True
+            self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration between the photoscan mesh and skin surface.")
+            self.ui.runICPRegistrationPV.enabled = True
+            self.ui.runICPRegistrationPV.setToolTip("Run Iterative Closest Point (ICP) registration of the face.")
             if self.photoscan_to_volume_transform_node:
                 self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
-                self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration between the photoscan mesh and skin surface.")
         else:
             self.ui.initializePVRegistration.setText("Initialize photoscan-volume transform")
             self.ui.initializePVRegistration.enabled = False
             self.ui.initializePVRegistration.setToolTip("Please place fiducial landmarks on both the photoscan"
-            " and skin surface mesh on the preceding pages to enable initialization.")
+            " and skin surface mesh on the preceding pages to enable fiducial-based registration.")
+            self.ui.runICPRegistrationPV.enabled = False
+            self.ui.runICPRegistrationPV.setToolTip("Iterative Closest Point (ICP) registration of the face requires the user to"
+            " first define fiducial landmarks on the facial surface on the preceding pages to delineate the region of interest.")
+
 
         if self.photoscan_to_volume_transform_node:
             self.setupTransformNode()
