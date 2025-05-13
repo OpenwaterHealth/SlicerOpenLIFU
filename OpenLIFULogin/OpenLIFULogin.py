@@ -569,8 +569,15 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 password_hash = "",
                 roles = [],
                 name = "Anonymous",
-                description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
+                description = "This is the default role set when the app opens, without anyone logged in, with user account mode activated. It has no roles and is therefore the most restricted."
         )
+        self._default_admin_user = openlifu_lz().db.User(
+                id = "default_admin", 
+                password_hash = "default_admin",
+                roles = ['admin'],
+                name = "default_admin",
+                description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database or if there is no database loaded at all."
+                )
         self._last_active_user = self._default_anonymous_user
 
     def setup(self) -> None:
@@ -816,27 +823,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def updateWidgetLoginState(self, state: Optional[LoginState] = None):
         if state is None:
-            state = self._cur_login_state # if called with None, we reload
+            state = self._cur_login_state # if called with None, we reload with prev state
 
-        # if a db is connected, check if there is an admin there. If not, override the state.
         if get_cur_db() and not any('admin' in u.roles for u in get_cur_db().load_all_users()):
-            # set the user to admin
-            default_admin_user = openlifu_lz().db.User(
-                    id = "default_admin", 
-                    password_hash = "default_admin",
-                    roles = ['admin'],
-                    name = "default_admin",
-                    description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database."
-                    )
-            self.logic.active_user = default_admin_user
-
+            # if there is a connected db with no admin users in it, set the user to admin
+            self.logic.active_user = self._default_admin_user
             self._cur_login_state = LoginState.DEFAULT_ADMIN
         elif get_cur_db() and self._cur_login_state == LoginState.DEFAULT_ADMIN:
-            # If we are here, this means there *IS* an admin in the db, but the
-            # state is DEFAULT_ADMIN. So we have to exit the DEFAULT_ADMIN
-            # state.
+            # If there *IS* an admin in the db, but the state is DEFAULT_ADMIN,
+            # we have to exit the DEFAULT_ADMIN state.
             self.logic.active_user = self._default_anonymous_user
             self._cur_login_state = LoginState.NOT_LOGGED_IN
+        elif get_cur_db() is None:
+            # if there is no connected db, set the user to admin
+            self.logic.active_user = self._default_admin_user
+            self._cur_login_state = LoginState.DEFAULT_ADMIN
         else:
             self._cur_login_state = state
 
@@ -860,7 +861,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.name}!")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
         elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
-            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please create an admin account for user accounts to work.")
+            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please connect a database with an admin account for user accounts to work.")
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
