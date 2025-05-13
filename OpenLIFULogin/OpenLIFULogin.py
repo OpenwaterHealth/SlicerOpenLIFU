@@ -374,7 +374,6 @@ class ManageAccountsDialog(qt.QDialog):
         self.tableWidget.setHorizontalHeaderLabels(cols)
         self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
-        self.tableWidget.setAlternatingRowColors(True)  # style
         self.tableWidget.setWordWrap(True) # style
         self.tableWidget.setShowGrid(True)  # style
         self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)  # style
