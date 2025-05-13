@@ -455,7 +455,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
     DEFAULT_INT_RANGE = (-1_000_000, 1_000_000)
     DEFAULT_FLOAT_VALUE = 0.
     DEFAULT_FLOAT_RANGE = (-1e6, 1e6)
-    DEFAULT_FLOAT_NUM_DECIMALS = 4
+    DEFAULT_FLOAT_NUM_DECIMALS = 8
 
     def __init__(self, cls: Type[Any], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None):
         """
