@@ -237,6 +237,7 @@ class SlicerOpenLIFUSession:
             for photoscan in self.get_affiliated_photoscans()
             if any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
             ]
+        # TODO: I think just removing this check should allow this function to return a list of multiple approved photoscan ID
         if len(approved_tt_photoscans) > 1:
             raise RuntimeError("Multiple  photoscans with approved transducer tracking results detected (IDs: {approved_photoscans}). Only one tracking result should be approved per session.")
 
