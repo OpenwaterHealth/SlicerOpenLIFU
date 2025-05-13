@@ -35,6 +35,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
+    display_errors,
     replace_widget,
 )
 
@@ -309,6 +310,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
 
+    @display_errors
     def onComputeSolutionClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
 
@@ -322,8 +324,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 slicer.app.processEvents()
                 self.logic.computeSolution(activeData["Volume"], activeData["Target"],
                                            activeData["Transducer"], activeData["Protocol"])
-            except Exception as e:
-                slicer.util.errorDisplay(f"Solution computation failed due to the following reason:\n{e}")
             finally:
                 self.updateSolutionProgressBar()
 
