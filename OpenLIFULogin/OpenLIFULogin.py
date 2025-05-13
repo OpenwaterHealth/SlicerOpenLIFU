@@ -656,6 +656,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.initializeParameterNode()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
+        if self._cur_login_state == LoginState.LOGGED_IN:
+            slicer.util.infoDisplay(f"Due to the database location being changed, you were logged out of {get_current_user().id}.")
+            self.onLoginLogoutClicked()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     def initializeParameterNode(self) -> None:
