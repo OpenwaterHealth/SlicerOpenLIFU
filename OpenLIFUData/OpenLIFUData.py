@@ -1906,6 +1906,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.update_photocollections_affiliated_with_loaded_session()
 
         # Check if there are any photoscans with approved transducer tracking results
+        # TODO: This assumes a single approved photoscan per session. This check needs to be udpated to allow for 
+        # approved_photoscan_id containing multiple photoscan IDs. 
         approved_photoscan_id = self.getParameterNode().loaded_session.get_transducer_tracking_approvals()
         if approved_photoscan_id:
             approved_photoscan_id = approved_photoscan_id[0]

@@ -72,6 +72,7 @@ if TYPE_CHECKING:
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # TODO: This placelandmarks flag can probably be removed now. Since the self.page_locked flag conveys that same information.
         self.placingLandmarks = False
         self._pointModifiedObserverTag = None
         self._currentlyPlacingIndex = -1
@@ -884,9 +885,9 @@ class TransducerTrackingWizard(qt.QWizard):
             photoscan_id = self.photoscan.get_id(),
             transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
         
-        self._existing_approval_revoked = False
+        self._existing_approval_revoked = False # This flag gets set to True when the user `unlocks` a page to allow editing of a valid tt result. 
         if self.photoscan_to_volume_transform_node and self.transducer_to_volume_transform_node:
-            self._valid_tt_result_exists = True
+            self._valid_tt_result_exists = True # This flag gets set to False when the existing tt result is invalidated i.e. a point is modified or transform is modified.
             if not (
                 get_approval_from_transducer_tracking_result_node(self.photoscan_to_volume_transform_node) 
                 and get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
@@ -1047,10 +1048,10 @@ class TransducerTrackingWizard(qt.QWizard):
                 photoscan_id = self.photoscan.get_id(),
                 transducer = self.transducer)
 
-                # Update the approval status of the associated openlifu photoscan object
-                self._logic.update_photoscan_approval(
-                    photoscan = self.photoscan,
-                    approval_state = True)
+            # Update the approval status of the associated openlifu photoscan object
+            self._logic.update_photoscan_approval(
+                photoscan = self.photoscan,
+                approval_state = True)
 
         else:
             raise RuntimeError("Something went wrong. You should not be able to complete the wizard without creating transducer tracking transforms.")
@@ -1901,6 +1902,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
 
         if current_state != approval_state: # If the approval state has changed
 
+            # TODO: Remove this constraint of only one approved photoscan per session. Might just need to remove this check. 
             # Check that the session doesn't have another approved photoscan
             if approval_state and session: # Only a single photoscan in a session can be approved
                 approved_photoscans = self.get_photoscan_ids_with_approval()
