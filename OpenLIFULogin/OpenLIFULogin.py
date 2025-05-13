@@ -606,7 +606,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # Account management
         
-        self.ui.createNewAccountButton.clicked.connect(self.onCreateNewAccountClicked)
         self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
         self.inject_workflow_controls_into_placeholder()
@@ -809,13 +808,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         # mode can be off. If user account mode is on, only admins can interact
         # with the button.
         if not get_cur_db():
-            self.ui.createNewAccountButton.setEnabled(False)
-            self.ui.createNewAccountButton.setToolTip("The login feature requires a database connection.")
             self.ui.manageAccountsButton.setEnabled(False)
             self.ui.manageAccountsButton.setToolTip("The login feature requires a database connection.")
             return
-        self.ui.createNewAccountButton.setEnabled(True)
-        self.ui.createNewAccountButton.setToolTip("Create a new account")
         self.ui.manageAccountsButton.setEnabled(True)
         self.ui.manageAccountsButton.setToolTip("Manage accounts")
 
