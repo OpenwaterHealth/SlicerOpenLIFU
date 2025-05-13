@@ -1046,6 +1046,12 @@ class TransducerTrackingWizard(qt.QWizard):
                 transducer_to_volume_approval_state = True,
                 photoscan_id = self.photoscan.get_id(),
                 transducer = self.transducer)
+
+                # Update the approval status of the associated openlifu photoscan object
+                self._logic.update_photoscan_approval(
+                    photoscan = self.photoscan,
+                    approval_state = True)
+
         else:
             raise RuntimeError("Something went wrong. You should not be able to complete the wizard without creating transducer tracking transforms.")
 
@@ -1146,18 +1152,11 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
         self.ui.dialogControls.setCurrentIndex(0)
-        # self.ui.trackingApprovalWidget.hide()
         self.ui.warningTrackingResultLabel.hide()
         self.ui.lockPanel.hide()
 
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
-
-        self._photoscan_approved = self.wizard().photoscan_approved
-        # Connect buttons and signals
-        self.updatePhotoscanApproveButton()
-        self.updatePhotoscanApprovalStatusLabel()
-        self.ui.photoscanApprovalButton.clicked.connect(self.onPhotoscanApproveClicked)
 
         set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
         
@@ -1166,38 +1165,12 @@ class PhotoscanPreviewPage(qt.QWizardPage):
         # Reset the camera associated with the view node based on the photoscan model
         reset_view_node_camera(self.wizard().photoscan.view_node)
 
-    def updatePhotoscanApprovalStatusLabel(self):
-        
-        status = "approved" if self._photoscan_approved else "not approved"
-        self.ui.photoscanApprovalStatusLabel.text = (
-            f"Photoscan is {status} for transducer tracking."
-        )
-
-    def updatePhotoscanApproveButton(self):
-        if self._photoscan_approved:
-            self.ui.photoscanApprovalButton.setText("Revoke photoscan approval")
-            self.ui.photoscanApprovalButton.setToolTip(
-                    "Revoke approval that the current photoscan is of sufficient quality to be used for transducer tracking")
-        else:
-            self.ui.photoscanApprovalButton.setText("Approve photoscan")
-            self.ui.photoscanApprovalButton.setToolTip("Approve that the current photoscan can be used for transducer tracking")
-
-    def onPhotoscanApproveClicked(self):
-
-        # Update the approval status at a wizard-level
-        self._photoscan_approved = not self._photoscan_approved 
-        
-        # Update the wizard page
-        self.updatePhotoscanApprovalStatusLabel()
-        self.updatePhotoscanApproveButton()
-
 class PhotoscanPreviewWizard(qt.QWizard):
     def __init__(self, photoscan : "openlifu.nav.photoscan.Photoscan"):
         super().__init__()
 
         self._logic = self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerTracker')
         self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
-        self.photoscan_approved: bool = self.photoscan.is_approved()
 
         self.setupViewNode()
 
@@ -1214,15 +1187,6 @@ class PhotoscanPreviewWizard(qt.QWizard):
 
     def onFinish(self):
         self.resetViewNodes()
-
-        # Update final photoscan approval state
-        self.photoscan_approved = self.photoscanPreviewPage._photoscan_approved
-
-        # Update the photoscan approval status in the underlying openlifu photoscan object
-        self._logic.update_photoscan_approval(
-            photoscan = self.photoscan,
-            approval_state = self.photoscan_approved)
-
         self.accept()  # Closes the wizard
     
     def setupViewNode(self):
