@@ -365,6 +365,13 @@ OpenLIFUVirtualFitOptionsDefinitionWidget</string>
        <widget class="ctkDynamicSpacer" name="DynamicSpacer"/>
       </item>
       <item>
+       <widget class="QLabel" name="protocolValidityIndicator">
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="saveStateLabel">
         <property name="alignment">
          <set>Qt::AlignCenter</set>
