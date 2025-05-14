@@ -311,7 +311,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
 
     @display_errors
-    def onComputeSolutionClicked(self):
+    def onComputeSolutionClicked(self, checked:bool):
         activeData = self.algorithm_input_widget.get_current_data()
 
         # In case a PNP was previously being displayed, hide it since it is about to no longer belong to the active solution.
