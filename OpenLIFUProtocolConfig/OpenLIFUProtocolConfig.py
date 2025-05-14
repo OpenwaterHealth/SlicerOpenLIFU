@@ -1087,7 +1087,7 @@ class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMult
         max_angle_spinbox = maxangle_definition_form_widget._field_widgets['max_angle']
         maxangle_definition_form_widget.modify_widget_spinbox(max_angle_spinbox, default_value=30, min_value=0, max_value=90)
 
-def _get_form_as_segmentation_method(self):
+def _get_form_as_segmentation_method(self, post_init: bool = True):
     """
     Custom replacement for get_form_as_class, used to override
     widgets inside the segmentation method form.
@@ -1098,7 +1098,11 @@ def _get_form_as_segmentation_method(self):
     if self._cls.__name__ in ["UniformWater", "UniformTissue"]:
         d.pop("ref_material")
 
-    return self._cls(**d)
+    if post_init:
+        return self._cls(**d)
+    else:
+        return instantiate_without_post_init(self._cls, **d)
+
 
 class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
 
