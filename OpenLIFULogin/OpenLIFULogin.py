@@ -861,7 +861,10 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome, {self.logic.active_user.name}!")
             self.ui.loginStateNotificationLabel.setProperty("styleSheet", f"color: {text_color}; font-weight: bold; font-size: 16px; border: none;")
         elif self._cur_login_state == LoginState.DEFAULT_ADMIN:
-            self.ui.loginStateNotificationLabel.setProperty("text", f"Welcome! Please connect a database with an admin account for user accounts to work.")
+            self.ui.loginStateNotificationLabel.setProperty("text",
+                "Welcome! You currently have root permissions. "
+                "Connect to a database and add an admin account for user account permissions to engage across the application."
+            )
 
     def updateUserAccountModeButton(self):
         if self._parameterNode.user_account_mode:
