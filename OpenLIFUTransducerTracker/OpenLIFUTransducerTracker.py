@@ -879,8 +879,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
 
     def onManualRegistrationClicked(self):
-        """ This is a temporary implementation that allows the user to manually edit the transducer-volume transform. In the 
-        future, ICP registration will be integrated here. """
+        """ This allows the user to manually edit the transducer-volume transform. """
         
         if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
             self.ui.enableManualTPRegistration.text = "Disable manual transform interaction"
