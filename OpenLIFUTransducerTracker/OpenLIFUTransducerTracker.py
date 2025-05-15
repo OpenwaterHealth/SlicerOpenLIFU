@@ -917,7 +917,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
  
         self.transducer_to_photoscan_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
             input_fixed_model = photoscan_hardened,
-            input_moving_model = transducer_hardened)
+            input_moving_model = transducer_hardened,
+            transformType = 0,
+        )
         
         if self.transducer_to_photoscan_icp_transform_node:
             self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
