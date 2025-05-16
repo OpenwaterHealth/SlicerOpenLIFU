@@ -197,6 +197,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self._cur_protocol_id: str = ""  # important if WIPs change the ID
         self._cur_save_state = SaveState.NO_CHANGES
+        self._editor_is_enabled: bool = False
         self._parameterNode: Optional[OpenLIFUProtocolConfigParameterNode] = None
         self._parameterNodeGuiTag = None
 
@@ -289,23 +290,25 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # Connect signals to trigger save state update
         trigger_unsaved_changes = lambda: self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES) if not self._is_saving_changes and not self._is_updating_display else None
+        trigger_invalid_protocol_check = lambda: self.updateWidgetProtocolValidityIndicator()
 
-        self.ui.protocolNameLineEdit.textChanged.connect(trigger_unsaved_changes)
-        self.ui.protocolIdLineEdit.textChanged.connect(trigger_unsaved_changes)
-        self.ui.protocolDescriptionTextEdit.textChanged.connect(trigger_unsaved_changes)
+        for f in [trigger_unsaved_changes, trigger_invalid_protocol_check]:
+            self.ui.protocolNameLineEdit.textChanged.connect(f)
+            self.ui.protocolIdLineEdit.textChanged.connect(f)
+            self.ui.protocolDescriptionTextEdit.textChanged.connect(f)
 
-        self.allowed_roles_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
-        self.pulse_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.sequence_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.abstract_focal_pattern_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.sim_setup_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.abstract_delay_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.abstract_apodization_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.abstract_segmentation_method_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.parameter_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
-        self.target_constraints_widget.table.itemChanged.connect(lambda *_: trigger_unsaved_changes())
-        self.solution_analysis_options_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
-        self.virtual_fit_options_definition_widget.add_value_changed_signals(trigger_unsaved_changes)
+            self.allowed_roles_widget.table.itemChanged.connect(lambda *_: f)
+            self.pulse_definition_widget.add_value_changed_signals(f)
+            self.sequence_definition_widget.add_value_changed_signals(f)
+            self.abstract_focal_pattern_definition_widget.add_value_changed_signals(f)
+            self.sim_setup_definition_widget.add_value_changed_signals(f)
+            self.abstract_delay_method_definition_widget.add_value_changed_signals(f)
+            self.abstract_apodization_method_definition_widget.add_value_changed_signals(f)
+            self.abstract_segmentation_method_definition_widget.add_value_changed_signals(f)
+            self.parameter_constraints_widget.table.itemChanged.connect(lambda *_: f)
+            self.target_constraints_widget.table.itemChanged.connect(lambda *_: f)
+            self.solution_analysis_options_definition_widget.add_value_changed_signals(f)
+            self.virtual_fit_options_definition_widget.add_value_changed_signals(f)
 
         # Connect main widget functions
 
@@ -753,6 +756,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.protocolDatabaseDeleteButton.setEnabled(False)
 
     def setProtocolEditorEnabled(self, enabled: bool) -> None:
+        self._editor_is_enabled = enabled
         self.ui.protocolEditorSectionGroupBox.setEnabled(enabled)
 
         # Dynamic widgets
@@ -772,6 +776,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.setAllSaveAndDeleteButtonsEnabled(enabled)
         if not get_cur_db():
             self.setDatabaseSaveAndDeleteButtonsEnabled(False)
+
+        self.updateWidgetProtocolValidityIndicator()
 
     def setProtocolEditButtonEnabled(self, enabled: bool) -> None:
         self.ui.protocolEditRevertDiscardButton.setEnabled(enabled)
@@ -815,6 +821,22 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.setCreateNewProtocolButtonEnabled(enabled)
         self.setProtocolEditorEnabled(enabled)
         self.setProtocolEditButtonEnabled(enabled)
+
+    def updateWidgetProtocolValidityIndicator(self) -> None:
+        if not self._editor_is_enabled:
+            self.ui.protocolValidityIndicator.setProperty("text", "")  
+            self.ui.protocolValidityIndicator.setProperty("styleSheet", "border: none;")
+            return
+        
+        # Try constructing entered protocol object from GUI. If it fails, protocol is invalid
+        try:
+            self.getProtocolFromGUI(post_init=True)
+        except Exception as e:
+            self.ui.protocolValidityIndicator.setProperty("text", f"Protocol is invalid due to at least one error:\n'{e}'")
+            self.ui.protocolValidityIndicator.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 3px;")
+        else:
+            self.ui.protocolValidityIndicator.setProperty("text", "")  
+            self.ui.protocolValidityIndicator.setProperty("styleSheet", "border: none;")
 
     def load_protocol_from_openlifu(self, protocol: "openlifu.plan.Protocol", check_cache: bool = True) -> bool:
 
