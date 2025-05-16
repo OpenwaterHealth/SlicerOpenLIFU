@@ -1901,20 +1901,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         current_state = photoscan.is_approved()
 
         if current_state != approval_state: # If the approval state has changed
-
-            # TODO: Remove this constraint of only one approved photoscan per session. Might just need to remove this check. 
-            # Check that the session doesn't have another approved photoscan
-            if approval_state and session: # Only a single photoscan in a session can be approved
-                approved_photoscans = self.get_photoscan_ids_with_approval()
-                if approved_photoscans:
-                    if len(approved_photoscans) > 1:
-                        raise RuntimeError("Multiple approved photoscans detected (IDs: {approved_photoscans}). Only one should be approved per session.")
-                    slicer.util.infoDisplay(
-                    text= f"Only one photoscan can be approved per session. Photoscan ID {approved_photoscans[0]} is already approved. Revoke it to approve another.",
-                    windowTitle="Approved photoscan exists"
-                    )
-                    return
-
             photoscan.set_approval(approval_state = approval_state)
             # Update the loaded SlicerOpenLIFUPhotoscan.
             data_parameter_node.loaded_photoscans[photoscan.get_id()] = photoscan 
