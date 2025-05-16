@@ -194,7 +194,7 @@ class SlicerOpenLIFUTransducer:
         query_transform_node.GetMatrixTransformToParent(query_transform_matrix)
 
         is_matching = (
-            slicer.util.arrayFromVTKMatrix(current_transform_matrix) == slicer.util.arrayFromVTKMatrix(query_transform_matrix)
-            ).all()
+            np.isclose(slicer.util.arrayFromVTKMatrix(current_transform_matrix), slicer.util.arrayFromVTKMatrix(query_transform_matrix))
+        ).all()
         
         return is_matching
