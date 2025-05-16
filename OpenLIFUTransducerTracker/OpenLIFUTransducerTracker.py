@@ -699,23 +699,29 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 surface_model_node = photoscan_hardened
             )
 
-            self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
-                input_fixed_model = self.wizard().skin_mesh_node,
-                input_moving_model = photoscan_roi_submesh)
-            
-            if self.photoscan_to_volume_icp_transform_node:
+            try:
+                self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+                    input_fixed_model = self.wizard().skin_mesh_node,
+                    input_moving_model = photoscan_roi_submesh)
+
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
             
                 # Reset the photoscan to volume transform and now observe the ICP result
                 self.resetScalingTransform()
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
+                slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
 
-            # Remove temporary hardened nodes and icp transform node
-            slicer.mrmlScene.RemoveNode(photoscan_hardened)
-            slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
-            slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
-            slicer.mrmlScene.RemoveNode(self.photoscan_to_volume_icp_transform_node)
+            except Exception as e:
+                slicer.util.errorDisplay('ICP failed. Check logs for details.')
+                raise e
+            
+            finally:
+            
+                # Remove temporary hardened nodes
+                slicer.mrmlScene.RemoveNode(photoscan_hardened)
+                slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
+                slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
 
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
@@ -915,20 +921,25 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         transducer_hardened.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
         transducer_hardened.HardenTransform()
  
-        self.transducer_to_photoscan_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
-            input_fixed_model = photoscan_hardened,
-            input_moving_model = transducer_hardened,
-            transformType = 0,
-        )
-        
-        if self.transducer_to_photoscan_icp_transform_node:
+        try:
+            self.transducer_to_photoscan_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+                input_fixed_model = photoscan_hardened,
+                input_moving_model = transducer_hardened,
+                transformType = 0,
+            )
+
             self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
             self.transducer_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
+            slicer.mrmlScene.RemoveNode(self.transducer_to_photoscan_icp_transform_node)
 
-        # Remove hardened photoscan and transducer node and icp transform node
-        slicer.mrmlScene.RemoveNode(photoscan_hardened)
-        slicer.mrmlScene.RemoveNode(self.transducer_to_photoscan_icp_transform_node)
-        slicer.mrmlScene.RemoveNode(transducer_hardened)
+        except Exception as e:
+            slicer.util.errorDisplay('ICP failed. Check logs for details.')
+            raise e
+            
+        finally:
+            # Remove hardened photoscan and transducer node 
+            slicer.mrmlScene.RemoveNode(photoscan_hardened)
+            slicer.mrmlScene.RemoveNode(transducer_hardened)
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
@@ -2334,32 +2345,25 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             if the registration fails. The transform node will be automatically added to the
             scene.
         """
-        
+
         icp_result_node =  slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "icp_transform_result")
 
-        try:
-            icpTransform = vtk.vtkIterativeClosestPointTransform()
-            icpTransform.SetSource( input_moving_model.GetPolyData() )
-            icpTransform.SetTarget( input_fixed_model.GetPolyData() )
-            icpTransform.GetLandmarkTransform().SetModeToRigidBody()
-            if transformType == 1:
-                icpTransform.GetLandmarkTransform().SetModeToSimilarity()
-            if transformType == 2:
-                icpTransform.GetLandmarkTransform().SetModeToAffine()
-            icpTransform.SetMaximumNumberOfIterations( numIterations )
-            icpTransform.SetMaximumNumberOfLandmarks( numLandmarks )
-            icpTransform.Modified()
-            icpTransform.Update()
+        icpTransform = vtk.vtkIterativeClosestPointTransform()
+        icpTransform.SetSource( input_moving_model.GetPolyData() )
+        icpTransform.SetTarget( input_fixed_model.GetPolyData() )
+        icpTransform.GetLandmarkTransform().SetModeToRigidBody()
+        if transformType == 1:
+            icpTransform.GetLandmarkTransform().SetModeToSimilarity()
+        if transformType == 2:
+            icpTransform.GetLandmarkTransform().SetModeToAffine()
+        icpTransform.SetMaximumNumberOfIterations( numIterations )
+        icpTransform.SetMaximumNumberOfLandmarks( numLandmarks )
+        icpTransform.Modified()
+        icpTransform.Update()
 
-            icp_result_node.SetMatrixTransformToParent( icpTransform.GetMatrix() )
-
-            if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-                icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), input_moving_model.GetID())
-                icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), input_fixed_model.GetID())
-
-        except Exception as e:
-            print("Exception thrown:", e)
-            return None
+        icp_result_node.SetMatrixTransformToParent( icpTransform.GetMatrix() )
+        icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), input_moving_model.GetID())
+        icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), input_fixed_model.GetID())
         
         return icp_result_node
 
