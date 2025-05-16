@@ -1659,9 +1659,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             if transducer.surface_model_node is None: # Check that the selected transducer has an affiliated registration surface model
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
-            elif get_guided_mode_state() and (photoscan and not photoscan.photoscan_approved): # GM: Check that the selected photoscan is approved
-                self.ui.runTrackingButton.enabled = False 
-                self.ui.runTrackingButton.setToolTip("The selected photoscan has not been approved for transducer tracking.")
+            # elif get_guided_mode_state() and (photoscan and not photoscan.photoscan_approved): # GM: Check that the selected photoscan is approved
+            #     self.ui.runTrackingButton.enabled = False
+            #     self.ui.runTrackingButton.setToolTip("The selected photoscan has not been approved for transducer tracking.")
             elif get_guided_mode_state() and (target and not target_is_approved): # GM: Check that virtual fit is approved for the selected target
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
