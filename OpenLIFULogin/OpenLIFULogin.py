@@ -501,7 +501,7 @@ class ManageAccountsDialog(qt.QDialog):
             ):
                 return
             self.db.delete_user(user_id)
-            slicer.util.getModuleWidget("OpenLIFULogin").onLoginLogoutClicked()
+            slicer.util.getModuleWidget("OpenLIFULogin").logout()
             self.accept()
         else:
             if not slicer.util.confirmYesNoDisplay(
@@ -658,7 +658,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         if self._cur_login_state == LoginState.LOGGED_IN:
             slicer.util.infoDisplay(f"You have been logged out because the database location was changed.")
-            self.onLoginLogoutClicked()
+            self.logout()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
 
     def initializeParameterNode(self) -> None:
@@ -716,26 +716,34 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
     @display_errors
     def onLoginLogoutClicked(self, checked: bool = False) -> None:
         if self.ui.loginLogoutButton.text == "Logout":
-            self.logic.active_user = self._default_anonymous_user
-            self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+            self.logout()
         elif self.ui.loginLogoutButton.text == "Login":
-            loginDlg = UsernamePasswordDialog()
-            returncode, user_id, password_text = loginDlg.customexec_()
+            self.login()
 
-            if not returncode:
-                return
+    def logout(self) -> None:
+        """Log the user out, setting the current user to be the default anonymous user."""
+        self.logic.active_user = self._default_anonymous_user
+        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+    
+    def login(self) -> None:
+        """Execute the interactive login process, which could succeed, fail, or be canceled."""
+        loginDlg = UsernamePasswordDialog()
+        returncode, user_id, password_text = loginDlg.customexec_()
 
-            users = get_cur_db().load_all_users()
-            verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
+        if not returncode:
+            return
 
-            matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
+        users = get_cur_db().load_all_users()
+        verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
 
-            if not matched_user:
-                self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
-                return
+        matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
 
-            self.logic.active_user = matched_user
-            self.updateWidgetLoginState(LoginState.LOGGED_IN)
+        if not matched_user:
+            self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
+            return
+
+        self.logic.active_user = matched_user
+        self.updateWidgetLoginState(LoginState.LOGGED_IN)
 
     @display_errors
     def onCreateNewAccountClicked(self, checked:bool = False) -> None:
