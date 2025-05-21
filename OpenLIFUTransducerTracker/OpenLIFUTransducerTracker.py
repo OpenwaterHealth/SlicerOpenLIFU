@@ -1165,6 +1165,7 @@ class PhotoscanPreviewDialog(qt.QDialog):
     def setup(self):
 
         self.setMinimumWidth(400)
+        self.setMinimumHeight(400)
 
         boxLayout = qt.QVBoxLayout()
         self.setLayout(boxLayout)
@@ -1641,9 +1642,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             if transducer.surface_model_node is None: # Check that the selected transducer has an affiliated registration surface model
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
-            # elif get_guided_mode_state() and (photoscan and not photoscan.photoscan_approved): # GM: Check that the selected photoscan is approved
-            #     self.ui.runTrackingButton.enabled = False
-            #     self.ui.runTrackingButton.setToolTip("The selected photoscan has not been approved for transducer tracking.")
             elif get_guided_mode_state() and (target and not target_is_approved): # GM: Check that virtual fit is approved for the selected target
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
@@ -1741,14 +1739,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateApprovalStatusLabel(self):
         """ Updates the status message that displays which photoscans have been approved or have
         transducer tracking results that have been approved."""
-        approved_photoscan_ids = self.logic.get_photoscan_ids_with_approval()
-        if len(approved_photoscan_ids) == 0:
-            photoscan_approval_status = "There are currently no photoscan approvals."
-        else:
-            photoscan_approval_status = (
-                "The following photoscans are approved for transducer tracking:\n- "
-                + "\n- ".join(approved_photoscan_ids)
-            )
+
         photoscan_ids_with_approved_tt_results = self.logic.get_photoscan_ids_with_approved_tt_results()
         if len(photoscan_ids_with_approved_tt_results ) == 0:
             tt_approval_status = "There are currently no transducer tracking approvals."
@@ -1757,7 +1748,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 "Transducer tracking is approved for the following photoscans:\n- "
                 + "\n- ".join(photoscan_ids_with_approved_tt_results)
             )
-        self.ui.approvalStatusLabel.text = photoscan_approval_status + "\n" + tt_approval_status
+        self.ui.approvalStatusLabel.text = tt_approval_status
     
     def updateApprovalWarningsIfAny(self):
         """ Updates the status message that warns the user if virtual fit is not 
@@ -1765,7 +1756,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         approved for transducer tracking"""
         
         current_data = self.algorithm_input_widget.get_current_data()
-        selected_photoscan = current_data['Photoscan']
         selected_target = current_data["Target"]
         warnings = ''
         if selected_target:
@@ -1773,8 +1763,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
             if not target_is_approved:
                 warnings += '\n-Virtual fit is not approved for the selected target.'
-        if selected_photoscan and not selected_photoscan.photoscan_approved:
-            warnings += '\n-The selected photoscan is not approved for transducer tracking.'
         
         if warnings:
             self.ui.approvalWarningLabel.text = "WARNING(S):" + warnings
@@ -1788,7 +1776,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
-        approved_photoscans = self.logic.get_photoscan_ids_with_approval()
         photoscans_with_approved_tt = self.logic.get_photoscan_ids_with_approved_tt_results(approved_photoscans_only = True)
         
         if session is None:
@@ -1797,12 +1784,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         elif not selected_photoscan_openlifu:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Select a photoscan to proceed."
-        elif not approved_photoscans:
-            self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Approve a photoscan to proceed."
         elif not photoscans_with_approved_tt:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Run transducer tracking for an approved photoscan and approve the result to proceed."
+            self.workflow_controls.status_text = "Run transducer tracking to proceed."
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Approved transducer tracking result detected, proceed to the next step."
