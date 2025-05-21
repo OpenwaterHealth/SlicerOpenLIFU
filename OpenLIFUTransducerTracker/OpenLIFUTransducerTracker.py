@@ -302,7 +302,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         self.setTitle("Place facial landmarks on photoscan")
         self.ui = initialize_wizard_ui(self)  
         self.viewWidget = set_threeD_view_widget(self.ui)  
-        self.ui.dialogControls.setCurrentIndex(1)
+        self.ui.dialogControls.setCurrentIndex(0)
         self.markupsWidget = self.ui.photoscanMarkupsWidget  # Assign the correct markups widget
         self.ui.pageLockButton.clicked.connect(self.onPageUnlocked)
         self.page_locked = True
@@ -378,7 +378,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         self.setTitle("Place facial landmarks on skin surface")
         self.ui = initialize_wizard_ui(self)  # Initialize your specific UI
         self.viewWidget = set_threeD_view_widget(self.ui)  # Initialize your specific view widget
-        self.ui.dialogControls.setCurrentIndex(2)
+        self.ui.dialogControls.setCurrentIndex(1)
         self.markupsWidget = self.ui.skinSegMarkupsWidget  # Assign the correct markups widget
         self.ui.pageLockButton.clicked.connect(self.onPageUnlocked)
         self.page_locked: bool = True
@@ -464,7 +464,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.setTitle("Register photoscan to skin surface")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
-        self.ui.dialogControls.setCurrentIndex(3)
+        self.ui.dialogControls.setCurrentIndex(2)
 
         self.ui.enableManualPVRegistration.clicked.connect(self.onManualRegistrationClicked)
         self.ui.runICPRegistrationPV.clicked.connect(self.onRunICPRegistrationClicked)
@@ -698,7 +698,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.setTitle("Register transducer to photoscan")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
-        self.ui.dialogControls.setCurrentIndex(4)
+        self.ui.dialogControls.setCurrentIndex(3)
 
         self.ui.enableManualTPRegistration.clicked.connect(self.onManualRegistrationClicked)
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
@@ -1144,58 +1144,44 @@ class TransducerTrackingWizard(qt.QWizard):
         if skin_facial_landmarks_node:
             skin_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
             skin_facial_landmarks_node.GetDisplayNode().SetViewNodeIDs(())
-    
-class PhotoscanPreviewPage(qt.QWizardPage):
-    def __init__(self, parent = None):
-        super().__init__()
-        self.setTitle("Photoscan preview")
 
-        self.ui = initialize_wizard_ui(self)
-        self.viewWidget = set_threeD_view_widget(self.ui)
-        self.ui.dialogControls.setCurrentIndex(0)
-        self.ui.warningTrackingResultLabel.hide()
-        self.ui.lockPanel.hide()
+class PhotoscanPreviewDialog(qt.QDialog):
+    """ Preview Photoscan Dialog """
 
-    def initializePage(self):
-        """ This function is called when the user clicks 'Next'."""
-
-        set_threeD_view_node(self.viewWidget, threeD_view_node = self.wizard().photoscan.view_node)
-        
-        # Display the photoscan 
-        self.wizard().photoscan.model_node.GetDisplayNode().SetVisibility(True) # Specify a view node for display
-        # Reset the camera associated with the view node based on the photoscan model
-        reset_view_node_camera(self.wizard().photoscan.view_node)
-
-class PhotoscanPreviewWizard(qt.QWizard):
-    def __init__(self, photoscan : "openlifu.nav.photoscan.Photoscan"):
-        super().__init__()
-
-        self._logic = self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerTracker')
-        self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
-
+    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Photoscan Preview")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.photoscan = photoscan
+        self.setup()
         self.setupViewNode()
 
-        self.setWindowTitle("Photoscan Preview")
-        self.photoscanPreviewPage = PhotoscanPreviewPage(self)
-        self.addPage(self.photoscanPreviewPage)
+        set_threeD_view_node(self.viewWidget, threeD_view_node = self.photoscan.view_node)
+        # Display the photoscan 
+        self.photoscan.model_node.GetDisplayNode().SetVisibility(True) # Specify a view node for display
+        # Reset the camera associated with the view node based on the photoscan model
+        reset_view_node_camera(self.photoscan.view_node)
 
-        # Customize view
-        self.setOption(qt.QWizard.NoBackButtonOnStartPage)
-        self.setOption(qt.QWizard.NoCancelButton)
+    def setup(self):
 
-        # Connect signals for finish and cancel
-        self.button(qt.QWizard.FinishButton).clicked.connect(self.onFinish)
+        self.setMinimumWidth(400)
 
-    def onFinish(self):
-        self.resetViewNodes()
-        self.accept()  # Closes the wizard
-    
+        boxLayout = qt.QVBoxLayout()
+        self.setLayout(boxLayout)
+
+        placeholderViewWidget = qt.QWidget()
+        placeholderViewWidget.setObjectName('viewWidgetPlaceholder')
+        boxLayout.addWidget(placeholderViewWidget)
+        self.viewWidget = set_threeD_view_widget(slicer.util.childWidgetVariables(self))
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok)
+        boxLayout.addWidget(self.buttonBox)
+        self.buttonBox.accepted.connect(self.onClose)
+
     def setupViewNode(self):
         """ Returns the view node associated with the photoscan.
-        When a new view node is created, the view node centers and fits the displayed photoscan in 3D view.
-        This should only happen when the user is viewing the photoscan for the first time. 
-        If the user has previously interacted with the 3D view widget, then
-        maintain the previous camera/focal point."""
+        When a new view node is created, the view node centers and fits the displayed photoscan in 3D view."""
                 
         # Create a viewNode for displaying the photoscan if it hasn't been created
         photoscan_id = self.photoscan.get_id()
@@ -1212,6 +1198,10 @@ class PhotoscanPreviewWizard(qt.QWizard):
         
         self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
         self.photoscan.set_view_nodes([])
+
+    def onClose(self):
+        self.resetViewNodes()
+        self.accept()
 
 class PhotoscanGenerationOptionsDialog(qt.QDialog):
     def __init__(self, meshroom_pipeline_names: list[str], parent=None):
@@ -1618,20 +1608,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
         
-        self.wizard = PhotoscanPreviewWizard(photoscan = selected_photoscan_openlifu)
-        # Display dialog
-        self.wizard.exec_() 
-        self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
+        with BusyCursor():
+            photoscan = self.logic.load_openlifu_photoscan(selected_photoscan_openlifu)  
+            previewDialog = PhotoscanPreviewDialog(photoscan)
 
-        # If the photoscan is no longer approved, revoke tt approval if approved
-        selected_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
-        if not selected_photoscan.is_approved():
-            self.revokeTransducerTrackingApprovalIfAny(photoscan_id = selected_photoscan_openlifu.id,
-            reason = "Approval was revoked for the affiliated photoscan.")
-
-        # Update 
-        self.updateInputOptions() # To update the photoscan associated with the input options
-        self.updateWorkflowControls()
+        previewDialog.exec_()
+        previewDialog.deleteLater()
 
     def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
         # If the photoscan combo box has valid data selected then enable the preview photoscan button
