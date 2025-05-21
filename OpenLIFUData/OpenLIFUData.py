@@ -1306,7 +1306,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                     + (f"{num_vf_approved} targets" if num_vf_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
                 )
 
-            # TODO: Fix this later.
             approved_tt_photoscans = self.logic.get_transducer_tracking_approvals_in_session()
             num_tt_approved = len(approved_tt_photoscans)
             if num_tt_approved > 0:
