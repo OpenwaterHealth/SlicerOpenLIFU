@@ -223,19 +223,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="warningTrackingResultLabel">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-       <horstretch>0</horstretch>
-       <verstretch>1</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="text">
-      <string>(placeholder warning message)</string>
-     </property>
-    </widget>
-   </item>
-   <item>
     <widget class="QWidget" name="lockPanel" native="true">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>

@@ -347,7 +347,6 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         #If the result in the scene remains valid, i.e. points aren't modified, the existing approval can be toggled. 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
-        # self.wizard().updateWarningLabel()
 
         if not self.page_locked:
             self.facial_landmarks_fiducial_node.SetLocked(False)
@@ -430,7 +429,6 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         #If the result in the scene remains valid, i.e. points aren't modified, the existing approval can be toggled. 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
-        # self.wizard().updateWarningLabel()
 
         if not self.page_locked:
             self.facial_landmarks_fiducial_node.SetLocked(False)
@@ -553,7 +551,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
         self.completeChanged()
-        # self.wizard().updateWarningLabel()
 
     def updatePageLock(self):
 
@@ -754,7 +751,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
         self.completeChanged()
-        # self.wizard().updateWarningLabel()
 
     def updatePageLock(self):
 
@@ -978,29 +974,6 @@ class TransducerTrackingWizard(qt.QWizard):
         
         # Reset the wizard volume view node based on the display settings
         reset_view_node_camera(self.volume_view_node)
-        # self.updateWarningLabel()
-
-    # def updateWarningLabel(self):
-
-    #     current_page = self.page(self.currentId)
-    #     # Trigger an update of the warning label on the relevant wizard page
-    #     if self._existing_approval_revoked:
-    #         text = "WARNING: Modifying a previously approved tracking result!"
-    #     else:
-    #         text = ""
-        
-    #     if isinstance(current_page, PhotoscanMarkupPage):
-    #             self.photoscanMarkupPage.ui.warningTrackingResultLabel.text = text
-    #             self.photoscanMarkupPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
-    #     elif isinstance(current_page, SkinSegmentationMarkupPage):
-    #         self.skinSegmentationMarkupPage.ui.warningTrackingResultLabel.text = text
-    #         self.skinSegmentationMarkupPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
-    #     elif isinstance(current_page, PhotoscanVolumeTrackingPage):
-    #         self.photoscanVolumeTrackingPage.ui.warningTrackingResultLabel.text = text
-    #         self.photoscanVolumeTrackingPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
-    #     elif isinstance(current_page, TransducerPhotoscanTrackingPage):
-    #         self.transducerPhotoscanTrackingPage.ui.warningTrackingResultLabel.text = text
-    #         self.transducerPhotoscanTrackingPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
 
     def updateCurrentPageLockButton(self, locked = False):
 
