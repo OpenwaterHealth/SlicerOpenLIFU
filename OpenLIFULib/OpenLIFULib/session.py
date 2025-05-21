@@ -212,9 +212,9 @@ class SlicerOpenLIFUSession:
 
         return self.session.session
 
-    def get_transducer_tracking_approvals(self, approved_photoscans_only = False) -> List[str]:
+    def get_transducer_tracking_approvals(self) -> List[str]:
         """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
-        transducer tracking is approved. If approved_photoscans_only is True, only the photoscan IDs with approval are returned.
+        transducer tracking is approved.
         """
         session_openlifu = self.session.session
         approved_tt_results = [
@@ -224,15 +224,7 @@ class SlicerOpenLIFUSession:
             and tt_result.photoscan_to_volume_tracking_approved
             ]
         
-        if approved_photoscans_only:
-            approved_tt_photoscans = [
-            photoscan.id
-            for photoscan in self.get_affiliated_photoscans()
-            if photoscan.photoscan_approved
-            and any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
-            ]
-        else:
-            approved_tt_photoscans = [
+        approved_tt_photoscans = [
             photoscan.id
             for photoscan in self.get_affiliated_photoscans()
             if any(photoscan.id == tt_result.photoscan_id for tt_result in approved_tt_results)
