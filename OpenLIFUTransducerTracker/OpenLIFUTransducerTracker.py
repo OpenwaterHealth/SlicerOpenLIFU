@@ -72,8 +72,6 @@ if TYPE_CHECKING:
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # TODO: This placelandmarks flag can probably be removed now. Since the self.page_locked flag conveys that same information.
-        self.placingLandmarks = False
         self._pointModifiedObserverTag = None
         self._currentlyPlacingIndex = -1
         self._currentlyUnsettingIndex = -1
@@ -88,6 +86,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             'Left Ear': None,
             'Nasion': None}
         self.facial_landmarks_fiducial_node: vtkMRMLMarkupsFiducialNode = None
+        self.page_locked = True
 
     def setupMarkupsWidget(self):
         self.markupsWidget.setMRMLScene(slicer.mrmlScene)
@@ -115,7 +114,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         tableWidget.setSizePolicy(tableWidget.sizePolicy.horizontalPolicy(), qt.QSizePolicy.Fixed)
 
     def markupTableWidgetSelected(self, item):
-        if not self.placingLandmarks:
+        if self.page_locked:
             return
         currentRow = item.row()
         if currentRow == -1 or self.facial_landmarks_fiducial_node.GetNthControlPointPositionStatus(currentRow) != 0:
@@ -182,7 +181,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def unsetControlPoint(self, item):
         currentRow = item.row()
         self._currentlyUnsettingIndex = currentRow
-        if not self.placingLandmarks or currentRow == -1:
+        if self.page_locked or currentRow == -1:
             return
 
         selected_text = self.markupsWidget.tableWidget().item(self._currentlyUnsettingIndex, 0).text()
@@ -277,7 +276,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         return all_points_defined
 
     def isComplete(self):
-        if self.placingLandmarks:
+        if not self.page_locked:
             return False
         elif self.wizard()._valid_tt_result_exists:
             return True
@@ -305,14 +304,13 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         self.ui.dialogControls.setCurrentIndex(0)
         self.markupsWidget = self.ui.photoscanMarkupsWidget  # Assign the correct markups widget
         self.ui.pageLockButton.clicked.connect(self.onPageUnlocked)
-        self.page_locked = True
 
     def initializePage(self):
         set_threeD_view_node(self.viewWidget, threeD_view_node=self.wizard().photoscan.view_node)
 
         existing_fiducial_node = self.wizard().photoscan.facial_landmarks_fiducial_node
         if existing_fiducial_node and self.facial_landmarks_fiducial_node is None:
-            if existing_fiducial_node .GetNumberOfControlPoints() != 3:
+            if existing_fiducial_node.GetNumberOfControlPoints() != 3:
                 slicer.util.infoDisplay(
                     text="Incorrect number of control points detected in the photoscan facial landmarks fiducial node. "
                     "Transudcer Tracking Wizard will replace the existing node.",
@@ -328,6 +326,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
 
         self.setupMarkupsWidget()
         self.updatePageLock()
+        self.updateLandmarkPlacementStatus()
     
     def updatePageLock(self):
 
@@ -343,25 +342,18 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
 
         self.page_locked = not self.page_locked
         self.updatePageLock()
+        self.updateLandmarkPlacementStatus()
 
         #If the result in the scene remains valid, i.e. points aren't modified, the existing approval can be toggled. 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
-        self.wizard().updateWarningLabel()
+        # self.wizard().updateWarningLabel()
 
         if not self.page_locked:
             self.facial_landmarks_fiducial_node.SetLocked(False)
-            self.placingLandmarks = True
             self.ui.photoscanMarkupsWidget.enabled = True
-            if self._checkAllLandmarksDefined():
-                self.updateLandmarkPlacementStatus()
-            else:
-                self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
-                                                     "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
-                                                     "- To unset a landmark's position, double-click it in the list."
         else:
             self.facial_landmarks_fiducial_node.SetLocked(True)
-            self.placingLandmarks = False
             self.ui.photoscanMarkupsWidget.tableWidget().clearSelection()
             self.ui.photoscanMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
@@ -369,8 +361,23 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
         self.completeChanged()
 
     def updateLandmarkPlacementStatus(self):
-        self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust.\n" \
+
+        if self.facial_landmarks_fiducial_node is None:
+            if self.wizard()._valid_tt_result_exists:
+                self.ui.landmarkPlacementStatus.text = "A previous transducer tracking result is available. Unlock the page to place "\
+                    "new facial landmarks on this photoscan, or click Next to proceed."
+            else:
+                self.ui.landmarkPlacementStatus.text = "Unlock the page to place facial landmarks on this photoscan."
+        elif self.page_locked:
+            self.ui.landmarkPlacementStatus.text = "Unlock the page to edit the facial landmarks on this photoscan"
+        elif self._checkAllLandmarksDefined():
+            self.ui.landmarkPlacementStatus.text = "Landmark positions unlocked. Click on the mesh to adjust.\n" \
                                              "- To unset a landmark's position, double-click it in the list."
+        else:
+            self.ui.landmarkPlacementStatus.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
+                                                     "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
+                                                     "- To unset a landmark's position, double-click it in the list."
+
 
 class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the base
     def __init__(self, parent=None):
@@ -404,6 +411,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
 
         self.setupMarkupsWidget()
         self.updatePageLock()
+        self.updateLandmarkPlacementStatus()
     
     def updatePageLock(self):
 
@@ -417,25 +425,18 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         
         self.page_locked = not self.page_locked
         self.updatePageLock()
+        self.updateLandmarkPlacementStatus()
 
         #If the result in the scene remains valid, i.e. points aren't modified, the existing approval can be toggled. 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
-        self.wizard().updateWarningLabel()
+        # self.wizard().updateWarningLabel()
 
         if not self.page_locked:
             self.facial_landmarks_fiducial_node.SetLocked(False)
-            self.placingLandmarks = True
             self.ui.skinSegMarkupsWidget.enabled = True
-            if self._checkAllLandmarksDefined():
-                self.updateLandmarkPlacementStatus()
-            else:
-                self.ui.landmarkPlacementStatus_2.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
-                                                     "- Click on the corresponding location on the skin surface mesh to place the landmark.\n" \
-                                                     "- To unset a landmark's position, double-click it in the list."
         else:
             self.facial_landmarks_fiducial_node.SetLocked(True)
-            self.placingLandmarks = False
             self.ui.skinSegMarkupsWidget.tableWidget().clearSelection()
             self.ui.skinSegMarkupsWidget.enabled = False
             self.exitPlaceFiducialMode()
@@ -455,8 +456,21 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
             self.facial_landmarks_fiducial_node.SetAttribute('OpenLIFUData.volume_id', None)
                 
     def updateLandmarkPlacementStatus(self):
-        self.ui.landmarkPlacementStatus_2.text = "Landmark positions unlocked. Click on the mesh to adjust.\n" \
+        if self.facial_landmarks_fiducial_node is None:
+            if self.wizard()._valid_tt_result_exists:
+                self.ui.landmarkPlacementStatus_2.text = "A previous transducer tracking result is available. Unlock the page to place "\
+                    "new facial landmarks on this skin surface, or click Next to proceed."
+            else:
+                self.ui.landmarkPlacementStatus_2.text = "Unlock the page to place facial landmarks on this skin surface."
+        elif self.page_locked:
+            self.ui.landmarkPlacementStatus_2.text = "Unlock the page to edit the facial landmarks on this photoscan"
+        elif self._checkAllLandmarksDefined():
+            self.ui.landmarkPlacementStatus_2.text = "Landmark positions unlocked. Click on the mesh to adjust.\n" \
                                              "- To unset a landmark's position, double-click it in the list."
+        else:
+            self.ui.landmarkPlacementStatus_2.text = "- Select the desired landmark (Right Ear, Left Ear, or Nasion) from the list.\n" \
+                                                     "- Click on the corresponding location on the photoscan mesh to place the landmark.\n" \
+                                                     "- To unset a landmark's position, double-click it in the list."
         
 class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
@@ -539,7 +553,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
         self.completeChanged()
-        self.wizard().updateWarningLabel()
+        # self.wizard().updateWarningLabel()
 
     def updatePageLock(self):
 
@@ -740,7 +754,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._existing_approval_revoked = not self.wizard()._existing_approval_revoked
         self.completeChanged()
-        self.wizard().updateWarningLabel()
+        # self.wizard().updateWarningLabel()
 
     def updatePageLock(self):
 
@@ -964,29 +978,29 @@ class TransducerTrackingWizard(qt.QWizard):
         
         # Reset the wizard volume view node based on the display settings
         reset_view_node_camera(self.volume_view_node)
-        self.updateWarningLabel()
+        # self.updateWarningLabel()
 
-    def updateWarningLabel(self):
+    # def updateWarningLabel(self):
 
-        current_page = self.page(self.currentId)
-        # Trigger an update of the warning label on the relevant wizard page
-        if self._existing_approval_revoked:
-            text = "WARNING: Modifying a previously approved tracking result!"
-        else:
-            text = ""
+    #     current_page = self.page(self.currentId)
+    #     # Trigger an update of the warning label on the relevant wizard page
+    #     if self._existing_approval_revoked:
+    #         text = "WARNING: Modifying a previously approved tracking result!"
+    #     else:
+    #         text = ""
         
-        if isinstance(current_page, PhotoscanMarkupPage):
-                self.photoscanMarkupPage.ui.warningTrackingResultLabel.text = text
-                self.photoscanMarkupPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
-        elif isinstance(current_page, SkinSegmentationMarkupPage):
-            self.skinSegmentationMarkupPage.ui.warningTrackingResultLabel.text = text
-            self.skinSegmentationMarkupPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
-        elif isinstance(current_page, PhotoscanVolumeTrackingPage):
-            self.photoscanVolumeTrackingPage.ui.warningTrackingResultLabel.text = text
-            self.photoscanVolumeTrackingPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
-        elif isinstance(current_page, TransducerPhotoscanTrackingPage):
-            self.transducerPhotoscanTrackingPage.ui.warningTrackingResultLabel.text = text
-            self.transducerPhotoscanTrackingPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
+    #     if isinstance(current_page, PhotoscanMarkupPage):
+    #             self.photoscanMarkupPage.ui.warningTrackingResultLabel.text = text
+    #             self.photoscanMarkupPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
+    #     elif isinstance(current_page, SkinSegmentationMarkupPage):
+    #         self.skinSegmentationMarkupPage.ui.warningTrackingResultLabel.text = text
+    #         self.skinSegmentationMarkupPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
+    #     elif isinstance(current_page, PhotoscanVolumeTrackingPage):
+    #         self.photoscanVolumeTrackingPage.ui.warningTrackingResultLabel.text = text
+    #         self.photoscanVolumeTrackingPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
+    #     elif isinstance(current_page, TransducerPhotoscanTrackingPage):
+    #         self.transducerPhotoscanTrackingPage.ui.warningTrackingResultLabel.text = text
+    #         self.transducerPhotoscanTrackingPage.ui.warningTrackingResultLabel.styleSheet = "color:red;"
 
     def updateCurrentPageLockButton(self, locked = False):
 
