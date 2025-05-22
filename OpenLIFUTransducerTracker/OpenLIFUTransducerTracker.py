@@ -784,6 +784,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
         self.ui.controlsWidget.enabled = not self.page_locked
 
+        if self.runningRegistration:
+            self.disable_manual_registration()
+
     def onTransformModified(self, node, eventID,):
         
         # If the transform node was initialized based on a previously computed tt result, modifying the transform
@@ -816,22 +819,28 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         """ This allows the user to manually edit the transducer-volume transform. """
         
         if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
-            self.ui.enableManualTPRegistration.text = "Disable manual transform interaction"
-            self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
-            self.runningRegistration = True
-            # For now, disable the approval and initialization button while in manual editing mode
-            self.ui.initializeTPRegistration.enabled = False
-            self.ui.runICPRegistrationTP.enabled = False
+            self.enable_manual_registration()
         else:
-            self.ui.enableManualTPRegistration.text = "Enable manual transform interaction"
-            self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
-            self.runningRegistration = False
-            self.ui.initializeTPRegistration.enabled = True
-            self.ui.runICPRegistrationTP.enabled = True
+            self.disable_manual_registration()
     
         # Emit signal to update the enable/disable state of 'Finish' button. 
         self.completeChanged()
     
+    def enable_manual_registration(self):
+        self.ui.enableManualTPRegistration.text = "Disable manual transform interaction"
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
+        self.runningRegistration = True
+        # For now, disable the approval and initialization button while in manual editing mode
+        self.ui.initializeTPRegistration.enabled = False
+        self.ui.runICPRegistrationTP.enabled = False
+
+    def disable_manual_registration(self):
+        self.ui.enableManualTPRegistration.text = "Enable manual transform interaction"
+        self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
+        self.runningRegistration = False
+        self.ui.initializeTPRegistration.enabled = True
+        self.ui.runICPRegistrationTP.enabled = True
+
     def onRunICPRegistrationClicked(self):
 
         # Harden the photoscan to volume registration result
