@@ -482,7 +482,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.runICPRegistrationPV.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.ui.pageLockButton.clicked.connect(self.togglePageLock)
-        self.runningRegistration = False
+        self.runningRegistration = False # Whether manual registration mode is currently happening
         self.page_locked: bool = True
 
         # Transform scale slider
@@ -524,8 +524,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.has_facial_landmarks:
             self.ui.initializePVRegistration.enabled = True
             self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration between the photoscan mesh and skin surface.")
-            self.ui.runICPRegistrationPV.enabled = True
-            self.ui.runICPRegistrationPV.setToolTip("Run Iterative Closest Point (ICP) registration of the face.")
             if self.photoscan_to_volume_transform_node:
                 self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
         else:
@@ -533,16 +531,13 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.ui.initializePVRegistration.enabled = False
             self.ui.initializePVRegistration.setToolTip("Please place fiducial landmarks on both the photoscan"
             " and skin surface mesh on the preceding pages to enable fiducial-based registration.")
-            self.ui.runICPRegistrationPV.enabled = False
-            self.ui.runICPRegistrationPV.setToolTip("Iterative Closest Point (ICP) registration of the face requires the user to"
-            " first define fiducial landmarks on the facial surface on the preceding pages to delineate the region of interest.")
 
         if self.photoscan_to_volume_transform_node:
             self.setupTransformNode()
         else:
-            self.ui.runICPRegistrationPV.enabled = False
             self.ui.ManualRegistrationGroupBox.enabled = False
-        
+
+        self.update_runICPRegistrationPV_button()
         self.updatePageLock()
     
     def togglePageLock(self):
@@ -556,7 +551,30 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
         self.ui.controlsWidget.enabled = not self.page_locked
-        
+    
+    def update_runICPRegistrationPV_button(self):
+        """Update enabledness and tooltip of the 'Run ICP' button"""
+        self.has_facial_landmarks = (
+            self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node
+            and self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node
+        )
+        if self.runningRegistration:
+            self.ui.runICPRegistrationPV.enabled = False
+            self.ui.runICPRegistrationPV.setToolTip("Cannot run ICP while in manual transform interaction mode.")
+        elif not self.has_facial_landmarks:
+            self.ui.runICPRegistrationPV.enabled = False
+            self.ui.runICPRegistrationPV.setToolTip(
+                "Iterative Closest Point (ICP) registration of the face requires the user to"
+                " first define fiducial landmarks on the facial surface on the preceding pages to delineate the region of interest."
+            )
+        elif not self.photoscan_to_volume_transform_node:
+            self.ui.runICPRegistrationPV.enabled = False
+            self.ui.runICPRegistrationPV.setToolTip("To run ICP, first initialize the transform via facial landmarks.")
+        else:
+            self.ui.runICPRegistrationPV.enabled = True
+            self.ui.runICPRegistrationPV.setToolTip("Run Iterative Closest Point (ICP) registration of the face.")
+
+
     def onTransformModified(self, node, eventID,):
         
         # Check that this function was triggered by actions on this page
@@ -587,7 +605,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
 
         # Enable approval and registration fine-tuning buttons
-        self.ui.runICPRegistrationPV.enabled = True
+        self.update_runICPRegistrationPV_button()
         self.ui.ManualRegistrationGroupBox.enabled = True
 
     def setupTransformNode(self):
@@ -680,14 +698,14 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             
             # For now, disable the approval and initialization button while in manual editing mode
             self.ui.initializePVRegistration.enabled = False
-            self.ui.runICPRegistrationPV.enabled = False
 
         else:
             self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
             self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
             self.runningRegistration = False
             self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
-            self.ui.runICPRegistrationPV.enabled = True
+        
+        self.update_runICPRegistrationPV_button()
 
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
