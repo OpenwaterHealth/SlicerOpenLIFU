@@ -551,6 +551,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
         self.ui.controlsWidget.enabled = not self.page_locked
+
+        if self.runningRegistration:
+            self.disable_manual_registration()
     
     def update_runICPRegistrationPV_button(self):
         """Update enabledness and tooltip of the 'Run ICP' button"""
@@ -691,24 +694,30 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
 
         if not self.photoscan_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
-
-            self.ui.enableManualPVRegistration.text = "Disable manual transform interaction"
-            self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
-            self.runningRegistration = True
-            
-            # For now, disable the approval and initialization button while in manual editing mode
-            self.ui.initializePVRegistration.enabled = False
-
+            self.enable_manual_registration()
         else:
-            self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
-            self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
-            self.runningRegistration = False
-            self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
-        
-        self.update_runICPRegistrationPV_button()
+            self.disable_manual_registration()
 
         # Emit signal to update the enable/disable state of 'Next button'. 
         self.completeChanged()
+    
+    def enable_manual_registration(self):
+        self.ui.enableManualPVRegistration.text = "Disable manual transform interaction"
+        self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
+        self.runningRegistration = True
+
+        # For now, disable the approval and initialization button while in manual editing mode
+        self.ui.initializePVRegistration.enabled = False
+
+        self.update_runICPRegistrationPV_button()
+    
+    def disable_manual_registration(self):
+        self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
+        self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
+        self.runningRegistration = False
+        self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
+
+        self.update_runICPRegistrationPV_button()
     
     def updateScaledTransformNode(self):
 
