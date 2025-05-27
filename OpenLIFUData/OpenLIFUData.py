@@ -1856,6 +1856,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             # Place virtual fit results under the transducer folder
             newly_loaded_transducer.move_node_into_transducer_sh_folder(vf_node)
+            
+            # For the best virtual fit result nodes, check if the current transducer
+            # transform matches the virtual fit result in terms of matrix values.
+            if int(vf_node.GetAttribute("VF:rank")) == 1 and newly_loaded_transducer.is_matching_transform(vf_node):
+                newly_loaded_transducer.set_matching_transform(vf_node)
 
         # === Load transducer tracking results ===
 
@@ -1919,7 +1924,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 current_photoscan_id = get_photoscan_id_from_transducer_tracking_result(transducer_to_volume_node)
                 if current_photoscan_id == approved_photoscan_id:
                     if newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
-                        newly_loaded_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_node)
+                        newly_loaded_transducer.set_matching_transform(transducer_to_volume_node)
                     else:
                         transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
                             photoscan_id=approved_photoscan_id,
