@@ -1,7 +1,10 @@
 from typing import Dict, Any, List, Callable, TYPE_CHECKING
 from dataclasses import dataclass
+
+import ctk
 import qt
 import slicer
+
 from slicer import vtkMRMLScalarVolumeNode
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
 from OpenLIFULib.util import get_openlifu_data_parameter_node
@@ -46,7 +49,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             if input_name not in ["Protocol", "Transducer", "Volume", "Target", "Photoscan"]:
                 raise ValueError("Invalid algorithm input specified.")
             else:
-                self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QLabel(f"{input_name}", self), qt.QComboBox(self))
+                self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QLabel(f"{input_name}", self), ctk.ctkComboBox(self))
                 
         for input in self.inputs_dict.values():
             layout.addRow(input.label, input.combo_box)
