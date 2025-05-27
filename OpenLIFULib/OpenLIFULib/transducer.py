@@ -12,9 +12,19 @@ from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix, transducer_transform_node_from_openlifu
+from OpenLIFULib.transducer_tracking_results import is_transducer_tracking_result_node
+from OpenLIFULib.virtual_fit_results import is_virtual_fit_result_node
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
+
+
+# Define transducer color dictionary
+TRANSDUCER_MODEL_COLORS = {
+    "default": [230, 230, 77], # yellow
+    "virtual_fit_result": [255, 170, 0], # orange
+    "transducer_tracking_result": [255, 0, 0], # red
+}
 
 @parameterPack
 class SlicerOpenLIFUTransducer:
@@ -171,10 +181,26 @@ class SlicerOpenLIFUTransducer:
         self.set_matching_transform(transform_node)
 
     def set_matching_transform(self, node: vtkMRMLTransformNode = None) -> None:
+        
+        model_color = TRANSDUCER_MODEL_COLORS["default"]
         if node:
             self.transform_node.SetAttribute("matching_transform", node.GetID())
+
+            # Set the color of the transdcer model to indicate whether it matches a virtual fit result or tt result
+            if is_virtual_fit_result_node(node):
+                model_color = TRANSDUCER_MODEL_COLORS["virtual_fit_result"]
+            elif is_transducer_tracking_result_node(node):
+                model_color = TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]
         else:
             self.transform_node.SetAttribute("matching_transform", None)
+        
+        # Normalize color to 0-1 range
+        normalized_color = [c / 255.0 for c in model_color]
+        self.model_node.GetDisplayNode().SetColor(normalized_color)
+        if self.body_model_node and self.body_model_node.GetDisplayNode():
+            self.body_model_node.GetDisplayNode().SetColor(normalized_color)
+        if self.surface_model_node and self.surface_model_node.GetDisplayNode():
+            self.surface_model_node.GetDisplayNode().SetColor(normalized_color)
 
     def move_node_into_transducer_sh_folder(self, node : vtkMRMLNode) -> None:
         """In the subject hiearchy, move the given `node` into this transducer's transform node folder."""
