@@ -400,14 +400,14 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             for protocol_id, protocol_w in get_openlifu_data_parameter_node().loaded_protocols.items():
                 protocol_text = f"{protocol_w.protocol.name} (ID: {protocol_id})"
                 if protocol_id in self.logic.cached_protocols:
-                    protocol_text = "[  +  ]  " + protocol_text
+                    protocol_text = "[  ✱  ]  " + protocol_text
                 self.ui.protocolSelector.addItem(protocol_text, protocol_w.protocol)
                     
             self.setProtocolEditButtonEnabled(True)
 
         for protocol_id in self.logic.new_protocol_ids:
             protocol = self.logic.cached_protocols[protocol_id]
-            self.ui.protocolSelector.addItem(f"[  +  ]  {protocol.name} (ID: {protocol.id})", protocol)
+            self.ui.protocolSelector.addItem(f"[  ✱  ]  {protocol.name} (ID: {protocol.id})", protocol)
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
@@ -462,7 +462,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.logic.new_protocol_ids.add(protocol.id)
 
         # Set the text of the protocolSelector
-        self.ui.protocolSelector.addItem(text := f'[  +  ]  {protocol.name} (ID: {protocol.id})', protocol)
+        self.ui.protocolSelector.addItem(text := f'[  ✱  ]  {protocol.name} (ID: {protocol.id})', protocol)
         self.ui.protocolSelector.setCurrentText(text)
 
         self.setNewProtocolWidgets()
@@ -482,7 +482,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
             prev_protocol = self.ui.protocolSelector.currentText
             self.reloadProtocols()
-            self.ui.protocolSelector.setCurrentText(prev_protocol.lstrip("[  +  ] "))
+            self.ui.protocolSelector.setCurrentText(prev_protocol.lstrip("[  ✱  ] "))
 
     @display_errors
     def onSaveProtocolToFileClicked(self, checked:bool) -> None:
@@ -639,8 +639,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         elif state == SaveState.UNSAVED_CHANGES:
             self.ui.saveStateLabel.setProperty("text", "You have unsaved changes!")
             self.ui.saveStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
-            if not self.ui.protocolSelector.currentText.startswith("[  +  ]  "):
-                new_text = "[  +  ]  " + self.ui.protocolSelector.currentText
+            if not self.ui.protocolSelector.currentText.startswith("[  ✱  ]  "):
+                new_text = "[  ✱  ]  " + self.ui.protocolSelector.currentText
                 self.ui.protocolSelector.setItemText(self.ui.protocolSelector.currentIndex, new_text)
             if self._cur_protocol_id in self.logic.new_protocol_ids:
                 self.ui.protocolEditRevertDiscardButton.setText("Discard New Protocol")
