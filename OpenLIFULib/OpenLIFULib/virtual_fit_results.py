@@ -105,7 +105,7 @@ def get_virtual_fit_result_nodes(
         raise ValueError("It does not make sense to both sort by rank and retrieve only rank 1 results.")
 
     vf_result_nodes : Iterable[vtkMRMLTransformNode] = [
-        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if t.GetAttribute("isVirtualFitResult") == "1"
+        t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if is_virtual_fit_result_node(t)
     ]
 
     if session_id is not None:
@@ -325,3 +325,10 @@ def get_target_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> s
     if node.GetAttribute("VF:targetID") is None:
         raise RuntimeError("Node does not have a target ID.")
     return node.GetAttribute("VF:targetID")
+
+def is_virtual_fit_result_node(transform_node: vtkMRMLTransformNode) -> bool:
+    """Returns True if the given node is a virtual fit result node"""
+    if transform_node.GetAttribute("isVirtualFitResult") == "1":
+        return True
+    else:
+        return False
