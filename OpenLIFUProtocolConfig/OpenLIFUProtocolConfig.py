@@ -637,8 +637,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.protocolEditRevertDiscardButton.setText("Edit Protocol")
             self.ui.protocolEditRevertDiscardButton.setToolTip("Edit the currently selected protocol.")
         elif state == SaveState.UNSAVED_CHANGES:
-            self.ui.saveStateLabel.setProperty("text", "You have unsaved changes!")
-            self.ui.saveStateLabel.setProperty("styleSheet", "color: red; font-weight: bold; font-size: 16px; border: 3px solid red; padding: 30px;")
+            self.ui.saveStateLabel.setProperty("text", "")  
+            self.ui.saveStateLabel.setProperty("styleSheet", "border: none;")
             if not self.ui.protocolSelector.currentText.startswith("[  ✱  ]  "):
                 new_text = "[  ✱  ]  " + self.ui.protocolSelector.currentText
                 self.ui.protocolSelector.setItemText(self.ui.protocolSelector.currentIndex, new_text)
