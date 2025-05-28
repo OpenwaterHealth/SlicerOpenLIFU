@@ -334,6 +334,7 @@ class ViewSessionsDialog(qt.QDialog):
         
         # ---- Add New Session Button ----
         self.addSessionButton = qt.QPushButton("Add New Session")
+        self.addSessionButton.setToolTip("Create a new session for the current subject")
         self.addSessionButton.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
         self.addSessionButton.clicked.connect(self.onAddNewSessionClicked)
         self.boxLayout.addWidget(self.addSessionButton)
@@ -342,8 +343,11 @@ class ViewSessionsDialog(qt.QDialog):
         buttonsLayout = qt.QHBoxLayout()
 
         self.startCaptureButton = qt.QPushButton("Start Photocollection Capture")
+        self.startCaptureButton.setToolTip("Add new photocollection to selected session")
         self.addPhotoscanButton = qt.QPushButton("Add Photoscan to Session")
+        self.addPhotoscanButton.setToolTip("Add new photoscan to selected session")
         self.loadSessionButton = qt.QPushButton("Load Session")
+        self.loadSessionButton.setToolTip("Load the currently selected session")
 
         for button in [self.startCaptureButton, self.addPhotoscanButton, self.loadSessionButton]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
@@ -359,6 +363,7 @@ class ViewSessionsDialog(qt.QDialog):
         # ---- Cancel Button ----
         self.buttonBox = qt.QDialogButtonBox()
         self.cancelButton = self.buttonBox.addButton("Cancel", qt.QDialogButtonBox.RejectRole)
+        self.cancelButton.setToolTip("Close this window without loading any new sessions")
         self.cancelButton.clicked.connect(lambda *args: self.reject())
         self.boxLayout.addWidget(self.buttonBox)
 
