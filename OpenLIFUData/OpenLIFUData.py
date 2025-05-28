@@ -826,7 +826,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.experimentalAddVolumeButton.clicked.connect(self.experimental_on_add_volume_clicked)
         self.ui.experimentalCreateNewSessionButton.clicked.connect(self.experimental_on_create_new_session_clicked)
         self.ui.experimentalSubjectSelectorTableWidget.doubleClicked.connect(self.experimental_on_view_sessions_clicked)
-        self.ui.experimentalViewSessionsPushButton.clicked.connect(self.experimental_on_view_sessions_clicked)
+        self.ui.experimentalViewSessionsButton.clicked.connect(self.experimental_on_view_sessions_clicked)
         # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
 
         # Session management buttons
@@ -848,6 +848,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         
         self.updateSubjectSessionSelectorFromDb(get_cur_db())
         self.updateExperimentalSubjectSelectorFromDb(get_cur_db())
+        self.updateExperimentalSubjectSelectorButtonsEnabled()
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.updateWorkflowControls()
@@ -857,6 +858,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateSubjectSessionSelectorFromDb(db)
         self.updateExperimentalSubjectSelectorFromDb(db)
         self.update_newSubjectButton_enabled()
+        self.updateExperimentalSubjectSelectorButtonsEnabled()
 
     def onSubjectSessionSelected(self):
         self.update_subjectLevelButtons_enabled()
@@ -991,6 +993,29 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionLoadButton.setEnabled(False)
             self.ui.sessionLoadButton.toolTip = 'Select a subject or session to load'
 
+    def updateExperimentalSubjectSelectorButtonsEnabled(self):
+        """ Update whether the add volume, create new session, and view sessions
+        buttons are enabled based on whether a database has been loaded"""
+
+        if get_cur_db():
+            self.ui.experimentalAddVolumeButton.setEnabled(True)
+            self.ui.experimentalAddVolumeButton.toolTip = "Add new volume to selected subject"
+
+            self.ui.experimentalCreateNewSessionButton.setEnabled(True)
+            self.ui.experimentalCreateNewSessionButton.toolTip = "Create new session for selected subject"
+
+            self.ui.experimentalViewSessionsButton.setEnabled(True)
+            self.ui.experimentalViewSessionsButton.toolTip = "View sessions for selected subject"
+        else:
+            self.ui.experimentalAddVolumeButton.setEnabled(False)
+            self.ui.experimentalAddVolumeButton.toolTip = "Requires a loaded database"
+
+            self.ui.experimentalCreateNewSessionButton.setEnabled(False)
+            self.ui.experimentalCreateNewSessionButton.toolTip = "Requires a loaded database"
+
+            self.ui.experimentalViewSessionsButton.setEnabled(False)
+            self.ui.experimentalViewSessionsButton.toolTip = "Requires a loaded database"
+
     @display_errors
     def on_item_double_clicked(self, index : qt.QModelIndex):
 
@@ -1028,20 +1053,60 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return self.ui.experimentalSubjectSelectorTableWidget.item(selected_row, 1).text()
 
     @display_errors
-    def experimental_on_add_volume_clicked(self, checked: bool) -> None:
+    def experimental_on_add_volume_clicked(self, checked: bool) -> bool:
         subject_id = self.experimental_get_selected_subject_id()
         if subject_id is None:
             slicer.util.errorDisplay("Please select a subject to add a volume.")
-        print(subject_id)
-        return
+            return False
+
+        volumedlg = AddNewVolumeDialog()
+        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
+        if not returncode:
+            return False
+
+        self.logic.add_volume_to_database(subject_id, volume_id, volume_name, volume_filepath)
+        return True
+
 
     @display_errors
-    def experimental_on_create_new_session_clicked(self, checked: bool) -> None:
+    def experimental_on_create_new_session_clicked(self, checked: bool) -> bool:
         subject_id = self.experimental_get_selected_subject_id()
         if subject_id is None:
             slicer.util.errorDisplay("Please select a subject to create new session.")
-        print(subject_id)
-        return
+            return False
+
+        if get_cur_db() is None:
+            raise RuntimeError("Cannot create session because there is no database connection")
+
+        db_transducer_ids = get_cur_db().get_transducer_ids()
+        db_volume_ids = get_cur_db().get_volume_ids(subject_id)
+
+        # ---- Don't show unallowed protocols; requires loading protocols ----
+        db_protocol_ids = get_cur_db().get_protocol_ids()
+        protocols: List["openlifu.plan.Protocol"] = get_cur_db().load_all_protocols()
+
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No filtering needed
+        else:
+            # Filter protocol IDs where any user role is in the protocol's allowed roles
+            db_protocol_ids = [
+                protocol.id for protocol in protocols
+                if any(role in protocol.allowed_roles for role in get_current_user().roles)
+            ]
+        # --------------------------------------------------------------------
+
+        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
+        returncode, session_parameters = sessiondlg.customexec_()
+        if not returncode:
+            return False
+
+        sessionAdded = self.logic.add_session_to_database(subject_id, session_parameters)
+
+        # Only required if new session was added
+        if sessionAdded:
+            self.logic.load_session(subject_id, session_parameters['id'])
+
+        return True
 
     @display_errors
     def experimental_on_view_sessions_clicked(self, checked: bool) -> None:
