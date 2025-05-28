@@ -324,6 +324,7 @@ class ViewSessionsDialog(qt.QDialog):
         self.tableWidget.verticalHeader().setDefaultSectionSize(24)
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.setShowGrid(False)
+        self.tableWidget.setFocusPolicy(qt.Qt.NoFocus)
 
         header = self.tableWidget.horizontalHeader()
         for i in range(0, 6):
