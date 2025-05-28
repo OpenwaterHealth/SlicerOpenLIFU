@@ -228,6 +228,11 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
+        if db is None:
+            self.ui.databaseLoadButton.setText("Load Database")
+        else:
+            self.ui.databaseLoadButton.setText("Reload Database")
+
         self.updateWorkflowControls()
 
     def updateWorkflowControls(self):
