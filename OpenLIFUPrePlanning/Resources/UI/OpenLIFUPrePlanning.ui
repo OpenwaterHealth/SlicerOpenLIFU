@@ -225,11 +225,43 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="virtualfitButton">
-           <property name="text">
-            <string>Virtual fit</string>
-           </property>
-          </widget>
+          <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="3,1">
+           <item>
+            <widget class="QPushButton" name="virtualfitButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Virtual fit</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="virtualfitDebugCheckbox">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>Whether to generate debugging information</string>
+             </property>
+             <property name="text">
+              <string>Debug</string>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
          <item>
           <widget class="QProgressBar" name="virtualFitProgressBar">

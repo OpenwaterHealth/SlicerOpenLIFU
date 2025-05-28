@@ -57,6 +57,7 @@ from OpenLIFULib.virtual_fit_results import (
 if TYPE_CHECKING:
     import openlifu
     import openlifu.geo
+    import openlifu.virtual_fit
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
@@ -597,7 +598,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                     volume = activeData["Volume"],
                     target = activeData["Target"],
                     progress_callback = progress_callback,
-                    include_debug_info = False,
+                    include_debug_info = self.ui.virtualfitDebugCheckbox.checked,
                 )
             finally:
                 self.resetVirtualFitProgressDisplay()
@@ -717,6 +718,10 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             progress_callback = progress_callback,
             include_debug_info = include_debug_info,
         )
+        if include_debug_info:
+            vf_transforms, debug_info = vf_transforms # In this case two things were actually returned, the first of which is the list of transforms
+            self.load_vf_debugging_info(debug_info)
+
 
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
@@ -740,6 +745,80 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         if len(vf_result_nodes)==0:
             return None
         return vf_result_nodes[0]
+
+    def load_vf_debugging_info(self, debug_info : "openlifu.virtual_fit.VirtualFitDebugInfo") -> None:
+        """Load virtual fit debugging info into the Slicer scene."""
+        skin_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        skin_node.SetAndObservePolyData(debug_info.skin_mesh)
+        skin_node.SetName("VF-debug-skin")
+
+        interpolated_skin_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        interpolated_skin_node.SetAndObservePolyData(debug_info.spherically_interpolated_mesh)
+        interpolated_skin_node.SetName("VF-debug-spherically-interpolated-skin")
+
+        for points, scalars, vectors, node_name, visible in [
+            (debug_info.search_points, debug_info.steering_dists, None, 'VF-debug-search-points-all', True),
+            (debug_info.search_points[debug_info.in_bounds], debug_info.steering_dists[debug_info.in_bounds], None, 'VF-debug-search-points-in-bounds', False),
+            (debug_info.search_points, debug_info.steering_dists, -debug_info.plane_normals, 'VF-debug-fitted_plane-normals', False),
+        ]:
+            points_vtk = vtk.vtkPoints()
+            for pt in points:
+                points_vtk.InsertNextPoint(pt)
+
+            points_polydata = vtk.vtkPolyData()
+            points_polydata.SetPoints(points_vtk)
+
+            scalar_array = vtk.vtkDoubleArray()
+            scalar_array.SetName('steeringDist')
+            scalar_array.SetNumberOfTuples(points.shape[0])
+            for i, v in enumerate(scalars):
+                scalar_array.SetValue(i, float(v))
+            points_polydata.GetPointData().AddArray(scalar_array)
+            points_polydata.GetPointData().SetActiveScalars('steeringDist')
+
+            if vectors is not None:
+                vector_array = vtk.vtkDoubleArray()
+                vector_array.SetName('planeNormal')
+                vector_array.SetNumberOfComponents(3)
+                vector_array.SetNumberOfTuples(vectors.shape[0])
+                for i, vec in enumerate(vectors):
+                    vector_array.SetTuple(i, vec)
+                points_polydata.GetPointData().AddArray(vector_array)
+                points_polydata.GetPointData().SetActiveVectors('planeNormal')
+
+                arrow = vtk.vtkArrowSource()
+                glyph = vtk.vtkGlyph3D()
+                glyph.SetSourceConnection(arrow.GetOutputPort())
+                glyph.SetInputData(points_polydata)
+                glyph.SetVectorModeToUseVector()
+                glyph.SetScaleModeToScaleByVector()
+                glyph.SetScaleFactor(5.0)
+                glyph.OrientOn()
+                glyph.Update()
+
+            else:
+                sphere = vtk.vtkSphereSource()
+                sphere.SetRadius(1.0)  # marker size
+                glyph = vtk.vtkGlyph3D()
+                glyph.SetSourceConnection(sphere.GetOutputPort())
+                glyph.SetInputData(points_polydata)
+                glyph.SetColorModeToColorByScalar()
+                glyph.SetScaleModeToDataScalingOff()
+                glyph.Update()
+
+            points_model_node = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', node_name)
+            points_model_node.SetAndObservePolyData(glyph.GetOutput())
+
+            points_model_node.CreateDefaultDisplayNodes()
+            disp = points_model_node.GetDisplayNode()
+            disp.SetActiveScalarName('steeringDist')
+            disp.SetAndObserveColorNodeID("vtkMRMLColorTableNodeRainbow")
+            disp.SetScalarVisibility(True)
+            disp.SetScalarRange(float(scalars.min()), float(scalars.max()))
+
+            disp.SetVisibility(visible)
+
+        self.debug_info=debug_info # TODO REMOVE. FOr now I use it like this: debug_info = slicer.modules.OpenLIFUPrePlanningWidget.logic.debug_info
 
 #
 # OpenLIFUPrePlanningTest
