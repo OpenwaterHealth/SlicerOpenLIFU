@@ -13,6 +13,7 @@ from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix, transducer_transform_node_from_openlifu
 from OpenLIFULib.transducer_tracking_results import is_transducer_tracking_result_node
+from OpenLIFULib.util import get_cloned_node
 from OpenLIFULib.virtual_fit_results import is_virtual_fit_result_node
 
 if TYPE_CHECKING:
@@ -35,6 +36,7 @@ class SlicerOpenLIFUTransducer:
     transform_node : vtkMRMLTransformNode
     body_model_node : Optional[vtkMRMLModelNode] = None
     surface_model_node : Optional[vtkMRMLModelNode] = None
+    cloned_virtual_fit_model: Optional[vtkMRMLModelNode] = None
 
     @staticmethod
     def initialize_from_openlifu_transducer(
@@ -232,4 +234,24 @@ class SlicerOpenLIFUTransducer:
         if self.body_model_node:
             self.body_model_node.GetDisplayNode().SetVisibility(visibility)
         if self.surface_model_node:
-            self.surface_model_node.GetDisplayNode().SetVisibility(visibility)
+            self.surface_model_node.GetDisplayNode().SetVisibility(visibility)    
+    
+    def set_cloned_virtual_fit_model(self, virtual_fit_transform: vtkMRMLTransformNode):
+
+        # Only one virtual fit result can be visualized at a time
+        if self.cloned_virtual_fit_model:
+            slicer.mrmlScene.RemoveNode(self.cloned_virtual_fit_model)
+
+        if self.body_model_node:
+            model_to_clone = self.body_model_node
+        else:
+            model_to_clone = self.surface_model_node
+        
+        self.cloned_virtual_fit_model = get_cloned_node(model_to_clone)
+        self.cloned_virtual_fit_model.SetAndObserveTransformNodeID(virtual_fit_transform.GetID())
+        self.cloned_virtual_fit_model.SetName(f"{model_to_clone.GetName()}-{virtual_fit_transform.GetName()}")
+        normalized_color = [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["virtual_fit_result"]] # Normalize color to 0-1 range
+        self.cloned_virtual_fit_model.GetDisplayNode().SetColor(normalized_color)
+        self.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
+
+        return self.cloned_virtual_fit_model

@@ -43,7 +43,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>1</number>
+         <number>3</number>
         </property>
         <widget class="QWidget" name="photoscanMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -213,6 +213,13 @@
               </widget>
              </item>
             </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="viewVirtualFitCheckBox">
+            <property name="text">
+             <string>View virtual fit transducer postion</string>
+            </property>
            </widget>
           </item>
          </layout>
