@@ -329,6 +329,12 @@ class ViewSessionsDialog(qt.QDialog):
         header.setSectionResizeMode(6, qt.QHeaderView.Stretch)
 
         self.boxLayout.addWidget(self.tableWidget)
+        
+        # ---- Add New Session Button ----
+        self.addSessionButton = qt.QPushButton("Add New Session")
+        self.addSessionButton.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+        self.addSessionButton.clicked.connect(self.onAddNewSessionClicked)
+        self.boxLayout.addWidget(self.addSessionButton)
 
         # ---- Session Level Buttons ----
         buttonsLayout = qt.QHBoxLayout()
@@ -400,7 +406,37 @@ class ViewSessionsDialog(qt.QDialog):
 
             self.tableWidget.setRowHeight(row, 48)
 
-    # ---- Button Handlers ----
+    @display_errors
+    def onAddNewSessionClicked(self, checked: bool) -> bool:
+        db_transducer_ids = self.db.get_transducer_ids()
+        db_volume_ids = self.db.get_volume_ids(self.subject_id)
+
+        # ---- Don't show unallowed protocols; requires loading protocols ----
+        db_protocol_ids = self.db.get_protocol_ids()
+        protocols: List["openlifu.plan.Protocol"] = self.db.load_all_protocols()
+
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No filtering needed
+        else:
+            # Filter protocol IDs where any user role is in the protocol's allowed roles
+            db_protocol_ids = [
+                protocol.id for protocol in protocols
+                if any(role in protocol.allowed_roles for role in get_current_user().roles)
+            ]
+        # --------------------------------------------------------------------
+
+        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
+        returncode, session_parameters = sessiondlg.customexec_()
+        if not returncode:
+            return False
+
+        slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
+
+        # Update session list
+        self.updateSessionsList()
+
+        return True
+
     def onStartPhotocollectionCaptureClicked(self):
         pass
 
