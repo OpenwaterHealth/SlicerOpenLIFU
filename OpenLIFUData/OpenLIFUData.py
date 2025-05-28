@@ -297,6 +297,8 @@ class ViewSessionsDialog(qt.QDialog):
 
         self.setup()
 
+        self._enforceUserPermissions()
+
     def setup(self):
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
@@ -525,6 +527,31 @@ class ViewSessionsDialog(qt.QDialog):
         slicer.util.getModuleWidget("OpenLIFUData").initializeParameterNode()
 
         self.accept()
+
+    def _enforceUserPermissions(self) -> None:
+        """Disable session editing buttons when the user is not an operator or admin. This 
+        is implemented in this manner because the existing user role infrastructure operates
+        on the GUI of the app. However, this panel is a generated GUI, so we must implement
+        enforceUserPermissions uniquely. It follows the same pattern as OpenLIFULogin."""
+
+        _enforcedButtons = [
+            self.addSessionButton,
+            self.startCaptureButton,
+            self.addPhotoscanButton,
+        ]
+        
+        # === Don't enforce if no user account mode ===
+
+        if not get_user_account_mode_state():
+            for button in _enforcedButtons:
+                button.setEnabled(True)
+            return
+
+        # === Enforce ===
+
+        if not any(r in ("admin", "operator") for r in get_current_user().roles):
+            for button in _enforcedButtons:
+                button.setEnabled(False)
 
 class StartPhotocollectionCaptureDialog(qt.QDialog):
     """ Add new photocollection dialog """
