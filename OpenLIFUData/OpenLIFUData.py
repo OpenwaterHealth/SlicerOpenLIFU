@@ -302,8 +302,8 @@ class ViewSelectedSubjectDialog(qt.QDialog):
     def setup(self):
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
-        self.setMinimumSize(1000, 500)
-        self.setMaximumSize(1400, 800)
+        self.setMinimumSize(1200, 700)
+        self.setMaximumSize(1600, 1000)
 
         # ---- Sessions Table ----
         cols = [
@@ -321,7 +321,11 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
         self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
-        self.tableWidget.verticalHeader().setDefaultSectionSize(24)
+        self.tableWidget.horizontalHeader().setDefaultSectionSize(120)
+        self.tableWidget.horizontalHeader().setMinimumSectionSize(120)
+        self.tableWidget.horizontalHeader().setHighlightSections(False)
+        self.tableWidget.horizontalHeader().setFixedHeight(30)
+        self.tableWidget.verticalHeader().setDefaultSectionSize(18)
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.setShowGrid(False)
         self.tableWidget.setFocusPolicy(qt.Qt.NoFocus)
@@ -336,37 +340,37 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         # ---- Subject Level Buttons ----
         subjectButtonsLayout = qt.QHBoxLayout()
 
-        self.createNewSessionForThisSubjectButton = qt.QPushButton("Create New Session For This Subject")
-        self.createNewSessionForThisSubjectButton.setToolTip("Create a new session to the current subject")
-        self.importVolumeForThisSubjectButton = qt.QPushButton("Import Volume For This Subject")
-        self.importVolumeForThisSubjectButton.setToolTip("Import a new volume to use for this subject")
+        self.createNewSessionForCurrentSubjectButton = qt.QPushButton("Create New Session For Current Subject")
+        self.createNewSessionForCurrentSubjectButton.setToolTip("Create a new session to the current subject")
+        self.importVolumeForCurrentSubjectButton = qt.QPushButton("Import Volume For Current Subject")
+        self.importVolumeForCurrentSubjectButton.setToolTip("Import a new volume to use for the current subject")
 
-        for button in [self.createNewSessionForThisSubjectButton, self.importVolumeForThisSubjectButton]:
+        for button in [self.createNewSessionForCurrentSubjectButton, self.importVolumeForCurrentSubjectButton]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
             subjectButtonsLayout.addWidget(button)
 
         self.boxLayout.addLayout(subjectButtonsLayout)
 
-        self.createNewSessionForThisSubjectButton.clicked.connect(self.onCreateNewSessionForThisSubjectClicked)
-        self.importVolumeForThisSubjectButton.clicked.connect(self.onImportVolumeForThisSubjectClicked)
+        self.createNewSessionForCurrentSubjectButton.clicked.connect(self.onCreateNewSessionForCurrentSubjectClicked)
+        self.importVolumeForCurrentSubjectButton.clicked.connect(self.onImportVolumeForCurrentSubjectClicked)
 
         # ---- Session Level Buttons ----
         sessionButtonsLayout = qt.QHBoxLayout()
 
-        self.startCaptureButton = qt.QPushButton("Start Photocollection Capture")
-        self.startCaptureButton.setToolTip("Add new photocollection to selected session")
-        self.addPhotoscanButton = qt.QPushButton("Add Photoscan to Session")
+        self.capturePhotocollectionButton = qt.QPushButton("Capture Photocollection for Selected Session")
+        self.capturePhotocollectionButton.setToolTip("Add new photocollection to selected session")
+        self.addPhotoscanButton = qt.QPushButton("Add Photoscan to Selected Session")
         self.addPhotoscanButton.setToolTip("Add new photoscan to selected session")
-        self.loadSessionButton = qt.QPushButton("Load Session")
+        self.loadSessionButton = qt.QPushButton("Load Selected Session")
         self.loadSessionButton.setToolTip("Load the currently selected session")
 
-        for button in [self.startCaptureButton, self.addPhotoscanButton, self.loadSessionButton]:
+        for button in [self.capturePhotocollectionButton, self.addPhotoscanButton, self.loadSessionButton]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
             sessionButtonsLayout.addWidget(button)
 
         self.boxLayout.addLayout(sessionButtonsLayout)
 
-        self.startCaptureButton.clicked.connect(self.onStartPhotocollectionCaptureClicked)
+        self.capturePhotocollectionButton.clicked.connect(self.onCapturePhotocollectionClicked)
         self.addPhotoscanButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
         self.loadSessionButton.clicked.connect(self.onLoadSessionClicked)
         self.tableWidget.doubleClicked.connect(self.onLoadSessionClicked)
@@ -425,7 +429,7 @@ class ViewSelectedSubjectDialog(qt.QDialog):
             self.tableWidget.setRowHeight(row, 48)
 
     @display_errors
-    def onCreateNewSessionForThisSubjectClicked(self, checked: bool) -> bool:
+    def onCreateNewSessionForCurrentSubjectClicked(self, checked: bool) -> bool:
         db_transducer_ids = self.db.get_transducer_ids()
         db_volume_ids = self.db.get_volume_ids(self.subject_id)
 
@@ -456,7 +460,7 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         return True
 
     @display_errors
-    def onImportVolumeForThisSubjectClicked(self, checked: bool) -> bool:
+    def onImportVolumeForCurrentSubjectClicked(self, checked: bool) -> bool:
         volumedlg = AddNewVolumeDialog()
         returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
         if not returncode:
@@ -466,7 +470,7 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         return True
 
     @display_errors
-    def onStartPhotocollectionCaptureClicked(self, checked: bool) -> bool:
+    def onCapturePhotocollectionClicked(self, checked: bool) -> bool:
         selected_items = self.tableWidget.selectedItems()
         if not selected_items:
             slicer.util.errorDisplay("Please select a session to add a photocollection to.")
@@ -561,9 +565,9 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         enforceUserPermissions uniquely. It follows the same pattern as OpenLIFULogin."""
 
         _enforcedButtons = [
-            self.createNewSessionForThisSubjectButton,
-            self.importVolumeForThisSubjectButton,
-            self.startCaptureButton,
+            self.createNewSessionForCurrentSubjectButton,
+            self.importVolumeForCurrentSubjectButton,
+            self.capturePhotocollectionButton,
             self.addPhotoscanButton,
         ]
         
