@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>696</width>
-    <height>1025</height>
+    <width>638</width>
+    <height>376</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -43,7 +43,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>3</number>
+         <number>2</number>
         </property>
         <widget class="QWidget" name="photoscanMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -128,14 +128,11 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="ManualRegistrationGroupBox">
-            <property name="title">
+           <widget class="ctkCollapsibleButton" name="CollapsibleButton_2">
+            <property name="text">
              <string>Manual registration refinement</string>
             </property>
-            <property name="collapsed">
-             <bool>false</bool>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_9">
+            <layout class="QVBoxLayout" name="verticalLayout_11">
              <item>
               <widget class="QPushButton" name="enableManualPVRegistration">
                <property name="text">
@@ -179,17 +176,11 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="visibilitySettings">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="title">
+           <widget class="ctkCollapsibleButton" name="CollapsibleButton_3">
+            <property name="text">
              <string>Visibility</string>
             </property>
-            <property name="collapsed">
-             <bool>false</bool>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_3">
+            <layout class="QVBoxLayout" name="verticalLayout_9">
              <item>
               <layout class="QHBoxLayout" name="photoscanSettings">
                <item>
@@ -294,14 +285,11 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
-            <property name="title">
+           <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+            <property name="text">
              <string>Manual registration refinement</string>
             </property>
-            <property name="collapsed">
-             <bool>false</bool>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_12">
+            <layout class="QVBoxLayout" name="verticalLayout_10">
              <item>
               <widget class="QPushButton" name="enableManualTPRegistration">
                <property name="text">
@@ -313,12 +301,9 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="visibilitySettings_2">
-            <property name="title">
+           <widget class="ctkCollapsibleButton" name="visibilitySettings_2">
+            <property name="text">
              <string>Visibility</string>
-            </property>
-            <property name="collapsed">
-             <bool>false</bool>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_8">
              <item>
@@ -477,9 +462,9 @@
    <header>ctkCheckBox.h</header>
   </customwidget>
   <customwidget>
-   <class>ctkCollapsibleGroupBox</class>
-   <extends>QGroupBox</extends>
-   <header>ctkCollapsibleGroupBox.h</header>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
