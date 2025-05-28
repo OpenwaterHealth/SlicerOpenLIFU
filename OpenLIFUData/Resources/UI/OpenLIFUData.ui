@@ -163,6 +163,9 @@
          </item>
          <item>
           <widget class="QTableWidget" name="experimentalSubjectSelectorTableWidget">
+           <property name="editTriggers">
+            <set>QAbstractItemView::NoEditTriggers</set>
+           </property>
            <property name="selectionBehavior">
             <enum>QAbstractItemView::SelectRows</enum>
            </property>
@@ -285,7 +288,7 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>272</width>
+           <width>325</width>
            <height>230</height>
           </rect>
          </property>
