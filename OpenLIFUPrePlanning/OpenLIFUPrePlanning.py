@@ -709,7 +709,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         units = "mm" # These are the units of the output space of the transform returned by get_IJK2RAS
 
         vf_transforms = openlifu_lz().virtual_fit(
-            volume_array = slicer.util.arrayFromVolume(volume),
+            volume_array = slicer.util.arrayFromVolume(volume).transpose((2,1,0)),
             volume_affine_RAS = get_IJK2RAS(volume),
             units = units,
             target_RAS = target.GetNthControlPointPosition(0),
