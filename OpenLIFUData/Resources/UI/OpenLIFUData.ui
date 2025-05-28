@@ -44,9 +44,9 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton">
+    <widget class="ctkCollapsibleButton" name="subjectsCollapsibleButton">
      <property name="text">
-      <string>Sessions</string>
+      <string>Subjects</string>
      </property>
      <property name="collapsed">
       <bool>false</bool>
@@ -73,13 +73,6 @@
          <property name="bottomMargin">
           <number>0</number>
          </property>
-         <item>
-          <widget class="QPushButton" name="newSubjectButton">
-           <property name="text">
-            <string>Add New Subject</string>
-           </property>
-          </widget>
-         </item>
         </layout>
        </widget>
       </item>
@@ -93,14 +86,17 @@
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_12">
          <item>
-          <widget class="QLabel" name="subjectSelectorLabel">
+          <widget class="QPushButton" name="newSubjectButton">
            <property name="text">
-            <string>Subject selector:</string>
+            <string>Add New Subject</string>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QTableWidget" name="subjectSelectorTableWidget">
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
            <property name="editTriggers">
             <set>QAbstractItemView::NoEditTriggers</set>
            </property>
