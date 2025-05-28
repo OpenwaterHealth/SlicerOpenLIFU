@@ -1031,6 +1031,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
                 #Update loaded subjects view
                 self.updateSubjectSessionSelectorFromDb(get_cur_db())
+                self.updateExperimentalSubjectSelectorFromDb(get_cur_db())
 
     @display_errors
     def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
