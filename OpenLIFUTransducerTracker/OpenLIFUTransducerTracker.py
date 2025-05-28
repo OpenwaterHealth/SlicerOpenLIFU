@@ -1251,6 +1251,22 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
             "The width in pixels to which input photos should be resized before going through mesh reconstruction."
         )
 
+        self.sequential_checkbox = qt.QCheckBox("Sequential", self)
+        self.sequential_checkbox.checked = True
+        form.addRow("Image matching:", self.sequential_checkbox)
+        self.sequential_checkbox.setToolTip(
+            "Whether to match images sequentially as opposed to pairwise."
+        )
+
+        self.sampling_rate_line_edit = qt.QLineEdit(self)
+        sampling_rate_validator = qt.QIntValidator(1, 99999, self)
+        self.sampling_rate_line_edit.setValidator(sampling_rate_validator)
+        self.sampling_rate_line_edit.text = "1"  # default sampling rate
+        form.addRow("Sampling rate:", self.sampling_rate_line_edit)
+        self.sampling_rate_line_edit.setToolTip(
+            "Use only every n^th image, where this entry is n."
+        )
+
         buttons = qt.QDialogButtonBox(
             qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
             self
@@ -1260,16 +1276,25 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
         form.addRow(buttons)
 
         self.ok_button = buttons.button(qt.QDialogButtonBox.Ok)
-        self.image_width_line_edit.textChanged.connect(self._on_image_width_changed)
+        self.image_width_line_edit.textChanged.connect(self._on_line_edit_changed)
+        self.sampling_rate_line_edit.textChanged.connect(self._on_line_edit_changed)
 
-    def _on_image_width_changed(self, text: str):
-        self.ok_button.setEnabled(self.image_width_line_edit.hasAcceptableInput())
+    def _on_line_edit_changed(self, text:str):
+        valid_width = self.image_width_line_edit.hasAcceptableInput()
+        valid_rate = self.sampling_rate_line_edit.hasAcceptableInput()
+        self.ok_button.setEnabled(valid_width and valid_rate)
 
     def get_selected_meshroom_pipeline(self) -> str:
         return self.meshroom_pipeline_combobox.currentText
 
     def get_entered_image_width(self) -> int:
         return int(self.image_width_line_edit.text)
+
+    def get_sequential_checked(self) -> bool:
+        return self.sequential_checkbox.isChecked()
+
+    def get_sampling_rate(self) -> int:
+        return int(self.sampling_rate_line_edit.text)
 
 #
 # OpenLIFUTransducerTracker
@@ -1617,6 +1642,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     photocollection_reference_number = selected_reference_number,
                     meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
                     image_width = photoscan_generation_options_dialog.get_entered_image_width(),
+                    window_radius=1 if photoscan_generation_options_dialog.get_sequential_checked() else None,
+                    sampling_rate=photoscan_generation_options_dialog.get_sampling_rate(),
                     progress_callback = progress_callback,
                 )
             except CalledProcessError as e:
@@ -1845,6 +1872,8 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         photocollection_reference_number:str,
         meshroom_pipeline:str,
         image_width:int,
+        window_radius:int,
+        sampling_rate:int,
         progress_callback:Callable[[int,str],None],
     ) -> None:
         """Call mesh reconstruction using openlifu, which should call Meshroom.
@@ -1855,6 +1884,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             photocollection_reference_number: The photocollection reference number
             meshroom_pipeline: The name of the meshroom pipeline to use. See openlifu.nav.photoscan.get_meshroom_pipeline_names.
             image_width: The image width to which to resize input images before sending them into meshroom
+            window_radius: The number of images forward and backward in the sequence to try and
+                match with, if None matches each images to all others.
+            sampling_rate: Use only every n-th image after sorting. Must be >= 1.
             progress_callback: A function to be called by the underlying openlifu code when reporting progress
         """
         if get_cur_db() is None:
@@ -1864,12 +1896,18 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             session_id=session_id,
             reference_number=photocollection_reference_number,
         )
+        photocollection_filepaths = openlifu_lz().nav.photoscan.preprocess_image_paths(
+            paths = photocollection_filepaths,
+            sort_by = "filename",
+            sampling_rate = sampling_rate,
+        )
         with BusyCursor():
             photoscan, data_dir = openlifu_lz().nav.photoscan.run_reconstruction(
                 images = photocollection_filepaths,
                 pipeline_name = meshroom_pipeline,
                 input_resize_width = image_width,
                 use_masks = True,
+                window_radius = window_radius,
                 progress_callback = progress_callback,
             )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
