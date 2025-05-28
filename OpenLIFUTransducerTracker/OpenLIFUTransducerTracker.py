@@ -483,6 +483,17 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.runICPRegistrationPV.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.ui.pageLockButton.clicked.connect(self.togglePageLock)
+
+        # Connect visibility settings
+        self.ui.photoscanVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().photoscan.model_node.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.skinMeshVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().skin_mesh_node.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.photoscanOpacitySlider.valueChanged.connect(
+            lambda value: self.wizard().photoscan.model_node.GetDisplayNode().SetOpacity(value))
+        self.ui.skinMeshOpacitySlider.valueChanged.connect(
+            lambda value: self.wizard().skin_mesh_node.GetDisplayNode().SetOpacity(value))
+
         self.runningRegistration = False # Whether manual registration mode is currently happening
         self.page_locked: bool = True
 
@@ -743,7 +754,19 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.ui.runICPRegistrationTP.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.pageLockButton.clicked.connect(self.togglePageLock)
-        self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.onViewVirtualFitResultStateChanged)
+
+        # Connect visibility settings
+        self.ui.transducerVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.photoscanVisibilityCheckBox_2.stateChanged.connect(
+            lambda state: self.wizard().photoscan.model_node.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.transducerOpacitySlider.valueChanged.connect(
+            lambda value: self.wizard().transducer_surface.GetDisplayNode().SetOpacity(value))
+        self.ui.photoscanOpacitySlider_2.valueChanged.connect(
+            lambda value: self.wizard().photoscan.model_node.GetDisplayNode().SetOpacity(value))
+        self.ui.viewVirtualFitCheckBox.stateChanged.connect(
+            lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
+
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
         self.page_locked: bool = True
@@ -879,14 +902,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             # Remove hardened photoscan and transducer node 
             slicer.mrmlScene.RemoveNode(photoscan_hardened)
             slicer.mrmlScene.RemoveNode(transducer_hardened)
-    
-    def onViewVirtualFitResultStateChanged(self):
-
-        if self.ui.viewVirtualFitCheckBox.isChecked():
-            self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(True)
-            self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
-        else:
-            self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
@@ -911,10 +926,12 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node = self._logic.compute_skin_segmentation(volume)
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
 
+            # TODO: What if there isn't a virtual fit result? Should disable the button.
             best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_best_virtual_fit_result_node(
             target_id = fiducial_to_openlifu_point_id(self.target)
             )
             self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
 
             self.setupViewNodes()
 
@@ -970,6 +987,7 @@ class TransducerTrackingWizard(qt.QWizard):
             # Reset the view node everytime the photoscan is displayed
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.SetAndObserveTransformNodeID(None) # Should be viewed in native space
+            self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
 
             # Disable editing of the fiducial node position
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
@@ -1005,6 +1023,9 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
+
+            self.photoscan.model_node.SetDisplayVisibility(self.photoscanVolumeTrackingPage.ui.photoscanVisibilityCheckBox.isChecked())
+            self.photoscan.model_node.GetDisplayNode().SetOpacity(self.photoscanVolumeTrackingPage.ui.photoscanOpacitySlider.value)
             
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(True)
@@ -1018,6 +1039,9 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(True)
+
+            self.photoscan.model_node.SetDisplayVisibility(self.transducerPhotoscanTrackingPage.ui.photoscanVisibilityCheckBox_2.isChecked())
+            self.photoscan.model_node.GetDisplayNode().SetOpacity(self.transducerPhotoscanTrackingPage.ui.photoscanOpacitySlider_2.value)
 
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
@@ -1175,15 +1199,18 @@ class TransducerTrackingWizard(qt.QWizard):
         choose it. """
         
         self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
+        self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
         self.photoscan.set_view_nodes([])
 
         # Restore previous view settings
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs(self.current_transducer_surface_viewnodes)
         self.transducer_surface.GetDisplayNode().SetVisibility(self.current_transducer_surface_visibility) 
         self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(())
+        self.transducer_surface.GetDisplayNode().SetOpacity(1)
         
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
         self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
+        self.skin_mesh_node.GetDisplayNode().SetOpacity(1)
         skin_facial_landmarks_node = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
         if skin_facial_landmarks_node:
             skin_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
