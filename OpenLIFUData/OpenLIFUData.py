@@ -279,6 +279,141 @@ class AddNewVolumeDialog(qt.QDialog):
 
         return (returncode, volume_filepath,volume_name, volume_id)
 
+class ViewSessionsDialog(qt.QDialog):
+    """ Interface for managing and selecting sessions for a given subject """
+
+    def __init__(self, db: "openlifu.db.Database", subject_id: str, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        subject = db.load_subject(subject_id)
+
+        self.setWindowTitle(f"View Sessions for {subject.name} ({subject_id})")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(700, 400)
+
+        self.db = db
+        self.subject_id = subject_id
+        self.subject = subject
+        self.selected_session_id: str = None
+
+        self.setup()
+
+    def setup(self):
+        self.boxLayout = qt.QVBoxLayout()
+        self.setLayout(self.boxLayout)
+        self.setMinimumSize(900, 500)
+        self.setMaximumSize(1200, 800)
+
+        # ---- Sessions Table ----
+        cols = [
+            "Session Name",
+            "Session ID",
+            "Protocol",
+            "Volume",
+            "Transducer",
+            "Created Date",
+            "Modified Date",
+        ]
+        self.tableWidget = qt.QTableWidget(self)
+        self.tableWidget.setColumnCount(len(cols))
+        self.tableWidget.setHorizontalHeaderLabels(cols)
+        self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.tableWidget.setWordWrap(True)
+        self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+        self.tableWidget.verticalHeader().setDefaultSectionSize(24)
+        self.tableWidget.verticalHeader().setVisible(False)
+        self.tableWidget.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.tableWidget.setShowGrid(False)
+
+        header = self.tableWidget.horizontalHeader()
+        for i in range(0, 6):
+            header.setSectionResizeMode(i, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, qt.QHeaderView.Stretch)
+
+        self.boxLayout.addWidget(self.tableWidget)
+
+        # ---- Session Level Buttons ----
+        buttonsLayout = qt.QHBoxLayout()
+
+        self.startCaptureButton = qt.QPushButton("Start Photocollection Capture")
+        self.addPhotoscanButton = qt.QPushButton("Add Photoscan to Session")
+        self.loadSessionButton = qt.QPushButton("Load Session")
+
+        for button in [self.startCaptureButton, self.addPhotoscanButton, self.loadSessionButton]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            buttonsLayout.addWidget(button)
+
+        self.boxLayout.addLayout(buttonsLayout)
+
+        self.startCaptureButton.clicked.connect(self.onStartPhotocollectionCaptureClicked)
+        self.addPhotoscanButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
+        self.loadSessionButton.clicked.connect(self.onLoadSessionClicked)
+        self.tableWidget.doubleClicked.connect(self.onLoadSessionClicked)
+
+        # ---- Cancel Button ----
+        self.buttonBox = qt.QDialogButtonBox()
+        self.cancelButton = self.buttonBox.addButton("Cancel", qt.QDialogButtonBox.RejectRole)
+        self.cancelButton.clicked.connect(lambda *args: self.reject())
+        self.boxLayout.addWidget(self.buttonBox)
+
+        # ---- Populate Table ----
+        self.updateSessionsList()
+
+    def updateSessionsList(self):
+        session_ids = self.db.get_session_ids(self.subject_id)
+
+        self.tableWidget.clearContents()
+        self.tableWidget.setRowCount(0)
+        self.tableWidget.setRowCount(len(session_ids))
+
+        for row, session_id in enumerate(session_ids):
+            # Session info
+            session = self.db.load_session(self.subject, session_id)
+            self.tableWidget.setItem(row, 0, qt.QTableWidgetItem(session.name))
+            self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(session.id))
+
+            # Protocol, volume, transducer text
+            def safe_call(func, fallback="NA"):
+                try:
+                    return func()
+                except Exception:
+                    return fallback
+
+            protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
+            volume_name = safe_call(lambda: self.db.get_volume_info(session_id, session.volume_id)["name"])
+            transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
+
+            protocol_text = f"{protocol_name} ({session.protocol_id})"
+            volume_text = f"{volume_name} ({session.volume_id})"
+            transducer_text = f"{transducer_name} ({session.transducer_id})"
+
+            self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(protocol_text))
+            self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(volume_text))
+            self.tableWidget.setItem(row, 4, qt.QTableWidgetItem(transducer_text))
+
+            # Approval checkboxes were omitted because getting the status of
+            # approval requires loading the session into the parameter node via
+            # an SlicerOpenLIFUSession.
+
+            # Date created, modified
+
+            self.tableWidget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
+            self.tableWidget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
+
+            self.tableWidget.setRowHeight(row, 48)
+
+    # ---- Button Handlers ----
+    def onStartPhotocollectionCaptureClicked(self):
+        pass
+
+    def onAddPhotoscanToSessionClicked(self):
+        pass
+
+    def onLoadSessionClicked(self):
+        # This would normally trigger session loading logic
+        # For now just close the dialog
+        self.accept()
+
 class StartPhotocollectionCaptureDialog(qt.QDialog):
     """ Add new photocollection dialog """
 
@@ -1109,12 +1244,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def experimental_on_view_sessions_clicked(self, checked: bool) -> None:
+    def experimental_on_view_sessions_clicked(self, checked: bool) -> bool:
         subject_id = self.experimental_get_selected_subject_id()
         if subject_id is None:
             slicer.util.errorDisplay("Please select a subject to view sessions.")
-        print(subject_id)
-        return
+            return False
+
+        view_sessions_dlg = ViewSessionsDialog(get_cur_db(), subject_id)
+        view_sessions_dlg.exec_()
+
+        return True
 
     @display_errors
     def onAddNewSubjectClicked(self, checked:bool) -> None:
