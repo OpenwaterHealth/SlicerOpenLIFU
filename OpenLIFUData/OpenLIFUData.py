@@ -819,6 +819,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_sessionLoadButton_enabled()
         self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
 
+        # Experimental subject selector
+        self.ui.experimentalSubjectSelectorFrame.visible = self.ui.enableExperimentalSubjectSelectorCheckBox.isChecked()
+        self.ui.enableExperimentalSubjectSelectorCheckBox.toggled.connect(lambda c: self.ui.experimentalSubjectSelectorFrame.setVisible(c))
+
         # Session management buttons
         self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
         self.ui.saveSessionButton.clicked.connect(self.onSaveSessionClicked)
