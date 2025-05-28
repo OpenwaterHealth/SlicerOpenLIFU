@@ -279,7 +279,7 @@ class AddNewVolumeDialog(qt.QDialog):
 
         return (returncode, volume_filepath,volume_name, volume_id)
 
-class ViewSessionsDialog(qt.QDialog):
+class ViewSelectedSubjectDialog(qt.QDialog):
     """ Interface for managing and selecting sessions for a given subject """
 
     def __init__(self, db: "openlifu.db.Database", subject_id: str, parent="mainWindow"):
@@ -302,8 +302,8 @@ class ViewSessionsDialog(qt.QDialog):
     def setup(self):
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
-        self.setMinimumSize(900, 500)
-        self.setMaximumSize(1200, 800)
+        self.setMinimumSize(1000, 500)
+        self.setMaximumSize(1400, 800)
 
         # ---- Sessions Table ----
         cols = [
@@ -333,15 +333,25 @@ class ViewSessionsDialog(qt.QDialog):
 
         self.boxLayout.addWidget(self.tableWidget)
         
-        # ---- Add New Session Button ----
-        self.addSessionButton = qt.QPushButton("Add New Session")
-        self.addSessionButton.setToolTip("Create a new session for the current subject")
-        self.addSessionButton.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
-        self.addSessionButton.clicked.connect(self.onAddNewSessionClicked)
-        self.boxLayout.addWidget(self.addSessionButton)
+        # ---- Subject Level Buttons ----
+        subjectButtonsLayout = qt.QHBoxLayout()
+
+        self.createNewSessionForThisSubjectButton = qt.QPushButton("Create New Session For This Subject")
+        self.createNewSessionForThisSubjectButton.setToolTip("Create a new session to the current subject")
+        self.importVolumeForThisSubjectButton = qt.QPushButton("Import Volume For This Subject")
+        self.importVolumeForThisSubjectButton.setToolTip("Import a new volume to use for this subject")
+
+        for button in [self.createNewSessionForThisSubjectButton, self.importVolumeForThisSubjectButton]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            subjectButtonsLayout.addWidget(button)
+
+        self.boxLayout.addLayout(subjectButtonsLayout)
+
+        self.createNewSessionForThisSubjectButton.clicked.connect(self.onCreateNewSessionForThisSubjectClicked)
+        self.importVolumeForThisSubjectButton.clicked.connect(self.onImportVolumeForThisSubjectClicked)
 
         # ---- Session Level Buttons ----
-        buttonsLayout = qt.QHBoxLayout()
+        sessionButtonsLayout = qt.QHBoxLayout()
 
         self.startCaptureButton = qt.QPushButton("Start Photocollection Capture")
         self.startCaptureButton.setToolTip("Add new photocollection to selected session")
@@ -352,9 +362,9 @@ class ViewSessionsDialog(qt.QDialog):
 
         for button in [self.startCaptureButton, self.addPhotoscanButton, self.loadSessionButton]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
-            buttonsLayout.addWidget(button)
+            sessionButtonsLayout.addWidget(button)
 
-        self.boxLayout.addLayout(buttonsLayout)
+        self.boxLayout.addLayout(sessionButtonsLayout)
 
         self.startCaptureButton.clicked.connect(self.onStartPhotocollectionCaptureClicked)
         self.addPhotoscanButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
@@ -415,7 +425,7 @@ class ViewSessionsDialog(qt.QDialog):
             self.tableWidget.setRowHeight(row, 48)
 
     @display_errors
-    def onAddNewSessionClicked(self, checked: bool) -> bool:
+    def onCreateNewSessionForThisSubjectClicked(self, checked: bool) -> bool:
         db_transducer_ids = self.db.get_transducer_ids()
         db_volume_ids = self.db.get_volume_ids(self.subject_id)
 
@@ -443,6 +453,16 @@ class ViewSessionsDialog(qt.QDialog):
         # Update session list
         self.updateSessionsList()
 
+        return True
+
+    @display_errors
+    def onImportVolumeForThisSubjectClicked(self, checked: bool) -> bool:
+        volumedlg = AddNewVolumeDialog()
+        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
+        if not returncode:
+            return False
+
+        slicer.util.getModuleLogic("OpenLIFUData").add_volume_to_database(self.subject_id, volume_id, volume_name, volume_filepath)
         return True
 
     @display_errors
@@ -541,7 +561,8 @@ class ViewSessionsDialog(qt.QDialog):
         enforceUserPermissions uniquely. It follows the same pattern as OpenLIFULogin."""
 
         _enforcedButtons = [
-            self.addSessionButton,
+            self.createNewSessionForThisSubjectButton,
+            self.importVolumeForThisSubjectButton,
             self.startCaptureButton,
             self.addPhotoscanButton,
         ]
@@ -1064,9 +1085,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Subject selector
         self.ui.subjectSelectorTableWidget.setHorizontalHeaderLabels(["Subject Name", "Subject ID"])
-        self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
-        self.ui.subjectSelectorTableWidget.doubleClicked.connect(self.on_view_sessions_clicked)
-        self.ui.viewSessionsButton.clicked.connect(self.on_view_sessions_clicked)
+        self.ui.subjectSelectorTableWidget.doubleClicked.connect(self.on_view_selected_subject_clicked)
+        self.ui.viewSelectedSubjectButton.clicked.connect(self.on_view_selected_subject_clicked)
         # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
 
         # Session management buttons
@@ -1136,17 +1156,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         buttons are enabled based on whether a database has been loaded"""
 
         if get_cur_db():
-            self.ui.addVolumeButton.setEnabled(True)
-            self.ui.addVolumeButton.toolTip = "Add new volume to selected subject"
-
-            self.ui.viewSessionsButton.setEnabled(True)
-            self.ui.viewSessionsButton.toolTip = "View sessions for selected subject"
+            self.ui.viewSelectedSubjectButton.setEnabled(True)
+            self.ui.viewSelectedSubjectButton.toolTip = "View sessions for selected subject"
         else:
-            self.ui.addVolumeButton.setEnabled(False)
-            self.ui.addVolumeButton.toolTip = "Requires a loaded database"
-
-            self.ui.viewSessionsButton.setEnabled(False)
-            self.ui.viewSessionsButton.toolTip = "Requires a loaded database"
+            self.ui.viewSelectedSubjectButton.setEnabled(False)
+            self.ui.viewSelectedSubjectButton.toolTip = "Requires a loaded database"
 
     @display_errors
     def get_selected_subject_id(self) -> Optional[str]:
@@ -1155,74 +1169,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             return None
         selected_row = selected_items[0].row()  # Can select multiple rows
         return self.ui.subjectSelectorTableWidget.item(selected_row, 1).text()
-
-    @display_errors
-    def on_add_volume_clicked(self, checked: bool) -> bool:
-        subject_id = self.get_selected_subject_id()
-        if subject_id is None:
-            slicer.util.errorDisplay("Please select a subject to add a volume.")
-            return False
-
-        volumedlg = AddNewVolumeDialog()
-        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
-        if not returncode:
-            return False
-
-        self.logic.add_volume_to_database(subject_id, volume_id, volume_name, volume_filepath)
-        return True
-
-
-    @display_errors
-    def on_create_new_session_clicked(self, checked: bool) -> bool:
-        subject_id = self.get_selected_subject_id()
-        if subject_id is None:
-            slicer.util.errorDisplay("Please select a subject to create new session.")
-            return False
-
-        if get_cur_db() is None:
-            raise RuntimeError("Cannot create session because there is no database connection")
-
-        db_transducer_ids = get_cur_db().get_transducer_ids()
-        db_volume_ids = get_cur_db().get_volume_ids(subject_id)
-
-        # ---- Don't show unallowed protocols; requires loading protocols ----
-        db_protocol_ids = get_cur_db().get_protocol_ids()
-        protocols: List["openlifu.plan.Protocol"] = get_cur_db().load_all_protocols()
-
-        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
-            pass  # No filtering needed
-        else:
-            # Filter protocol IDs where any user role is in the protocol's allowed roles
-            db_protocol_ids = [
-                protocol.id for protocol in protocols
-                if any(role in protocol.allowed_roles for role in get_current_user().roles)
-            ]
-        # --------------------------------------------------------------------
-
-        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
-        returncode, session_parameters = sessiondlg.customexec_()
-        if not returncode:
-            return False
-
-        sessionAdded = self.logic.add_session_to_database(subject_id, session_parameters)
-
-        # Only required if new session was added
-        if sessionAdded:
-            self.logic.load_session(subject_id, session_parameters['id'])
-
-        return True
-
-    @display_errors
-    def on_view_sessions_clicked(self, checked: bool) -> bool:
-        subject_id = self.get_selected_subject_id()
-        if subject_id is None:
-            slicer.util.errorDisplay("Please select a subject to view sessions.")
-            return False
-
-        view_sessions_dlg = ViewSessionsDialog(get_cur_db(), subject_id)
-        view_sessions_dlg.exec_()
-
-        return True
 
     @display_errors
     def onAddNewSubjectClicked(self, checked:bool) -> None:
@@ -1240,6 +1186,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
                 # Update loaded subjects view
                 self.updateSubjectSelectorFromDb(get_cur_db())
+
+    @display_errors
+    def on_view_selected_subject_clicked(self, checked: bool) -> bool:
+        subject_id = self.get_selected_subject_id()
+        if subject_id is None:
+            slicer.util.errorDisplay("Please select a subject to view sessions.")
+            return False
+
+        view_sessions_dlg = ViewSelectedSubjectDialog(get_cur_db(), subject_id)
+        view_sessions_dlg.exec_()
+
+        return True
 
     @display_errors
     def startPhotocollectionCaptureForCurrentSession(self) -> bool:
