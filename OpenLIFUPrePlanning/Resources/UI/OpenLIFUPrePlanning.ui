@@ -248,7 +248,7 @@
               </sizepolicy>
              </property>
              <property name="toolTip">
-              <string>Whether to generate debugging information</string>
+              <string>Whether to dump debugging information such as skin meshes and search points.</string>
              </property>
              <property name="text">
               <string>Debug</string>
