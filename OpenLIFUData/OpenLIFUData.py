@@ -759,7 +759,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         self.inject_workflow_controls_into_placeholder()
 
-        # ---- Connections ----
+        # ---- External connections and observers ----
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -769,6 +769,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.setupSHNodeObserver()
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
+        
+        # Connect to the database logic for updates related to database
+        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(self.onDatabaseChanged)
+
+        # ---- Internal button setup ----
 
         # Go to protocol config
         self.ui.configureProtocolsPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
@@ -826,14 +831,20 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionStatusVolumeValueLabel,
         ]
 
-        # ====================================
+        # ---- Issue updates that may not have been triggered yet ---
         
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
         
+        self.updateSubjectSessionSelectorFromDb(get_cur_db())
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.updateWorkflowControls()
+
+    def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
+        self.logic.clear_session()
+        self.updateSubjectSessionSelectorFromDb(db)
+        self.update_newSubjectButton_enabled()
 
     def onSubjectSessionSelected(self):
         self.update_subjectLevelButtons_enabled()
@@ -859,7 +870,20 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             elif action == addNewSessionAction:
                 self.onCreateNewSessionClicked(checked=True)
 
-    def updateSubjectSessionSelector(self, subject_info: Sequence[Tuple[str, str]]):
+    def updateSubjectSessionSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
+        # Get subject info from db
+        if db is not None:
+            subject_ids : List[str] = ensure_list(db.get_subject_ids())
+            subjects = {
+                subject_id : db.load_subject(subject_id)
+                for subject_id in subject_ids
+            }
+            self.logic._subjects = subjects
+            subject_names : List[str] = [subject.name for subject in subjects.values()]
+            subject_info = list(zip(subject_ids, subject_names))
+        else:
+            subject_info = []
+
         # Clear any items that are already there
         self.subjectSessionItemModel.removeRows(0,self.subjectSessionItemModel.rowCount())
 
@@ -972,8 +996,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             else:
                 # Add subject to database
                 self.logic.add_subject_to_database(subject_name,subject_id)
+
                 #Update loaded subjects view
-                self.updateSubjectSessionSelector(slicer.util.getModuleLogic('OpenLIFUDatabase').load_database(Path(slicer.util.getModuleWidget('OpenLIFUDatabase').ui.databaseDirectoryLineEdit.currentPath)))
+                self.updateSubjectSessionSelectorFromDb(get_cur_db())
 
     @display_errors
     def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
