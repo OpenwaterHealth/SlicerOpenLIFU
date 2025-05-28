@@ -494,11 +494,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approveButton.setToolTip("Please select a target and run virtual fit first")
             return
         target_id = fiducial_to_openlifu_point_id(selected_target)
-        session = get_openlifu_data_parameter_node().loaded_session
-        session_id = None if session is None else session.get_session_id()
-        virtual_fit_result_node : Optional[vtkMRMLTransformNode] = get_best_virtual_fit_result_node(
-            target_id=target_id, session_id=session_id
-        )
+        virtual_fit_result_node : Optional[vtkMRMLTransformNode] = self.logic.get_best_virtual_fit_result_node(target_id=target_id)
         if virtual_fit_result_node is None:
             self.ui.approveButton.setEnabled(False)
             self.ui.approveButton.setText("Approve virtual fit")
@@ -675,12 +671,16 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         data_logic.update_underlying_openlifu_session()
 
-    def get_virtual_fit_approval(self, target_id : str) -> bool:
-        """Return whether there is a virtual fit approval for the target. In case there is not even a virtual
-        fit result for the target, this returns False."""
+    def get_best_virtual_fit_result_node(self, target_id: str) -> vtkMRMLTransformNode:
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
         virtual_fit_result = get_best_virtual_fit_result_node(target_id=target_id, session_id=session_id)
+        return virtual_fit_result
+
+    def get_virtual_fit_approval(self, target_id : str) -> bool:
+        """Return whether there is a virtual fit approval for the target. In case there is not even a virtual
+        fit result for the target, this returns False."""
+        virtual_fit_result = self.get_best_virtual_fit_result_node(target_id=target_id)
         if virtual_fit_result is None:
             return False
         return get_approval_from_virtual_fit_result_node(virtual_fit_result)
