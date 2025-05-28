@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>843</width>
-    <height>1094</height>
+    <width>696</width>
+    <height>1025</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -178,6 +178,103 @@
             </layout>
            </widget>
           </item>
+          <item>
+           <widget class="ctkCollapsibleGroupBox" name="visibilitySettings">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="title">
+             <string>Visibility</string>
+            </property>
+            <property name="collapsed">
+             <bool>false</bool>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_3">
+             <item>
+              <layout class="QHBoxLayout" name="photoscanSettings">
+               <item>
+                <widget class="QLabel" name="photoscanVisibilityLabel">
+                 <property name="text">
+                  <string>Photoscan visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox">
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="photoscanOpacityLabel">
+                 <property name="text">
+                  <string>Opacity: </string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="skinMeshSettings">
+               <item>
+                <widget class="QLabel" name="skinMeshVisibilityLabel">
+                 <property name="text">
+                  <string>Skin mesh visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="ctkCheckBox" name="skinMeshVisibilityCheckBox">
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="skinMeshOpacityLabel">
+                 <property name="text">
+                  <string>Opacity:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLSliderWidget" name="skinMeshOpacitySlider">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
          </layout>
         </widget>
         <widget class="QWidget" name="TransducerPhotoscanTracking">
@@ -216,10 +313,104 @@
            </widget>
           </item>
           <item>
-           <widget class="QCheckBox" name="viewVirtualFitCheckBox">
-            <property name="text">
-             <string>View virtual fit transducer postion</string>
+           <widget class="ctkCollapsibleGroupBox" name="visibilitySettings_2">
+            <property name="title">
+             <string>Visibility</string>
             </property>
+            <property name="collapsed">
+             <bool>false</bool>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_8">
+             <item>
+              <layout class="QHBoxLayout" name="transducerSettings">
+               <item>
+                <widget class="QLabel" name="transducerVisibilityLabel">
+                 <property name="text">
+                  <string>Transducer visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="ctkCheckBox" name="transducerVisibilityCheckBox">
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="transducerOpacityLabel">
+                 <property name="text">
+                  <string>Opacity:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLSliderWidget" name="transducerOpacitySlider">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="photoscanSettings_2">
+               <item>
+                <widget class="QLabel" name="photoscanVisibilityLabel_2">
+                 <property name="text">
+                  <string>Photoscan visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox_2">
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="photoscanOpacityLabel_2">
+                 <property name="text">
+                  <string>Opacity: </string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider_2">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="viewVirtualFitCheckBox">
+               <property name="text">
+                <string>View virtual fit transducer postion</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
           </item>
          </layout>
@@ -279,6 +470,11 @@
    <class>qSlicerSimpleMarkupsWidget</class>
    <extends>qSlicerWidget</extends>
    <header>qSlicerSimpleMarkupsWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkCheckBox</class>
+   <extends>QCheckBox</extends>
+   <header>ctkCheckBox.h</header>
   </customwidget>
   <customwidget>
    <class>ctkCollapsibleGroupBox</class>
