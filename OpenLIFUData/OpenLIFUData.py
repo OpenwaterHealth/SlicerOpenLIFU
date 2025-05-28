@@ -293,7 +293,7 @@ class ViewSessionsDialog(qt.QDialog):
         self.db = db
         self.subject_id = subject_id
         self.subject = subject
-        self.selected_session_id: str = None
+        self.selected_session_id = None
 
         self.setup()
 
@@ -318,11 +318,9 @@ class ViewSessionsDialog(qt.QDialog):
         self.tableWidget.setHorizontalHeaderLabels(cols)
         self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
-        self.tableWidget.setWordWrap(True)
         self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
         self.tableWidget.verticalHeader().setDefaultSectionSize(24)
         self.tableWidget.verticalHeader().setVisible(False)
-        self.tableWidget.setSelectionMode(qt.QAbstractItemView.SingleSelection)
         self.tableWidget.setShowGrid(False)
 
         header = self.tableWidget.horizontalHeader()
