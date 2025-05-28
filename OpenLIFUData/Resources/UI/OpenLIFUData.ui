@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>784</height>
+    <height>867</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -136,6 +136,42 @@
         <property name="text">
          <string>Load Subject/Session</string>
         </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="enableExperimentalSubjectSelectorCheckBox">
+        <property name="text">
+         <string>Enable experimental subject selector</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="experimentalSubjectSelectorFrame">
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_12">
+         <item>
+          <widget class="QLabel" name="experimentalSubjectSelectorLabel">
+           <property name="text">
+            <string>Subject selector (experimental):</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QTableWidget" name="experimentalSubjectSelectorTableWidget"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="experimentalSelectSubjectPushbutton">
+           <property name="text">
+            <string>Select Subject (experimental)</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
