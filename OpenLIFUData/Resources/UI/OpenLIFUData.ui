@@ -80,73 +80,11 @@
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="addVolumeToSubjectButton">
-           <property name="text">
-            <string>Add Volume to Subject</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="newSessionButton">
-           <property name="text">
-            <string>Create New Session</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="startPhotocollectionCaptureButton">
-           <property name="text">
-            <string>Start Photocollection Capture</string>
-           </property>
-           <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="addPhotoscanToSessionButton">
-           <property name="text">
-            <string>Add Photoscan to Session</string>
-           </property>
-           <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
         </layout>
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="subjectSessionLabel">
-        <property name="text">
-         <string>Subject/session selector:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QTreeView" name="subjectSessionView">
-        <property name="expandsOnDoubleClick">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="sessionLoadButton">
-        <property name="text">
-         <string>Load Subject/Session</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="enableExperimentalSubjectSelectorCheckBox">
-        <property name="text">
-         <string>Enable experimental subject selector</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QFrame" name="experimentalSubjectSelectorFrame">
+       <widget class="QFrame" name="subjectSelectorFrame">
         <property name="frameShape">
          <enum>QFrame::StyledPanel</enum>
         </property>
@@ -155,14 +93,14 @@
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_12">
          <item>
-          <widget class="QLabel" name="experimentalSubjectSelectorLabel">
+          <widget class="QLabel" name="subjectSelectorLabel">
            <property name="text">
-            <string>Subject selector (experimental):</string>
+            <string>Subject selector:</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QTableWidget" name="experimentalSubjectSelectorTableWidget">
+          <widget class="QTableWidget" name="subjectSelectorTableWidget">
            <property name="editTriggers">
             <set>QAbstractItemView::NoEditTriggers</set>
            </property>
@@ -225,16 +163,16 @@
              <number>0</number>
             </property>
             <item>
-             <widget class="QPushButton" name="experimentalAddVolumeButton">
+             <widget class="QPushButton" name="addVolumeButton">
               <property name="text">
-               <string>Add Volume (experimental)</string>
+               <string>Add Volume</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="experimentalCreateNewSessionButton">
+             <widget class="QPushButton" name="createNewSessionButton">
               <property name="text">
-               <string>Create New Session (experimental)</string>
+               <string>Create New Session</string>
               </property>
              </widget>
             </item>
@@ -242,9 +180,9 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="experimentalViewSessionsButton">
+          <widget class="QPushButton" name="viewSessionsButton">
            <property name="text">
-            <string>View Sessions (experimental)</string>
+            <string>View Sessions</string>
            </property>
           </widget>
          </item>

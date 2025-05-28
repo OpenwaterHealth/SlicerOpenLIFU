@@ -1061,51 +1061,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
         self.update_newSubjectButton_enabled()
 
-        # Add new volume to subject
-        self.ui.addVolumeToSubjectButton.clicked.connect(self.onAddVolumeToSubjectClicked)
-
-        # Add new session
-        self.ui.newSessionButton.clicked.connect(self.onCreateNewSessionClicked)
-        self.update_subjectLevelButtons_enabled()
-
-        # Add new photocollection to session
-        self.ui.startPhotocollectionCaptureButton.clicked.connect(self.onStartPhotocollectionCaptureClicked)
-        self.update_sessionLevelButtons_enabled()
-
-        # Add new photoscan to session
-        self.ui.addPhotoscanToSessionButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
-        self.update_sessionLevelButtons_enabled()
-
-        self.subjectSessionItemModel = qt.QStandardItemModel()
-        self.subjectSessionItemModel.setHorizontalHeaderLabels(['Name', 'ID'])
-        self.ui.subjectSessionView.setModel(self.subjectSessionItemModel)
-        self.ui.subjectSessionView.setColumnWidth(0, 200) # make the Name column wider
-
-        self.ui.subjectSessionView.doubleClicked.connect(self.on_item_double_clicked)
-
-        # If a subject is clicked or double clicked, the add volume to subject button should be enabled
-        self.ui.subjectSessionView.selectionModel().selectionChanged.connect(self.onSubjectSessionSelected)
-
-        # Create custom context menu on right-click
-        self.ui.subjectSessionView.setContextMenuPolicy(qt.Qt.CustomContextMenu)
-        self.ui.subjectSessionView.customContextMenuRequested.connect(self.openSubjectSessionContextMenu)
-
-        # Selecting an item and clicking sessionLoadButton is equivalent to doubleclicking the item:
-        self.ui.sessionLoadButton.clicked.connect(
-            lambda : self.on_item_double_clicked(self.ui.subjectSessionView.currentIndex())
-        )
-
-        self.update_sessionLoadButton_enabled()
-        self.ui.subjectSessionView.selectionModel().currentChanged.connect(self.update_sessionLoadButton_enabled)
-
-        # Experimental subject selector
-        self.ui.experimentalSubjectSelectorFrame.visible = self.ui.enableExperimentalSubjectSelectorCheckBox.isChecked()
-        self.ui.enableExperimentalSubjectSelectorCheckBox.toggled.connect(lambda c: self.ui.experimentalSubjectSelectorFrame.setVisible(c))
-        self.ui.experimentalSubjectSelectorTableWidget.setHorizontalHeaderLabels(["Subject Name", "Subject ID"])
-        self.ui.experimentalAddVolumeButton.clicked.connect(self.experimental_on_add_volume_clicked)
-        self.ui.experimentalCreateNewSessionButton.clicked.connect(self.experimental_on_create_new_session_clicked)
-        self.ui.experimentalSubjectSelectorTableWidget.doubleClicked.connect(self.experimental_on_view_sessions_clicked)
-        self.ui.experimentalViewSessionsButton.clicked.connect(self.experimental_on_view_sessions_clicked)
+        # Subject selector
+        self.ui.subjectSelectorTableWidget.setHorizontalHeaderLabels(["Subject Name", "Subject ID"])
+        self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
+        self.ui.createNewSessionButton.clicked.connect(self.on_create_new_session_clicked)
+        self.ui.subjectSelectorTableWidget.doubleClicked.connect(self.on_view_sessions_clicked)
+        self.ui.viewSessionsButton.clicked.connect(self.on_view_sessions_clicked)
         # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
 
         # Session management buttons
@@ -1125,45 +1086,19 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
         
-        self.updateSubjectSessionSelectorFromDb(get_cur_db())
-        self.updateExperimentalSubjectSelectorFromDb(get_cur_db())
-        self.updateExperimentalSubjectSelectorButtonsEnabled()
+        self.updateSubjectSelectorFromDb(get_cur_db())
+        self.updateSubjectSelectorButtonsEnabled()
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.logic.clear_session()
-        self.updateSubjectSessionSelectorFromDb(db)
-        self.updateExperimentalSubjectSelectorFromDb(db)
+        self.updateSubjectSelectorFromDb(db)
         self.update_newSubjectButton_enabled()
-        self.updateExperimentalSubjectSelectorButtonsEnabled()
+        self.updateSubjectSelectorButtonsEnabled()
 
-    def onSubjectSessionSelected(self):
-        self.update_subjectLevelButtons_enabled()
-        self.update_sessionLevelButtons_enabled()
-
-    def openSubjectSessionContextMenu(self, point):
-        index = self.ui.subjectSessionView.indexAt(point)
-        if self.itemIsSession(index):
-            menu = qt.QMenu()
-            addNewPhotoscanAction = menu.addAction("Add photoscan to session...")
-            action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
-            if action == addNewPhotoscanAction:
-                self.onAddPhotoscanToSessionClicked(checked=True)
-
-        else:
-            menu = qt.QMenu()
-            addNewSubjectAction = menu.addAction("Add volume to subject...")
-            addNewSessionAction = menu.addAction("Create new session...")
-            action = menu.exec_(self.ui.subjectSessionView.mapToGlobal(point))
-
-            if action == addNewSubjectAction:
-                self.onAddVolumeToSubjectClicked(checked=True)
-            elif action == addNewSessionAction:
-                self.onCreateNewSessionClicked(checked=True)
-
-    def updateSubjectSessionSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
+    def updateSubjectSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
         # Get subject info from db
         if db is not None:
             subject_ids : List[str] = ensure_list(db.get_subject_ids())
@@ -1178,45 +1113,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             subject_info = []
 
         # Clear any items that are already there
-        self.subjectSessionItemModel.removeRows(0,self.subjectSessionItemModel.rowCount())
+        self.ui.subjectSelectorTableWidget.setRowCount(0)
 
         for subject_id, subject_name in subject_info:
-            subject_row = list(map(
-                create_noneditable_QStandardItem,
-                [subject_name,subject_id]
-            ))
-            self.subjectSessionItemModel.appendRow(subject_row)
+            row_position = self.ui.subjectSelectorTableWidget.rowCount
+            self.ui.subjectSelectorTableWidget.insertRow(row_position)
 
-    def updateExperimentalSubjectSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
-        # Get subject info from db
-        if db is not None:
-            subject_ids : List[str] = ensure_list(db.get_subject_ids())
-            subjects = {
-                subject_id : db.load_subject(subject_id)
-                for subject_id in subject_ids
-            }
-            self.logic._subjects = subjects
-            subject_names : List[str] = [subject.name for subject in subjects.values()]
-            subject_info = list(zip(subject_ids, subject_names))
-        else:
-            subject_info = []
-
-        # Clear any items that are already there
-        self.ui.experimentalSubjectSelectorTableWidget.setRowCount(0)
-
-        for subject_id, subject_name in subject_info:
-            row_position = self.ui.experimentalSubjectSelectorTableWidget.rowCount
-            self.ui.experimentalSubjectSelectorTableWidget.insertRow(row_position)
-
-            self.ui.experimentalSubjectSelectorTableWidget.setItem(row_position, 0, qt.QTableWidgetItem(subject_name))
-            self.ui.experimentalSubjectSelectorTableWidget.setItem(row_position, 1, qt.QTableWidgetItem(subject_id))
-
-    def itemIsSession(self, index : qt.QModelIndex) -> bool:
-        """Whether an item from the subject/session tree view is a session.
-        Returns True if it's a session and False if it's a subject."""
-        # If this has a parent, then it is a session item rather than a subject item.
-        # Otherwise, it is a top-level item, so it must be a subject.
-        return index.parent().isValid()
+            self.ui.subjectSelectorTableWidget.setItem(row_position, 0, qt.QTableWidgetItem(subject_name))
+            self.ui.subjectSelectorTableWidget.setItem(row_position, 1, qt.QTableWidgetItem(subject_id))
 
     def update_newSubjectButton_enabled(self):
         """ Update whether the add new subject button is enabled based on whether a database has been loaded"""
@@ -1227,113 +1131,40 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.newSubjectButton.setDisabled(True)
             self.ui.newSubjectButton.toolTip = 'Requires a loaded database'
 
-    def update_subjectLevelButtons_enabled(self):
-        """ Update whether the add volume and create session buttons are enabled based on whether a database has been loaded
-        and a subject has been selected in the tree view"""
-
-        if get_cur_db() and not self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
-            self.ui.addVolumeToSubjectButton.setEnabled(True)
-            self.ui.addVolumeToSubjectButton.toolTip = 'Add new volume to selected subject'
-
-            self.ui.newSessionButton.setEnabled(True)
-            self.ui.newSessionButton.toolTip = 'Create new session for selected subject'
-        else:
-            self.ui.addVolumeToSubjectButton.setEnabled(False)
-            self.ui.addVolumeToSubjectButton.toolTip = 'Requires a loaded database and subject to be selected'
-
-            self.ui.newSessionButton.setEnabled(False)
-            self.ui.newSessionButton.toolTip = 'Requires a loaded database and subject to be selected'
-    
-    def update_sessionLevelButtons_enabled(self):
-        """ Update whether the add photoscan and photocollection buttons are enabled
-        based on whether a database has been loaded and a session has been
-        selected in the tree view"""
-
-        if get_cur_db() and self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
-            self.ui.startPhotocollectionCaptureButton.setEnabled(True)
-            self.ui.startPhotocollectionCaptureButton.toolTip = 'Add new photocollection to selected session'
-            self.ui.addPhotoscanToSessionButton.setEnabled(True)
-            self.ui.addPhotoscanToSessionButton.toolTip = 'Add new photoscan to selected session'
-        else:
-            self.ui.startPhotocollectionCaptureButton.setEnabled(False)
-            self.ui.startPhotocollectionCaptureButton.toolTip = 'Requires a loaded database and session to be selected'
-            self.ui.addPhotoscanToSessionButton.setEnabled(False)
-            self.ui.addPhotoscanToSessionButton.toolTip = 'Requires a loaded database and session to be selected'
-
-    def update_sessionLoadButton_enabled(self):
-        """Update whether the session loading button is enabled based on whether any subject or session is selected."""
-        if self.ui.subjectSessionView.currentIndex().isValid():
-            self.ui.sessionLoadButton.setEnabled(True)
-            if self.itemIsSession(self.ui.subjectSessionView.currentIndex()):
-                self.ui.sessionLoadButton.toolTip = 'Load the currently selected session'
-            else:
-                self.ui.sessionLoadButton.toolTip = 'Query the list of sessions for the currently selected subject'
-        else:
-            self.ui.sessionLoadButton.setEnabled(False)
-            self.ui.sessionLoadButton.toolTip = 'Select a subject or session to load'
-
-    def updateExperimentalSubjectSelectorButtonsEnabled(self):
+    def updateSubjectSelectorButtonsEnabled(self):
         """ Update whether the add volume, create new session, and view sessions
         buttons are enabled based on whether a database has been loaded"""
 
         if get_cur_db():
-            self.ui.experimentalAddVolumeButton.setEnabled(True)
-            self.ui.experimentalAddVolumeButton.toolTip = "Add new volume to selected subject"
+            self.ui.addVolumeButton.setEnabled(True)
+            self.ui.addVolumeButton.toolTip = "Add new volume to selected subject"
 
-            self.ui.experimentalCreateNewSessionButton.setEnabled(True)
-            self.ui.experimentalCreateNewSessionButton.toolTip = "Create new session for selected subject"
+            self.ui.createNewSessionButton.setEnabled(True)
+            self.ui.createNewSessionButton.toolTip = "Create new session for selected subject"
 
-            self.ui.experimentalViewSessionsButton.setEnabled(True)
-            self.ui.experimentalViewSessionsButton.toolTip = "View sessions for selected subject"
+            self.ui.viewSessionsButton.setEnabled(True)
+            self.ui.viewSessionsButton.toolTip = "View sessions for selected subject"
         else:
-            self.ui.experimentalAddVolumeButton.setEnabled(False)
-            self.ui.experimentalAddVolumeButton.toolTip = "Requires a loaded database"
+            self.ui.addVolumeButton.setEnabled(False)
+            self.ui.addVolumeButton.toolTip = "Requires a loaded database"
 
-            self.ui.experimentalCreateNewSessionButton.setEnabled(False)
-            self.ui.experimentalCreateNewSessionButton.toolTip = "Requires a loaded database"
+            self.ui.createNewSessionButton.setEnabled(False)
+            self.ui.createNewSessionButton.toolTip = "Requires a loaded database"
 
-            self.ui.experimentalViewSessionsButton.setEnabled(False)
-            self.ui.experimentalViewSessionsButton.toolTip = "Requires a loaded database"
-
-    @display_errors
-    def on_item_double_clicked(self, index : qt.QModelIndex):
-
-        if self.itemIsSession(index):
-            session_name, session_id = self.getSubjectSessionAtIndex(index)
-            _, subject_id = self.getSubjectSessionAtIndex(index.parent())
-
-            # ---- Prevent loading sessions with unallowed protocols ----
-            if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
-                pass  # No enforcement needed
-            else:
-                session_info = get_cur_db().load_session_info(subject_id, session_id)
-                protocol: openlifu.plan.Protocol = get_cur_db().load_protocol(session_info["protocol_id"]) 
-                if not any(role in protocol.allowed_roles for role in get_current_user().roles):
-                    slicer.util.errorDisplay(
-                        f"Could not load the session '{session_name}' ({session_id}) because it uses a protocol that does not allow any of the logged in user's roles."
-                    )
-                    return
-            # -----------------------------------------------------------
-
-            self.logic.load_session(subject_id, session_id)
-
-        else: # If the item was a subject:
-            self.addSessionsToSubjectSessionSelector(index)
-
-        # Make sure parameter node is initialized (needed for module reload)
-        self.initializeParameterNode()
+            self.ui.viewSessionsButton.setEnabled(False)
+            self.ui.viewSessionsButton.toolTip = "Requires a loaded database"
 
     @display_errors
-    def experimental_get_selected_subject_id(self) -> Optional[str]:
-        selected_items = self.ui.experimentalSubjectSelectorTableWidget.selectedItems()
+    def get_selected_subject_id(self) -> Optional[str]:
+        selected_items = self.ui.subjectSelectorTableWidget.selectedItems()
         if not selected_items:
             return None
         selected_row = selected_items[0].row()  # Can select multiple rows
-        return self.ui.experimentalSubjectSelectorTableWidget.item(selected_row, 1).text()
+        return self.ui.subjectSelectorTableWidget.item(selected_row, 1).text()
 
     @display_errors
-    def experimental_on_add_volume_clicked(self, checked: bool) -> bool:
-        subject_id = self.experimental_get_selected_subject_id()
+    def on_add_volume_clicked(self, checked: bool) -> bool:
+        subject_id = self.get_selected_subject_id()
         if subject_id is None:
             slicer.util.errorDisplay("Please select a subject to add a volume.")
             return False
@@ -1348,8 +1179,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
 
     @display_errors
-    def experimental_on_create_new_session_clicked(self, checked: bool) -> bool:
-        subject_id = self.experimental_get_selected_subject_id()
+    def on_create_new_session_clicked(self, checked: bool) -> bool:
+        subject_id = self.get_selected_subject_id()
         if subject_id is None:
             slicer.util.errorDisplay("Please select a subject to create new session.")
             return False
@@ -1388,8 +1219,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def experimental_on_view_sessions_clicked(self, checked: bool) -> bool:
-        subject_id = self.experimental_get_selected_subject_id()
+    def on_view_sessions_clicked(self, checked: bool) -> bool:
+        subject_id = self.get_selected_subject_id()
         if subject_id is None:
             slicer.util.errorDisplay("Please select a subject to view sessions.")
             return False
@@ -1413,68 +1244,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 # Add subject to database
                 self.logic.add_subject_to_database(subject_name,subject_id)
 
-                #Update loaded subjects view
-                self.updateSubjectSessionSelectorFromDb(get_cur_db())
-                self.updateExperimentalSubjectSelectorFromDb(get_cur_db())
-
-    @display_errors
-    def getSubjectSessionAtIndex(self, index: qt.QModelIndex) -> Tuple[str, str]:
-        """ Returns the subject or session (name, id) at the specified index in the SubjectSessionView """
-
-        name = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0)).text()
-        id = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(1)).text()
-
-        return (name, id)
-
-    @display_errors
-    def onAddVolumeToSubjectClicked(self, checked:bool) -> None:
-        volumedlg = AddNewVolumeDialog()
-        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
-        if not returncode:
-            return False
-
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        _, subject_id = self.getSubjectSessionAtIndex(currentIndex)
-        self.logic.add_volume_to_database(subject_id, volume_id, volume_name, volume_filepath)
-
-    @display_errors
-    def onCreateNewSessionClicked(self, checked:bool) -> None:
-
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        _, subject_id = self.getSubjectSessionAtIndex(currentIndex)
-
-        if get_cur_db() is None:
-            raise RuntimeError("Cannot create session because there is no database connection")
-
-        db_transducer_ids = get_cur_db().get_transducer_ids()
-        db_volume_ids = get_cur_db().get_volume_ids(subject_id)
-
-        # ---- Don't show unallowed protocols; requires loading protocols ----
-        db_protocol_ids = get_cur_db().get_protocol_ids()
-        protocols: List["openlifu.plan.Protocol"] = get_cur_db().load_all_protocols()
-
-        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
-            pass  # No filtering needed
-        else:
-            # Filter protocol IDs where any user role is in the protocol's allowed roles
-            db_protocol_ids = [
-                protocol.id for protocol in protocols
-                if any(role in protocol.allowed_roles for role in get_current_user().roles)
-            ]
-        # --------------------------------------------------------------------
-
-        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
-        returncode, session_parameters = sessiondlg.customexec_()
-        if not returncode:
-            return False
-
-        sessionAdded = self.logic.add_session_to_database(subject_id, session_parameters)
-
-        # Only required if new session was added
-        if sessionAdded:
-            self.addSessionsToSubjectSessionSelector(currentIndex, session_parameters['name'], session_parameters['id'])
-            self.ui.subjectSessionView.expand(self.ui.subjectSessionView.currentIndex())
-            self.logic.load_session(subject_id, session_parameters['id'])
+                # Update loaded subjects view
+                self.updateSubjectSelectorFromDb(get_cur_db())
 
     @display_errors
     def onStartPhotocollectionCaptureClicked(self, checked:bool):
@@ -1534,28 +1305,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is not None and session_id == loaded_session.get_session_id():
             self.logic.update_photocollections_affiliated_with_loaded_session()
-
-    def addSessionsToSubjectSessionSelector(self, index : qt.QModelIndex, session_name: str = None, session_id: str = None) -> None:
-        """ Adds sessions to the Subject/Session selector for the subject specified by 'index'.
-        This is done to maintain previously expanded subjects in the view instead of clearing and reloading the view"""
-
-        _, subject_id = self.getSubjectSessionAtIndex(index)
-        subject_item = self.subjectSessionItemModel.itemFromIndex(index.siblingAtColumn(0))
-
-        if subject_item.rowCount() == 0: # If we have not already expanded this subject
-            for session_id, session_name in self.logic.get_session_info(subject_id):
-                session_row = list(map(
-                    create_noneditable_QStandardItem,
-                    [session_name, session_id]
-                ))
-                subject_item.appendRow(session_row)
-        elif session_name and session_id:
-            session_row = list(map(
-                    create_noneditable_QStandardItem,
-                    [session_name, session_id]
-                ))
-            subject_item.appendRow(session_row)
-        self.ui.subjectSessionView.expand(index)
 
     @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
