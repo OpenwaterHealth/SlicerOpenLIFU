@@ -1588,9 +1588,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # ---- Photoscan generation connections ----
         data_module = slicer.util.getModuleWidget('OpenLIFUData')
-        self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.onStartPhotocollectionCaptureClicked)
+        self.ui.startPhotocollectionCaptureButton.clicked.connect(lambda: data_module.startPhotocollectionCaptureForCurrentSession())
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
-        self.ui.importPhotocollectionFromDiskButton.clicked.connect(data_module.onImportPhotocollectionFromDiskClicked)
+        self.ui.importPhotocollectionFromDiskButton.clicked.connect(lambda: data_module.addPhotocollectionToCurrentSessionFromDisk())
         self.resetPhotoscanGeneratorProgressDisplay()
         # ------------------------------------------
 

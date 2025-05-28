@@ -461,14 +461,14 @@ class ViewSessionsDialog(qt.QDialog):
         if not returncode:
             return False
 
-        slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        slicer.util.getModuleLogic("OpenLIFUData").add_photocollection_to_database(self.subject_id, session_id, photocollection_dict)
+        slicer.util.getModuleLogic("OpenLIFUData").add_photocollection_to_database(self.subject_id, session_id, photocollection_dict.copy())  # logic mutates the dict
         
         # If the photocollection is being added to a currently active session,
         # update the session 
         loaded_session = slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.loaded_session
         if loaded_session is not None and session_id == loaded_session.get_session_id():
             slicer.util.getModuleLogic("OpenLIFUData").update_photocollections_affiliated_with_loaded_session()
+            slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
 
         return True
 
@@ -488,7 +488,7 @@ class ViewSessionsDialog(qt.QDialog):
         if not returncode:
             return False
 
-        slicer.util.getModuleLogic("OpenLIFUData").add_photoscan_to_database(self.subject_id, session_id, photoscan_dict)
+        slicer.util.getModuleLogic("OpenLIFUData").add_photoscan_to_database(self.subject_id, session_id, photoscan_dict.copy())  # logic mutates the dict
         
         # If the photoscan is being added to a currently active session,
         # update the session and the transducer tracking module to reflect the added photoscan.
@@ -1249,63 +1249,55 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 self.updateSubjectSelectorFromDb(get_cur_db())
 
     @display_errors
-    def onStartPhotocollectionCaptureClicked(self, checked:bool):
+    def startPhotocollectionCaptureForCurrentSession(self) -> bool:
+        loaded_session = self._parameterNode.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot start photocollection capture because a session is not loaded.")
+
         photocollectiondlg = StartPhotocollectionCaptureDialog()
         returncode, photocollection_dict = photocollectiondlg.customexec_()
         if not returncode:
             return False
 
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        _, session_id = self.getSubjectSessionAtIndex(currentIndex)
-        _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
+        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
         self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
-        
-        # If the photocollection is being added to a currently active session,
-        # update the session 
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is not None and session_id == loaded_session.get_session_id():
-            self.logic.update_photocollections_affiliated_with_loaded_session()
+        self.logic.update_photocollections_affiliated_with_loaded_session()
+        return True
 
     @display_errors
-    def onAddPhotoscanToSessionClicked(self, checked:bool) -> None:
-        photoscandlg = AddNewPhotoscanDialog()
-        returncode, photoscan_dict = photoscandlg.customexec_()
-        if not returncode:
-            return False
-
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        _, session_id = self.getSubjectSessionAtIndex(currentIndex)
-        _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
-        self.logic.add_photoscan_to_database(subject_id, session_id, photoscan_dict)
-        
-        # If the photoscan is being added to a currently active session,
-        # update the session and the transducer tracking module to reflect the added photoscan.
+    def addPhotocollectionToCurrentSessionFromDisk(self):
         loaded_session = self._parameterNode.loaded_session
-        if loaded_session is not None and session_id == loaded_session.get_session_id():
-            self.logic.update_photoscans_affiliated_with_loaded_session()
-            # Update the transducer tracking drop down to reflect new photoscans 
-            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
-            transducer_tracking_widget.algorithm_input_widget.update()
+        if loaded_session is None:
+            raise RuntimeError("Cannot start photocollection capture because a session is not loaded.")
 
-    @display_errors
-    def onImportPhotocollectionFromDiskClicked(self, checked:bool):
         importDlg = ImportPhotocollectionFromDiskDialog()
         returncode, photocollection_dict = importDlg.customexec_()
         if not returncode:
             return False
 
-        currentIndex = self.ui.subjectSessionView.currentIndex()
-        _, session_id = self.getSubjectSessionAtIndex(currentIndex)
-        _, subject_id = self.getSubjectSessionAtIndex(currentIndex.parent())
+        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
         self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
-        
-        # If the photocollection is being added to a currently active session,
-        # update the session 
+        self.logic.update_photocollections_affiliated_with_loaded_session()
+
+    @display_errors
+    def addPhotoscanToCurrentSession(self) -> bool:
         loaded_session = self._parameterNode.loaded_session
-        if loaded_session is not None and session_id == loaded_session.get_session_id():
-            self.logic.update_photocollections_affiliated_with_loaded_session()
+        if loaded_session is None:
+            raise RuntimeError("Cannot add photoscan because a session is not loaded.")
+
+        photoscandlg = AddNewPhotoscanDialog()
+        returncode, photoscan_dict = photoscandlg.customexec_()
+        if not returncode:
+            return False
+
+        self.logic.add_photoscan_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photoscan_dict.copy())  # logic mutates the dict
+        self.logic.update_photoscans_affiliated_with_loaded_session()
+
+        # Update the transducer tracking drop down to reflect new photoscans 
+        transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+        transducer_tracking_widget.algorithm_input_widget.update()
+        
+        return True
 
     @display_errors
     def onUnloadSessionClicked(self, checked:bool) -> None:
