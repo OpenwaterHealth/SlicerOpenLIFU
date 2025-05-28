@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>867</height>
+    <height>1029</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -201,9 +201,47 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="experimentalSelectSubjectPushbutton">
+          <widget class="QWidget" name="permissionsWidget3" native="true">
+           <property name="slicer.openlifu.allowed-roles" stdset="0">
+            <stringlist>
+             <string>admin</string>
+             <string>operator</string>
+            </stringlist>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_14">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="experimentalAddVolumeButton">
+              <property name="text">
+               <string>Add Volume (experimental)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="experimentalCreateNewSessionButton">
+              <property name="text">
+               <string>Create New Session (experimental)</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="experimentalViewSessionsPushButton">
            <property name="text">
-            <string>Select Subject (experimental)</string>
+            <string>View Sessions (experimental)</string>
            </property>
           </widget>
          </item>
