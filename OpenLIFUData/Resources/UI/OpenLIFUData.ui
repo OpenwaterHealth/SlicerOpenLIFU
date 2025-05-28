@@ -98,10 +98,34 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="newSubjectButton">
-        <property name="text">
-         <string>Add New Subject</string>
+       <widget class="QWidget" name="permissionsWidget2" native="true">
+        <property name="slicer.openlifu.allowed-roles" stdset="0">
+         <stringlist>
+          <string>admin</string>
+          <string>operator</string>
+         </stringlist>
         </property>
+        <layout class="QVBoxLayout" name="verticalLayout_12">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QPushButton" name="newSubjectButton">
+           <property name="text">
+            <string>Add New Subject</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
       <item>
@@ -118,6 +142,9 @@
     <widget class="ctkCollapsibleButton" name="activeSessionCollapsibleButton">
      <property name="text">
       <string>Active session</string>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
      </property>
      <property name="collapsed">
       <bool>true</bool>
