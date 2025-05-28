@@ -2,7 +2,7 @@
 import itertools
 import warnings
 from subprocess import CalledProcessError
-from typing import Optional, Tuple, TYPE_CHECKING, List, Dict, Union
+from typing import Callable, Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 
 # Third-party imports
 import numpy as np
@@ -59,7 +59,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget 
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
 from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node,  get_virtual_fit_approval_for_target
 
 # These imports are for IDE and static analysis purposes only
@@ -1448,7 +1448,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.onStartPhotocollectionCaptureClicked)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         self.ui.importPhotocollectionFromDiskButton.clicked.connect(data_module.onImportPhotocollectionFromDiskClicked)
-        self.ui.photoscanGenerationStatusMessage.hide() # Only displayed when running photoscan generation
+        self.resetPhotoscanGeneratorProgressDisplay()
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
@@ -1569,7 +1569,19 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Determine whether a photoscan can be previewed based on the status of the photoscan combo box
         self.checkCanPreviewPhotoscan()
 
-    def onStartPhotoscanGenerationButtonClicked(self):
+    def resetPhotoscanGeneratorProgressDisplay(self):
+        self.ui.photoscanGeneratorProgressBar.hide()
+        self.ui.photoscanGenerationStatusMessage.hide()
+    
+    def setPhotoscanGeneratorProgressDisplay(self, value: int, status_text: str):
+        """Update the photoscan generation progress display widgets and show them."""
+        self.ui.photoscanGeneratorProgressBar.value = value
+        self.ui.photoscanGenerationStatusMessage.text = status_text
+        self.ui.photoscanGeneratorProgressBar.show()
+        self.ui.photoscanGenerationStatusMessage.show()
+
+    @display_errors
+    def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
         add_slicer_log_handler("MeshRecon", "Mesh reconstruction")
         add_slicer_log_handler("Meshroom", "Meshroom process", use_dialogs=False)
         reference_numbers = get_openlifu_data_parameter_node().session_photocollections
@@ -1593,10 +1605,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             openlifu_lz().nav.photoscan.get_meshroom_pipeline_names()
         )
         if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
-            self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 0)
-            self.ui.photoscanGenerationStatusMessage.show()
-            self.ui.photoscanGenerationStatusMessage.text = ("Generating mesh... this process can take up to 20 minutes.")
-            self.ui.photoscanGenerationStatusMessage.styleSheet = "color:red;"
+
+            def progress_callback(progress_percent:int, step_description:str) -> None:
+                self.setPhotoscanGeneratorProgressDisplay(value = progress_percent, status_text = step_description)
+                slicer.app.processEvents()
+
             try:
                 self.logic.generate_photoscan(
                     subject_id = subject_id,
@@ -1604,27 +1617,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     photocollection_reference_number = selected_reference_number,
                     meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
                     image_width = photoscan_generation_options_dialog.get_entered_image_width(),
+                    progress_callback = progress_callback,
                 )
-                self.updatePhotoscanGeneratorProgressBar(new_photoscan_generator_progress_value = 100)
             except CalledProcessError as e:
                 slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
                 raise e
             finally:
-                self.ui.photoscanGenerationStatusMessage.hide()
+                self.resetPhotoscanGeneratorProgressDisplay()
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
         self.updateWorkflowControls()
-    
-    def updatePhotoscanGeneratorProgressBar(self,  new_photoscan_generator_progress_value = None):
-        """Update the photoscan generation progress bar. 
-        Currently this function is called before and after photoscan generation is run.
-        The progress bar needs to be connected to updates from the meshroom reconstruction pipeline. """
-        self.ui.photoscanGeneratorProgressBar.maximum = 100 
-        if new_photoscan_generator_progress_value is not None:
-            self.ui.photoscanGeneratorProgressBar.value = new_photoscan_generator_progress_value
-        else:
-            self.ui.photoscanGeneratorProgressBar.value = 0
 
 
     def onPreviewPhotoscanClicked(self):
@@ -1842,6 +1845,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         photocollection_reference_number:str,
         meshroom_pipeline:str,
         image_width:int,
+        progress_callback:Callable[[int,str],None],
     ) -> None:
         """Call mesh reconstruction using openlifu, which should call Meshroom.
 
@@ -1851,6 +1855,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             photocollection_reference_number: The photocollection reference number
             meshroom_pipeline: The name of the meshroom pipeline to use. See openlifu.nav.photoscan.get_meshroom_pipeline_names.
             image_width: The image width to which to resize input images before sending them into meshroom
+            progress_callback: A function to be called by the underlying openlifu code when reporting progress
         """
         if get_cur_db() is None:
             raise RuntimeError("Cannot generate photoscan without a database connected to write it into.")
@@ -1865,6 +1870,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                 pipeline_name = meshroom_pipeline,
                 input_resize_width = image_width,
                 use_masks = True,
+                progress_callback = progress_callback,
             )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
         photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
