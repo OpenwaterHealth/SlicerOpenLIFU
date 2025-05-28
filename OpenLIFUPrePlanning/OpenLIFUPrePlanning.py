@@ -1,7 +1,7 @@
 # Standard library imports
 from collections import defaultdict
 from functools import partial
-from typing import Optional, TYPE_CHECKING, Dict, List, Union
+from typing import Callable, Optional, TYPE_CHECKING, Dict, List, Union
 
 # Third-party imports
 import qt
@@ -194,6 +194,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         for fiducial_node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
             self.watch_fiducial_node(fiducial_node)
 
+        self.resetVirtualFitProgressDisplay()
         self.updateTargetsListView()
         self.updateApproveButton()
         self.updateInputOptions()
@@ -569,12 +570,37 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Approved virtual fit result detected, proceed to the next step."
 
+    def resetVirtualFitProgressDisplay(self):
+        self.ui.virtualFitProgressBar.hide()
+        self.ui.virtualFitProgressStatusLabel.hide()
+    
+    def setVirtualFitProgressDisplay(self, value: int, status_text: str):
+        self.ui.virtualFitProgressBar.value = value
+        self.ui.virtualFitProgressStatusLabel.text = status_text
+        self.ui.virtualFitProgressBar.show()
+        self.ui.virtualFitProgressStatusLabel.show()
+
+
+
     def onVirtualfitClicked(self):
         activeData = self.algorithm_input_widget.get_current_data()
+
+        def progress_callback(progress_percent:int, step_description:str) -> None:
+            self.setVirtualFitProgressDisplay(value = progress_percent, status_text = step_description)
+            slicer.app.processEvents()
+
         with BusyCursor():
-            virtual_fit_result : Optional[vtkMRMLTransformNode] = self.logic.virtual_fit(
-                activeData["Protocol"],activeData["Transducer"], activeData["Volume"], activeData["Target"]
-            )
+            try:
+                virtual_fit_result : Optional[vtkMRMLTransformNode] = self.logic.virtual_fit(
+                    protocol = activeData["Protocol"],
+                    transducer = activeData["Transducer"],
+                    volume = activeData["Volume"],
+                    target = activeData["Target"],
+                    progress_callback = progress_callback,
+                    include_debug_info = False,
+                )
+            finally:
+                self.resetVirtualFitProgressDisplay()
 
         if virtual_fit_result is None:
             slicer.util.errorDisplay("Virtual fit failed. No viable transducer positions found.")
@@ -665,12 +691,14 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         data_logic.update_underlying_openlifu_session()
 
     def virtual_fit(
-            self,
-            protocol: SlicerOpenLIFUProtocol,
-            transducer : SlicerOpenLIFUTransducer,
-            volume: vtkMRMLScalarVolumeNode,
-            target: vtkMRMLMarkupsFiducialNode,
-        ) -> Optional[vtkMRMLTransformNode]:
+        self,
+        protocol: SlicerOpenLIFUProtocol,
+        transducer : SlicerOpenLIFUTransducer,
+        volume: vtkMRMLScalarVolumeNode,
+        target: vtkMRMLMarkupsFiducialNode,
+        progress_callback : Callable[[int,str],None],
+        include_debug_info : bool,
+    ) -> Optional[vtkMRMLTransformNode]:
 
         add_slicer_log_handler("VirtualFit", "Virtual fitting")
 
@@ -686,6 +714,8 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             target_RAS = target.GetNthControlPointPosition(0),
             standoff_transform = transducer_openlifu.get_standoff_transform_in_units(units),
             options = protocol_openlifu.virtual_fit_options,
+            progress_callback = progress_callback,
+            include_debug_info = include_debug_info,
         )
 
         session = get_openlifu_data_parameter_node().loaded_session

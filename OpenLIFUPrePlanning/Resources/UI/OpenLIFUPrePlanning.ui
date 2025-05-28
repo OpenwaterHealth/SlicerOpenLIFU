@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>387</width>
+    <width>404</width>
     <height>592</height>
    </rect>
   </property>
@@ -25,11 +25,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="targetsCollapsible">
-     <property name="text">
+    <widget class="ctkCollapsibleButton" name="targetsCollapsible" native="true">
+     <property name="text" stdset="0">
       <string>Targets</string>
      </property>
-     <property name="collapsed">
+     <property name="collapsed" stdset="0">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -168,11 +168,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible">
-     <property name="text">
+    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible" native="true">
+     <property name="text" stdset="0">
       <string>Virtual Fitting</string>
      </property>
-     <property name="collapsed">
+     <property name="collapsed" stdset="0">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -228,6 +228,23 @@
           <widget class="QPushButton" name="virtualfitButton">
            <property name="text">
             <string>Virtual fit</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QProgressBar" name="virtualFitProgressBar">
+           <property name="value">
+            <number>24</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="virtualFitProgressStatusLabel">
+           <property name="styleSheet">
+            <string notr="true">font-style: italic</string>
+           </property>
+           <property name="text">
+            <string>TextLabel</string>
            </property>
           </widget>
          </item>
