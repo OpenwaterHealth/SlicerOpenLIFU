@@ -159,14 +159,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
-
-        subject_info = self.logic.load_database(Path(self.ui.databaseDirectoryLineEdit.currentPath))
-
-        slicer.util.getModuleWidget('OpenLIFUData').updateSubjectSessionSelector(subject_info) # from previous Data module behavior
-
-        self.updateSettingFromParameter('databaseDirectory')
-
-        slicer.util.getModuleWidget('OpenLIFUData').update_newSubjectButton_enabled() # from previous Data module behavior
+        self.logic.load_database(Path(self.ui.databaseDirectoryLineEdit.currentPath))
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -281,45 +274,24 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         for f in self._on_db_changed_callbacks:
             f(self._db)
 
-    def load_database(self, path: Path) -> Sequence[Tuple[str,str]]:
+    def load_database(self, path: Path) -> None:
         """Load an openlifu database from a local folder hierarchy.
-
-        This sets the internal openlifu database object and reads in all the subjects,
-        and returns the subject information.
 
         Args:
             path: Path to the openlifu database folder on disk.
-
-        Returns: A sequence of pairs (subject_id, subject_name) running over all subjects
-            in the database.
         """
-        slicer.util.getModuleLogic('OpenLIFUData').clear_session() # from previous implementation
-        subjects = {}
-
         if not self.path_is_openlifu_database_root(path):
             if not slicer.util.confirmYesNoDisplay(
                 f"An openlifu database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
                 "Confirm initialize database"
             ):
                 self.db = None
-                return list()
+                return
 
             self.copy_preinitialized_database(path)
 
         self.db = openlifu_lz().Database(path)
         add_slicer_log_handler_for_openlifu_object(self.db)
-
-        subject_ids : List[str] = ensure_list(self.db.get_subject_ids())
-        subjects = {
-            subject_id : self.db.load_subject(subject_id)
-            for subject_id in subject_ids
-        }
-
-        slicer.util.getModuleLogic('OpenLIFUData')._subjects = subjects # from previous implementation
-
-        subject_names : List[str] = [subject.name for subject in subjects.values()]
-
-        return list(zip(subject_ids, subject_names))
     
     @staticmethod
     def get_database_destination():
