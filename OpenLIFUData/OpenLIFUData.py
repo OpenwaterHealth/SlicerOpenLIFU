@@ -437,15 +437,93 @@ class ViewSessionsDialog(qt.QDialog):
 
         return True
 
-    def onStartPhotocollectionCaptureClicked(self):
-        pass
+    @display_errors
+    def onStartPhotocollectionCaptureClicked(self, checked: bool) -> bool:
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a session to add a photocollection to.")
+            return False
 
-    def onAddPhotoscanToSessionClicked(self):
-        pass
+        row = selected_items[0].row()
+        session_id_item = self.tableWidget.item(row, 1)  # Column 1 is Session ID
+        session_id = session_id_item.text()
 
-    def onLoadSessionClicked(self):
-        # This would normally trigger session loading logic
-        # For now just close the dialog
+        photocollectiondlg = StartPhotocollectionCaptureDialog()
+        returncode, photocollection_dict = photocollectiondlg.customexec_()
+        if not returncode:
+            return False
+
+        slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        slicer.util.getModuleLogic("OpenLIFUData").add_photocollection_to_database(self.subject_id, session_id, photocollection_dict)
+        
+        # If the photocollection is being added to a currently active session,
+        # update the session 
+        loaded_session = slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.loaded_session
+        if loaded_session is not None and session_id == loaded_session.get_session_id():
+            slicer.util.getModuleLogic("OpenLIFUData").update_photocollections_affiliated_with_loaded_session()
+
+        return True
+
+    @display_errors
+    def onAddPhotoscanToSessionClicked(self, checked: bool) -> bool:
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a session to add photoscan to.")
+            return False
+
+        row = selected_items[0].row()
+        session_id_item = self.tableWidget.item(row, 1)  # Column 1 is Session ID
+        session_id = session_id_item.text()
+
+        photoscandlg = AddNewPhotoscanDialog()
+        returncode, photoscan_dict = photoscandlg.customexec_()
+        if not returncode:
+            return False
+
+        slicer.util.getModuleLogic("OpenLIFUData").add_photoscan_to_database(self.subject_id, session_id, photoscan_dict)
+        
+        # If the photoscan is being added to a currently active session,
+        # update the session and the transducer tracking module to reflect the added photoscan.
+        loaded_session = slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.loaded_session
+        if loaded_session is not None and session_id == loaded_session.get_session_id():
+            slicer.util.getModuleLogic("OpenLIFUData").update_photoscans_affiliated_with_loaded_session()
+            # Update the transducer tracking drop down to reflect new photoscans 
+            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+            transducer_tracking_widget.algorithm_input_widget.update()
+
+        return True
+
+    @display_errors
+    def onLoadSessionClicked(self, checked: bool) -> None:
+        selected_items = self.tableWidget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a session to load.")
+            return
+
+        row = selected_items[0].row()
+        session_id_item = self.tableWidget.item(row, 1)  # Column 1 is Session ID
+        session_id = session_id_item.text()
+
+        # ---- Prevent loading sessions with unallowed protocols ----
+        session = self.db.load_session(self.subject, session_id)
+        protocol = self.db.load_protocol(session.protocol_id)
+
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No enforcement needed
+        else:
+            if not any(role in protocol.allowed_roles for role in get_current_user().roles):
+                slicer.util.errorDisplay(
+                    f"Could not load the session '{session.name}' ({session_id}) because it uses a protocol "
+                    f"that does not allow any of the logged-in user's roles."
+                )
+                return
+        # -----------------------------------------------------------
+
+        slicer.util.getModuleLogic("OpenLIFUData").load_session(self.subject_id, session_id)
+
+        # Ensure parameter node is initialized. Taken from previous implementation
+        slicer.util.getModuleWidget("OpenLIFUData").initializeParameterNode()
+
         self.accept()
 
 class StartPhotocollectionCaptureDialog(qt.QDialog):
