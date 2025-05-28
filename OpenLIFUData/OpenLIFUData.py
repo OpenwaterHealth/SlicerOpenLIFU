@@ -822,6 +822,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Experimental subject selector
         self.ui.experimentalSubjectSelectorFrame.visible = self.ui.enableExperimentalSubjectSelectorCheckBox.isChecked()
         self.ui.enableExperimentalSubjectSelectorCheckBox.toggled.connect(lambda c: self.ui.experimentalSubjectSelectorFrame.setVisible(c))
+        self.ui.experimentalSubjectSelectorTableWidget.setHorizontalHeaderLabels(["Subject Name", "Subject ID"])
+
 
         # Session management buttons
         self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
@@ -841,6 +843,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.initializeParameterNode()
         
         self.updateSubjectSessionSelectorFromDb(get_cur_db())
+        self.updateExperimentalSubjectSelectorFromDb(get_cur_db())
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.updateWorkflowControls()
@@ -848,6 +851,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.logic.clear_session()
         self.updateSubjectSessionSelectorFromDb(db)
+        self.updateExperimentalSubjectSelectorFromDb(db)
         self.update_newSubjectButton_enabled()
 
     def onSubjectSessionSelected(self):
@@ -897,6 +901,30 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 [subject_name,subject_id]
             ))
             self.subjectSessionItemModel.appendRow(subject_row)
+
+    def updateExperimentalSubjectSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
+        # Get subject info from db
+        if db is not None:
+            subject_ids : List[str] = ensure_list(db.get_subject_ids())
+            subjects = {
+                subject_id : db.load_subject(subject_id)
+                for subject_id in subject_ids
+            }
+            self.logic._subjects = subjects
+            subject_names : List[str] = [subject.name for subject in subjects.values()]
+            subject_info = list(zip(subject_ids, subject_names))
+        else:
+            subject_info = []
+
+        # Clear any items that are already there
+        self.ui.experimentalSubjectSelectorTableWidget.setRowCount(0)
+
+        for subject_id, subject_name in subject_info:
+            row_position = self.ui.experimentalSubjectSelectorTableWidget.rowCount
+            self.ui.experimentalSubjectSelectorTableWidget.insertRow(row_position)
+
+            self.ui.experimentalSubjectSelectorTableWidget.setItem(row_position, 0, qt.QTableWidgetItem(subject_name))
+            self.ui.experimentalSubjectSelectorTableWidget.setItem(row_position, 1, qt.QTableWidgetItem(subject_id))
 
     def itemIsSession(self, index : qt.QModelIndex) -> bool:
         """Whether an item from the subject/session tree view is a session.
