@@ -1065,7 +1065,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Subject selector
         self.ui.subjectSelectorTableWidget.setHorizontalHeaderLabels(["Subject Name", "Subject ID"])
         self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
-        self.ui.createNewSessionButton.clicked.connect(self.on_create_new_session_clicked)
         self.ui.subjectSelectorTableWidget.doubleClicked.connect(self.on_view_sessions_clicked)
         self.ui.viewSessionsButton.clicked.connect(self.on_view_sessions_clicked)
         # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
@@ -1133,24 +1132,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.newSubjectButton.toolTip = 'Requires a loaded database'
 
     def updateSubjectSelectorButtonsEnabled(self):
-        """ Update whether the add volume, create new session, and view sessions
+        """ Update whether the add volume, and view sessions
         buttons are enabled based on whether a database has been loaded"""
 
         if get_cur_db():
             self.ui.addVolumeButton.setEnabled(True)
             self.ui.addVolumeButton.toolTip = "Add new volume to selected subject"
 
-            self.ui.createNewSessionButton.setEnabled(True)
-            self.ui.createNewSessionButton.toolTip = "Create new session for selected subject"
-
             self.ui.viewSessionsButton.setEnabled(True)
             self.ui.viewSessionsButton.toolTip = "View sessions for selected subject"
         else:
             self.ui.addVolumeButton.setEnabled(False)
             self.ui.addVolumeButton.toolTip = "Requires a loaded database"
-
-            self.ui.createNewSessionButton.setEnabled(False)
-            self.ui.createNewSessionButton.toolTip = "Requires a loaded database"
 
             self.ui.viewSessionsButton.setEnabled(False)
             self.ui.viewSessionsButton.toolTip = "Requires a loaded database"
