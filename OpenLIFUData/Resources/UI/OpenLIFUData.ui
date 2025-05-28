@@ -132,13 +132,6 @@
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="createNewSessionButton">
-           <property name="text">
-            <string>Create New Session</string>
-           </property>
-          </widget>
-         </item>
         </layout>
        </widget>
       </item>
