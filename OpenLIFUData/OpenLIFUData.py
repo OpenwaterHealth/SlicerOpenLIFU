@@ -823,7 +823,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.experimentalSubjectSelectorFrame.visible = self.ui.enableExperimentalSubjectSelectorCheckBox.isChecked()
         self.ui.enableExperimentalSubjectSelectorCheckBox.toggled.connect(lambda c: self.ui.experimentalSubjectSelectorFrame.setVisible(c))
         self.ui.experimentalSubjectSelectorTableWidget.setHorizontalHeaderLabels(["Subject Name", "Subject ID"])
-
+        self.ui.experimentalAddVolumeButton.clicked.connect(self.experimental_on_add_volume_clicked)
+        self.ui.experimentalCreateNewSessionButton.clicked.connect(self.experimental_on_create_new_session_clicked)
+        self.ui.experimentalSubjectSelectorTableWidget.doubleClicked.connect(self.experimental_on_view_sessions_clicked)
+        self.ui.experimentalViewSessionsPushButton.clicked.connect(self.experimental_on_view_sessions_clicked)
+        # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
 
         # Session management buttons
         self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
@@ -1014,6 +1018,38 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+    @display_errors
+    def experimental_get_selected_subject_id(self) -> Optional[str]:
+        selected_items = self.ui.experimentalSubjectSelectorTableWidget.selectedItems()
+        if not selected_items:
+            return None
+        selected_row = selected_items[0].row()  # Can select multiple rows
+        return self.ui.experimentalSubjectSelectorTableWidget.item(selected_row, 1).text()
+
+    @display_errors
+    def experimental_on_add_volume_clicked(self, checked: bool) -> None:
+        subject_id = self.experimental_get_selected_subject_id()
+        if subject_id is None:
+            slicer.util.errorDisplay("Please select a subject to add a volume.")
+        print(subject_id)
+        return
+
+    @display_errors
+    def experimental_on_create_new_session_clicked(self, checked: bool) -> None:
+        subject_id = self.experimental_get_selected_subject_id()
+        if subject_id is None:
+            slicer.util.errorDisplay("Please select a subject to create new session.")
+        print(subject_id)
+        return
+
+    @display_errors
+    def experimental_on_view_sessions_clicked(self, checked: bool) -> None:
+        subject_id = self.experimental_get_selected_subject_id()
+        if subject_id is None:
+            slicer.util.errorDisplay("Please select a subject to view sessions.")
+        print(subject_id)
+        return
 
     @display_errors
     def onAddNewSubjectClicked(self, checked:bool) -> None:
