@@ -363,8 +363,8 @@ class ManageAccountsDialog(qt.QDialog):
 
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
-        self.setMinimumSize(600, 400)
-        self.setMaximumSize(1000, 700)
+        self.setMinimumSize(1000, 500)
+        self.setMaximumSize(1200, 800)
 
         # ---- Users table ----
 
@@ -378,6 +378,9 @@ class ManageAccountsDialog(qt.QDialog):
         self.tableWidget.setShowGrid(True)  # style
         self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)  # style
         self.tableWidget.verticalHeader().setDefaultSectionSize(24)  # style
+        self.tableWidget.verticalHeader().setVisible(False)
+        self.tableWidget.setFocusPolicy(qt.Qt.NoFocus)
+        self.tableWidget.horizontalHeader().setHighlightSections(False)
 
         header = self.tableWidget.horizontalHeader()
         header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)  # ID
