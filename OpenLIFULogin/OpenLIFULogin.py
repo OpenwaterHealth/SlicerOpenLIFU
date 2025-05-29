@@ -265,20 +265,20 @@ class ChangePasswordDialog(qt.QDialog):
         mainLayout.setSpacing(15)
         self.setLayout(mainLayout)
 
-        self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
-        self.infoLabel.setWordWrap(True)
-        self.infoLabel.setStyleSheet("""
-            font-size: 14pt;
-            font-weight: bold;
-            padding: 5px 0;
-        """)
-        self.infoLabel.setWordWrap(True)
-        mainLayout.addWidget(self.infoLabel)
-
         formLayout = qt.QFormLayout()
         formLayout.setSpacing(12)
         formLayout.setFormAlignment(qt.Qt.AlignTop)
         mainLayout.addLayout(formLayout)
+
+        self.infoLabel = qt.QLabel(f"Change the password for {self.user.id}:")
+        self.infoLabel.setAlignment(qt.Qt.AlignCenter)
+        self.infoLabel.setWordWrap(True)
+        self.infoLabel.setStyleSheet("""
+            font-size: 150%;
+            font-weight: bold;
+            padding-bottom: 5px;
+        """)
+        formLayout.addRow(self.infoLabel)
 
         # ---- Password fields ----
 
