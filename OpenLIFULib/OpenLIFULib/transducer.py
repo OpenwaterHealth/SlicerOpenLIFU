@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 
 # Define transducer color dictionary
 TRANSDUCER_MODEL_COLORS = {
-    "default": [230, 230, 77], # yellow
-    "virtual_fit_result": [255, 170, 0], # orange
-    "transducer_tracking_result": [255, 0, 0], # red
+    "default": [230, 230, 77], # YELLOW
+    "virtual_fit_result": [0, 85, 255], # BLUE
+    "transducer_tracking_result": [0, 170, 0], # GREEN
 }
 
 @parameterPack
