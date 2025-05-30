@@ -1729,6 +1729,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.watchTransducerTrackingNode(transducer_to_volume_transform_node)
             # Set the current transducer transform node to the transducer tracking result.
             selected_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_transform_node)
+            selected_transducer.set_visibility(True)
             self.updateWorkflowControls()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
