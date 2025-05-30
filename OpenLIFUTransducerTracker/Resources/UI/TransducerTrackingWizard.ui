@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>638</width>
-    <height>376</height>
+    <width>1089</width>
+    <height>804</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -128,7 +128,10 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleButton" name="CollapsibleButton_2">
+           <widget class="ctkCollapsibleButton" name="ManualRegistrationGroupBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
             <property name="text">
              <string>Manual registration refinement</string>
             </property>
@@ -176,7 +179,7 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleButton" name="CollapsibleButton_3">
+           <widget class="ctkCollapsibleButton" name="visibilitySettings">
             <property name="text">
              <string>Visibility</string>
             </property>
@@ -285,7 +288,7 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+           <widget class="ctkCollapsibleButton" name="manualRegistrationCollapsible">
             <property name="text">
              <string>Manual registration refinement</string>
             </property>
@@ -305,31 +308,60 @@
             <property name="text">
              <string>Visibility</string>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_8">
-             <item>
-              <layout class="QHBoxLayout" name="transducerSettings">
+            <layout class="QGridLayout" name="gridLayout">
+             <item row="1" column="0">
+              <layout class="QHBoxLayout" name="horizontalLayout_2">
                <item>
-                <widget class="QLabel" name="transducerVisibilityLabel">
+                <widget class="QCheckBox" name="registrationSurfaceVisibilityCheckBox">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
                  <property name="text">
-                  <string>Transducer visibility:</string>
+                  <string>View transducer registration surface</string>
                  </property>
                 </widget>
                </item>
                <item>
-                <widget class="ctkCheckBox" name="transducerVisibilityCheckBox">
-                 <property name="checked">
-                  <bool>true</bool>
+                <spacer name="horizontalSpacer_2">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
                  </property>
-                </widget>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
                </item>
                <item>
-                <widget class="QLabel" name="transducerOpacityLabel">
+                <widget class="QCheckBox" name="viewVirtualFitCheckBox">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
                  <property name="text">
-                  <string>Opacity:</string>
+                  <string>View virtual fit transducer postion</string>
                  </property>
                 </widget>
                </item>
                <item>
+                <spacer name="horizontalSpacer_3">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item row="0" column="0">
+              <layout class="QGridLayout" name="gridLayout_2">
+               <item row="0" column="3">
                 <widget class="qMRMLSliderWidget" name="transducerOpacitySlider">
                  <property name="singleStep">
                   <double>0.050000000000000</double>
@@ -345,32 +377,47 @@
                  </property>
                 </widget>
                </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="photoscanSettings_2">
-               <item>
-                <widget class="QLabel" name="photoscanVisibilityLabel_2">
-                 <property name="text">
-                  <string>Photoscan visibility:</string>
+               <item row="0" column="1" alignment="Qt::AlignLeft">
+                <widget class="ctkCheckBox" name="transducerVisibilityCheckBox">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
                  </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox_2">
+                 <property name="text">
+                  <string/>
+                 </property>
                  <property name="checked">
                   <bool>true</bool>
                  </property>
                 </widget>
                </item>
-               <item>
+               <item row="1" column="1">
+                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox_2">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QLabel" name="transducerOpacityLabel">
+                 <property name="text">
+                  <string>Opacity:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
                 <widget class="QLabel" name="photoscanOpacityLabel_2">
                  <property name="text">
                   <string>Opacity: </string>
                  </property>
                 </widget>
                </item>
-               <item>
+               <item row="1" column="3">
                 <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider_2">
                  <property name="singleStep">
                   <double>0.050000000000000</double>
@@ -386,14 +433,21 @@
                  </property>
                 </widget>
                </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label">
+                 <property name="text">
+                  <string>Transducer visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_2">
+                 <property name="text">
+                  <string>Photoscan visibility:</string>
+                 </property>
+                </widget>
+               </item>
               </layout>
-             </item>
-             <item>
-              <widget class="QCheckBox" name="viewVirtualFitCheckBox">
-               <property name="text">
-                <string>View virtual fit transducer postion</string>
-               </property>
-              </widget>
              </item>
             </layout>
            </widget>

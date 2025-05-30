@@ -757,13 +757,15 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
         # Connect visibility settings
         self.ui.transducerVisibilityCheckBox.stateChanged.connect(
-            lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
+            lambda state: self.wizard().transducer_body.SetDisplayVisibility(state == qt.Qt.Checked))
         self.ui.photoscanVisibilityCheckBox_2.stateChanged.connect(
             lambda state: self.wizard().photoscan.model_node.SetDisplayVisibility(state == qt.Qt.Checked))
         self.ui.transducerOpacitySlider.valueChanged.connect(
-            lambda value: self.wizard().transducer_surface.GetDisplayNode().SetOpacity(value))
+            lambda value: self.wizard().transducer_body.GetDisplayNode().SetOpacity(value))
         self.ui.photoscanOpacitySlider_2.valueChanged.connect(
             lambda value: self.wizard().photoscan.model_node.GetDisplayNode().SetOpacity(value))
+        self.ui.registrationSurfaceVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(
             lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
 
@@ -837,6 +839,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def setupTransformNode(self):
 
         self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
+        self.wizard().transducer_body.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
         self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]) # Specify a view node for display
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
@@ -920,7 +923,13 @@ class TransducerTrackingWizard(qt.QWizard):
 
             self.transducer = transducer
             self.target = target
+            
+            # Should not be able to get here if these are None
+            if transducer.surface_model_node is None or transducer.body_model_node is None:
+                raise RuntimeError("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
+            
             self.transducer_surface = transducer.surface_model_node
+            self.transducer_body = transducer.body_model_node
             
             # These steps take some time
             self.skin_mesh_node = self._logic.compute_skin_segmentation(volume)
@@ -1008,6 +1017,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
+            self.transducer_body.GetDisplayNode().SetVisibility(False)
 
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
@@ -1023,6 +1033,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
+            self.transducer_body.GetDisplayNode().SetVisibility(False)
 
             self.photoscan.model_node.SetDisplayVisibility(self.photoscanVolumeTrackingPage.ui.photoscanVisibilityCheckBox.isChecked())
             self.photoscan.model_node.GetDisplayNode().SetOpacity(self.photoscanVolumeTrackingPage.ui.photoscanOpacitySlider.value)
@@ -1038,7 +1049,7 @@ class TransducerTrackingWizard(qt.QWizard):
             # Display the photoscan and transducer and hide the skin mesh
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
-            self.transducer_surface.GetDisplayNode().SetVisibility(True)
+            self.transducer_body.GetDisplayNode().SetVisibility(True)
 
             self.photoscan.model_node.SetDisplayVisibility(self.transducerPhotoscanTrackingPage.ui.photoscanVisibilityCheckBox_2.isChecked())
             self.photoscan.model_node.GetDisplayNode().SetOpacity(self.transducerPhotoscanTrackingPage.ui.photoscanOpacitySlider_2.value)
@@ -1085,6 +1096,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         # Copy photoscan and skin segmentation landmarks to slicer scene
         # There may not be fiducials created of the user is viewing previous tracking results
@@ -1134,6 +1146,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.resetViewNodes()
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
         self.clearWizardNodes()
 
         # Exit place mode
@@ -1181,10 +1194,17 @@ class TransducerTrackingWizard(qt.QWizard):
         # If the transducer surface has specific view nodes associated with it, maintain those view nodes
         # We need to check for current view settings since the transducer exists in the scene
         # before the wizard.
+        
         self.current_transducer_surface_visibility = self.transducer_surface.GetDisplayNode().GetVisibility()
         self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.transducer_surface.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
+        
+        self.current_transducer_body_visibility = self.transducer_body.GetDisplayNode().GetVisibility()
+        self.current_transducer_body_viewnodes = self.transducer_body.GetDisplayNode().GetViewNodeIDs()
+        self.transducer_body.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+        self.transducer_body.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
+        
         self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
 
         self.photoscan.set_view_nodes(wizard_view_nodes)
@@ -1206,7 +1226,10 @@ class TransducerTrackingWizard(qt.QWizard):
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs(self.current_transducer_surface_viewnodes)
         self.transducer_surface.GetDisplayNode().SetVisibility(self.current_transducer_surface_visibility) 
         self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(())
-        self.transducer_surface.GetDisplayNode().SetOpacity(1)
+    
+        self.transducer_body.GetDisplayNode().SetViewNodeIDs(self.current_transducer_body_viewnodes)
+        self.transducer_body.GetDisplayNode().SetVisibility(self.current_transducer_body_visibility) 
+        self.transducer_body.GetDisplayNode().SetOpacity(1)
         
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
         self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
@@ -1743,9 +1766,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 target_id = fiducial_to_openlifu_point_id(target)
                 target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
 
-            if transducer.surface_model_node is None: # Check that the selected transducer has an affiliated registration surface model
+            if transducer.surface_model_node is None or transducer.body_model_node is None: # Check that the selected transducer has an affiliated registration surface model
                 self.ui.runTrackingButton.enabled = False
-                self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
+                self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
             elif get_guided_mode_state() and (target and not target_is_approved): # GM: Check that virtual fit is approved for the selected target
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
