@@ -1833,6 +1833,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
         )
+        newly_loaded_transducer.set_visibility(False)
 
         # === Load protocol ===
 
@@ -1861,6 +1862,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # transform matches the virtual fit result in terms of matrix values.
             if int(vf_node.GetAttribute("VF:rank")) == 1 and newly_loaded_transducer.is_matching_transform(vf_node):
                 newly_loaded_transducer.set_matching_transform(vf_node)
+                newly_loaded_transducer.set_visibility(True)
 
         # === Load transducer tracking results ===
 
@@ -1925,6 +1927,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 if current_photoscan_id == approved_photoscan_id:
                     if newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
                         newly_loaded_transducer.set_matching_transform(transducer_to_volume_node)
+                        newly_loaded_transducer.set_visibility(True)
                     else:
                         transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
                             photoscan_id=approved_photoscan_id,
