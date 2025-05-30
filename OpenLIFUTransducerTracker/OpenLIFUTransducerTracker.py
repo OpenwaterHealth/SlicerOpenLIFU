@@ -36,7 +36,7 @@ from OpenLIFULib import (
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMixin
-from OpenLIFULib.skinseg import generate_skin_mesh
+from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation, display_skin_segmentation
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.transducer_tracking_results import (
@@ -896,7 +896,10 @@ class TransducerTrackingWizard(qt.QWizard):
             self.transducer_surface = transducer.surface_model_node
             
             # These steps take some time
-            self.skin_mesh_node = self._logic.compute_skin_segmentation(volume)
+            self.skin_mesh_node = self.get_skin_segmentation(volume)
+            if self.skin_mesh_node is None:
+                skin_mesh_node = generate_skin_segmentation(volume)
+
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
 
             self.setupViewNodes()
@@ -2030,29 +2033,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                     photoscan.facial_landmarks_fiducial_node.SetNthControlPointPosition(i, position)
             
         return photoscan.facial_landmarks_fiducial_node
-        
-    def compute_skin_segmentation(self, volume : vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
-        """Computes skin segmentation if it has not been created. The ID of the volume node used to create the 
-        skin segmentation is added as a model node attribute. Note, this is different from the openlifu volume id.
-        """
-        skin_mesh_node = [
-            node for node in slicer.util.getNodesByClass('vtkMRMLModelNode') 
-            if node.GetAttribute('OpenLIFUData.volume_id') == volume.GetID()
-            ]
-        if len(skin_mesh_node) > 1:
-            raise RuntimeError(f"Found multiple skin segmentation models affiliated with volume {volume.GetID()}")
-    
-        if not skin_mesh_node:
-            skin_mesh_node = generate_skin_mesh(volume)
-            skin_mesh_node.SetName(f'{volume.GetName()}-skinsegmentation')
-            # Set the ID of corresponding volume as a node attribute 
-            skin_mesh_node.SetAttribute('OpenLIFUData.volume_id', volume.GetID())
-            skin_mesh_node.CreateDefaultDisplayNodes()
-            skin_mesh_node.GetDisplayNode().SetVisibility(False) # visibility is turned on by default
-        else:
-            skin_mesh_node = skin_mesh_node[0]
-
-        return skin_mesh_node
 
     def get_volume_facial_landmarks(self, volume_or_skin_mesh : Union[vtkMRMLScalarVolumeNode, vtkMRMLModelNode]) -> vtkMRMLMarkupsFiducialNode:
         """Returns the facial landmarks fiducial node affiliated with the specified volume or skin_mesh node. Returns None is
