@@ -33,6 +33,7 @@ from OpenLIFULib import (
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation, display_skin_segmentation
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
@@ -600,6 +601,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # TODO: Make the virtual fit button both update the transducer transform and populate in the virtual fit results
             activeData["Transducer"].set_current_transform_to_match_transform_node(virtual_fit_result)
             self.watchVirtualFit(virtual_fit_result)
+            skin_mesh_node = get_skin_segmentation(activeData["Volume"])
+            display_skin_segmentation(skin_mesh_node)
             activeData["Transducer"].set_visibility(True)
 
         self.updateApproveButton()
@@ -703,13 +706,17 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
         units = "mm" # These are the units of the output space of the transform returned by get_IJK2RAS
 
-        vf_transforms = openlifu_lz().virtual_fit(
-            volume_array = slicer.util.arrayFromVolume(volume).transpose((2,1,0)),
-            volume_affine_RAS = get_IJK2RAS(volume),
+        # Get the skin mesh associated with the volume
+        skin_mesh_node = get_skin_segmentation(volume)
+        if skin_mesh_node is None:
+            skin_mesh_node = generate_skin_segmentation(volume)
+
+        vf_transforms = openlifu_lz().run_virtual_fit(
             units = units,
             target_RAS = target.GetNthControlPointPosition(0),
             standoff_transform = transducer_openlifu.get_standoff_transform_in_units(units),
             options = protocol_openlifu.virtual_fit_options,
+            skin_mesh = skin_mesh_node.GetPolyData(),
             progress_callback = progress_callback,
             include_debug_info = include_debug_info,
         )
