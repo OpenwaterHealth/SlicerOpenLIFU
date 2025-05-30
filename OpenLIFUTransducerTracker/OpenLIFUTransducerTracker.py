@@ -767,7 +767,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.registrationSurfaceVisibilityCheckBox.stateChanged.connect(
             lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(
-            lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
+                lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
 
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
@@ -796,6 +796,10 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
             self.ui.runICPRegistrationTP.enabled = False
             self.ui.enableManualTPRegistration.enabled = False
+        
+        if self.wizard().transducer.cloned_virtual_fit_model is None:
+            self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
         
         self.updatePageLock()
 
@@ -939,8 +943,10 @@ class TransducerTrackingWizard(qt.QWizard):
             best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_best_virtual_fit_result_node(
             target_id = fiducial_to_openlifu_point_id(self.target)
             )
-            self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
-            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
+            # When not in guided mode, there does not need to be a virtual fit result to be able to run tracking
+            if best_virtual_fit_result_node is not None:
+                self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
+                self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
 
             self.setupViewNodes()
 
@@ -1205,7 +1211,8 @@ class TransducerTrackingWizard(qt.QWizard):
         self.transducer_body.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.transducer_body.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
         
-        self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+        if self.transducer.cloned_virtual_fit_model:
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
 
         self.photoscan.set_view_nodes(wizard_view_nodes)
 
@@ -1225,7 +1232,8 @@ class TransducerTrackingWizard(qt.QWizard):
         # Restore previous view settings
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs(self.current_transducer_surface_viewnodes)
         self.transducer_surface.GetDisplayNode().SetVisibility(self.current_transducer_surface_visibility) 
-        self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(())
+        if self.transducer.cloned_virtual_fit_model:
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(())
     
         self.transducer_body.GetDisplayNode().SetViewNodeIDs(self.current_transducer_body_viewnodes)
         self.transducer_body.GetDisplayNode().SetVisibility(self.current_transducer_body_visibility) 
