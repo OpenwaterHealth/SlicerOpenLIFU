@@ -39,6 +39,7 @@ from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMi
 from OpenLIFULib.skinseg import generate_skin_mesh
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
+from OpenLIFULib.transducer import TRANSDUCER_MODEL_COLORS
 from OpenLIFULib.transducer_tracking_results import (
     TransducerTrackingTransformType,
     add_transducer_tracking_result,
@@ -60,7 +61,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
-from OpenLIFULib.virtual_fit_results import get_best_virtual_fit_result_node,  get_virtual_fit_approval_for_target
+from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target
 
 # These imports are for IDE and static analysis purposes only
 if TYPE_CHECKING:
@@ -482,6 +483,17 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.ui.runICPRegistrationPV.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.initializePVRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.ui.pageLockButton.clicked.connect(self.togglePageLock)
+
+        # Connect visibility settings
+        self.ui.photoscanVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().photoscan.model_node.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.skinMeshVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().skin_mesh_node.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.photoscanOpacitySlider.valueChanged.connect(
+            lambda value: self.wizard().photoscan.model_node.GetDisplayNode().SetOpacity(value))
+        self.ui.skinMeshOpacitySlider.valueChanged.connect(
+            lambda value: self.wizard().skin_mesh_node.GetDisplayNode().SetOpacity(value))
+
         self.runningRegistration = False # Whether manual registration mode is currently happening
         self.page_locked: bool = True
 
@@ -742,6 +754,21 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.initializeTPRegistration.clicked.connect(self.onInitializeRegistrationClicked)
         self.ui.runICPRegistrationTP.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.pageLockButton.clicked.connect(self.togglePageLock)
+
+        # Connect visibility settings
+        self.ui.transducerVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().transducer_body.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.photoscanVisibilityCheckBox_2.stateChanged.connect(
+            lambda state: self.wizard().photoscan.model_node.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.transducerOpacitySlider.valueChanged.connect(
+            lambda value: self.wizard().transducer_body.GetDisplayNode().SetOpacity(value))
+        self.ui.photoscanOpacitySlider_2.valueChanged.connect(
+            lambda value: self.wizard().photoscan.model_node.GetDisplayNode().SetOpacity(value))
+        self.ui.registrationSurfaceVisibilityCheckBox.stateChanged.connect(
+            lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
+        self.ui.viewVirtualFitCheckBox.stateChanged.connect(
+                lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
+
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
         self.page_locked: bool = True
@@ -770,8 +797,12 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             self.ui.runICPRegistrationTP.enabled = False
             self.ui.enableManualTPRegistration.enabled = False
         
+        if self.wizard().transducer.cloned_virtual_fit_model is None:
+            self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
+        
         self.updatePageLock()
-    
+
     def togglePageLock(self):
         self.page_locked = not self.page_locked
         self.updatePageLock()
@@ -786,6 +817,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
         if self.runningRegistration:
             self.disable_manual_registration()
+
+        self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
     def onTransformModified(self, node, eventID,):
         
@@ -810,6 +843,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def setupTransformNode(self):
 
         self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
+        self.wizard().transducer_body.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
         self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]) # Specify a view node for display
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
@@ -893,11 +927,26 @@ class TransducerTrackingWizard(qt.QWizard):
 
             self.transducer = transducer
             self.target = target
+            
+            # Should not be able to get here if these are None
+            if transducer.surface_model_node is None or transducer.body_model_node is None:
+                raise RuntimeError("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
+            
             self.transducer_surface = transducer.surface_model_node
+            self.transducer_body = transducer.body_model_node
             
             # These steps take some time
             self.skin_mesh_node = self._logic.compute_skin_segmentation(volume)
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
+
+            # TODO: What if there isn't a virtual fit result? Should disable the button.
+            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_best_virtual_fit_result_node(
+            target_id = fiducial_to_openlifu_point_id(self.target)
+            )
+            # When not in guided mode, there does not need to be a virtual fit result to be able to run tracking
+            if best_virtual_fit_result_node is not None:
+                self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
+                self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
 
             self.setupViewNodes()
 
@@ -953,6 +1002,7 @@ class TransducerTrackingWizard(qt.QWizard):
             # Reset the view node everytime the photoscan is displayed
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.SetAndObserveTransformNodeID(None) # Should be viewed in native space
+            self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
 
             # Disable editing of the fiducial node position
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
@@ -973,6 +1023,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
+            self.transducer_body.GetDisplayNode().SetVisibility(False)
 
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
@@ -988,6 +1039,10 @@ class TransducerTrackingWizard(qt.QWizard):
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
+            self.transducer_body.GetDisplayNode().SetVisibility(False)
+
+            self.photoscan.model_node.SetDisplayVisibility(self.photoscanVolumeTrackingPage.ui.photoscanVisibilityCheckBox.isChecked())
+            self.photoscan.model_node.GetDisplayNode().SetOpacity(self.photoscanVolumeTrackingPage.ui.photoscanOpacitySlider.value)
             
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(True)
@@ -1000,7 +1055,10 @@ class TransducerTrackingWizard(qt.QWizard):
             # Display the photoscan and transducer and hide the skin mesh
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
-            self.transducer_surface.GetDisplayNode().SetVisibility(True)
+            self.transducer_body.GetDisplayNode().SetVisibility(True)
+
+            self.photoscan.model_node.SetDisplayVisibility(self.transducerPhotoscanTrackingPage.ui.photoscanVisibilityCheckBox_2.isChecked())
+            self.photoscan.model_node.GetDisplayNode().SetOpacity(self.transducerPhotoscanTrackingPage.ui.photoscanOpacitySlider_2.value)
 
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
@@ -1044,6 +1102,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         # Copy photoscan and skin segmentation landmarks to slicer scene
         # There may not be fiducials created of the user is viewing previous tracking results
@@ -1093,6 +1152,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.resetViewNodes()
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
         self.clearWizardNodes()
 
         # Exit place mode
@@ -1140,14 +1200,25 @@ class TransducerTrackingWizard(qt.QWizard):
         # If the transducer surface has specific view nodes associated with it, maintain those view nodes
         # We need to check for current view settings since the transducer exists in the scene
         # before the wizard.
+        
         self.current_transducer_surface_visibility = self.transducer_surface.GetDisplayNode().GetVisibility()
         self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+        self.transducer_surface.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
+        
+        self.current_transducer_body_visibility = self.transducer_body.GetDisplayNode().GetVisibility()
+        self.current_transducer_body_viewnodes = self.transducer_body.GetDisplayNode().GetViewNodeIDs()
+        self.transducer_body.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+        self.transducer_body.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
+        
+        if self.transducer.cloned_virtual_fit_model:
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
 
         self.photoscan.set_view_nodes(wizard_view_nodes)
 
         # Hide all displayable nodes in the scene from the wizard view nodes
         hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
+
         
     def resetViewNodes(self):
         """Resets the view nodes of all models created by the wizard to null '()'. This allows the
@@ -1155,18 +1226,29 @@ class TransducerTrackingWizard(qt.QWizard):
         choose it. """
         
         self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
+        self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
         self.photoscan.set_view_nodes([])
 
         # Restore previous view settings
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs(self.current_transducer_surface_viewnodes)
         self.transducer_surface.GetDisplayNode().SetVisibility(self.current_transducer_surface_visibility) 
+        if self.transducer.cloned_virtual_fit_model:
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(())
+    
+        self.transducer_body.GetDisplayNode().SetViewNodeIDs(self.current_transducer_body_viewnodes)
+        self.transducer_body.GetDisplayNode().SetVisibility(self.current_transducer_body_visibility) 
+        self.transducer_body.GetDisplayNode().SetOpacity(1)
         
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
         self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
+        self.skin_mesh_node.GetDisplayNode().SetOpacity(1)
         skin_facial_landmarks_node = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
         if skin_facial_landmarks_node:
             skin_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
             skin_facial_landmarks_node.GetDisplayNode().SetViewNodeIDs(())
+
+        if self.transducer.cloned_virtual_fit_model:
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(()) 
 
 class PhotoscanPreviewDialog(qt.QDialog):
     """ Preview Photoscan Dialog """
@@ -1692,9 +1774,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 target_id = fiducial_to_openlifu_point_id(target)
                 target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
 
-            if transducer.surface_model_node is None: # Check that the selected transducer has an affiliated registration surface model
+            if transducer.surface_model_node is None or transducer.body_model_node is None: # Check that the selected transducer has an affiliated registration surface model
                 self.ui.runTrackingButton.enabled = False
-                self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated registration surface model, which is needed to run tracking.")
+                self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
             elif get_guided_mode_state() and (target and not target_is_approved): # GM: Check that virtual fit is approved for the selected target
                 self.ui.runTrackingButton.enabled = False
                 self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
@@ -1729,6 +1811,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.watchTransducerTrackingNode(transducer_to_volume_transform_node)
             # Set the current transducer transform node to the transducer tracking result.
             selected_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_transform_node)
+            selected_transducer.set_visibility(True)
             self.updateWorkflowControls()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
@@ -2356,13 +2439,10 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             target: The target for which the virtual fit result should be retrieved.
         """
       
-        session = get_openlifu_data_parameter_node().loaded_session
-        session_id : Optional[str] = session.get_session_id() if session is not None else None
-
         # Initialize with virtual fit result if available
-        best_virtual_fit_result_node = get_best_virtual_fit_result_node(
-            target_id = fiducial_to_openlifu_point_id(target),
-            session_id = session_id)
+        best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_best_virtual_fit_result_node(
+            target_id = fiducial_to_openlifu_point_id(target)
+            )
         
         if best_virtual_fit_result_node is None:
             # Initialize transform with identity matrix

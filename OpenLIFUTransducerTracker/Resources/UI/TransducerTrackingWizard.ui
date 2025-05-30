@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>843</width>
-    <height>1094</height>
+    <width>1089</width>
+    <height>804</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -43,7 +43,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>1</number>
+         <number>2</number>
         </property>
         <widget class="QWidget" name="photoscanMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -128,14 +128,14 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="ManualRegistrationGroupBox">
-            <property name="title">
+           <widget class="ctkCollapsibleButton" name="ManualRegistrationGroupBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
              <string>Manual registration refinement</string>
             </property>
-            <property name="collapsed">
-             <bool>false</bool>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_9">
+            <layout class="QVBoxLayout" name="verticalLayout_11">
              <item>
               <widget class="QPushButton" name="enableManualPVRegistration">
                <property name="text">
@@ -178,6 +178,97 @@
             </layout>
            </widget>
           </item>
+          <item>
+           <widget class="ctkCollapsibleButton" name="visibilitySettings">
+            <property name="text">
+             <string>Visibility</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_9">
+             <item>
+              <layout class="QHBoxLayout" name="photoscanSettings">
+               <item>
+                <widget class="QLabel" name="photoscanVisibilityLabel">
+                 <property name="text">
+                  <string>Photoscan visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox">
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="photoscanOpacityLabel">
+                 <property name="text">
+                  <string>Opacity: </string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="skinMeshSettings">
+               <item>
+                <widget class="QLabel" name="skinMeshVisibilityLabel">
+                 <property name="text">
+                  <string>Skin mesh visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="ctkCheckBox" name="skinMeshVisibilityCheckBox">
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="skinMeshOpacityLabel">
+                 <property name="text">
+                  <string>Opacity:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="qMRMLSliderWidget" name="skinMeshOpacitySlider">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
          </layout>
         </widget>
         <widget class="QWidget" name="TransducerPhotoscanTracking">
@@ -197,20 +288,166 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
-            <property name="title">
+           <widget class="ctkCollapsibleButton" name="manualRegistrationCollapsible">
+            <property name="text">
              <string>Manual registration refinement</string>
             </property>
-            <property name="collapsed">
-             <bool>false</bool>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_12">
+            <layout class="QVBoxLayout" name="verticalLayout_10">
              <item>
               <widget class="QPushButton" name="enableManualTPRegistration">
                <property name="text">
                 <string>Enable interaction handles</string>
                </property>
               </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleButton" name="visibilitySettings_2">
+            <property name="text">
+             <string>Visibility</string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout">
+             <item row="1" column="0">
+              <layout class="QHBoxLayout" name="horizontalLayout_2">
+               <item>
+                <widget class="QCheckBox" name="registrationSurfaceVisibilityCheckBox">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string>View transducer registration surface</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_2">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="viewVirtualFitCheckBox">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string>View virtual fit transducer postion</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_3">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item row="0" column="0">
+              <layout class="QGridLayout" name="gridLayout_2">
+               <item row="0" column="3">
+                <widget class="qMRMLSliderWidget" name="transducerOpacitySlider">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1" alignment="Qt::AlignLeft">
+                <widget class="ctkCheckBox" name="transducerVisibilityCheckBox">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox_2">
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QLabel" name="transducerOpacityLabel">
+                 <property name="text">
+                  <string>Opacity:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QLabel" name="photoscanOpacityLabel_2">
+                 <property name="text">
+                  <string>Opacity: </string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="3">
+                <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider_2">
+                 <property name="singleStep">
+                  <double>0.050000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="quantity">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label">
+                 <property name="text">
+                  <string>Transducer visibility:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_2">
+                 <property name="text">
+                  <string>Photoscan visibility:</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
              </item>
             </layout>
            </widget>
@@ -274,9 +511,14 @@
    <header>qSlicerSimpleMarkupsWidget.h</header>
   </customwidget>
   <customwidget>
-   <class>ctkCollapsibleGroupBox</class>
-   <extends>QGroupBox</extends>
-   <header>ctkCollapsibleGroupBox.h</header>
+   <class>ctkCheckBox</class>
+   <extends>QCheckBox</extends>
+   <header>ctkCheckBox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
