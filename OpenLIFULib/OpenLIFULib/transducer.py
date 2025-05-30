@@ -224,3 +224,12 @@ class SlicerOpenLIFUTransducer:
         ).all()
         
         return is_matching
+    
+    def set_visibility(self, visibility: bool):
+        """Sets the visibility of any model nodes associated with the transducer"""
+
+        self.model_node.GetDisplayNode().SetVisibility(visibility)
+        if self.body_model_node:
+            self.body_model_node.GetDisplayNode().SetVisibility(visibility)
+        if self.surface_model_node:
+            self.surface_model_node.GetDisplayNode().SetVisibility(visibility)
