@@ -610,6 +610,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # TODO: Make the virtual fit button both update the transducer transform and populate in the virtual fit results
             activeData["Transducer"].set_current_transform_to_match_transform_node(virtual_fit_result)
             self.watchVirtualFit(virtual_fit_result)
+            activeData["Transducer"].set_visibility(True)
 
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
