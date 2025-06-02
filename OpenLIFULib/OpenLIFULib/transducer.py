@@ -237,6 +237,21 @@ class SlicerOpenLIFUTransducer:
             self.surface_model_node.GetDisplayNode().SetVisibility(visibility)    
     
     def set_cloned_virtual_fit_model(self, virtual_fit_transform: vtkMRMLTransformNode):
+        """
+        This function creates a duplicate of either the `body_model_node` or
+        `surface_model_node` (depending on which is available) and sets its
+        transform to follow the given `virtual_fit_transform`. This allows for
+        a secondary visualization of the transducer model at the position defined by the
+        virtual fit result. Any previously cloned virtual fit model is removed
+        before creating a new one.
+
+        Args:
+            virtual_fit_transform: The transform node representing the virtual fit result. 
+
+        Returns:
+            vtkMRMLModelNode: The newly created transducer model node
+            that observes the virtual fit transform.
+        """
 
         # Only one virtual fit result can be visualized at a time
         if self.cloned_virtual_fit_model:
