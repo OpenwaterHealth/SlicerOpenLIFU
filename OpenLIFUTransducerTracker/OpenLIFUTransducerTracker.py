@@ -818,7 +818,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         if self.runningRegistration:
             self.disable_manual_registration()
 
-        self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
+        if self.wizard().transducer.cloned_virtual_fit_model:
+            self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
     def onTransformModified(self, node, eventID,):
         
