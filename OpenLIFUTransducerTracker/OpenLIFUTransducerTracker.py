@@ -940,7 +940,7 @@ class TransducerTrackingWizard(qt.QWizard):
             # These steps take some time
             self.skin_mesh_node = get_skin_segmentation(volume)
             if self.skin_mesh_node is None:
-                skin_mesh_node = generate_skin_segmentation(volume)
+                self.skin_mesh_node = generate_skin_segmentation(volume)
 
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
 
@@ -951,7 +951,6 @@ class TransducerTrackingWizard(qt.QWizard):
             # When not in guided mode, there does not need to be a virtual fit result to be able to run tracking
             if best_virtual_fit_result_node is not None:
                 self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
-                self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
 
             self.setupViewNodes()
 
@@ -1506,6 +1505,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # This is needed to prevent slicer from
         # crashing after the wizard is closed. 
         self.wizard = None
+        self._setting_vf_clone = False
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -1571,10 +1571,15 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.checkCanRunTracking)
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateApprovalWarningsIfAny)
+        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateVirtualFitResultForDisplay) # Update the enabled-ness of the virtual fit rendering checkbox
 
+        # ---- Model rendering options ----
+        self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.updateVirtualFitResultForDisplay)
+        # ---------------------------------
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
 
+        self.updateVirtualFitResultForDisplay()
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
         self.updateApprovalWarningsIfAny()
@@ -1674,13 +1679,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def updateInputOptions(self):
         """Update the algorithm input options"""
+
+        self._input_update_in_progress = True
         self.algorithm_input_widget.update()
+        self._input_update_in_progress = False  # Prevents repeated function calls due to combo box index changed signals
 
         # Determine whether transducer tracking can be run based on the status of combo boxes
         self.checkCanRunTracking()
 
         # Determine whether a photoscan can be previewed based on the status of the photoscan combo box
         self.checkCanPreviewPhotoscan()
+    
+        # Prevents recursive behavior since cloning the vf result triggers the paramternodemodified function 
+        if not self._setting_vf_clone:
+            self.updateVirtualFitResultForDisplay()
 
     def resetPhotoscanGeneratorProgressDisplay(self):
         self.ui.photoscanGeneratorProgressBar.hide()
@@ -1908,6 +1920,52 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.approvalWarningLabel.styleSheet = "color:red;"
         else:
             self.ui.approvalWarningLabel.text = ""
+    
+
+    def updateVirtualFitResultForDisplay(self):
+        """
+        Updates the display of the best virtual fit result based on the currently
+        selected target and transducer. It clones the virtual fit result,
+        sets its opacity, and stores it for potential further use.
+        If no target is selected or no virtual fit result is found
+        for the selected target, the visibility of the virtual fit checkbox is
+        disabled.
+        """
+
+        # Prevents a recursive loop when NodeAdded/Removed (when cloning VF result)
+        # triggers an update to the comboboxes which triggers this function call.
+        if self._input_update_in_progress:
+            return
+
+        current_data = self.algorithm_input_widget.get_current_data()
+        selected_target = current_data["Target"]
+        selected_transducer = current_data["Transducer"]
+
+        if not selected_target or not selected_transducer:
+            self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.setToolTip("Select a target and transducer to view the affiliated virtual fit result")
+            return
+
+        target_id = fiducial_to_openlifu_point_id(selected_target)
+        best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
+            target_id = target_id)
+
+        if not best_virtual_fit_result_node:
+            self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
+            return
+
+        self.ui.viewVirtualFitCheckBox.enabled = True
+        self.ui.viewVirtualFitCheckBox.setToolTip("")
+
+        self._setting_vf_clone = True
+        selected_transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
+        self._setting_vf_clone = False
+
+        # Control visibility based on the checkbox state
+        is_visible = self.ui.viewVirtualFitCheckBox.isChecked()
+        if selected_transducer.cloned_virtual_fit_model.GetDisplayVisibility() != is_visible:
+            selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(is_visible)
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session

@@ -604,6 +604,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             skin_mesh_node = get_skin_segmentation(activeData["Volume"])
             display_skin_segmentation(skin_mesh_node)
             activeData["Transducer"].set_visibility(True)
+            slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultDisplay()
 
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
