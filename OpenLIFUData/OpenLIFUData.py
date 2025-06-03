@@ -501,7 +501,7 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         self.boxLayout.addLayout(subjectButtonsLayout)
 
         self.createNewSessionForCurrentSubjectButton.clicked.connect(self.onCreateNewSessionForCurrentSubjectClicked)
-        self.importVolumeForCurrentSubjectButton.clicked.connect(self.onImportVolumeForCurrentSubjectClicked)
+        self.importVolumeForCurrentSubjectButton.clicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To add a volume, first exit the \"View Selected Subject\" section. Then, load the desired subject in the \"Subjects\" collapsible section and then add a volume in the \"Volumes\" collapsible section."))
 
         # ---- Session Level Buttons ----
         sessionButtonsLayout = qt.QHBoxLayout()
@@ -606,16 +606,6 @@ class ViewSelectedSubjectDialog(qt.QDialog):
         # Update session list
         self.updateSessionsList()
 
-        return True
-
-    @display_errors
-    def onImportVolumeForCurrentSubjectClicked(self, checked: bool) -> bool:
-        volumedlg = AddNewVolumeDialog()
-        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
-        if not returncode:
-            return False
-
-        slicer.util.getModuleLogic("OpenLIFUData").add_volume_to_database(self.subject_id, volume_id, volume_name, volume_filepath)
         return True
 
     @display_errors
@@ -1238,6 +1228,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadSubjectButton.clicked.connect(self.on_load_subject_clicked)
 
         # Volumes collapsible section
+        self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
 
         # Add new subject (deprecated)
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
@@ -1281,10 +1272,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def on_subject_changed(self, subject: Optional["openlifu.db.Subject"] = None):
         self.logic.clear_session()
         self.update_subject_status()
-
-        # TODO: The entire volumes panel can be set up if there is a subject.
-        # Either wipe the info or add the info.
-        # 
+        self.update_volumes_table(subject.id, get_cur_db())
 
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_activeSessionCollapsibleButton_checked_and_enabled()
@@ -1314,7 +1302,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.subjectSelectorTableWidget.setItem(row_position, 1, qt.QTableWidgetItem(subject_id))
 
     def update_volumesCollapsibleButton_checked_and_enabled(self) -> None:
-        pass
+        if self.logic.subject is None:
+            self.ui.volumesCollapsibleButton.setChecked(False)
+            self.ui.volumesCollapsibleButton.setEnabled(False)
+        else:
+            # The volumes section should be automatically opened only if there
+            # are no volumes for the subject
+            subject_has_no_volumes = len(get_cur_db().get_volume_ids(self.logic.subject.id)) <= 0
+            self.ui.volumesCollapsibleButton.setChecked(subject_has_no_volumes)
+            self.ui.volumesCollapsibleButton.setEnabled(True)
 
     def update_activeSessionCollapsibleButton_checked_and_enabled(self) -> None:
         if self.logic.subject is None:
@@ -1378,6 +1374,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             return False
 
         self.logic.subject = new_subject
+        return True
+
+    @display_errors
+    def on_add_volume_clicked(self, checked: bool) -> bool:
+        volumedlg = AddNewVolumeDialog()
+        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
+        if not returncode:
+            return False
+
+        self.logic.add_volume_to_database(self.logic.subject.id, volume_id, volume_name, volume_filepath)
+        self.update_subject_status()
+        self.update_volumes_table(self.logic.subject.id, get_cur_db())
         return True
 
     @display_errors
@@ -1614,6 +1622,36 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.subjectStatusSubjectNumberOfVolumesValueLabel.setText(num_volumes)
 
             self.ui.subjectStatusStackedWidget.setCurrentIndex(1)
+
+    def update_volumes_table(self, subject_id: str, db: "openlifu.db.Database") -> None:
+        """Update the volumes table from a given subject id and database"""
+        volume_ids = db.get_volume_ids(subject_id)
+
+        self.ui.volumesTableWidget.clearContents()
+        self.ui.volumesTableWidget.setRowCount(0)
+        self.ui.volumesTableWidget.setRowCount(len(volume_ids))
+
+        def infer_format(filepath: Path) -> str:
+            ext = filepath.suffix.lower()
+            if ext in ['.nii', '.nii.gz']:
+                return 'NIFTI'
+            elif ext in ['.dcm']:
+                return 'DICOM'
+            elif ext in ['.mhd', '.raw', '.mha']:
+                return 'MetaImage'
+            elif ext in ['.nrrd']:
+                return 'NRRD'
+            elif ext in ['.hdr', '.img']:
+                return 'Analyze'
+            else:
+                return ''
+
+        for row, volume_id in enumerate(volume_ids):
+            # volume info
+            volume_info = db.get_volume_info(subject_id, volume_id)
+            self.ui.volumesTableWidget.setItem(row, 0, qt.QTableWidgetItem(volume_info["name"]))
+            self.ui.volumesTableWidget.setItem(row, 1, qt.QTableWidgetItem(volume_info["id"]))
+            self.ui.volumesTableWidget.setItem(row, 2, qt.QTableWidgetItem(infer_format(volume_info["data_abspath"])))
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
