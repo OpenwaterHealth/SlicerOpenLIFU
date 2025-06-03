@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>390</width>
-    <height>1029</height>
+    <height>1057</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -52,6 +52,105 @@
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_9">
+      <item>
+       <widget class="QGroupBox" name="subjectStatusGroupBox">
+        <property name="title">
+         <string>Active subject status</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_14">
+         <item>
+          <widget class="QStackedWidget" name="subjectStatusStackedWidget">
+           <property name="currentIndex">
+            <number>1</number>
+           </property>
+           <widget class="QWidget" name="noSubject">
+            <layout class="QVBoxLayout" name="verticalLayout_15">
+             <item>
+              <widget class="QLabel" name="noSubjectLabel">
+               <property name="text">
+                <string>No subject is loaded.</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="activeSubject">
+            <layout class="QVBoxLayout" name="verticalLayout_16">
+             <item>
+              <widget class="QWidget" name="subjectStatusFormWidget" native="true">
+               <layout class="QFormLayout" name="formLayout_4">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="subjectStatusSubjectNameLabel">
+                  <property name="text">
+                   <string>Subject Name:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QLabel" name="subjectStatusSubjectNameValueLabel"/>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="subjectStatusSubjectIdLabel">
+                  <property name="text">
+                   <string>Subject ID:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QLabel" name="subjectStatusSubjectIdValueLabel"/>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="subjectStatusSubjectNumberOfVolumesLabel">
+                  <property name="text">
+                   <string>Number of Volumes:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QLabel" name="subjectStatusSubjectNumberOfVolumesValueLabel"/>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="subjectStatusSubjectNumberOfSessionsLabel">
+                  <property name="text">
+                   <string>Number of Sessions:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QLabel" name="subjectStatusSubjectNumberOfSessionsValueLabel"/>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loadSubjectButton">
+        <property name="text">
+         <string>Load Subject</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QTableWidget" name="subjectSelectorTableWidget">
         <property name="focusPolicy">
@@ -140,6 +239,9 @@
    </item>
    <item>
     <widget class="ctkCollapsibleButton" name="activeSessionCollapsibleButton">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="text">
       <string>Active session</string>
      </property>
@@ -444,15 +546,15 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>qMRMLWidget</class>
-   <extends>QWidget</extends>
-   <header>qMRMLWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
