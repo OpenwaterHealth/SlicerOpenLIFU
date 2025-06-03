@@ -1286,8 +1286,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Either wipe the info or add the info.
         # 
 
-        self.update_volumesCollapsibleButton_enabled()
-        self.update_activeSessionCollapsibleButton_enabled()
+        self.update_volumesCollapsibleButton_checked_and_enabled()
+        self.update_activeSessionCollapsibleButton_checked_and_enabled()
 
     def updateSubjectSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
         # Get subject info from db
@@ -1313,10 +1313,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.subjectSelectorTableWidget.setItem(row_position, 0, qt.QTableWidgetItem(subject_name))
             self.ui.subjectSelectorTableWidget.setItem(row_position, 1, qt.QTableWidgetItem(subject_id))
 
-    def update_volumesCollapsibleButton_enabled(self) -> None:
+    def update_volumesCollapsibleButton_checked_and_enabled(self) -> None:
         pass
 
-    def update_activeSessionCollapsibleButton_enabled(self) -> None:
+    def update_activeSessionCollapsibleButton_checked_and_enabled(self) -> None:
         if self.logic.subject is None:
             self.ui.activeSessionCollapsibleButton.setChecked(False)
             self.ui.activeSessionCollapsibleButton.setEnabled(False)
