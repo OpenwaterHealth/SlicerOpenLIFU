@@ -1234,8 +1234,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Go to protocol config
         self.ui.configureProtocolsPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
 
-        # Subjects
+        # Subjects collapsible section
         self.ui.loadSubjectButton.clicked.connect(self.on_load_subject_clicked)
+
+        # Volumes collapsible section
 
         # Add new subject (deprecated)
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
