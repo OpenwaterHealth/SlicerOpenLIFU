@@ -33,7 +33,7 @@ from OpenLIFULib import (
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation, display_skin_segmentation
+from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
@@ -602,9 +602,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             activeData["Transducer"].set_current_transform_to_match_transform_node(virtual_fit_result)
             self.watchVirtualFit(virtual_fit_result)
             skin_mesh_node = get_skin_segmentation(activeData["Volume"])
-            display_skin_segmentation(skin_mesh_node)
+            skin_mesh_node.SetDisplayVisibility(True)
             activeData["Transducer"].set_visibility(True)
-            slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultDisplay()
+            slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
+            slicer.modules.OpenLIFUTransducerTrackerWidget.updateModelRenderingSettings()
 
         self.updateApproveButton()
         self.updateApprovalStatusLabel()
