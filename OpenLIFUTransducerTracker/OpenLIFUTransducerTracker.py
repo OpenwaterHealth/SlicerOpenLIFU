@@ -941,7 +941,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
 
             # TODO: What if there isn't a virtual fit result? Should disable the button.
-            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_best_virtual_fit_result_node(
+            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
             target_id = fiducial_to_openlifu_point_id(self.target)
             )
             # When not in guided mode, there does not need to be a virtual fit result to be able to run tracking
@@ -2441,7 +2441,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         """
       
         # Initialize with virtual fit result if available
-        best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_best_virtual_fit_result_node(
+        best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
             target_id = fiducial_to_openlifu_point_id(target)
             )
         
