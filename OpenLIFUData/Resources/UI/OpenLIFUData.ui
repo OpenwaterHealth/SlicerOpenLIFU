@@ -44,6 +44,89 @@
     </widget>
    </item>
    <item>
+    <widget class="QTableWidget" name="subjectSelectorTableWidget">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="editTriggers">
+      <set>QAbstractItemView::NoEditTriggers</set>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
+     </property>
+     <property name="showGrid">
+      <bool>false</bool>
+     </property>
+     <property name="columnCount">
+      <number>2</number>
+     </property>
+     <attribute name="horizontalHeaderDefaultSectionSize">
+      <number>200</number>
+     </attribute>
+     <attribute name="horizontalHeaderHighlightSections">
+      <bool>false</bool>
+     </attribute>
+     <attribute name="horizontalHeaderStretchLastSection">
+      <bool>true</bool>
+     </attribute>
+     <attribute name="verticalHeaderVisible">
+      <bool>false</bool>
+     </attribute>
+     <attribute name="verticalHeaderMinimumSectionSize">
+      <number>20</number>
+     </attribute>
+     <attribute name="verticalHeaderDefaultSectionSize">
+      <number>20</number>
+     </attribute>
+     <attribute name="verticalHeaderHighlightSections">
+      <bool>false</bool>
+     </attribute>
+     <attribute name="verticalHeaderStretchLastSection">
+      <bool>false</bool>
+     </attribute>
+     <column/>
+     <column/>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="permissionsWidget2" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+       <string>operator</string>
+      </stringlist>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_12">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="newSubjectButton">
+        <property name="text">
+         <string>Add New Subject</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="viewSelectedSubjectButton">
+     <property name="text">
+      <string>View Selected Subject</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="subjectsCollapsibleButton">
      <property name="text">
       <string>Subjects</string>
@@ -148,89 +231,6 @@
        <widget class="QPushButton" name="loadSubjectButton">
         <property name="text">
          <string>Load Subject</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QTableWidget" name="subjectSelectorTableWidget">
-        <property name="focusPolicy">
-         <enum>Qt::NoFocus</enum>
-        </property>
-        <property name="editTriggers">
-         <set>QAbstractItemView::NoEditTriggers</set>
-        </property>
-        <property name="selectionBehavior">
-         <enum>QAbstractItemView::SelectRows</enum>
-        </property>
-        <property name="showGrid">
-         <bool>false</bool>
-        </property>
-        <property name="columnCount">
-         <number>2</number>
-        </property>
-        <attribute name="horizontalHeaderDefaultSectionSize">
-         <number>200</number>
-        </attribute>
-        <attribute name="horizontalHeaderHighlightSections">
-         <bool>false</bool>
-        </attribute>
-        <attribute name="horizontalHeaderStretchLastSection">
-         <bool>true</bool>
-        </attribute>
-        <attribute name="verticalHeaderVisible">
-         <bool>false</bool>
-        </attribute>
-        <attribute name="verticalHeaderMinimumSectionSize">
-         <number>20</number>
-        </attribute>
-        <attribute name="verticalHeaderDefaultSectionSize">
-         <number>20</number>
-        </attribute>
-        <attribute name="verticalHeaderHighlightSections">
-         <bool>false</bool>
-        </attribute>
-        <attribute name="verticalHeaderStretchLastSection">
-         <bool>false</bool>
-        </attribute>
-        <column/>
-        <column/>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="permissionsWidget2" native="true">
-        <property name="slicer.openlifu.allowed-roles" stdset="0">
-         <stringlist>
-          <string>admin</string>
-          <string>operator</string>
-         </stringlist>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_12">
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <property name="rightMargin">
-          <number>0</number>
-         </property>
-         <property name="bottomMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="QPushButton" name="newSubjectButton">
-           <property name="text">
-            <string>Add New Subject</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="viewSelectedSubjectButton">
-        <property name="text">
-         <string>View Selected Subject</string>
         </property>
        </widget>
       </item>
