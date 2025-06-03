@@ -25,6 +25,12 @@ def generate_skin_segmentation(volume_node:vtkMRMLScalarVolumeNode) -> vtkMRMLMo
     skin_mesh_node.CreateDefaultDisplayNodes()
     skin_mesh_node.GetDisplayNode().SetVisibility(False) # visibility is turned on by default
 
+    # Default display settings
+    model_color = TRANSDUCER_MODEL_COLORS["virtual_fit_result"]
+    normalized_color = [c / 255.0 for c in model_color]
+    skin_mesh_node.GetDisplayNode().SetColor(normalized_color)
+    skin_mesh_node.GetDisplayNode().SetOpacity(0.5)
+
     return skin_mesh_node
 
 def get_skin_segmentation(volume : Union[vtkMRMLScalarVolumeNode, str]) -> vtkMRMLModelNode:
@@ -49,11 +55,3 @@ def get_skin_segmentation(volume : Union[vtkMRMLScalarVolumeNode, str]) -> vtkMR
         raise RuntimeError(f"Found multiple skin segmentation models affiliated with volume {volume_id}")
     else:
         return skin_mesh_node[0]
-
-def display_skin_segmentation(skin_mesh_node: vtkMRMLModelNode) -> None:
-    # Default display settings
-    model_color = TRANSDUCER_MODEL_COLORS["virtual_fit_result"]
-    normalized_color = [c / 255.0 for c in model_color]
-    skin_mesh_node.GetDisplayNode().SetColor(normalized_color)
-    skin_mesh_node.GetDisplayNode().SetOpacity(0.5)
-    skin_mesh_node.GetDisplayNode().SetVisibility(True)
