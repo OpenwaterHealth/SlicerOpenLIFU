@@ -1788,17 +1788,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.volumesTableWidget.setRowCount(0)
         self.ui.volumesTableWidget.setRowCount(len(volume_ids))
 
-        def infer_format(filepath: Path) -> str:
-            ext = filepath.suffix.lower()
-            if ext in ['.nii', '.nii.gz']:
+        def infer_format(filepath: str) -> str:
+            filepath = filepath.lower()
+            if filepath.endswith('.nii') or filepath.endswith('.nii.gz'):
                 return 'NIFTI'
-            elif ext in ['.dcm']:
+            elif filepath.endswith('.dcm'):
                 return 'DICOM'
-            elif ext in ['.mhd', '.raw', '.mha']:
+            elif filepath.endswith(('.mhd', '.raw', '.mha')):
                 return 'MetaImage'
-            elif ext in ['.nrrd']:
+            elif filepath.endswith('.nrrd'):
                 return 'NRRD'
-            elif ext in ['.hdr', '.img']:
+            elif filepath.endswith(('.hdr', '.img')):
                 return 'Analyze'
             else:
                 return ''
@@ -1808,7 +1808,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             volume_info = db.get_volume_info(subject_id, volume_id)
             self.ui.volumesTableWidget.setItem(row, 0, qt.QTableWidgetItem(volume_info["name"]))
             self.ui.volumesTableWidget.setItem(row, 1, qt.QTableWidgetItem(volume_info["id"]))
-            self.ui.volumesTableWidget.setItem(row, 2, qt.QTableWidgetItem(infer_format(volume_info["data_abspath"])))
+            self.ui.volumesTableWidget.setItem(row, 2, qt.QTableWidgetItem(infer_format(str(volume_info["data_abspath"]))))
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
