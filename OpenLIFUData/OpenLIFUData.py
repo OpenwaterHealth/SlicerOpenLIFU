@@ -1173,6 +1173,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+        self.update_loadSubjectButton_enabled()
+        self.update_volumesCollapsibleButton_checked_and_enabled()
+        self.update_sessionsCollapsibleButton_checked_and_enabled()
         self.update_session_level_buttons_enabled()
         self.updateWorkflowControls()
 
