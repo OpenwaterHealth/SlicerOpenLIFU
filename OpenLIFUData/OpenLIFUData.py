@@ -1179,6 +1179,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
+        self.logic.subject = None
         self.logic.clear_session()
         self.update_loadSubjectButton_enabled()
 
