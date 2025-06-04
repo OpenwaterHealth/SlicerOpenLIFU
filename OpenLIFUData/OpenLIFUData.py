@@ -1185,11 +1185,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def on_subject_changed(self, subject: Optional["openlifu.db.Subject"] = None):
         self.logic.clear_session()
+
         self.update_subject_status()
         self.update_volumes_table(subject.id, get_cur_db())
-
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_sessionsCollapsibleButton_checked_and_enabled()
+        self.updateWorkflowControls()
 
     def update_loadSubjectButton_enabled(self):
         """ Update whether the load subject button is enabled based on whether a
@@ -1595,7 +1596,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
 
     def updateWorkflowControls(self):
-        if self._parameterNode.loaded_session is None:
+        if self.logic.subject is None:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Load a subject to proceed."
+        elif self._parameterNode.loaded_session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Load a session to proceed."
         else:
