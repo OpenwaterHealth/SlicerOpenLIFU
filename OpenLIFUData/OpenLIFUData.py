@@ -1187,7 +1187,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.logic.clear_session()
 
         self.update_subject_status()
-        self.update_volumes_table(subject.id, get_cur_db())
+        self.update_volumes_table(subject, get_cur_db())
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_sessionsCollapsibleButton_checked_and_enabled()
         self.updateWorkflowControls()
@@ -1272,7 +1272,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         self.logic.add_volume_to_database(self.logic.subject.id, volume_id, volume_name, volume_filepath)
         self.update_subject_status()
-        self.update_volumes_table(self.logic.subject.id, get_cur_db())
+        self.update_volumes_table(self.logic.subject, get_cur_db())
         return True
 
     @display_errors
@@ -1506,9 +1506,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
             self.ui.subjectStatusStackedWidget.setCurrentIndex(1)
 
-    def update_volumes_table(self, subject_id: str, db: "openlifu.db.Database") -> None:
+    def update_volumes_table(self, subject: Optional["openlifu.db.subject.Subject"], db: "openlifu.db.Database") -> None:
         """Update the volumes table from a given subject id and database"""
-        volume_ids = db.get_volume_ids(subject_id)
+        if subject is None:
+            volume_ids = []
+        else:
+            volume_ids = db.get_volume_ids(subject.id)
 
         self.ui.volumesTableWidget.clearContents()
         self.ui.volumesTableWidget.setRowCount(0)
@@ -1531,7 +1534,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         for row, volume_id in enumerate(volume_ids):
             # volume info
-            volume_info = db.get_volume_info(subject_id, volume_id)
+            volume_info = db.get_volume_info(subject.id, volume_id)
             self.ui.volumesTableWidget.setItem(row, 0, qt.QTableWidgetItem(volume_info["name"]))
             self.ui.volumesTableWidget.setItem(row, 1, qt.QTableWidgetItem(volume_info["id"]))
             self.ui.volumesTableWidget.setItem(row, 2, qt.QTableWidgetItem(infer_format(str(volume_info["data_abspath"]))))
