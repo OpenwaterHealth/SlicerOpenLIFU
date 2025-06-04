@@ -59,6 +59,8 @@ class UserAccountBanner(qt.QWidget):
         group_layout.addWidget(self.go_to_login_button)
 
         top_level_layout.addWidget(group_box)  # Add the group box to the top_level_layout
+
+        self.setProperty("slicer.openlifu.hide-in-guided-mode", True)  # dynamic property to hide in guided mode
     
     def change_active_user(self, new_active_user: Optional["openlifu.db.User"]):
         if new_active_user is None or new_active_user.id == "anonymous":
