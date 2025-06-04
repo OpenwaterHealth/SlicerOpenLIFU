@@ -1871,6 +1871,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """Update the underlying openlifu session of the currently loaded session, if there is one.
         Returns the newly updated openlifu Session object."""
         parameter_node = self.getParameterNode()
+
+        if parameter_node.loaded_session is None:
+            raise RuntimeError("Cannot save session because OpenLIFUDataParameterNode.loaded_session is None")
+
         session : SlicerOpenLIFUSession = parameter_node.loaded_session
         if session is not None:
             targets = get_target_candidates()
