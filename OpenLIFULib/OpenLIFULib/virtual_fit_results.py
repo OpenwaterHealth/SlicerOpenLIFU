@@ -66,9 +66,6 @@ def add_virtual_fit_result(
             else:
                 raise RuntimeError("There is already a virtual fit result node for this target+session+rank and replace is False")
 
-    if approval_status and rank != 1:
-        raise ValueError("Only the rank 1 (best) virtual fit result can be approved")
-
     if clone_node:
         virtual_fit_result : vtkMRMLTransformNode = get_cloned_node(transform_node)
     else:
@@ -78,8 +75,7 @@ def add_virtual_fit_result(
     virtual_fit_result.SetAttribute("isVirtualFitResult", "1")
     virtual_fit_result.SetAttribute("VF:targetID", target_id)
     virtual_fit_result.SetAttribute("VF:rank", str(rank))
-    if rank == 1:
-        virtual_fit_result.SetAttribute("VF:approvalStatus", "1" if approval_status else "0")
+    virtual_fit_result.SetAttribute("VF:approvalStatus", "1" if approval_status else "0")
     if session_id is not None:
         virtual_fit_result.SetAttribute("VF:sessionID", session_id)
 
@@ -88,21 +84,26 @@ def add_virtual_fit_result(
 def get_virtual_fit_result_nodes(
     target_id : Optional[str] = None,
     session_id : Optional[str] = None,
+    rank : Optional[int] = None,
     sort : bool = False,
-    best_only : bool = False,
+    approved_only : bool = False,
 ) -> Iterable[vtkMRMLTransformNode]:
     """Retrieve a list of all virtual fit result nodes, filtered and sorted as desired.
 
     Args:
         target_id: filter for only this target ID
         session_id: filter for only this session ID
+        rank: filter for only this rank
         sort: sort by rank, from best rank to worst  (ascending rank value)
-        best_only: filter for only the rank 1 virtual fit results
+        approved_only: filter for only the approved virtual fit results. A target can have multiple approved results.
 
     Returns the list of matching virtual fit result transform nodes that are currently in the scene.
     """
-    if sort and best_only:
-        raise ValueError("It does not make sense to both sort by rank and retrieve only rank 1 results.")
+    
+    num_exclusive = (sort is not False) + (rank is not None)
+
+    if num_exclusive > 1:
+        raise ValueError("You can specify only one of 'rank' or 'sort'")
 
     vf_result_nodes : Iterable[vtkMRMLTransformNode] = [
         t for t in slicer.util.getNodesByClass('vtkMRMLTransformNode') if is_virtual_fit_result_node(t)
@@ -114,8 +115,11 @@ def get_virtual_fit_result_nodes(
     if target_id is not None:
         vf_result_nodes = filter(lambda t : t.GetAttribute("VF:targetID") == target_id, vf_result_nodes)
 
-    if best_only:
-        vf_result_nodes = filter(lambda t : int(t.GetAttribute("VF:rank")) == 1, vf_result_nodes)
+    if rank:
+        vf_result_nodes = filter(lambda t : t.GetAttribute("VF:rank") == rank, vf_result_nodes)
+
+    if approved_only:
+        vf_result_nodes = filter(lambda t : int(t.GetAttribute("VF:approvalStatus")) == 1, vf_result_nodes)
 
     if sort:
         vf_result_nodes = sorted(vf_result_nodes, key = lambda t : int(t.GetAttribute("VF:rank")))
@@ -147,14 +151,12 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
         )
         if int(vf_nodes_for_target[0].GetAttribute("VF:rank")) != 1:
             raise RuntimeError("The first virtual fit result node in the sorted list should have rank 1. Something went wrong.")
-        approved : bool = vf_nodes_for_target[0].GetAttribute("VF:approvalStatus") == "1"
-        virtual_fit_results_openlifu[target_id] = (
-            approved,
-            [
+        virtual_fit_results_openlifu[target_id] = [
+            (
+                t.GetAttribute("VF:approvalStatus") == "1",
                 transducer_transform_node_to_openlifu(transform_node=t, transducer_units=units)
-                for t in vf_nodes_for_target
-            ],
-        )
+            ) for t in vf_nodes_for_target
+            ]
     return virtual_fit_results_openlifu
 
 def add_virtual_fit_results_from_openlifu_session_format(
@@ -180,8 +182,8 @@ def add_virtual_fit_results_from_openlifu_session_format(
     See also the reverse function `get_virtual_fit_results_in_openlifu_session_format`
     """
     nodes_that_have_been_added = []
-    for target_id, (is_approved, array_transforms) in vf_results_openlifu.items():
-        for i, array_transform in enumerate(array_transforms):
+    for target_id, list_of_transforms in vf_results_openlifu.items(): #(is_approved, array_transforms) 
+        for i, (is_approved, array_transform) in enumerate(list_of_transforms):
             virtual_fit_result_transform = transducer_transform_node_from_openlifu(
                 openlifu_transform_matrix = array_transform.matrix,
                 transform_units = array_transform.units,
@@ -191,7 +193,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
                 transform_node = virtual_fit_result_transform,
                 target_id = target_id,
                 session_id = session_id,
-                approval_status = is_approved if i==0 else False, # Only label approval on the top transform
+                approval_status = is_approved, 
                 rank = i+1,
                 clone_node=False,
                 replace=replace,
@@ -205,6 +207,9 @@ def get_best_virtual_fit_result_node(
 ) -> Optional[vtkMRMLTransformNode]:
     """Retrieve the best virtual fit result node for the given target, returning None if there isn't one,
     and raising an exception if there appears to be a non-unique one.
+    The "best" result is determined as follows:
+        1. The approved result with the highest rank.
+        2. If no results are approved, the rank 1 node.
 
     Args:
         target_id: target ID for which to retrieve the unique best virtual fit result
@@ -213,31 +218,43 @@ def get_best_virtual_fit_result_node(
 
     Returns: The retrieved virtual fit result vtkMRMLTransformNode.
     """
-    vf_result_nodes = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, best_only=True))
+    
+    approved_vf_result_nodes = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, approved_only = True, sort = True))
 
-    # If session_id None, then at this point vf_result_nodes is not filtered for session ID
+    # If session_id None, then at this point approved_vf_result_nodes is not filtered for session ID
     # So here we specifically filter for nodes that are have *no* session id:
     if session_id is None:
-        vf_result_nodes = list(filter(
+        approved_vf_result_nodes = list(filter(
             lambda t : t.GetAttribute("VF:sessionID") is None,
-            vf_result_nodes,
+            approved_vf_result_nodes,
         ))
 
-    if len(vf_result_nodes) < 1:
-        return None
+    if len(approved_vf_result_nodes) > 0:
+        # Return the result with the highest rank
+        return approved_vf_result_nodes[0]
+    
+    # If no results are approved, then return the rank 1 node
+    else:
+        vf_result_nodes = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, rank = 1))
 
-    if len(vf_result_nodes) > 1:
-        raise RuntimeError(
-            f"There are {len(vf_result_nodes)} rank 1 virtual fit result nodes for target {target_id} "
-            + (f"and session {session_id}" if session_id is not None else "with no session.")
-        )
+        # If session_id None, then at this point vf_result_nodes is not filtered for session ID
+        # So here we specifically filter for nodes that are have *no* session id:
+        if session_id is None:
+            vf_result_nodes = list(filter(
+                lambda t : t.GetAttribute("VF:sessionID") is None,
+                vf_result_nodes,
+            ))
 
-    vf_result_node = vf_result_nodes[0]
+        if len(vf_result_nodes) < 1:
+            return None
 
-    if int(vf_result_node.GetAttribute("VF:rank")) != 1:
-        raise RuntimeError("The best virtual fit result node appears not have rank 1... this should not happen.")
-
-    return vf_result_node
+        if len(vf_result_nodes) > 1:
+            raise RuntimeError(
+                f"There are {len(vf_result_nodes)} rank 1 virtual fit result nodes for target {target_id} "
+                + (f"and session {session_id}" if session_id is not None else "with no session.")
+            )
+        
+        return vf_result_nodes[0]
 
 def clear_virtual_fit_results(
     target_id: Optional[str],
@@ -271,32 +288,47 @@ def get_approved_target_ids(session_id: str) -> List[str]:
         session_id: optional session ID. If None then **only virtual fit results with no session ID are included**.
     """
 
-    nodes = get_virtual_fit_result_nodes(session_id=session_id, best_only=True)
+    nodes = get_virtual_fit_result_nodes(session_id=session_id, approved_only = True)
 
     # If session_id None, then at this point `nodes`` is not filtered for session ID
     # So here we specifically filter for nodes that are have *no* session id:
     if session_id is None:
         nodes = filter(lambda t : t.GetAttribute("VF:sessionID") is None, nodes)
 
-    return [t.GetAttribute("VF:targetID") for t in nodes if int(t.GetAttribute("VF:approvalStatus")) == 1]
+    targets_with_duplicates = [t.GetAttribute("VF:targetID") for t in nodes if int(t.GetAttribute("VF:approvalStatus")) == 1]
+    # Use sets since a target can have multiple approved nodes
+    return list(set(targets_with_duplicates))
 
-def set_virtual_fit_approval_for_target(
-    approval_state : bool,
-    target_id : str,
-    session_id : Optional[str],
-) -> None:
-    """Set approval state on the best virtual fit result node for the given target.
+def set_approval_for_virtual_fit_result_node(
+    approval_state: bool,
+    vf_result_node: vtkMRMLTransformNode) -> None:
+    """Set approval state on the given virtual fit result node.
 
     Args:
         approval_state: new approval state to apply
-        target_id: target ID for which to apply new approval state to the best virtual fit result
-        session_id: session ID to help identify the correct virtual fit result node, or None to work with
+        vf_result_node: virtual fit transform node
+    """
+    vf_result_node.SetAttribute("VF:approvalStatus", "1" if approval_state else "0")
+
+def revoke_any_virtual_fit_approvals_for_target(
+    target_id : str,
+    session_id : Optional[str],
+) -> None:
+    """Revokes approval on any/all approved virtual fit result nodes for the given target.
+
+    Args:
+        target_id: target ID for which to revoke all virtual fit approvals
+        session_id: session ID to help identify the correct virtual fit result nodes, or None to work with
             only virtual fit result nodes that do not have an affiliated session
     """
-    node = get_best_virtual_fit_result_node(target_id=target_id, session_id=session_id)
-    if node is None:
-        raise RuntimeError("There is no virtual fit node for the given target id and session id.")
-    node.SetAttribute("VF:approvalStatus", "1" if approval_state else "0")
+
+    approved_nodes = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, approved_only = True))
+    
+    if len(approved_nodes) < 1:
+        raise RuntimeError("There are no approved virtual fit nodes for the given target id and session id.")
+    
+    for node in approved_nodes:
+        node.SetAttribute("VF:approvalStatus", "0")
 
 def get_virtual_fit_approval_for_target(
     target_id : str,
@@ -326,9 +358,9 @@ def get_target_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> s
         raise RuntimeError("Node does not have a target ID.")
     return node.GetAttribute("VF:targetID")
 
-def is_virtual_fit_result_node(transform_node: vtkMRMLTransformNode) -> bool:
+def is_virtual_fit_result_node(node: vtkMRMLTransformNode) -> bool:
     """Returns True if the given node is a virtual fit result node"""
-    if transform_node.GetAttribute("isVirtualFitResult") == "1":
+    if node.GetAttribute("isVirtualFitResult") == "1":
         return True
     else:
         return False
