@@ -1218,7 +1218,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionsCollapsibleButton.setChecked(False)
             self.ui.sessionsCollapsibleButton.setEnabled(False)
         else:
-            self.ui.sessionsCollapsibleButton.setChecked(True)
+            # Only start sessions expanded if the subject has volumes
+            subject_has_volumes = len(get_cur_db().get_volume_ids(self.logic.subject.id)) > 0
+            self.ui.sessionsCollapsibleButton.setChecked(subject_has_volumes)
             self.ui.sessionsCollapsibleButton.setEnabled(True)
 
     def update_session_level_buttons_enabled(self) -> None:
