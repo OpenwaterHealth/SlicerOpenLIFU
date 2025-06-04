@@ -992,6 +992,8 @@ class TransducerTrackingWizard(qt.QWizard):
             ): #Flag to keep track of when approval is revoked and an existing result can be modified
                 self._existing_approval_revoked = True    
         
+        self.adjustSize()
+        
     def customexec_(self):
         returncode = self.exec_()
         return (returncode, self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node)
