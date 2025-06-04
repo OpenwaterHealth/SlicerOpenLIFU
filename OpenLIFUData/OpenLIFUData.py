@@ -1384,14 +1384,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.viewSelectedSubjectButton.clicked.connect(self.on_view_selected_subject_clicked)
         # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
 
-        self.session_status_field_widgets = [
-            self.ui.sessionStatusSubjectNameIdValueLabel,
-            self.ui.sessionStatusSessionNameIdValueLabel,
-            self.ui.sessionStatusProtocolValueLabel,
-            self.ui.sessionStatusTransducerValueLabel,
-            self.ui.sessionStatusVolumeValueLabel,
-        ]
-
         # ---- Issue updates that may not have been triggered yet ---
         
         # Make sure parameter node is initialized (needed for module reload)
@@ -1820,8 +1812,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
+        session_status_field_widgets = [
+            self.ui.sessionStatusSubjectNameIdValueLabel,
+            self.ui.sessionStatusSessionNameIdValueLabel,
+            self.ui.sessionStatusProtocolValueLabel,
+            self.ui.sessionStatusTransducerValueLabel,
+            self.ui.sessionStatusVolumeValueLabel,
+        ]
+
         if self._parameterNode is None or self._parameterNode.loaded_session is None:
-            for label in self.session_status_field_widgets:
+            for label in session_status_field_widgets:
                 label.setText("") # Doing this before setCurrentIndex(0) results in the desired scrolling behavior
                 # (Doing it after makes Qt maintain the possibly larger size of page 1 of the collectioned widget, providing unnecessary scroll bars)
             self.ui.sessionStatusStackedWidget.setCurrentIndex(0)
