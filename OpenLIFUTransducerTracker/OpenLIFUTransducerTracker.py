@@ -1690,6 +1690,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateInputOptions(self):
         """Update the algorithm input options"""
 
+        # This function is triggered everytime a node is added/removed from the scene. We don't want to 
+        # update these settings while the wizard is in progress
+        if self._running_wizard:
+            return
+
         self._input_update_in_progress = True
         self.algorithm_input_widget.update()
         self._input_update_in_progress = False  # Prevents repeated function calls due to combo box index changed signals
@@ -1705,10 +1710,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateVirtualFitResultForDisplay()
         
         # Determines whether the photoscan or skin mesh can be rendered based on the status of the photoscan and volume combo box.
-        # This function is triggered everytime a node is added/removed from the scene. We don't want to 
-        # update these settings while the wizard is in progress
-        if not self._running_wizard:
-            self.updateModelRenderingSettings()
+        self.updateModelRenderingSettings()
 
     def resetPhotoscanGeneratorProgressDisplay(self):
         self.ui.photoscanGeneratorProgressBar.hide()
@@ -1864,7 +1866,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             if skin_mesh_node is None:
                 self.ui.skinMeshVisibilitySettings.enabled = False
                 self.ui.skinMeshVisibilitySettings.setToolTip("Skin segmentation mesh not found. Generate with virtual fit or tracking.")
-            else:
+            elif skin_mesh_node.GetDisplayNode():
                 self.ui.skinMeshVisibilitySettings.enabled = True
                 self.ui.skinMeshVisibilitySettings.setToolTip("")
                 # If already visible in the scene
@@ -1915,17 +1917,16 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeData = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
         selected_transducer = activeData["Transducer"]
-        
+    
+        self._running_wizard = True
         self.wizard = TransducerTrackingWizard(
             photoscan = selected_photoscan_openlifu,
             volume = activeData["Volume"],
             transducer = activeData["Transducer"],
             target = activeData["Target"])
-        
-        self._running_wizard = True
         returncode, photoscan_to_volume_transform_node, transducer_to_volume_transform_node = self.wizard.customexec_()
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
-        self.running_wizard = False
+        self._running_wizard = False
 
         if returncode:
             # This shouldn't be possible
@@ -1939,7 +1940,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             selected_transducer.set_visibility(True)
             self.updateWorkflowControls()
         
-            # Enable photoscan rendering options if tracking was run successfully 
+            # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
+            self.ui.skinMeshVisibilityCheckBox.setChecked(True)
             self.updateModelRenderingSettings()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
