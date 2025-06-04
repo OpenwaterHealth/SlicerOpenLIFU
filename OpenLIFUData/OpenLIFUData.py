@@ -319,6 +319,7 @@ class LoadSubjectDialog(qt.QDialog):
         self.tableWidget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.tableWidget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
         self.tableWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+        self.tableWidget.horizontalHeader().setHighlightSections(False)
         self.tableWidget.horizontalHeader().setStretchLastSection(True)
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.setShowGrid(False)
@@ -326,28 +327,26 @@ class LoadSubjectDialog(qt.QDialog):
         self.boxLayout.addWidget(self.tableWidget)
 
         header = self.tableWidget.horizontalHeader()
-        for i in range(len(cols) - 1):
-            header.setSectionResizeMode(i, qt.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(len(cols) - 1, qt.QHeaderView.Stretch)
-
+        header.setSectionResizeMode(0, qt.QHeaderView.Interactive)
+        header.resizeSection(0, 250)
+        header.setSectionResizeMode(1, qt.QHeaderView.Interactive)
+        header.resizeSection(1, 200)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, qt.QHeaderView.Stretch)
 
         # ---- Buttons Row ----
         buttonRowLayout = qt.QHBoxLayout()
 
         self.addButton = qt.QPushButton("Add Subject")
         self.addButton.setToolTip("Add a new subject")
-        self.addButton.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
-        self.addButton.setMinimumHeight(50)
         self.addButton.clicked.connect(self.onAddNewSubjectClicked)
         buttonRowLayout.addWidget(self.addButton)
 
-        self.loadButton = qt.QPushButton("Load")
-        self.loadButton.setToolTip("Load the selected subject")
-        self.loadButton.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
-        self.loadButton.setMinimumHeight(50)
-        self.loadButton.clicked.connect(self.onLoadSubjectClicked)
+        self.loadSubjectButton = qt.QPushButton("Load Subject")
+        self.loadSubjectButton.setToolTip("Load the selected subject")
+        self.loadSubjectButton.clicked.connect(self.onLoadSubjectClicked)
         self.tableWidget.doubleClicked.connect(self.onLoadSubjectClicked)
-        buttonRowLayout.addWidget(self.loadButton)
+        buttonRowLayout.addWidget(self.loadSubjectButton)
 
         self.boxLayout.addLayout(buttonRowLayout)
 
