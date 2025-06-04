@@ -428,6 +428,231 @@ class LoadSubjectDialog(qt.QDialog):
             for button in _enforcedButtons:
                 button.setEnabled(False)
 
+class LoadSessionDialog(qt.QDialog):
+    """ Interface for managing and selecting sessions for a given subject """
+
+    def __init__(self, db: "openlifu.db.Database", subject_id: str, parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        subject = db.load_subject(subject_id)
+
+        self.setWindowTitle(f"View Sessions for {subject.name} ({subject_id})")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(700, 400)
+
+        self.db = db
+        self.subject_id = subject_id
+        self.subject = subject
+        self.selected_session = None
+
+        self.setup()
+
+        self._enforce_user_permissions()
+
+    def setup(self):
+        self.box_layout = qt.QVBoxLayout()
+        self.setLayout(self.box_layout)
+        self.setMinimumSize(1200, 700)
+        self.setMaximumSize(1600, 1000)
+
+        # ---- Sessions Table ----
+        cols = [
+            "Session Name",
+            "Session ID",
+            "Protocol",
+            "Volume",
+            "Transducer",
+            "Created Date",
+            "Modified Date",
+        ]
+        self.table_widget = qt.QTableWidget(self)
+        self.table_widget.setColumnCount(len(cols))
+        self.table_widget.setHorizontalHeaderLabels(cols)
+        self.table_widget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table_widget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.table_widget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+        self.table_widget.horizontalHeader().setDefaultSectionSize(120)
+        self.table_widget.horizontalHeader().setMinimumSectionSize(120)
+        self.table_widget.horizontalHeader().setHighlightSections(False)
+        self.table_widget.horizontalHeader().setFixedHeight(30)
+        self.table_widget.verticalHeader().setDefaultSectionSize(18)
+        self.table_widget.verticalHeader().setVisible(False)
+        self.table_widget.setShowGrid(False)
+        self.table_widget.setFocusPolicy(qt.Qt.NoFocus)
+
+        header = self.table_widget.horizontalHeader()
+        for i in range(0, 6):
+            header.setSectionResizeMode(i, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, qt.QHeaderView.Stretch)
+
+        self.box_layout.addWidget(self.table_widget)
+        
+        # ---- Subject Level Buttons ----
+        subject_buttons_layout = qt.QHBoxLayout()
+
+        self.create_new_session_button = qt.QPushButton("New Session")
+        self.create_new_session_button.setToolTip("Create a new session for this subject")
+        self.load_session_button = qt.QPushButton("Load Session")
+        self.load_session_button.setToolTip("Load the currently selected session")
+
+        for button in [self.create_new_session_button, self.load_session_button]:
+            button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            subject_buttons_layout.addWidget(button)
+
+        self.box_layout.addLayout(subject_buttons_layout)
+
+        self.create_new_session_button.clicked.connect(self.create_new_session)
+        self.load_session_button.clicked.connect(self.load_session)
+        self.table_widget.doubleClicked.connect(self.load_session)
+
+        # ---- Cancel Button ----
+        self.button_box = qt.QDialogButtonBox()
+        self.cancel_button = self.button_box.addButton("Cancel", qt.QDialogButtonBox.RejectRole)
+        self.cancel_button.setToolTip("Close this window without loading any new sessions")
+        self.cancel_button.clicked.connect(lambda *args: self.reject())
+        self.box_layout.addWidget(self.button_box)
+
+        # ---- Populate Table ----
+        self.update_sessions_list()
+
+    def update_sessions_list(self):
+        session_ids = self.db.get_session_ids(self.subject_id)
+
+        self.table_widget.clearContents()
+        self.table_widget.setRowCount(0)
+        self.table_widget.setRowCount(len(session_ids))
+
+        for row, session_id in enumerate(session_ids):
+            # Session info
+            session = self.db.load_session(self.subject, session_id)
+            self.table_widget.setItem(row, 0, qt.QTableWidgetItem(session.name))
+            self.table_widget.setItem(row, 1, qt.QTableWidgetItem(session.id))
+
+            # Protocol, volume, transducer text
+            def safe_call(func, fallback="NA"):
+                try:
+                    return func()
+                except Exception:
+                    return fallback
+
+            protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
+            volume_name = safe_call(lambda: self.db.get_volume_info(session_id, session.volume_id)["name"])
+            transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
+
+            protocol_text = f"{protocol_name} ({session.protocol_id})"
+            volume_text = f"{volume_name} ({session.volume_id})"
+            transducer_text = f"{transducer_name} ({session.transducer_id})"
+
+            self.table_widget.setItem(row, 2, qt.QTableWidgetItem(protocol_text))
+            self.table_widget.setItem(row, 3, qt.QTableWidgetItem(volume_text))
+            self.table_widget.setItem(row, 4, qt.QTableWidgetItem(transducer_text))
+
+            # Date created, modified
+
+            self.table_widget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
+            self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
+
+            self.table_widget.setRowHeight(row, 48)
+
+    @display_errors
+    def create_new_session(self, checked: bool) -> bool:
+        """
+        Create a new session for the current subject, after applying user permission filtering on protocols.
+        """
+        db_transducer_ids = self.db.get_transducer_ids()
+        db_volume_ids = self.db.get_volume_ids(self.subject_id)
+
+        # ---- Don't show unallowed protocols; requires loading protocols ----
+        db_protocol_ids = self.db.get_protocol_ids()
+        protocols: List["openlifu.plan.Protocol"] = self.db.load_all_protocols()
+
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No filtering needed
+        else:
+            # Filter protocol IDs where any user role is in the protocol's allowed roles
+            db_protocol_ids = [
+                protocol.id for protocol in protocols
+                if any(role in protocol.allowed_roles for role in get_current_user().roles)
+            ]
+        # --------------------------------------------------------------------
+
+        sessiondlg = CreateNewSessionDialog(
+            transducer_ids=db_transducer_ids,
+            protocol_ids=db_protocol_ids,
+            volume_ids=db_volume_ids
+        )
+        returncode, session_parameters = sessiondlg.customexec_()
+        if not returncode:
+            return False
+
+        slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
+
+        # Update session list
+        self.update_sessions_list()
+
+        return True
+
+    @display_errors
+    def load_session(self, *args) -> None:
+        """
+        Load the selected session into the OpenLIFUData module if the user has permission.
+        """
+        selected_items = self.table_widget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a session to load.")
+            return
+
+        row = selected_items[0].row()
+        session_id_item = self.table_widget.item(row, 1)  # Column 1 is Session ID
+        session_id = session_id_item.text()
+
+        # ---- Prevent loading sessions with unallowed protocols ----
+        session = self.db.load_session(self.subject, session_id)
+        protocol = self.db.load_protocol(session.protocol_id)
+
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No enforcement needed
+        else:
+            if not any(role in protocol.allowed_roles for role in get_current_user().roles):
+                slicer.util.errorDisplay(
+                    f"Could not load the session '{session.name}' ({session_id}) because it uses a protocol "
+                    f"that does not allow any of the logged-in user's roles."
+                )
+                return
+        # -----------------------------------------------------------
+
+        self.selected_session = session
+        self.accept()
+
+    def exec_and_get_session(self) -> Optional["openlifu.db.Session"]:
+        """
+        Execute the dialog and return the selected session ID, or None if canceled.
+        """
+        if self.exec() == qt.QDialog.Accepted:
+            return self.selected_session
+        return None
+
+    def _enforce_user_permissions(self) -> None:
+        """
+        Disable session editing buttons when the user is not an operator or admin. This 
+        is implemented in this manner because the existing user role infrastructure operates
+        on the GUI of the app. However, this panel is a generated GUI, so we must implement
+        enforce_user_permissions uniquely. It follows the same pattern as OpenLIFULogin.
+        """
+        _enforced_buttons = [
+            self.create_new_session_button
+        ]
+        
+        # Don't enforce if no user account mode
+        if not get_user_account_mode_state():
+            for button in _enforced_buttons:
+                button.setEnabled(True)
+            return
+
+        # Enforce
+        if not any(r in ("admin", "operator") for r in get_current_user().roles):
+            for button in _enforced_buttons:
+                button.setEnabled(False)
+
 class ViewSelectedSubjectDialog(qt.QDialog):
     """ Interface for managing and selecting sessions for a given subject """
 
@@ -500,7 +725,7 @@ class ViewSelectedSubjectDialog(qt.QDialog):
 
         self.boxLayout.addLayout(subjectButtonsLayout)
 
-        self.createNewSessionForCurrentSubjectButton.clicked.connect(self.onCreateNewSessionForCurrentSubjectClicked)
+        self.createNewSessionForCurrentSubjectButton.clicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To create a new session, first exit the \"View Selected Subject\" section. Then, load the desired subject in the \"Subjects\" collapsible section and then add a session in the \"Sessions\" collapsible section."))
         self.importVolumeForCurrentSubjectButton.clicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To add a volume, first exit the \"View Selected Subject\" section. Then, load the desired subject in the \"Subjects\" collapsible section and then add a volume in the \"Volumes\" collapsible section."))
 
         # ---- Session Level Buttons ----
@@ -519,10 +744,10 @@ class ViewSelectedSubjectDialog(qt.QDialog):
 
         self.boxLayout.addLayout(sessionButtonsLayout)
 
-        self.capturePhotocollectionButton.clicked.connect(self.onCapturePhotocollectionClicked)
-        self.addPhotoscanButton.clicked.connect(self.onAddPhotoscanToSessionClicked)
-        self.loadSessionButton.clicked.connect(self.onLoadSessionClicked)
-        self.tableWidget.doubleClicked.connect(self.onLoadSessionClicked)
+        self.capturePhotocollectionButton.clicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To add a photocollection, first exit the \"View Selected Session\" section. Then, load the desired subject in the \"Subjects\" collapsible section. Then, load the desired session in the \"Sessions\" collapsible section and add a photocollection in that section."))
+        self.addPhotoscanButton.clicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To add a photoscan, first exit the \"View Selected Session\" section. Then, load the desired subject in the \"Subjects\" collapsible section. Then, load the desired session in the \"Sessions\" collapsible section and add a photoscan in that section."))
+        self.loadSessionButton.clicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To load a session, first exit the \"View Selected Session\" section. Then, load the desired subject in the \"Subjects\" collapsible section. Then, load the desired session in the \"Sessions\" collapsible section."))
+        self.tableWidget.doubleClicked.connect(lambda: slicer.util.errorDisplay(f"Feature not implemented. To load a session, first exit the \"View Selected Session\" section. Then, load the desired subject in the \"Subjects\" collapsible section. Then, load the desired session in the \"Sessions\" collapsible section."))
 
         # ---- Cancel Button ----
         self.buttonBox = qt.QDialogButtonBox()
@@ -576,93 +801,6 @@ class ViewSelectedSubjectDialog(qt.QDialog):
             self.tableWidget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
 
             self.tableWidget.setRowHeight(row, 48)
-
-    @display_errors
-    def onCreateNewSessionForCurrentSubjectClicked(self, checked: bool) -> bool:
-        db_transducer_ids = self.db.get_transducer_ids()
-        db_volume_ids = self.db.get_volume_ids(self.subject_id)
-
-        # ---- Don't show unallowed protocols; requires loading protocols ----
-        db_protocol_ids = self.db.get_protocol_ids()
-        protocols: List["openlifu.plan.Protocol"] = self.db.load_all_protocols()
-
-        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
-            pass  # No filtering needed
-        else:
-            # Filter protocol IDs where any user role is in the protocol's allowed roles
-            db_protocol_ids = [
-                protocol.id for protocol in protocols
-                if any(role in protocol.allowed_roles for role in get_current_user().roles)
-            ]
-        # --------------------------------------------------------------------
-
-        sessiondlg = CreateNewSessionDialog(transducer_ids=db_transducer_ids, protocol_ids= db_protocol_ids, volume_ids=db_volume_ids)
-        returncode, session_parameters = sessiondlg.customexec_()
-        if not returncode:
-            return False
-
-        slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
-
-        # Update session list
-        self.updateSessionsList()
-
-        return True
-
-    @display_errors
-    def onCapturePhotocollectionClicked(self, checked: bool) -> bool:
-        selected_items = self.tableWidget.selectedItems()
-        if not selected_items:
-            slicer.util.errorDisplay("Please select a session to add a photocollection to.")
-            return False
-
-        row = selected_items[0].row()
-        session_id_item = self.tableWidget.item(row, 1)  # Column 1 is Session ID
-        session_id = session_id_item.text()
-
-        photocollectiondlg = StartPhotocollectionCaptureDialog()
-        returncode, photocollection_dict = photocollectiondlg.customexec_()
-        if not returncode:
-            return False
-
-        slicer.util.getModuleLogic("OpenLIFUData").add_photocollection_to_database(self.subject_id, session_id, photocollection_dict.copy())  # logic mutates the dict
-        
-        # If the photocollection is being added to a currently active session,
-        # update the session 
-        loaded_session = slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.loaded_session
-        if loaded_session is not None and session_id == loaded_session.get_session_id():
-            slicer.util.getModuleLogic("OpenLIFUData").update_photocollections_affiliated_with_loaded_session()
-            slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-
-        return True
-
-    @display_errors
-    def onAddPhotoscanToSessionClicked(self, checked: bool) -> bool:
-        selected_items = self.tableWidget.selectedItems()
-        if not selected_items:
-            slicer.util.errorDisplay("Please select a session to add photoscan to.")
-            return False
-
-        row = selected_items[0].row()
-        session_id_item = self.tableWidget.item(row, 1)  # Column 1 is Session ID
-        session_id = session_id_item.text()
-
-        photoscandlg = AddNewPhotoscanDialog()
-        returncode, photoscan_dict = photoscandlg.customexec_()
-        if not returncode:
-            return False
-
-        slicer.util.getModuleLogic("OpenLIFUData").add_photoscan_to_database(self.subject_id, session_id, photoscan_dict.copy())  # logic mutates the dict
-        
-        # If the photoscan is being added to a currently active session,
-        # update the session and the transducer tracking module to reflect the added photoscan.
-        loaded_session = slicer.util.getModuleWidget("OpenLIFUData")._parameterNode.loaded_session
-        if loaded_session is not None and session_id == loaded_session.get_session_id():
-            slicer.util.getModuleLogic("OpenLIFUData").update_photoscans_affiliated_with_loaded_session()
-            # Update the transducer tracking drop down to reflect new photoscans 
-            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
-            transducer_tracking_widget.algorithm_input_widget.update()
-
-        return True
 
     @display_errors
     def onLoadSessionClicked(self, checked: bool) -> None:
@@ -1230,6 +1368,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Volumes collapsible section
         self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
 
+        # Sessions collapsible section
+        self.ui.loadSessionButton.clicked.connect(self.on_load_session_clicked)
+        self.ui.capturePhotocollectionButton.clicked.connect(self.on_capture_photocollection_clicked)
+        self.ui.addPhotoscanButton.clicked.connect(self.on_add_photoscan_clicked)
+        self.ui.saveSessionButton.clicked.connect(self.on_save_session_clicked)
+
         # Add new subject (deprecated)
         self.ui.newSubjectButton.clicked.connect(self.onAddNewSubjectClicked)
         self.update_newSubjectButton_enabled()
@@ -1239,10 +1383,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.subjectSelectorTableWidget.doubleClicked.connect(self.on_view_selected_subject_clicked)
         self.ui.viewSelectedSubjectButton.clicked.connect(self.on_view_selected_subject_clicked)
         # TODO: Add context menu on right clicking subject that also allows adding volumes and creating new sessions
-
-        # Session management buttons
-        self.ui.unloadSessionButton.clicked.connect(self.onUnloadSessionClicked)
-        self.ui.saveSessionButton.clicked.connect(self.onSaveSessionClicked)
 
         self.session_status_field_widgets = [
             self.ui.sessionStatusSubjectNameIdValueLabel,
@@ -1261,6 +1401,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateSubjectSelectorButtonsEnabled()
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+        self.update_session_level_buttons_enabled()
         self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
@@ -1275,7 +1416,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_volumes_table(subject.id, get_cur_db())
 
         self.update_volumesCollapsibleButton_checked_and_enabled()
-        self.update_activeSessionCollapsibleButton_checked_and_enabled()
+        self.update_sessionsCollapsibleButton_checked_and_enabled()
 
     def updateSubjectSelectorFromDb(self, db: Optional["openlifu.db.Database"]):
         # Get subject info from db
@@ -1312,13 +1453,29 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.volumesCollapsibleButton.setChecked(subject_has_no_volumes)
             self.ui.volumesCollapsibleButton.setEnabled(True)
 
-    def update_activeSessionCollapsibleButton_checked_and_enabled(self) -> None:
+    def update_sessionsCollapsibleButton_checked_and_enabled(self) -> None:
         if self.logic.subject is None:
-            self.ui.activeSessionCollapsibleButton.setChecked(False)
-            self.ui.activeSessionCollapsibleButton.setEnabled(False)
+            self.ui.sessionsCollapsibleButton.setChecked(False)
+            self.ui.sessionsCollapsibleButton.setEnabled(False)
         else:
-            self.ui.activeSessionCollapsibleButton.setChecked(True)
-            self.ui.activeSessionCollapsibleButton.setEnabled(True)
+            self.ui.sessionsCollapsibleButton.setChecked(True)
+            self.ui.sessionsCollapsibleButton.setEnabled(True)
+
+    def update_session_level_buttons_enabled(self) -> None:
+        if self._parameterNode is None or self._parameterNode.loaded_session is None:
+            self.ui.capturePhotocollectionButton.setEnabled(False)
+            self.ui.capturePhotocollectionButton.setToolTip("There is no active session")
+            self.ui.addPhotoscanButton.setEnabled(False)
+            self.ui.addPhotoscanButton.setToolTip("There is no active session")
+            self.ui.saveSessionButton.setEnabled(False)
+            self.ui.saveSessionButton.setToolTip("There is no active session")
+        else:
+            self.ui.capturePhotocollectionButton.setEnabled(True)
+            self.ui.capturePhotocollectionButton.setToolTip("Capture a photocollection for the loaded session")
+            self.ui.addPhotoscanButton.setEnabled(True)
+            self.ui.addPhotoscanButton.setToolTip("Add a photoscan to the loaded session")
+            self.ui.saveSessionButton.setEnabled(True)
+            self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
 
     def update_newSubjectButton_enabled(self):
         """ Update whether the add new subject button is enabled based on whether a database has been loaded"""
@@ -1389,19 +1546,34 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def on_view_selected_subject_clicked(self, checked: bool) -> bool:
-        subject_id = self.get_selected_subject_id()
-        if subject_id is None:
-            slicer.util.errorDisplay("Please select a subject to view sessions.")
+    def on_load_session_clicked(self, checked:bool) -> bool:
+        load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
+        new_session = load_session_dlg.exec_and_get_session()
+
+        if not new_session:
             return False
 
-        view_sessions_dlg = ViewSelectedSubjectDialog(get_cur_db(), subject_id)
-        view_sessions_dlg.exec_()
-
+        self.logic.clear_session(clean_up_scene=True)
+        self.logic.load_session(self.logic.subject.id, new_session.id)
         return True
 
     @display_errors
-    def startPhotocollectionCaptureForCurrentSession(self) -> bool:
+    def on_import_photocollection_clicked(self, checked:bool):
+        loaded_session = self._parameterNode.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot import photocollection because a session is not loaded.")
+
+        importDlg = ImportPhotocollectionFromDiskDialog()
+        returncode, photocollection_dict = importDlg.customexec_()
+        if not returncode:
+            return False
+
+        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
+        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        self.logic.update_photocollections_affiliated_with_loaded_session()
+
+    @display_errors
+    def on_capture_photocollection_clicked(self, checked:bool) -> bool:
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is None:
             raise RuntimeError("Cannot start photocollection capture because a session is not loaded.")
@@ -1417,22 +1589,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def addPhotocollectionToCurrentSessionFromDisk(self):
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is None:
-            raise RuntimeError("Cannot start photocollection capture because a session is not loaded.")
-
-        importDlg = ImportPhotocollectionFromDiskDialog()
-        returncode, photocollection_dict = importDlg.customexec_()
-        if not returncode:
-            return False
-
-        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
-        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.update_photocollections_affiliated_with_loaded_session()
-
-    @display_errors
-    def addPhotoscanToCurrentSession(self) -> bool:
+    def on_add_photoscan_clicked(self, checked:bool) -> bool:
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is None:
             raise RuntimeError("Cannot add photoscan because a session is not loaded.")
@@ -1452,12 +1609,20 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def onUnloadSessionClicked(self, checked:bool) -> None:
-        self.logic.clear_session(clean_up_scene=True)
+    def on_save_session_clicked(self, checked:bool) -> None:
+        self.logic.save_session()
 
     @display_errors
-    def onSaveSessionClicked(self, checked:bool) -> None:
-        self.logic.save_session()
+    def on_view_selected_subject_clicked(self, checked: bool) -> bool:
+        subject_id = self.get_selected_subject_id()
+        if subject_id is None:
+            slicer.util.errorDisplay("Please select a subject to view sessions.")
+            return False
+
+        view_sessions_dlg = ViewSelectedSubjectDialog(get_cur_db(), subject_id)
+        view_sessions_dlg.exec_()
+
+        return True
 
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -1660,9 +1825,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 label.setText("") # Doing this before setCurrentIndex(0) results in the desired scrolling behavior
                 # (Doing it after makes Qt maintain the possibly larger size of page 1 of the collectioned widget, providing unnecessary scroll bars)
             self.ui.sessionStatusStackedWidget.setCurrentIndex(0)
-            for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
-                button.setEnabled(False)
-                button.setToolTip("There is no active session")
         else:
             loaded_session = self._parameterNode.loaded_session
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
@@ -1708,10 +1870,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionStatusAdditionalInfoLabel.setText('\n'.join(additional_info_messages))
 
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
-            for button in [self.ui.unloadSessionButton, self.ui.saveSessionButton]:
-                button.setEnabled(True)
-            self.ui.unloadSessionButton.setToolTip("Unload the active session, cleaning up session-affiliated nodes in the scene")
-            self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
 
     def updateWorkflowControls(self):
         if self._parameterNode.loaded_session is None:
@@ -1724,6 +1882,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+        self.update_session_level_buttons_enabled()
         self.updateWorkflowControls()
 
     def cleanup(self) -> None:
