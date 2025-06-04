@@ -273,63 +273,63 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QLabel" name="label">
+           <property name="text">
+            <string>Select virtual fit result:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="virtualFitResultsOptions">
+           <item>
+            <widget class="qMRMLNodeComboBox" name="virtualFitResultComboBox">
+             <property name="nodeTypes">
+              <stringlist notr="true">
+               <string>vtkMRMLTransformNode</string>
+              </stringlist>
+             </property>
+             <property name="hideChildNodeTypes">
+              <stringlist notr="true"/>
+             </property>
+             <property name="baseName">
+              <string>Manual VF</string>
+             </property>
+             <property name="removeEnabled">
+              <bool>false</bool>
+             </property>
+             <property name="interactionNodeSingletonTag">
+              <string notr="true"/>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButtonSetTransducerTransform">
+             <property name="text">
+              <string>Update transducer position</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButtonEnableManualInteraction">
+             <property name="text">
+              <string>Enable manual interaction</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
         </layout>
        </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Select virtual fit result:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="virtualFitResultsOptions">
-        <item>
-         <widget class="qMRMLNodeComboBox" name="virtualFitResultComboBox">
-          <property name="nodeTypes">
-           <stringlist notr="true">
-            <string>vtkMRMLTransformNode</string>
-           </stringlist>
-          </property>
-          <property name="hideChildNodeTypes">
-           <stringlist notr="true"/>
-          </property>
-          <property name="baseName">
-           <string>Manual VF</string>
-          </property>
-          <property name="removeEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="interactionNodeSingletonTag">
-           <string notr="true"/>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="pushButtonSetTransducerTransform">
-          <property name="text">
-           <string>Update transducer position</string>
-          </property>
-          <property name="checkable">
-           <bool>true</bool>
-          </property>
-          <property name="checked">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="pushButtonEnableManualInteraction">
-          <property name="text">
-           <string>Enable manual interaction</string>
-          </property>
-          <property name="checkable">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-       </layout>
       </item>
       <item>
        <widget class="QPushButton" name="approveButton">
