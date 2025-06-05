@@ -1592,6 +1592,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ---------------------------------
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
+        self.ui.quantitativeTransducerTrackingMetricLabel.setToolTip(
+            "Euclidean distance between the virtual fit and tracked transform origins.")
+        #self.ui.quantitativeTransducerTrackingMetricLabel.hide()
 
         self.updateVirtualFitResultForDisplay()
         self.updatePhotoscanGenerationButtons()
@@ -1922,13 +1925,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeData = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
         selected_transducer = activeData["Transducer"]
-    
+        selected_target = activeData["Target"]
+
         self._running_wizard = True
         self.wizard = TransducerTrackingWizard(
             photoscan = selected_photoscan_openlifu,
             volume = activeData["Volume"],
-            transducer = activeData["Transducer"],
-            target = activeData["Target"])
+            transducer = selected_transducer,
+            target = selected_target)
         returncode, photoscan_to_volume_transform_node, transducer_to_volume_transform_node = self.wizard.customexec_()
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
         self._running_wizard = False
@@ -1937,13 +1941,26 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             # This shouldn't be possible
             if photoscan_to_volume_transform_node is None or transducer_to_volume_transform_node is None:
                 raise RuntimeError("Transducer tracking wizard was completed without generating valid transducer tracking transforms")
+            
             # Watch the transducer tracking results for any deletions/modifications
             self.watchTransducerTrackingNode(photoscan_to_volume_transform_node)
             self.watchTransducerTrackingNode(transducer_to_volume_transform_node)
+            
             # Set the current transducer transform node to the transducer tracking result.
             selected_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_transform_node)
             selected_transducer.set_visibility(True)
             self.updateWorkflowControls()
+
+            # If there is a virtual fit result, compute a quantitative measure comparing it with the tracked result
+            target_id = fiducial_to_openlifu_point_id(selected_target)
+            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
+                target_id = target_id)
+
+            if best_virtual_fit_result_node:
+                distance = self.logic.calculate_transform_origin_distance(
+                    transform_node1 = transducer_to_volume_transform_node,
+                    transform_node2 = best_virtual_fit_result_node)
+                self.ui.quantitativeTransducerTrackingMetricLabel.text = f"Distance from virtual fit (mm): {distance:.2f}"
         
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
             skin_seg = get_skin_segmentation(activeData["Volume"])
@@ -2639,3 +2656,37 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             ]
         for node in facial_landmark_node:
             slicer.mrmlScene.RemoveNode(node)
+    
+    def calculate_transform_origin_distance(self, transform_node1: vtkMRMLTransformNode, transform_node2: vtkMRMLTransformNode) -> float:
+        """
+        Computes the linear (Euclidean) distance between the origins
+        of two vtkMRMLTransformNode's in world coordinates. The "origin" of a 
+        transform node refers to the (0,0,0) point of its local coordinate 
+        system, transformed to world coordinates.
+
+        Returns:
+            float: The Euclidean distance between the transform node origins, or None if
+                either transform node is invalid.
+        """
+
+        # Transform 1
+        matrix1_to_world = vtk.vtkMatrix4x4()
+        transform_node1.GetMatrixTransformToWorld(matrix1_to_world)
+        # Extract the translation components (last column)
+        origin1_world = np.array([matrix1_to_world.GetElement(0, 3),
+                                matrix1_to_world.GetElement(1, 3),
+                                matrix1_to_world.GetElement(2, 3)])
+
+        # Transform 2
+        matrix2_to_world = vtk.vtkMatrix4x4()
+        transform_node2.GetMatrixTransformToWorld(matrix2_to_world)
+        origin2_world = np.array([matrix2_to_world.GetElement(0, 3),
+                                matrix2_to_world.GetElement(1, 3),
+                                matrix2_to_world.GetElement(2, 3)])
+
+        # calculate eucidean distance between origins
+        distance = np.linalg.norm(origin1_world - origin2_world)
+
+        return distance
+
+
