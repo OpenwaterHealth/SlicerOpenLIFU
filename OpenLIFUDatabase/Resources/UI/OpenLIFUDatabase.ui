@@ -43,6 +43,9 @@
         <property name="filters">
          <set>ctkPathLineEdit::Dirs</set>
         </property>
+        <property name="showBrowseButton">
+         <bool>false</bool>
+        </property>
         <property name="showHistoryButton">
          <bool>false</bool>
         </property>
@@ -59,6 +62,36 @@
      <property name="text">
       <string>Load Database</string>
      </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="permissionsWidget2" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+      </stringlist>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="changeDatabaseLocationButton">
+        <property name="text">
+         <string>Change Database Location</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -85,15 +118,15 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkPathLineEdit.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ctkPathLineEdit</class>
-   <extends>QWidget</extends>
-   <header>ctkPathLineEdit.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
