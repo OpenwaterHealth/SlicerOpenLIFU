@@ -109,6 +109,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.logic.call_on_db_changed(self.onDatabaseChanged)
 
         self.ui.databaseLoadButton.clicked.connect(self.onLoadDatabaseClicked)
+        self.ui.changeDatabaseLocationButton.clicked.connect(lambda *args: self.ui.databaseDirectoryLineEdit.browse())
         self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect(
             "returnPressed()",
             lambda : self.onLoadDatabaseClicked(checked=True)
