@@ -153,6 +153,7 @@ class SlicerOpenLIFUSession:
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
 
+
         return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
 
     def set_affiliated_photocollections(self, affiliated_photocollections : List[str]):

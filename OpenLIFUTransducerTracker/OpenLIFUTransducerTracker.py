@@ -1196,7 +1196,7 @@ class TransducerTrackingWizard(qt.QWizard):
         # Set view nodes for the skin mesh, transducer and photoscan
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.skin_mesh_node.GetDisplayNode().SetOpacity(1.0)
-        self.skin_mesh_node.GetDisplayNode().SetSelectable(True)
+        self.skin_mesh_node.SetSelectable(True)
 
         # For transducers, ensure that the parent folder visibility is turned on
         # and save the current view settings on the transducer surface
@@ -1250,7 +1250,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs(())
         self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
         self.skin_mesh_node.GetDisplayNode().SetOpacity(0.5)
-        self.skin_mesh_node.GetDisplayNode().SetSelectable(False) # so fiducial nodes don't stick to mesh
+        self.skin_mesh_node.SetSelectable(False) # so fiducial nodes don't stick to mesh
 
         skin_facial_landmarks_node = self._logic.get_volume_facial_landmarks(self.skin_mesh_node)
         if skin_facial_landmarks_node:
@@ -1946,6 +1946,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateWorkflowControls()
         
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
+            skin_seg = get_skin_segmentation(activeData["Volume"])
             self.ui.skinMeshVisibilityCheckBox.setChecked(True)
             self.updateModelRenderingSettings()
 
