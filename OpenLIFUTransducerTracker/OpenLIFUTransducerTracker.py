@@ -1575,12 +1575,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names)
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
-        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.checkCanRunTracking)
-        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateApprovalWarningsIfAny)
-        # Update the enabled-ness of the virtual fit rendering checkbox
-        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateVirtualFitResultForDisplay) 
-        # Update the enabled-ness of the moderl rendering options
-        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateModelRenderingSettings)
+        self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateInputRelatedWidgets)
 
         # ---- Model rendering options ----
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.updateVirtualFitResultForDisplay)
@@ -1592,16 +1587,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ---------------------------------
         self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
         self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
-        self.ui.quantitativeTransducerTrackingMetricLabel.setToolTip(
-            "Euclidean distance between the virtual fit and tracked transform origins.")
-        #self.ui.quantitativeTransducerTrackingMetricLabel.hide()
 
-        self.updateVirtualFitResultForDisplay()
+        # These ui elemeents are not specific to the currently selected input options
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
-        self.updateApprovalWarningsIfAny()
         self.updateWorkflowControls()
-        self.updateModelRenderingSettings()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -1707,18 +1697,19 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.algorithm_input_widget.update()
         self._input_update_in_progress = False  # Prevents repeated function calls due to combo box index changed signals
 
-        # Determine whether transducer tracking can be run based on the status of combo boxes
-        self.checkCanRunTracking()
+        self.updateInputRelatedWidgets()
 
-        # Determine whether a photoscan can be previewed based on the status of the photoscan combo box
+    def updateInputRelatedWidgets(self):
+        """ Enables or disable certain widgets
+        based on the currently selected inputs"""
+
+        self.checkCanRunTracking() # Determine whether transducer tracking can be run
         self.checkCanPreviewPhotoscan()
-    
-        # Prevents recursive behavior since cloning the vf result triggers the paramternodemodified function 
+        self.updateApprovalWarningsIfAny()
         if not self._setting_vf_clone:
-            self.updateVirtualFitResultForDisplay()
-        
-        # Determines whether the photoscan or skin mesh can be rendered based on the status of the photoscan and volume combo box.
-        self.updateModelRenderingSettings()
+            self.updateVirtualFitResultForDisplay() # virtual fit rendering checkbox
+        self.updateModelRenderingSettings() #model rendering options
+        self.updateDistanceFromVFLabel()
 
     def resetPhotoscanGeneratorProgressDisplay(self):
         self.ui.photoscanGeneratorProgressBar.hide()
@@ -1951,16 +1942,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             selected_transducer.set_visibility(True)
             self.updateWorkflowControls()
 
-            # If there is a virtual fit result, compute a quantitative measure comparing it with the tracked result
-            target_id = fiducial_to_openlifu_point_id(selected_target)
-            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
-                target_id = target_id)
-
-            if best_virtual_fit_result_node:
-                distance = self.logic.calculate_transform_origin_distance(
-                    transform_node1 = transducer_to_volume_transform_node,
-                    transform_node2 = best_virtual_fit_result_node)
-                self.ui.quantitativeTransducerTrackingMetricLabel.text = f"Distance from virtual fit (mm): {distance:.2f}"
+            self.updateDistanceFromVFLabel()
         
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
             skin_seg = get_skin_segmentation(activeData["Volume"])
@@ -1988,7 +1970,46 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             notify(f"Tracking approval revoked:\n{reason}")
             self.logic.revoke_transducer_tracking_approval(photoscan_id = photoscan_id)
             self.updateApprovalStatusLabel()
+            self.updateDistanceFromVFLabel()
 
+    def updateDistanceFromVFLabel(self) -> None:
+
+        # If there is a virtual fit result and tracking result,
+        # compute a quantitative measure comparing it with the tracked result
+        activeData = self.algorithm_input_widget.get_current_data()
+        selected_transducer = activeData["Transducer"]
+        selected_target = activeData["Target"]
+        selected_photoscan = activeData["Photoscan"]
+
+        if not selected_target or not selected_photoscan or not selected_transducer:
+            self.ui.quantitativeTransducerTrackingMetricLabel.hide()
+            return
+
+        tracking_approved = self.logic.get_transducer_tracking_approval(selected_photoscan.id)
+        tracking_result = self.logic.get_transducer_tracking_result_node(
+            photoscan_id = selected_photoscan.id,
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+        if tracking_result and tracking_approved:
+
+            target_id = fiducial_to_openlifu_point_id(selected_target)
+            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
+                target_id = target_id)
+
+            if best_virtual_fit_result_node:
+                distance = self.logic.calculate_transform_origin_distance(
+                    transform_node1 = tracking_result,
+                    transform_node2 = best_virtual_fit_result_node)
+                self.ui.quantitativeTransducerTrackingMetricLabel.show()
+                self.ui.quantitativeTransducerTrackingMetricLabel.text = f"Distance from virtual fit (mm): {distance:.2f}"
+                self.ui.quantitativeTransducerTrackingMetricLabel.setToolTip(
+                    "Euclidean distance between the virtual fit and tracked transform origins.")
+            else:
+                self.ui.quantitativeTransducerTrackingMetricLabel.show()
+                self.ui.quantitativeTransducerTrackingMetricLabel.text = f"(Cannot calculate distance from virtual fit. No result found for selected target.)"
+                self.ui.quantitativeTransducerTrackingMetricLabel.setToolTip("")
+        else:
+            self.ui.quantitativeTransducerTrackingMetricLabel.hide()
+            return
 
     def updateStartPhotocollectionCaptureButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
