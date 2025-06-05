@@ -2073,6 +2073,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
             return
 
+        # Disable the check box if the current transducer position matches the virtual fit result
+        vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == best_virtual_fit_result_node.GetID()
+        if vfresult_is_current:
+            self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.setToolTip("Transducer is already at the virtual fit position.")
+            return
+
         self.ui.viewVirtualFitCheckBox.enabled = True
         self.ui.viewVirtualFitCheckBox.setToolTip("")
 
