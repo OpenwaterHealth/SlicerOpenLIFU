@@ -40,6 +40,9 @@
       </item>
       <item>
        <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
         <property name="filters">
          <set>ctkPathLineEdit::Dirs</set>
         </property>
