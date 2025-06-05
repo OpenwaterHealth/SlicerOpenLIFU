@@ -1940,6 +1940,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
         slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
+        slicer.util.getModuleWidget('OpenLIFUTransducerTracker').updateVirtualFitResultForDisplay()
 
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:
@@ -1954,6 +1955,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 )
             
             transducer.set_matching_transform(None)
+
 
     def load_protocol_from_file(self, filepath:str) -> None:
         protocol = openlifu_lz().Protocol.from_file(filepath)
