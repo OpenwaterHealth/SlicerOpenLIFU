@@ -134,7 +134,7 @@ class CreateNewSessionDialog(qt.QDialog):
         self.volume_ids = volume_ids
         self.setup()
 
-    def setup(self):
+    def setup(self) -> None:
 
         self.setMinimumWidth(200)
 
@@ -149,7 +149,6 @@ class CreateNewSessionDialog(qt.QDialog):
 
         self.transducer = qt.QComboBox()
         self.add_items_to_combobox(self.transducer, self.transducer_ids, "transducer")
-
         formLayout.addRow(_("Transducer:"), self.transducer)
 
         self.protocol = qt.QComboBox()
@@ -160,15 +159,23 @@ class CreateNewSessionDialog(qt.QDialog):
         formLayout.addRow(_("Volume:"), self.volume)
         self.add_items_to_combobox(self.volume, self.volume_ids, "volume")
 
+        # Add load checkbox into same row as Ok and Cancel buttons
+        buttonLayout = qt.QHBoxLayout()
+
+        self.loadCheckBox = qt.QCheckBox(_("Load"))
+        buttonLayout.addWidget(self.loadCheckBox)
+
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
                                           qt.QDialogButtonBox.Cancel)
-        formLayout.addWidget(self.buttonBox)
+        buttonLayout.addWidget(self.buttonBox)
+
+        formLayout.addRow(buttonLayout)
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.validateInputs)
 
-    def add_items_to_combobox(self, comboBox: qt.QComboBox, itemList: List[str], name: str):
+    def add_items_to_combobox(self, comboBox: qt.QComboBox, itemList: List[str], name: str) -> None:
 
         if len(itemList) == 0:
             comboBox.addItem(f"No {name} objects found", None)
@@ -177,7 +184,7 @@ class CreateNewSessionDialog(qt.QDialog):
             for item in itemList:
                 comboBox.addItem(item, item)
 
-    def validateInputs(self):
+    def validateInputs(self) -> None:
 
         session_name = self.sessionName.text
         session_id = self.sessionID.text
@@ -185,23 +192,24 @@ class CreateNewSessionDialog(qt.QDialog):
         protocol_id = self.protocol.currentData
         volume_id = self.volume.currentData
 
-        if not len(session_name) or not len(session_id) or any(object is None for object in (volume_id,transducer_id,protocol_id)):
-            slicer.util.errorDisplay("Required fields are missing", parent = self)
+        if not len(session_name) or not len(session_id) or any(object is None for object in (volume_id, transducer_id, protocol_id)):
+            slicer.util.errorDisplay("Required fields are missing", parent=self)
         else:
             self.accept()
 
-    def customexec_(self):
+    def customexec_(self) -> tuple[int, dict, bool]:
 
-        returncode = self.exec_()
-        session_parameters = {
+        returncode: int = self.exec_()
+        session_parameters: dict = {
             'name': self.sessionName.text,
             'id': self.sessionID.text,
             'transducer_id': self.transducer.currentData,
             'protocol_id': self.protocol.currentData,
             'volume_id': self.volume.currentData,
         }
+        load_checked: bool = self.loadCheckBox.isChecked()
 
-        return (returncode, session_parameters)
+        return (returncode, session_parameters, load_checked)
 
 class AddNewVolumeDialog(qt.QDialog):
     """ Add new volume dialog """
@@ -503,20 +511,20 @@ class LoadSessionDialog(qt.QDialog):
         # ---- Subject Level Buttons ----
         subject_buttons_layout = qt.QHBoxLayout()
 
-        self.create_new_session_button = qt.QPushButton("New Session")
-        self.create_new_session_button.setToolTip("Create a new session for this subject")
+        self.new_session_button = qt.QPushButton("New Session")
+        self.new_session_button.setToolTip("Create a new session for this subject")
         self.load_session_button = qt.QPushButton("Load Session")
         self.load_session_button.setToolTip("Load the currently selected session")
 
-        for button in [self.create_new_session_button, self.load_session_button]:
+        for button in [self.new_session_button, self.load_session_button]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
             subject_buttons_layout.addWidget(button)
 
         self.box_layout.addLayout(subject_buttons_layout)
 
-        self.create_new_session_button.clicked.connect(self.create_new_session)
-        self.load_session_button.clicked.connect(self.load_session)
-        self.table_widget.doubleClicked.connect(self.load_session)
+        self.new_session_button.clicked.connect(self.on_new_session_clicked)
+        self.load_session_button.clicked.connect(self.on_load_session_clicked)
+        self.table_widget.doubleClicked.connect(self.on_load_session_clicked)
 
         # ---- Cancel Button ----
         self.button_box = qt.QDialogButtonBox()
@@ -568,7 +576,7 @@ class LoadSessionDialog(qt.QDialog):
             self.table_widget.setRowHeight(row, 48)
 
     @display_errors
-    def create_new_session(self, checked: bool) -> bool:
+    def on_new_session_clicked(self, checked: bool) -> None:
         """
         Create a new session for the current subject, after applying user permission filtering on protocols.
         """
@@ -594,19 +602,20 @@ class LoadSessionDialog(qt.QDialog):
             protocol_ids=db_protocol_ids,
             volume_ids=db_volume_ids
         )
-        returncode, session_parameters = sessiondlg.customexec_()
+        returncode, session_parameters, load_checked = sessiondlg.customexec_()
+
         if not returncode:
-            return False
+            return
 
         slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
-
-        # Update session list
         self.update_sessions_list()
 
-        return True
+        if load_checked:
+            self.selected_session = self.db.load_session(self.subject, session_parameters["id"])
+            self.accept()
 
     @display_errors
-    def load_session(self, *args) -> None:
+    def on_load_session_clicked(self, *args) -> None:
         """
         Load the selected session into the OpenLIFUData module if the user has permission.
         """
@@ -637,7 +646,7 @@ class LoadSessionDialog(qt.QDialog):
         self.selected_session = session
         self.accept()
 
-    def exec_and_get_session(self) -> Optional["openlifu.db.Session"]:
+    def exec_and_get_session(self) -> Optional["openlifu.db.session.Session"]:
         """
         Execute the dialog and return the selected session ID, or None if canceled.
         """
@@ -653,7 +662,7 @@ class LoadSessionDialog(qt.QDialog):
         enforce_user_permissions uniquely. It follows the same pattern as OpenLIFULogin.
         """
         _enforced_buttons = [
-            self.create_new_session_button
+            self.new_session_button
         ]
         
         # Don't enforce if no user account mode
