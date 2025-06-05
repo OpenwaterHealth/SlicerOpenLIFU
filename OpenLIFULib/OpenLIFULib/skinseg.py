@@ -30,6 +30,7 @@ def generate_skin_segmentation(volume_node:vtkMRMLScalarVolumeNode) -> vtkMRMLMo
     normalized_color = [c / 255.0 for c in model_color]
     skin_mesh_node.GetDisplayNode().SetColor(normalized_color)
     skin_mesh_node.GetDisplayNode().SetOpacity(0.5)
+    skin_mesh_node.GetDisplayNode().SetSelectable(False)
 
     return skin_mesh_node
 
