@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>404</width>
-    <height>592</height>
+    <width>568</width>
+    <height>943</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -25,11 +25,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="targetsCollapsible" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="targetsCollapsible">
+     <property name="text">
       <string>Targets</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -168,11 +168,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible">
+     <property name="text">
       <string>Virtual Fitting</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -215,13 +215,6 @@
              </widget>
             </item>
            </layout>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="approveButton">
-           <property name="text">
-            <string>Approve virtual fit</string>
-           </property>
           </widget>
          </item>
          <item>
@@ -283,6 +276,68 @@
         </layout>
        </widget>
       </item>
+      <item>
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Select virtual fit result:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="virtualFitResultsOptions">
+        <item>
+         <widget class="qMRMLNodeComboBox" name="virtualFitResultComboBox">
+          <property name="nodeTypes">
+           <stringlist notr="true">
+            <string>vtkMRMLTransformNode</string>
+           </stringlist>
+          </property>
+          <property name="hideChildNodeTypes">
+           <stringlist notr="true"/>
+          </property>
+          <property name="baseName">
+           <string>Manual VF</string>
+          </property>
+          <property name="removeEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="interactionNodeSingletonTag">
+           <string notr="true"/>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButtonSetTransducerTransform">
+          <property name="text">
+           <string>Update transducer position</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButtonEnableManualInteraction">
+          <property name="text">
+           <string>Enable manual interaction</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPushButton" name="approveButton">
+        <property name="text">
+         <string>Approve virtual fit</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -310,6 +365,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
@@ -323,5 +383,22 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>OpenLIFUPrePlanning</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>virtualFitResultComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>283</x>
+     <y>471</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>340</x>
+     <y>611</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
