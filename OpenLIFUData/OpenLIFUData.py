@@ -339,7 +339,7 @@ class LoadSubjectDialog(qt.QDialog):
 
         self.addButton = qt.QPushButton("Add Subject")
         self.addButton.setToolTip("Add a new subject")
-        self.addButton.clicked.connect(self.onAddNewSubjectClicked)
+        self.addButton.clicked.connect(self.on_add_subject_clicked)
         buttonRowLayout.addWidget(self.addButton)
 
         self.loadSubjectButton = qt.QPushButton("Load Subject")
@@ -381,9 +381,24 @@ class LoadSubjectDialog(qt.QDialog):
             self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
             self.tableWidget.setRowHeight(row, 36)
 
-    def onAddNewSubjectClicked(self) -> None:
-        slicer.util.getModuleWidget("OpenLIFUData").onAddNewSubjectClicked(checked=False)
+    def on_add_subject_clicked(self, checked:bool) -> None:
+        subjectdlg = AddNewSubjectDialog()
+        returncode, subject_name, subject_id, load_checked = subjectdlg.customexec_()
+
+        if not returncode:
+            return
+
+        if not len(subject_name) or not len(subject_id):
+            slicer.util.errorDisplay("Required fields are missing")
+            return
+
+        # Add subject to database
+        slicer.util.getModuleLogic("OpenLIFUData").add_subject_to_database(subject_name,subject_id)
         self.updateSubjectsList()
+
+        if load_checked:
+            self.selected_subject = self.db.load_subject(subject_id)
+            self.accept()
 
     def onLoadSubjectClicked(self) -> None:
         selected_items = self.tableWidget.selectedItems()
@@ -929,8 +944,7 @@ class AddNewSubjectDialog(qt.QDialog):
         self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
-    def setup(self):
-
+    def setup(self) -> None:
         self.setMinimumWidth(200)
 
         formLayout = qt.QFormLayout()
@@ -942,21 +956,30 @@ class AddNewSubjectDialog(qt.QDialog):
         self.subjectID = qt.QLineEdit()
         formLayout.addRow(_("Subject ID:"), self.subjectID)
 
+        # Create a horizontal layout to hold checkbox and button box in same row
+        buttonLayout = qt.QHBoxLayout()
+
+        self.loadCheckBox = qt.QCheckBox(_("Load"))
+        buttonLayout.addWidget(self.loadCheckBox)
+
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
                                           qt.QDialogButtonBox.Cancel)
-        formLayout.addWidget(self.buttonBox)
+        buttonLayout.addWidget(self.buttonBox)
+
+        formLayout.addRow(buttonLayout)
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.accept)
 
-    def customexec_(self):
+    def customexec_(self) -> tuple[int, str, str, bool]:
 
-        returncode = self.exec_()
-        subject_name = self.subjectName.text
-        subject_id = self.subjectID.text
+        returncode: int = self.exec_()
+        subject_name: str = self.subjectName.text
+        subject_id: str = self.subjectID.text
+        load_checked: bool = self.loadCheckBox.isChecked()
 
-        return (returncode, subject_name, subject_id)
+        return (returncode, subject_name, subject_id, load_checked)
 
 class LoadPhotoscanDialog(qt.QDialog):
     """ Load photoscan dialog """
@@ -1238,19 +1261,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.addPhotoscanButton.setToolTip("Add a photoscan to the loaded session")
             self.ui.saveSessionButton.setEnabled(True)
             self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
-
-    @display_errors
-    def onAddNewSubjectClicked(self, checked:bool) -> None:
-        subjectdlg = AddNewSubjectDialog()
-        returncode, subject_name, subject_id = subjectdlg.customexec_()
-
-        if returncode:
-            if not len(subject_name) or not len(subject_id):
-                slicer.util.errorDisplay("Required fields are missing")
-                return
-            else:
-                # Add subject to database
-                self.logic.add_subject_to_database(subject_name,subject_id)
 
     @display_errors
     def on_load_subject_clicked(self, checked: bool) -> bool:
