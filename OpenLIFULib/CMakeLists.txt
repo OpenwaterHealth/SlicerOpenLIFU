@@ -24,6 +24,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/skinseg.py
   OpenLIFULib/transducer_tracking_wizard_utils.py
   OpenLIFULib/events.py
+  OpenLIFULib/notifications.py
 )
 
 set(MODULE_PYTHON_RESOURCES
