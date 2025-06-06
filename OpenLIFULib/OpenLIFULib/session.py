@@ -8,6 +8,7 @@ from slicer import (
 )
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.util import get_openlifu_data_parameter_node
+from OpenLIFULib.skinseg import load_volume_and_threshold_background
 from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
 from OpenLIFULib.targets import (
@@ -147,7 +148,7 @@ class SlicerOpenLIFUSession:
         """
 
         # Load volume
-        volume_node = slicer.util.loadVolume(volume_info['data_abspath'])
+        volume_node = load_volume_and_threshold_background(volume_info['data_abspath'])
         assign_openlifu_metadata_to_volume_node(volume_node, volume_info)
 
         # Load targets
