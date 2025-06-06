@@ -61,6 +61,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
+from OpenLIFULib.notifications import notify
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target
 
 # These imports are for IDE and static analysis purposes only
@@ -1833,10 +1834,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         and show a message dialog to that effect.
         """
         if self.logic.get_transducer_tracking_approval(photoscan_id):
-            slicer.util.infoDisplay(
-                text= "Transducer tracking approval has been revoked for the following reason:\n"+reason,
-                windowTitle="Approval revoked"
-            )
+            notify(f"Tracking approval revoked:\n{reason}")
             self.logic.revoke_transducer_tracking_approval(photoscan_id = photoscan_id)
             self.updateApprovalStatusLabel()
 
