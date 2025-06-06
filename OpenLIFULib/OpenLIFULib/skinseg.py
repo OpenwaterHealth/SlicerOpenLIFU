@@ -71,6 +71,7 @@ def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> 
     volume_node.GetDisplayNode().SetThreshold(volume_array_min,volume_array.max())
     volume_node.GetDisplayNode().SetApplyThreshold(1)
     volume_node.GetDisplayNode().SetAutoThreshold(0)
+    volume_node.Modified()
 
 def load_volume_and_threshold_background(volume_filepath) -> vtkMRMLScalarVolumeNode:
     """Load a volume node from file, and also set the background values to a certain value that can be threshoded out, and threshold it out."""
