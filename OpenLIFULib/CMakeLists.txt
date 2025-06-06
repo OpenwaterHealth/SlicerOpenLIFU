@@ -25,6 +25,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/transducer_tracking_wizard_utils.py
   OpenLIFULib/events.py
   OpenLIFULib/notifications.py
+  OpenLIFULib/volume_thresholding.py
 )
 
 set(MODULE_PYTHON_RESOURCES
