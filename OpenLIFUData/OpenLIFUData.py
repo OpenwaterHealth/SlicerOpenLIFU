@@ -57,7 +57,7 @@ from OpenLIFULib.util import (
     ensure_list,
     replace_widget,
 )
-from OpenLIFULib.skinseg import load_volume_and_threshold_background
+from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
 from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_results_from_openlifu_session_format,
     clear_virtual_fit_results,
