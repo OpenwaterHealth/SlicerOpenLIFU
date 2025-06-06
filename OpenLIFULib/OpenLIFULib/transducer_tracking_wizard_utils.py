@@ -114,6 +114,9 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
                     vrDisplayNode.SetViewNodeIDs(views_mainwindow)
         elif displayable_node.IsA('vtkMRMLTransformNode') and displayable_node.GetDisplayNode() is not None:
             displayable_node.GetDisplayNode().SetEditorVisibility(False)
+        elif displayable_node.IsA('vtkMRMLMarkupsNode') and displayable_node.GetDisplayVisibility():
+            fiducial_views = views_mainwindow + ['vtkMRMLSliceNodeRed','vtkMRMLSliceNodeYellow','vtkMRMLSliceNodeGreen']
+            displayable_node.GetDisplayNode().SetViewNodeIDs(fiducial_views)
         elif displayable_node.GetDisplayVisibility() and not displayable_node.GetDisplayNode().GetViewNodeIDs():
             displayable_node.GetDisplayNode().SetViewNodeIDs(views_mainwindow)
     
