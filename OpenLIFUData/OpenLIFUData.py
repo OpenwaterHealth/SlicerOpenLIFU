@@ -57,6 +57,7 @@ from OpenLIFULib.util import (
     ensure_list,
     replace_widget,
 )
+from OpenLIFULib.skinseg import load_volume_and_threshold_background
 from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_results_from_openlifu_session_format,
     clear_virtual_fit_results,
@@ -2301,7 +2302,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
         volume_filepath = Path(volume_dir,volume_metadata['data_filename'])
-        loadedVolumeNode = slicer.util.loadVolume(volume_filepath)
+        loadedVolumeNode = load_volume_and_threshold_background(volume_filepath)
         # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is assigned to the node so need
         # call updateLoadedObjectsView again to display openlifu name/id.
         assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
@@ -2313,7 +2314,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         parent_dir = Path(filepath).parent
         # Load volume using use slicer default volume name and id based on filepath
         if slicer.app.coreIOManager().fileType(filepath) == 'VolumeFile':
-            slicer.util.loadVolume(filepath)
+            load_volume_and_threshold_background(filepath)
 
         # If the user selects a json file, infer volume filepath information based on the volume_metadata.
         elif Path(filepath).suffix == '.json':
