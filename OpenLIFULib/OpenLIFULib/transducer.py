@@ -253,14 +253,24 @@ class SlicerOpenLIFUTransducer:
             that observes the virtual fit transform.
         """
 
-        # Only one virtual fit result can be visualized at a time
+        # Check if the cloned model already exists and if it's the correct one
+        # This avoids unnecessary re-cloning if the virtual_fit_transform is the same.
+        current_cloned_transform_id = None
         if self.cloned_virtual_fit_model:
-            slicer.mrmlScene.RemoveNode(self.cloned_virtual_fit_model)
+            current_cloned_transform_id = self.cloned_virtual_fit_model.GetTransformNodeID()
 
+        # Only clone if the model doesn't exist or is observing a different transform
+        if current_cloned_transform_id == virtual_fit_transform.GetID():
+            return self.cloned_virtual_fit_model
+        elif self.cloned_virtual_fit_model:
+            slicer.mrmlScene.RemoveNode(self.cloned_virtual_fit_model)
+            
         if self.body_model_node:
             model_to_clone = self.body_model_node
-        else:
+        elif self.surface_model_node:
             model_to_clone = self.surface_model_node
+        else:
+            model_to_clone = self.model_node
         
         self.cloned_virtual_fit_model = get_cloned_node(model_to_clone)
         self.cloned_virtual_fit_model.SetAndObserveTransformNodeID(virtual_fit_transform.GetID())
@@ -268,5 +278,6 @@ class SlicerOpenLIFUTransducer:
         normalized_color = [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["virtual_fit_result"]] # Normalize color to 0-1 range
         self.cloned_virtual_fit_model.GetDisplayNode().SetColor(normalized_color)
         self.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
+        self.cloned_virtual_fit_model.GetDisplayNode().SetOpacity(0.5)
 
         return self.cloned_virtual_fit_model
