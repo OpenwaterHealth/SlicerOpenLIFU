@@ -4,6 +4,7 @@ from OpenLIFULib.lazyimport import openlifu_lz
 from slicer import vtkMRMLScalarVolumeNode, vtkMRMLModelNode
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.transducer import TRANSDUCER_MODEL_COLORS
+from OpenLIFULib.util import BusyCursor
 import slicer
 from typing import Union
 
@@ -56,3 +57,24 @@ def get_skin_segmentation(volume : Union[vtkMRMLScalarVolumeNode, str]) -> vtkMR
         raise RuntimeError(f"Found multiple skin segmentation models affiliated with volume {volume_id}")
     else:
         return skin_mesh_node[0]
+
+def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> None:
+    """Compute the foreground mask for a loaded volume and threshold the volume to strip out the background.
+    This modifies the values of the background region in the volume and sets them to 1 less than the minimum value in the volume.
+    This way we can simply enable volume thresholding to remove
+    It can take a moment to actually compute the foreground mask.
+    """
+    volume_array = slicer.util.arrayFromVolume(volume_node)
+    volume_array_min = volume_array.min()
+    foreground_mask = openlifu_lz().seg.skinseg.compute_foreground_mask(volume_array)
+    slicer.util.arrayFromVolume(volume_node)[~foreground_mask] = volume_array_min - 1
+    volume_node.GetDisplayNode().SetThreshold(volume_array_min,volume_array.max())
+    volume_node.GetDisplayNode().SetApplyThreshold(1)
+    volume_node.GetDisplayNode().SetAutoThreshold(0)
+
+def load_volume_and_threshold_background(volume_filepath) -> vtkMRMLScalarVolumeNode:
+    """Load a volume node from file, and also set the background values to a certain value that can be threshoded out, and threshold it out."""
+    volume_node = slicer.util.loadVolume(volume_filepath)
+    with BusyCursor():
+        threshold_volume_by_foreground_mask(volume_node)
+    return volume_node
