@@ -38,6 +38,7 @@ from OpenLIFULib.util import (
     display_errors,
     replace_widget,
 )
+from OpenLIFULib.notifications import notify
 
 # These imports are deferred at runtime using openlifu_lz, 
 # but are done here for IDE and static analysis purposes
@@ -343,10 +344,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if self.logic.solution_analysis_exists():
             data_logic.clear_solution(clean_up_scene=False)
             self._parameterNode.solution_analysis = None
-            slicer.util.infoDisplay(
-                text= "Computed solution has been deleted for the following reason:\n"+reason,
-                windowTitle="Solution deleted"
-            )
+            notify(f"Solution deleted:\n{reason}")
 
     def updateVirtualFitApprovalStatus(self) -> None:
         loaded_session = get_openlifu_data_parameter_node().loaded_session
@@ -455,16 +453,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             solution_is_approved = get_openlifu_data_parameter_node().loaded_solution.is_approved()
             if solution_is_approved and not self.logic.solution_analysis_exists():
                 self.logic.toggle_solution_approval()
-                slicer.util.infoDisplay(
-                    text= "Solution approval has been revoked due there being no solution analysis.",
-                    windowTitle="Approval revoked"
-                )
+                notify(f"Solution approval revoked: missing solution analysis!")
             elif solution_is_approved and self.logic.solution_analysis_has_errors():
                 self.logic.toggle_solution_approval()
-                slicer.util.infoDisplay(
-                    text= "Solution approval has been revoked due to errors in the solution analysis.",
-                    windowTitle="Approval revoked"
-                )
+                notify(f"Solution approval revoked: errors in solution analysis!")
 
     def updateSolutionAnalysis(self) -> None:
         """Update the solution analysis widgets"""

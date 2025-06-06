@@ -41,6 +41,7 @@ from OpenLIFULib.util import (
     add_slicer_log_handler,
     replace_widget,
 )
+from OpenLIFULib.notifications import notify
 from OpenLIFULib.virtual_fit_results import (
     add_virtual_fit_result,
     clear_virtual_fit_results,
@@ -326,20 +327,16 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateEditTargetEnabled()
 
     def clearVirtualFitResultsIfAny(self,target: vtkMRMLMarkupsFiducialNode, reason:str):
-        """Clear virtual fit results for the target from the scene if any, and show a message dialog for the user to confirm deletion.
+        """Clear virtual fit results for the target from the scene if any.
         """
         target_id = fiducial_to_openlifu_point_id(target)
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
         
         if list(get_virtual_fit_result_nodes(target_id, session_id)):
-            if slicer.util.confirmYesNoDisplay(
-                text= f"Virtual fit results for {target_id} will be removed for the following reason:\n"+reason + 
-                "\nProceed with deletion?",
-                windowTitle="Confirm virtual fit results deletion"
-                ):
-                self.logic.clear_virtual_fit_results(target = target)
-                self.updateWorkflowControls()
+            self.logic.clear_virtual_fit_results(target = target)
+            self.updateWorkflowControls()
+            notify(f"Virtual fit results for {target_id} removed:\n{reason}")
 
     def revokeApprovalIfAny(self, target : Union[str,vtkMRMLMarkupsFiducialNode], reason:str):
         """Revoke virtual fit approval for the target if there was an approval, and show a message dialog to that effect.
@@ -354,11 +351,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             raise ValueError("Invalid target type.")
 
         if self.logic.get_virtual_fit_approval(target_id):
-            slicer.util.infoDisplay(
-                text= "Virtual fit approval has been revoked for the following reason:\n"+reason,
-                windowTitle="Approval revoked"
-            )
             self.logic.revoke_virtual_fit_approval(target_id)
+            notify(f"Virtual fit approval revoked:\n{reason}")
             self.updateApproveButton()
             self.updateApprovalStatusLabel()
 
