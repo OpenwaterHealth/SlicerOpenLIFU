@@ -1,5 +1,7 @@
 """Skin segmentation tools"""
 
+import logging
+import vtk
 from OpenLIFULib.lazyimport import openlifu_lz
 from slicer import vtkMRMLScalarVolumeNode, vtkMRMLModelNode
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
@@ -16,6 +18,18 @@ def generate_skin_mesh(volume_node:vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
     skin_node.SetAndObservePolyData(skin_mesh)
     return skin_node
 
+def cast_volume_to_float(volume_node:vtkMRMLScalarVolumeNode) -> None:
+    """Converts a volume node to float, replacing the underlying vtkImageData."""
+    image_cast = vtk.vtkImageCast()
+    image_cast.SetInputData(volume_node.GetImageData())
+    image_cast.SetOutputScalarTypeToDouble()
+    image_cast.Update()
+    volume_node.SetAndObserveImageData(image_cast.GetOutput())
+
+    # I am not certain that the display node will know to update itself to handle the new image data type,
+    # so I hope poking `CreateDefaultDisplayNodes` here makes it do the right thing. If it's not needed then it's harmless anyway:
+    volume_node.CreateDefaultDisplayNodes()
+
 def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> None:
     """Compute the foreground mask for a loaded volume and threshold the volume to strip out the background.
     This modifies the values of the background region in the volume and sets them to 1 less than the minimum value in the volume.
@@ -24,8 +38,14 @@ def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> 
     """
     volume_array = slicer.util.arrayFromVolume(volume_node)
     volume_array_min = volume_array.min()
+
+    background_value = volume_array_min - 1
+    if background_value < volume_node.GetImageData().GetScalarTypeMin(): # e.g. if volume_array_min is 0 and it's an unsigned int type
+        logging.info("Casting volume to float for the sake of `threshold_volume_by_foreground_mask`.")
+        cast_volume_to_float(volume_node)
+
     foreground_mask = openlifu_lz().seg.skinseg.compute_foreground_mask(volume_array)
-    slicer.util.arrayFromVolume(volume_node)[~foreground_mask] = volume_array_min - 1
+    slicer.util.arrayFromVolume(volume_node)[~foreground_mask] = background_value
     volume_node.GetDisplayNode().SetThreshold(volume_array_min,volume_array.max())
     volume_node.GetDisplayNode().SetApplyThreshold(1)
     volume_node.GetDisplayNode().SetAutoThreshold(0)
