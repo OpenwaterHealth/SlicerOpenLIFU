@@ -1,4 +1,5 @@
 # Standard library imports
+from collections import defaultdict
 import itertools
 import warnings
 from subprocess import CalledProcessError
@@ -12,6 +13,7 @@ import vtk
 # Slicer imports
 import slicer
 from slicer import (
+    vtkMRMLNode,
     vtkMRMLMarkupsFiducialNode,
     vtkMRMLModelNode,
     vtkMRMLScalarVolumeNode,
@@ -174,9 +176,9 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         node.GetDisplayNode().SetVisibility(True)  # Ensure that visibility is turned on after setting biew nodes
 
         # Add an observer if any of the points are undefined
-        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved)
-        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onPointAdded)
-        node.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onPointModified)
+        self.wizard().node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAboutToBeRemovedEvent, self.onPointRemoved))
+        self.wizard().node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onPointAdded))
+        self.wizard().node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onPointModified))
         self.facial_landmarks_fiducial_node = node
         return node
 
@@ -211,7 +213,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
 
         self.exitPlaceFiducialMode()
-        self.currently_placing_node.RemoveAllObservers()
+        self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
         slicer.mrmlScene.RemoveNode(self.currently_placing_node)
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
         if self._checkAllLandmarksDefined():
@@ -653,7 +655,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
         # Add observer after setup
-        self.photoscan_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
+        self.wizard().node_observations[self.photoscan_to_volume_transform_node.GetID()].append(
+            self.photoscan_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
+            )
 
     def resetScalingTransform(self):
         self.ui.scalingTransformMRMLSliderWidget.value = 1
@@ -849,7 +853,9 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node.GetDisplayNode().SetViewNodeIDs(
             [self.wizard().volume_view_node.GetID()]) # Specify a view node for display
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
-        self.transducer_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
+        self.wizard().node_observations[self.transducer_to_volume_transform_node.GetID()].append(
+            self.transducer_to_volume_transform_node.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTransformModified)
+            )
 
     def onManualRegistrationClicked(self):
         """ This allows the user to manually edit the transducer-volume transform. """
@@ -991,6 +997,9 @@ class TransducerTrackingWizard(qt.QWizard):
                 and get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node)
             ): #Flag to keep track of when approval is revoked and an existing result can be modified
                 self._existing_approval_revoked = True    
+
+        # Mapping from mrml node ID to a list of vtkCommand tags that can later be used to remove the observation
+        self.node_observations : Dict[str,List[int]] = defaultdict(list)
         
         self.adjustSize()
         
@@ -1122,11 +1131,12 @@ class TransducerTrackingWizard(qt.QWizard):
         # Add the transducer tracking result nodes to the slicer scene
         # Shouldn't be able to get to this final stage without both transform nodes
         if self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node and self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node:
-            
-            # Remove observer
-            self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.RemoveAllObservers()
-            self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.HardenTransform() 
-            
+        
+            # Remove all observations
+            self.clean_up_observers(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
+            self.clean_up_observers(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
+            self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node.HardenTransform()  # observer must be removed before this
+
             self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node = self._logic.add_transducer_tracking_result(
                 photoscan_to_volume_transform = self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node,
                 photoscan_to_volume_approval_state = True,
@@ -1170,20 +1180,30 @@ class TransducerTrackingWizard(qt.QWizard):
         # Ensure any temporary variables are cleared. Nodes in the scene are not updated
         for node in self.photoscanMarkupPage.temp_markup_fiducials.values():
             if node:
-                node.RemoveAllObservers()
-            slicer.mrmlScene.RemoveNode(node)
-        slicer.mrmlScene.RemoveNode(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
+                self.clean_up_observers(node)
+                slicer.mrmlScene.RemoveNode(node)
+        if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
+            self.clean_up_observers(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
+            slicer.mrmlScene.RemoveNode(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
 
         for node in self.skinSegmentationMarkupPage.temp_markup_fiducials.values():
             if node:
-                node.RemoveAllObservers()
-            slicer.mrmlScene.RemoveNode(node)
-        slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
+                self.clean_up_observers(node)
+                slicer.mrmlScene.RemoveNode(node)
+        
+        if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
+            self.clean_up_observers(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
+            slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
 
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
         slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.scaling_transform_node)
 
+    def clean_up_observers(self, node: vtkMRMLNode):
+        """ Removes any tagged observers associated with this node """
+        for tag in self.node_observations.pop(node.GetID()):
+            node.RemoveObserver(tag)
+        
     def setupViewNodes(self):
                 
         # Create a viewNode for displaying the photoscan if it hasn't been created
