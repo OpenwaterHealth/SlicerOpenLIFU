@@ -745,6 +745,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
+        if not self.photoscan_to_volume_transform_node:
+            return False
         return not self.runningRegistration and self.page_locked
 
 class TransducerPhotoscanTrackingPage(qt.QWizardPage):
@@ -920,6 +922,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
+        if not self.transducer_to_volume_transform_node:
+            return False
         return not self.runningRegistration and self.page_locked
 
 class TransducerTrackingWizard(qt.QWizard):
