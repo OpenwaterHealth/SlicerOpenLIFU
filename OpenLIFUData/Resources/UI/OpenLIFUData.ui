@@ -44,9 +44,9 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="subjectsCollapsibleButton">
+    <widget class="ctkCollapsibleButton" name="subjectCollapsibleButton">
      <property name="text">
-      <string>Subjects</string>
+      <string>Subject</string>
      </property>
      <property name="collapsed">
       <bool>false</bool>
@@ -268,12 +268,12 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="sessionsCollapsibleButton">
+    <widget class="ctkCollapsibleButton" name="sessionCollapsibleButton">
      <property name="enabled">
       <bool>true</bool>
      </property>
      <property name="text">
-      <string>Sessions</string>
+      <string>Session</string>
      </property>
      <property name="checked">
       <bool>true</bool>

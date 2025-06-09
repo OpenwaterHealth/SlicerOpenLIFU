@@ -363,7 +363,7 @@ class LoadSubjectDialog(qt.QDialog):
         buttonBoxLayout.addStretch()
 
         self.cancelButton = qt.QPushButton("Cancel")
-        self.cancelButton.setToolTip("Close this window without loading any new sessions")
+        self.cancelButton.setToolTip("Close this window without loading any new session")
         self.cancelButton.clicked.connect(lambda *args: self.reject())
         buttonBoxLayout.addWidget(self.cancelButton)
 
@@ -451,7 +451,7 @@ class LoadSubjectDialog(qt.QDialog):
                 button.setEnabled(False)
 
 class LoadSessionDialog(qt.QDialog):
-    """ Interface for managing and selecting sessions for a given subject """
+    """ Interface for managing and selecting a session for a given subject """
 
     def __init__(self, db: "openlifu.db.Database", subject_id: str, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
@@ -529,7 +529,7 @@ class LoadSessionDialog(qt.QDialog):
         # ---- Cancel Button ----
         self.button_box = qt.QDialogButtonBox()
         self.cancel_button = self.button_box.addButton("Cancel", qt.QDialogButtonBox.RejectRole)
-        self.cancel_button.setToolTip("Close this window without loading any new sessions")
+        self.cancel_button.setToolTip("Close this window without loading any new session")
         self.cancel_button.clicked.connect(lambda *args: self.reject())
         self.box_layout.addWidget(self.button_box)
 
@@ -1185,13 +1185,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Go to protocol config
         self.ui.configureProtocolsPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
 
-        # Subjects collapsible section
+        # Subject collapsible section
         self.ui.loadSubjectButton.clicked.connect(self.on_load_subject_clicked)
 
         # Volumes collapsible section
         self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
 
-        # Sessions collapsible section
+        # Session collapsible section
         self.ui.loadSessionButton.clicked.connect(self.on_load_session_clicked)
         self.ui.capturePhotocollectionButton.clicked.connect(self.on_capture_photocollection_clicked)
         self.ui.addPhotoscanButton.clicked.connect(self.on_add_photoscan_clicked)
@@ -1206,7 +1206,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateSessionStatus()
         self.update_loadSubjectButton_enabled()
         self.update_volumesCollapsibleButton_checked_and_enabled()
-        self.update_sessionsCollapsibleButton_checked_and_enabled()
+        self.update_sessionCollapsibleButton_checked_and_enabled()
         self.update_session_level_buttons_enabled()
         self.updateWorkflowControls()
 
@@ -1221,7 +1221,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_subject_status()
         self.update_volumes_table(subject, get_cur_db())
         self.update_volumesCollapsibleButton_checked_and_enabled()
-        self.update_sessionsCollapsibleButton_checked_and_enabled()
+        self.update_sessionCollapsibleButton_checked_and_enabled()
         self.updateWorkflowControls()
 
     def update_loadSubjectButton_enabled(self):
@@ -1245,15 +1245,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.volumesCollapsibleButton.setChecked(subject_has_no_volumes)
             self.ui.volumesCollapsibleButton.setEnabled(True)
 
-    def update_sessionsCollapsibleButton_checked_and_enabled(self) -> None:
+    def update_sessionCollapsibleButton_checked_and_enabled(self) -> None:
         if self.logic.subject is None:
-            self.ui.sessionsCollapsibleButton.setChecked(False)
-            self.ui.sessionsCollapsibleButton.setEnabled(False)
+            self.ui.sessionCollapsibleButton.setChecked(False)
+            self.ui.sessionCollapsibleButton.setEnabled(False)
         else:
-            # Only start sessions expanded if the subject has volumes
+            # Only start session expanded if the subject has volumes
             subject_has_volumes = len(get_cur_db().get_volume_ids(self.logic.subject.id)) > 0
-            self.ui.sessionsCollapsibleButton.setChecked(subject_has_volumes)
-            self.ui.sessionsCollapsibleButton.setEnabled(True)
+            self.ui.sessionCollapsibleButton.setChecked(subject_has_volumes)
+            self.ui.sessionCollapsibleButton.setEnabled(True)
 
     def update_session_level_buttons_enabled(self) -> None:
         if self._parameterNode is None or self._parameterNode.loaded_session is None:
