@@ -163,6 +163,7 @@ class CreateNewSessionDialog(qt.QDialog):
         buttonLayout = qt.QHBoxLayout()
 
         self.loadCheckBox = qt.QCheckBox(_("Load"))
+        self.loadCheckBox.setChecked(True)
         buttonLayout.addWidget(self.loadCheckBox)
 
         self.buttonBox = qt.QDialogButtonBox()
@@ -969,6 +970,7 @@ class AddNewSubjectDialog(qt.QDialog):
         buttonLayout = qt.QHBoxLayout()
 
         self.loadCheckBox = qt.QCheckBox(_("Load"))
+        self.loadCheckBox.setChecked(True)
         buttonLayout.addWidget(self.loadCheckBox)
 
         self.buttonBox = qt.QDialogButtonBox()
