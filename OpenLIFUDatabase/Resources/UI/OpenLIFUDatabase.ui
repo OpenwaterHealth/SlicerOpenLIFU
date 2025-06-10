@@ -58,13 +58,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="databaseLoadButton">
-     <property name="text">
-      <string>Load Database</string>
-     </property>
-    </widget>
-   </item>
-   <item>
     <widget class="QWidget" name="permissionsWidget2" native="true">
      <property name="slicer.openlifu.allowed-roles" stdset="0">
       <stringlist>
@@ -85,9 +78,9 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QPushButton" name="changeDatabaseLocationButton">
+       <widget class="QPushButton" name="chooseDatabaseLocationButton">
         <property name="text">
-         <string>Change Database Location</string>
+         <string>Choose Database Location</string>
         </property>
        </widget>
       </item>
