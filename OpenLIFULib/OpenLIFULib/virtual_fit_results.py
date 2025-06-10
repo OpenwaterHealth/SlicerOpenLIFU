@@ -71,7 +71,11 @@ def add_virtual_fit_result(
     else:
         virtual_fit_result = transform_node
 
-    virtual_fit_result.SetName(f"VF {target_id} {rank}")
+    if rank < 101:
+        virtual_fit_result.SetName(f"VF {target_id} {rank}")
+    else:
+        vf_result_node.SetName(f"VF {target_id} Manual-{rank-100}")
+
     virtual_fit_result.SetAttribute("isVirtualFitResult", "1")
     virtual_fit_result.SetAttribute("VF:targetID", target_id)
     virtual_fit_result.SetAttribute("VF:rank", str(rank))
@@ -149,8 +153,6 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
             target_id=target_id,
             sort=True, # Sorted!
         )
-        if int(vf_nodes_for_target[0].GetAttribute("VF:rank")) != 1:
-            raise RuntimeError("The first virtual fit result node in the sorted list should have rank 1. Something went wrong.")
         virtual_fit_results_openlifu[target_id] = [
             (
                 t.GetAttribute("VF:approvalStatus") == "1",
@@ -189,6 +191,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
                 transform_units = array_transform.units,
                 transducer = transducer,
             )
+
             node = add_virtual_fit_result(
                 transform_node = virtual_fit_result_transform,
                 target_id = target_id,
@@ -209,7 +212,7 @@ def get_best_virtual_fit_result_node(
     and raising an exception if there appears to be a non-unique one.
     The "best" result is determined as follows:
         1. The approved result with the highest rank.
-        2. If no results are approved, the rank 1 node.
+        2. If no results are approved, the highest rank is returned
 
     Args:
         target_id: target ID for which to retrieve the unique best virtual fit result
@@ -233,9 +236,9 @@ def get_best_virtual_fit_result_node(
         # Return the result with the highest rank
         return approved_vf_result_nodes[0]
     
-    # If no results are approved, then return the rank 1 node
+    # If no results are approved, then returns the highest rank node ( may not be rank 1)
     else:
-        vf_result_nodes = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, rank = 1))
+        vf_result_nodes = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
 
         # If session_id None, then at this point vf_result_nodes is not filtered for session ID
         # So here we specifically filter for nodes that are have *no* session id:
@@ -247,12 +250,6 @@ def get_best_virtual_fit_result_node(
 
         if len(vf_result_nodes) < 1:
             return None
-
-        if len(vf_result_nodes) > 1:
-            raise RuntimeError(
-                f"There are {len(vf_result_nodes)} rank 1 virtual fit result nodes for target {target_id} "
-                + (f"and session {session_id}" if session_id is not None else "with no session.")
-            )
         
         return vf_result_nodes[0]
 
