@@ -178,7 +178,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
 
-        self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateApproveButton)
+        self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateVFResultButtons)
         self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateVirtualFitResultsSelections)
 
         self.ui.targetListWidget.currentItemChanged.connect(self.onTargetListWidgetCurrentItemChanged)
@@ -201,7 +201,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.resetVirtualFitProgressDisplay()
         self.updateTargetsListView()
-        self.updateApproveButton()
+        self.updateVFResultButtons()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
         self.updateEditTargetEnabled()
@@ -213,16 +213,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.lockButton.clicked.connect(self.onLockClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.virtualfitButton.clicked.connect(self.onVirtualfitClicked)
+        self.ui.runFittingAlgorithmCheckBox.stateChanged.connect(
+            lambda state: self.ui.virtualfitDebugCheckbox.setEnabled(state == qt.Qt.Checked))
 
         # ---- Virtual fit result options ----
-        self.ui.virtualFitResultComboBox.addAttribute("vtkMRMLTransformNode", "isVirtualFitResult", "1")
-        self.ui.virtualFitResultComboBox.currentNodeChanged.connect(self.checkCanSetTransducerTransformButton)
-        self.ui.virtualFitResultComboBox.currentNodeChanged.connect(self.checkCanEnableManualInteraction)
+        self.ui.virtualFitResultComboBox.currentIndexChanged.connect(self.updateVFResultButtons)
+        self.ui.virtualFitResultComboBox.currentIndexChanged.connect(self.checkCanEnableInteraction)
         self.ui.pushButtonSetTransducerTransform.clicked.connect(self.setVirtualFitResultAsCurrentTransform)
-        self.ui.pushButtonEnableManualInteraction.clicked.connect(self.onManualInteractionClicked)
+        self.ui.pushButtonEnableInteraction.clicked.connect(self.onInteractionClicked)
         self.updateVirtualFitResultsSelections()
-        self.checkCanSetTransducerTransformButton()
-        self.checkCanEnableManualInteraction()
+        self.updateVFResultButtons()
+        self.checkCanEnableInteraction()
         # ------------------------------------
 
         self.updateWorkflowControls()
@@ -369,7 +370,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self.logic.get_virtual_fit_approval(target_id):
             self.logic.revoke_virtual_fit_approval(target_id)
             notify(f"Virtual fit approval revoked:\n{reason}")
-            self.updateApproveButton()
+            self.updateVFResultButtons()
             self.updateApprovalStatusLabel()
 
     def updateTargetsListView(self):
@@ -413,7 +414,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
-        self.updateApproveButton()
+        self.updateVFResultButtons()
         self.updateInputOptions()
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
@@ -496,31 +497,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             raise RuntimeError("It should not be possible to click the lock button with no target selected.")
         node.SetLocked(not node.GetLocked())
 
-    def updateApproveButton(self):
-        selected_target : Optional[vtkMRMLMarkupsFiducialNode] = self.algorithm_input_widget.get_current_data()['Target']
-        if selected_target is None:
-            self.ui.approveButton.setEnabled(False)
-            self.ui.approveButton.setText("Approve virtual fit")
-            self.ui.approveButton.setToolTip("Please select a target and run virtual fit first")
-            return
-        target_id = fiducial_to_openlifu_point_id(selected_target)
-        virtual_fit_result_node : Optional[vtkMRMLTransformNode] = self.logic.find_best_virtual_fit_result_for_target(target_id=target_id)
-        if virtual_fit_result_node is None:
-            self.ui.approveButton.setEnabled(False)
-            self.ui.approveButton.setText("Approve virtual fit")
-            self.ui.approveButton.setToolTip("Please run virtual fit first")
-            return
-
-        approved : bool = get_approval_from_virtual_fit_result_node(virtual_fit_result_node)
-
-        self.ui.approveButton.setEnabled(True)
-        if not approved:
-            self.ui.approveButton.setText("Approve virtual fit")
-            self.ui.approveButton.setToolTip("Approve the virtual fit result for the selected target")
-        else:
-            self.ui.approveButton.setText("Revoke virtual fit approval")
-            self.ui.approveButton.setToolTip("Revoke virtual fit approval for the selected target")
-
     def updateInputOptions(self):
         """Update the algorithm input options"""
         self.algorithm_input_widget.update()
@@ -536,14 +512,14 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.virtualfitButton.setToolTip("Specify all required inputs to enable virtual fitting")
 
     def onApproveClicked(self):
-        selected_vfresult_node_id = self.ui.virtualFitResultComboBox.currentNodeID
-        if not selected_vfresult_node_id:
+        selected_vf_result = self.ui.virtualFitResultComboBox.currentData
+        if not selected_vf_result:
             raise RuntimeError("The 'Update transducer position' button should not have been enabled with no selected result")
-        selected_vf_result = slicer.mrmlScene.GetNodeByID(selected_vfresult_node_id)
         self.logic.toggle_virtual_fit_approval(selected_vf_result)
-        self.updateApproveButton()
+        # self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()  
+        self.updateVFResultButtons()
 
     def updateApprovalStatusLabel(self):
         approved_target_ids = self.logic.get_approved_target_ids()
@@ -586,59 +562,70 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.virtualFitProgressStatusLabel.show()
 
     def updateVirtualFitResultsSelections(self):
+        
+        most_recent_selection = self.ui.virtualFitResultComboBox.currentIndex
+        self.ui.virtualFitResultComboBox.clear()
+
         activeData = self.algorithm_input_widget.get_current_data()
         target = activeData["Target"]
-        if target:
-            target_id = fiducial_to_openlifu_point_id(target)
-            self.ui.virtualFitResultComboBox.addAttribute("vtkMRMLTransformNode", "VF:targetID", target_id)
-
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
-        # TODO: Should also filter by session in addition to target. And this should update if the sesion state changes
-        # self.ui.virtualFitResultComboBox.addAttribute("vtkMRMLTransformNode", "VF:sessionID", "test")
-        
-        # # Defaults to the current transducer node
-        # self.ui.virtualFitResultComboBox.setCurrentNode()
+        if not target:
+            return
+
+        target_id = fiducial_to_openlifu_point_id(target)
+        vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
+
+        if vf_results:
+            for result in vf_results:
+                self.ui.virtualFitResultComboBox.addItem(result.GetName(), result)
+
+        if most_recent_selection != -1:
+            self.ui.virtualFitResultComboBox.setCurrentIndex(most_recent_selection)
 
     def onVirtualfitClicked(self):
+        
         activeData = self.algorithm_input_widget.get_current_data()
+        protocol = activeData["Protocol"]
+        transducer = activeData["Transducer"]
+        volume = activeData["Volume"]
+        target = activeData["Target"]
 
-        def progress_callback(progress_percent:int, step_description:str) -> None:
-            self.setVirtualFitProgressDisplay(value = progress_percent, status_text = step_description)
-            slicer.app.processEvents()
+        run_fitting_algorithm = self.ui.runFittingAlgorithmCheckBox.checked
 
-        with BusyCursor():
-            try:
-                virtual_fit_result : Optional[vtkMRMLTransformNode] = self.logic.virtual_fit(
-                    protocol = activeData["Protocol"],
-                    transducer = activeData["Transducer"],
-                    volume = activeData["Volume"],
-                    target = activeData["Target"],
-                    progress_callback = progress_callback,
-                    include_debug_info = self.ui.virtualfitDebugCheckbox.checked,
-                )
-            finally:
-                self.resetVirtualFitProgressDisplay()
+        if run_fitting_algorithm:
 
-        if virtual_fit_result is None:
-            slicer.util.errorDisplay("Virtual fit failed. No viable transducer positions found.")
-            return
+            virtual_fit_result = self.run_virtual_fit_algorithm(
+                protocol = protocol,
+                transducer = transducer,
+                volume = volume,
+                target = target
+            )
+
+            if virtual_fit_result is None:
+                slicer.util.errorDisplay("Fitting algorithm failed. No viable transducer positions found.")
+                return
+        
         else:
-            # TODO: Make the virtual fit button both update the transducer transform and populate in the virtual fit results
+            
+            virtual_fit_result = self.logic.create_manual_virtual_fit_result(
+                transducer = transducer,
+                volume = volume,
+                target = target)
+        
+        # If running the fitting algorithm, defaults to the rank 1 virtual fit result
+        transducer.set_current_transform_to_match_transform_node(virtual_fit_result)
+        self.watchVirtualFit(virtual_fit_result)
+        self.updateVirtualFitResultsSelections()
+        self.ui.virtualFitResultComboBox.setCurrentText(virtual_fit_result.GetName())
 
-            # Defaults to the rank 1 virtual fit result
-            activeData["Transducer"].set_current_transform_to_match_transform_node(virtual_fit_result)
-            self.watchVirtualFit(virtual_fit_result)
-            self.updateVirtualFitResultsSelections()
-            self.ui.virtualFitResultComboBox.setCurrentNode(virtual_fit_result)
+        # Display the skin segmentation and transducer
+        self.showSkin(activeData["Volume"])
+        activeData["Transducer"].set_visibility(True)
+        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
 
-            # Display the skin segmentation and transducer
-            activeData["Transducer"].set_visibility(True)
-            slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
-            slicer.modules.OpenLIFUTransducerTrackerWidget.updateModelRenderingSettings()
-
-        self.updateApproveButton()
+        # self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
 
@@ -654,48 +641,97 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         skin_mesh_node.SetDisplayVisibility(True)
         slicer.modules.OpenLIFUTransducerTrackerWidget.updateModelRenderingSettings()
 
-    def checkCanSetTransducerTransformButton(self):
+    def run_virtual_fit_algorithm(
+        self,
+        protocol: SlicerOpenLIFUProtocol,
+        transducer: SlicerOpenLIFUTransducer,
+        volume: vtkMRMLScalarVolumeNode,
+        target: vtkMRMLMarkupsFiducialNode
+        ):
+
+        def progress_callback(progress_percent:int, step_description:str) -> None:
+            self.setVirtualFitProgressDisplay(value = progress_percent, status_text = step_description)
+            slicer.app.processEvents()
+
+        with BusyCursor():
+            try:
+                virtual_fit_result : Optional[vtkMRMLTransformNode] = self.logic.virtual_fit(
+                    protocol = protocol,
+                    transducer = transducer,
+                    volume = volume,
+                    target = target,
+                    progress_callback = progress_callback,
+                    include_debug_info = self.ui.virtualfitDebugCheckbox.checked,
+                )
+            finally:
+                self.resetVirtualFitProgressDisplay()
+        
+        return virtual_fit_result
+
+    def updateVFResultButtons(self):
         """Enables or disables the 'Update transducer position' button based on currently selected virtual fit result.
         The button can only be pressed when the selected vf result does not match the current transducer position."""
 
         activeData = self.algorithm_input_widget.get_current_data()
         selected_transducer = activeData["Transducer"]
-        if selected_transducer is None:
+        selected_target = activeData['Target']
+        if selected_transducer is None or selected_target is None:
+            self.ui.virtualFitResultsOptions.enabled = False
+            self.ui.approveButton.setEnabled(False)
+            self.ui.approveButton.setText("Approve virtual fit")
+            self.ui.approveButton.setToolTip("Please select a target and run virtual fit first")
             return
 
-        selected_vfresult_node_id = self.ui.virtualFitResultComboBox.currentNodeID
-        if not selected_vfresult_node_id:
+        self.ui.virtualFitResultsOptions.enabled = True
+        selected_vfresult_node = self.ui.virtualFitResultComboBox.currentData
+        if not selected_vfresult_node:
             self.ui.pushButtonSetTransducerTransform.setChecked(False)
             self.ui.pushButtonSetTransducerTransform.enabled = False
             self.ui.pushButtonSetTransducerTransform.setToolTip("No virtual fit result selected")
 
-        selected_vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == selected_vfresult_node_id
+            self.ui.approveButton.enabled = False
+            self.ui.approveButton.setText("Approve virtual fit")
+            self.ui.approveButton.setToolTip("No virtual fit result selected")
+            return
+
+        selected_vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == selected_vfresult_node.GetID()
+        approved : bool = get_approval_from_virtual_fit_result_node(selected_vfresult_node)
+        if not approved:
+            self.ui.approveButton.setText("Approve virtual fit")
+            self.ui.approveButton.setToolTip("Approve the virtual fit result for the selected target")
+        else:
+            self.ui.approveButton.setText("Revoke virtual fit approval")
+            self.ui.approveButton.setToolTip("Revoke virtual fit approval for the selected target")
+
         if selected_vfresult_is_current:
             self.ui.pushButtonSetTransducerTransform.setChecked(True)
             self.ui.pushButtonSetTransducerTransform.enabled = False
             self.ui.pushButtonSetTransducerTransform.setToolTip("Already the current transducer transform")
+            self.ui.approveButton.enabled = True
+
         else:
             self.ui.pushButtonSetTransducerTransform.setChecked(False)
             self.ui.pushButtonSetTransducerTransform.enabled = True
-            self.ui.pushButtonSetTransducerTransform.setToolTip("Updates the transducer position to match the select virtual fit result")
+            self.ui.pushButtonSetTransducerTransform.setToolTip("Updates the transducer position to match the selected virtual fit result")
+            self.ui.approveButton.enabled = False
+            self.ui.approveButton.setToolTip("To enable, first update the transducer position to match the selected result")
 
     def setVirtualFitResultAsCurrentTransform(self):
         """Updates the transducer transform to match the currently selected virtual fit result"""
 
         activeData = self.algorithm_input_widget.get_current_data()
-        selected_vfresult_node_id = self.ui.virtualFitResultComboBox.currentNodeID
-        if not selected_vfresult_node_id:
-            raise RuntimeError("The 'Update transducer position' button should not have been enabled with no selected result")
+        selected_vf_result = self.ui.virtualFitResultComboBox.currentData
+        if not selected_vf_result:
+            raise RuntimeError("The 'Update transducer position' button should not have been enabled with no result selected")
 
-        selected_vf_result = slicer.mrmlScene.GetNodeByID(selected_vfresult_node_id)
         activeData["Transducer"].set_current_transform_to_match_transform_node(selected_vf_result)
-        self.checkCanSetTransducerTransformButton()
-        self.checkCanEnableManualInteraction()
+        self.updateVFResultButtons()
+        self.checkCanEnableInteraction()
 
-    def onManualInteractionClicked(self):
+    def onInteractionClicked(self):
         pass
 
-    def checkCanEnableManualInteraction(self):
+    def checkCanEnableInteraction(self):
         """Enables or disables the 'Enable Manual Interaction' button based on currently selected virtual fit result.
         The button can only be pressed when the selected vf result matches the current transducer position."""
 
@@ -704,18 +740,19 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if selected_transducer is None:
             return
 
-        selected_vfresult_node_id = self.ui.virtualFitResultComboBox.currentNodeID
-        if not selected_vfresult_node_id:
-            self.ui.pushButtonEnableManualInteractionenabled = False
-            self.ui.pushButtonEnableManualInteractionsetToolTip("No virtual fit result selected")
+        selected_vfresult = self.ui.virtualFitResultComboBox.currentData
+        if not selected_vfresult:
+            self.ui.pushButtonEnableInteractionenabled = False
+            self.ui.pushButtonEnableInteraction.setToolTip("No virtual fit result selected")
+            return
 
-        selected_vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == selected_vfresult_node_id
+        selected_vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == selected_vfresult.GetID()
         if selected_vfresult_is_current:
-            self.ui.pushButtonEnableManualInteraction.enabled = True
-            self.ui.pushButtonEnableManualInteraction.setToolTip("Manually interaction with and modify the virtual fit result")
+            self.ui.pushButtonEnableInteraction.enabled = True
+            self.ui.pushButtonEnableInteraction.setToolTip("Manually interaction with and modify the virtual fit result")
         else:
-            self.ui.pushButtonEnableManualInteraction.enabled = False
-            self.ui.pushButtonEnableManualInteraction.setToolTip("To enable, first update the transducer position to match the selected result")
+            self.ui.pushButtonEnableInteraction.enabled = False
+            self.ui.pushButtonEnableInteraction.setToolTip("To enable, first update the transducer position to match the selected result")
 
     def watchVirtualFit(self, virtual_fit_transform_node : vtkMRMLTransformNode):
         """Watch the virtual fit transform node to revoke approval in case the transform node is approved and then modified."""
@@ -794,6 +831,46 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         revoke_any_virtual_fit_approvals_for_target(target_id=target_id, session_id=session_id)
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         data_logic.update_underlying_openlifu_session()
+
+    def create_manual_virtual_fit_result(
+        self,
+        transducer : SlicerOpenLIFUTransducer,
+        volume: vtkMRMLScalarVolumeNode,
+        target: vtkMRMLMarkupsFiducialNode,
+        ) -> vtkMRMLTransformNode:
+
+        with BusyCursor():
+            # Get the skin mesh associated with the volume
+            skin_mesh_node = get_skin_segmentation(volume)
+            if skin_mesh_node is None:
+                skin_mesh_node = generate_skin_segmentation(volume)
+
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id : Optional[str] = session.get_session_id() if session is not None else None
+
+        target_id = fiducial_to_openlifu_point_id(target)
+
+        existing_vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
+        
+        if not existing_vf_results:
+            rank = 101 # Manually created VF results start at rank 101
+        else:
+            current_lowest_rank = int(existing_vf_results[-1].GetAttribute("VF:rank"))
+            if current_lowest_rank < 101:
+                rank = 101
+            else:
+                rank = current_lowest_rank + 1
+
+        vf_result_node = add_virtual_fit_result(
+                transform_node = transducer.transform_node,
+                target_id = target_id,
+                session_id = session_id,
+                approval_status = False,
+                clone_node=True, # Important. Initialize based on the current transducer position
+                rank = rank, 
+        )
+
+        return vf_result_node
 
     def virtual_fit(
         self,
