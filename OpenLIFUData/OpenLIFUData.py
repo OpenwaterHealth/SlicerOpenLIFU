@@ -1195,9 +1195,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Session collapsible section
         self.ui.chooseSessionButton.clicked.connect(self.on_load_session_clicked)
-        self.ui.capturePhotocollectionButton.clicked.connect(self.on_capture_photocollection_clicked)
-        self.ui.addPhotoscanButton.clicked.connect(self.on_add_photoscan_clicked)
-        self.ui.saveSessionButton.clicked.connect(self.on_save_session_clicked)
 
         # ---- Issue updates that may not have been triggered yet ---
         
@@ -1259,17 +1256,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def update_session_level_buttons_enabled(self) -> None:
         if self._parameterNode is None or self._parameterNode.loaded_session is None:
-            self.ui.capturePhotocollectionButton.setEnabled(False)
-            self.ui.capturePhotocollectionButton.setToolTip("There is no active session")
-            self.ui.addPhotoscanButton.setEnabled(False)
-            self.ui.addPhotoscanButton.setToolTip("There is no active session")
             self.ui.saveSessionButton.setEnabled(False)
             self.ui.saveSessionButton.setToolTip("There is no active session")
         else:
-            self.ui.capturePhotocollectionButton.setEnabled(True)
-            self.ui.capturePhotocollectionButton.setToolTip("Capture a photocollection for the loaded session")
-            self.ui.addPhotoscanButton.setEnabled(True)
-            self.ui.addPhotoscanButton.setToolTip("Add a photoscan to the loaded session")
             self.ui.saveSessionButton.setEnabled(True)
             self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
 

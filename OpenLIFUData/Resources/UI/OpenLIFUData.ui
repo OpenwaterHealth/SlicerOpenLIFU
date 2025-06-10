@@ -470,32 +470,6 @@
           <number>0</number>
          </property>
          <item>
-          <widget class="QPushButton" name="capturePhotocollectionButton">
-           <property name="toolTip">
-            <string>Capture a photocollection for the loaded session</string>
-           </property>
-           <property name="text">
-            <string>Capture Photocollection</string>
-           </property>
-           <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="addPhotoscanButton">
-           <property name="toolTip">
-            <string>Add a photoscan to the loaded session</string>
-           </property>
-           <property name="text">
-            <string>Add Photoscan</string>
-           </property>
-           <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QPushButton" name="saveSessionButton">
            <property name="toolTip">
             <string>Save the current session to the database</string>
