@@ -102,15 +102,15 @@ class WorkflowControls(qt.QWidget):
 
         if include_session_controls:
             button_row2_layout = qt.QHBoxLayout()
-            self.save_close_button = qt.QPushButton("Save and close" if self.next_module_name is not None else "Finish")
-            self.close_button = qt.QPushButton("Close without saving")
-            button_row2_layout.addWidget(self.save_close_button)
-            button_row2_layout.addWidget(self.close_button)
+            self.save_button = qt.QPushButton("Save" if self.next_module_name is not None else "Finish")
+            self.exit_button = qt.QPushButton("Exit")
+            button_row2_layout.addWidget(self.save_button)
+            button_row2_layout.addWidget(self.exit_button)
             main_group_box_layout.addLayout(button_row2_layout)
-            self.save_close_button.clicked.connect(self.on_save_close)
-            self.close_button.clicked.connect(self.on_close)
-            self.save_close_button.setToolTip("Save and close the session")
-            self.close_button.setToolTip("Close the session without saving it")
+            self.save_button.clicked.connect(self.on_save)
+            self.exit_button.clicked.connect(self.on_exit)
+            self.save_button.setToolTip("Save and close the session")
+            self.exit_button.setToolTip("Close the session without saving it")
 
         self.update()
 
@@ -130,19 +130,26 @@ class WorkflowControls(qt.QWidget):
         home_module_logic.workflow_jump_ahead()
 
     @display_errors
-    def on_save_close(self, clicked:bool):
-        self.close_session(save=True)
+    def on_save(self, clicked:bool):
+        self.save_session()
 
     @display_errors
-    def on_close(self, clicked:bool):
-        self.close_session(save=False)
+    def on_exit(self, clicked:bool):
+        if slicer.util.confirmYesNoDisplay("Do you want to save your progress before exiting?", windowTitle="Save Confirmation"):
+            self.close_session(save=True)
+        else:
+            self.close_session(save=False)
+
+    def save_session(self):
+        data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+        data_module_logic.save_session()
 
     def close_session(self, save:bool):
         """Close the session, saving it or not depending on `save`"""
         data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
         home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
         if save:
-            data_module_logic.save_session()
+            self.save_session()
         data_module_logic.clear_session(clean_up_scene=True)
         home_module_logic.workflow_go_to_start()
 
