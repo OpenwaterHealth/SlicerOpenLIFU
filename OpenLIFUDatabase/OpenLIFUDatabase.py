@@ -193,6 +193,9 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
                 )
         qsettings.endGroup()
 
+        # Reset database color if changed from settings
+        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: none;")
+
     def updateSettingFromParameter(self, parameter_name:str) -> None:
         parameterNode : vtkMRMLScriptedModuleNode = self._parameterNode.parameterNode
         qsettings = qt.QSettings()
@@ -231,6 +234,8 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.updateWorkflowControls()
+        if db is not None:
+            self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: 1px solid green;")
 
     def updateWorkflowControls(self):
         if self.logic.db is None:
@@ -244,10 +249,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         """Called every time the ctkPathLineEdit is changed, even a single
         character. Note: focus only affects border when the line edit is
         actively selected!"""
-        if os.path.isdir(new_path):
-            self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("QLineEdit:focus { border: 1px solid green; }")
-        else:
-            self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("QLineEdit:focus { border: 1px solid yellow; }")
+        self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: 1px solid yellow;")
 
     def _custom_browse(self) -> bool:
         """
