@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>568</width>
-    <height>943</height>
+    <width>570</width>
+    <height>954</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -218,7 +218,7 @@
           </widget>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="3,1">
+          <layout class="QHBoxLayout" name="runVirtualFit" stretch="3,0,1">
            <item>
             <widget class="QPushButton" name="virtualfitButton">
              <property name="sizePolicy">
@@ -228,7 +228,17 @@
               </sizepolicy>
              </property>
              <property name="text">
-              <string>Virtual fit</string>
+              <string>Create virtual fit result(s)</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="runFittingAlgorithmCheckBox">
+             <property name="text">
+              <string>Run fitting algorithm</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -241,7 +251,7 @@
               </sizepolicy>
              </property>
              <property name="toolTip">
-              <string>Whether to dump debugging information such as skin meshes and search points.</string>
+              <string>Whether to dump debugging information such as skin meshes and search points from fitting algorithm.</string>
              </property>
              <property name="text">
               <string>Debug</string>
@@ -281,52 +291,43 @@
           </widget>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="virtualFitResultsOptions">
-           <item>
-            <widget class="qMRMLNodeComboBox" name="virtualFitResultComboBox">
-             <property name="nodeTypes">
-              <stringlist notr="true">
-               <string>vtkMRMLTransformNode</string>
-              </stringlist>
-             </property>
-             <property name="hideChildNodeTypes">
-              <stringlist notr="true"/>
-             </property>
-             <property name="baseName">
-              <string>Manual VF</string>
-             </property>
-             <property name="removeEnabled">
-              <bool>false</bool>
-             </property>
-             <property name="interactionNodeSingletonTag">
-              <string notr="true"/>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="pushButtonSetTransducerTransform">
-             <property name="text">
-              <string>Update transducer position</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="checked">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="pushButtonEnableManualInteraction">
-             <property name="text">
-              <string>Enable manual interaction</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
+          <widget class="QWidget" name="virtualFitResultsOptions" native="true">
+           <layout class="QGridLayout" name="virtualFitResultsLayout">
+            <item row="0" column="0">
+             <widget class="QComboBox" name="virtualFitResultComboBox">
+              <property name="editable">
+               <bool>false</bool>
+              </property>
+              <property name="insertPolicy">
+               <enum>QComboBox::InsertAtTop</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QPushButton" name="pushButtonSetTransducerTransform">
+              <property name="text">
+               <string>Update transducer position</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+              <property name="checked">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="3">
+             <widget class="QPushButton" name="pushButtonEnableInteraction">
+              <property name="text">
+               <string>Enable interaction</string>
+              </property>
+              <property name="checkable">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -365,11 +366,6 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>qMRMLNodeComboBox</class>
-   <extends>QWidget</extends>
-   <header>qMRMLNodeComboBox.h</header>
-  </customwidget>
-  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
@@ -383,22 +379,5 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections>
-  <connection>
-   <sender>OpenLIFUPrePlanning</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>virtualFitResultComboBox</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>283</x>
-     <y>471</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>340</x>
-     <y>611</y>
-    </hint>
-   </hints>
-  </connection>
- </connections>
+ <connections/>
 </ui>
