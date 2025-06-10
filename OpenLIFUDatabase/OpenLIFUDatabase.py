@@ -108,7 +108,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
         self.logic.call_on_db_changed(self.onDatabaseChanged)
 
-        self.ui.changeDatabaseLocationButton.clicked.connect(lambda *args: self.ui.databaseDirectoryLineEdit.browse())
+        self.ui.chooseDatabaseLocationButton.clicked.connect(self.on_choose_database_location_clicked)
         self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).connect(
             "returnPressed()",
             lambda : self.onLoadDatabaseClicked(checked=True)
@@ -156,6 +156,14 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+
+    @display_errors
+    def on_choose_database_location_clicked(self, checked:bool) -> None:
+        user_selected_open: bool = self._custom_browse()
+        if not user_selected_open:
+            return
+        else:
+            self.onLoadDatabaseClicked(checked=True)
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
@@ -230,6 +238,35 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Database connected, proceed to the next step."
+
+    def _custom_browse(self) -> bool:
+        """
+        Custom directory selection handler to replace the default browse()
+        behavior of ctkPathLineEdit. It opens a directory selection dialog and
+        sets the selected path in the ctkPathLineEdit widget.
+
+        This function is needed because the ctkPathLineEdit browse() does not
+        return whether the user selected "Open" or "Cancel", but this
+        information is required if we want automatic database loading upon
+        directory selection.
+
+        Returns:
+            True if the user selected a directory (clicked Open),
+            False if the user canceled the dialog.
+        """
+        previous_path: str = self.ui.databaseDirectoryLineEdit.currentPath or "."
+
+        selected_path: str = qt.QFileDialog.getExistingDirectory(
+            self.ui.databaseDirectoryLineEdit,
+            "Select a directory...",
+            previous_path,
+            qt.QFileDialog.ShowDirsOnly
+        )
+
+        if selected_path:
+            self.ui.databaseDirectoryLineEdit.setCurrentPath(selected_path)
+            return True  # User clicked Open
+        return False  # User clicked Cancel
 
 # OpenLIFUDatabaseLogic
 #
