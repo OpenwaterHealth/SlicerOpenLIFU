@@ -113,6 +113,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             "returnPressed()",
             lambda : self.onLoadDatabaseClicked(checked=True)
         )
+        self.ui.databaseDirectoryLineEdit.currentPathChanged.connect(self.on_database_directory_path_changed)
 
         # You do not need to connect databaseDirectoryLineEdit
         # currentPathChanged to something that updates the parameter node
@@ -238,6 +239,15 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Database connected, proceed to the next step."
+
+    def on_database_directory_path_changed(self, new_path: str):
+        """Called every time the ctkPathLineEdit is changed, even a single
+        character. Note: focus only affects border when the line edit is
+        actively selected!"""
+        if os.path.isdir(new_path):
+            self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("QLineEdit:focus { border: 1px solid green; }")
+        else:
+            self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("QLineEdit:focus { border: 1px solid yellow; }")
 
     def _custom_browse(self) -> bool:
         """
