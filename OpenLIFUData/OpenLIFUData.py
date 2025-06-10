@@ -1188,13 +1188,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.configureProtocolsPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
 
         # Subject collapsible section
-        self.ui.loadSubjectButton.clicked.connect(self.on_load_subject_clicked)
+        self.ui.chooseSubjectButton.clicked.connect(self.on_load_subject_clicked)
 
         # Volumes collapsible section
         self.ui.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
 
         # Session collapsible section
-        self.ui.loadSessionButton.clicked.connect(self.on_load_session_clicked)
+        self.ui.chooseSessionButton.clicked.connect(self.on_load_session_clicked)
         self.ui.capturePhotocollectionButton.clicked.connect(self.on_capture_photocollection_clicked)
         self.ui.addPhotoscanButton.clicked.connect(self.on_add_photoscan_clicked)
         self.ui.saveSessionButton.clicked.connect(self.on_save_session_clicked)
@@ -1230,11 +1230,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """ Update whether the load subject button is enabled based on whether a
         database has been loaded"""
         if get_cur_db():
-            self.ui.loadSubjectButton.setEnabled(True)
-            self.ui.loadSubjectButton.toolTip = 'Add new subject to loaded database'
+            self.ui.chooseSubjectButton.setEnabled(True)
+            self.ui.chooseSubjectButton.toolTip = 'Add new subject to loaded database'
         else:
-            self.ui.loadSubjectButton.setDisabled(True)
-            self.ui.loadSubjectButton.toolTip = 'Requires a loaded database'
+            self.ui.chooseSubjectButton.setDisabled(True)
+            self.ui.chooseSubjectButton.toolTip = 'Requires a loaded database'
 
     def update_volumesCollapsibleButton_checked_and_enabled(self) -> None:
         if self.logic.subject is None:

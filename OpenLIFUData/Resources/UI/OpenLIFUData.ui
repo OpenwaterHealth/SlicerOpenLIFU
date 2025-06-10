@@ -53,6 +53,16 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_9">
       <item>
+       <widget class="QPushButton" name="chooseSubjectButton">
+        <property name="toolTip">
+         <string>Load a subject</string>
+        </property>
+        <property name="text">
+         <string>Choose Subject</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QGroupBox" name="subjectStatusGroupBox">
         <property name="title">
          <string>Active subject status</string>
@@ -142,16 +152,6 @@
           </widget>
          </item>
         </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="loadSubjectButton">
-        <property name="toolTip">
-         <string>Load a subject</string>
-        </property>
-        <property name="text">
-         <string>Load Subject</string>
-        </property>
        </widget>
       </item>
      </layout>
@@ -282,6 +282,16 @@
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_10">
+      <item>
+       <widget class="QPushButton" name="chooseSessionButton">
+        <property name="toolTip">
+         <string>Load a session</string>
+        </property>
+        <property name="text">
+         <string>Choose Session</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QScrollArea" name="scrollArea">
         <property name="sizePolicy">
@@ -436,16 +446,6 @@
           </item>
          </layout>
         </widget>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="loadSessionButton">
-        <property name="toolTip">
-         <string>Load a session</string>
-        </property>
-        <property name="text">
-         <string>Load Session</string>
-        </property>
        </widget>
       </item>
       <item>
