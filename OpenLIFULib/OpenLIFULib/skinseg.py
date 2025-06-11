@@ -5,16 +5,20 @@ from slicer import vtkMRMLScalarVolumeNode, vtkMRMLModelNode
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.transducer import TRANSDUCER_MODEL_COLORS
 import slicer
-from typing import Union
+from typing import Union, Optional
+import numpy as np
 
-def generate_skin_segmentation(volume_node:vtkMRMLScalarVolumeNode) -> vtkMRMLModelNode:
+def generate_skin_segmentation(volume_node:vtkMRMLScalarVolumeNode, foreground_mask_array:Optional[np.ndarray]=None) -> vtkMRMLModelNode:
     """Computes the skin segmentation for the given volume. The ID of the volume node used to create the 
     skin segmentation is added as a model node attribute. Note, this is different from the openlifu volume id.
+
+    An already computed foreground_mask_array may optionally be provided if it's available, to save the time of recomputing it.
     """
     volume_array = slicer.util.arrayFromVolume(volume_node).transpose((2,1,0)) # the array indices come in KJI rather than IJK so we permute them
     volume_affine_RAS = get_IJK2RAS(volume_node)
 
-    foreground_mask_array = openlifu_lz().seg.skinseg.compute_foreground_mask(volume_array)
+    if foreground_mask_array is None:
+        foreground_mask_array = openlifu_lz().seg.skinseg.compute_foreground_mask(volume_array)
     foreground_mask_vtk_image = openlifu_lz().seg.skinseg.vtk_img_from_array_and_affine(foreground_mask_array, volume_affine_RAS)
     skin_mesh = openlifu_lz().seg.skinseg.create_closed_surface_from_labelmap(foreground_mask_vtk_image)
 
