@@ -365,7 +365,7 @@ class LoadSubjectDialog(qt.QDialog):
         buttonBoxLayout.addStretch()
 
         self.cancelButton = qt.QPushButton("Cancel")
-        self.cancelButton.setToolTip("Close this window without loading any new session")
+        self.cancelButton.setToolTip("Close this window without loading any new subject")
         self.cancelButton.clicked.connect(lambda *args: self.reject())
         buttonBoxLayout.addWidget(self.cancelButton)
 
