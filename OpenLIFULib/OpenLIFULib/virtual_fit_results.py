@@ -71,11 +71,7 @@ def add_virtual_fit_result(
     else:
         virtual_fit_result = transform_node
 
-    if rank < 101:
-        virtual_fit_result.SetName(f"VF {target_id} {rank}")
-    else:
-        vf_result_node.SetName(f"VF {target_id} Manual-{rank-100}")
-
+    virtual_fit_result.SetName(f"VF {target_id} {rank}")
     virtual_fit_result.SetAttribute("isVirtualFitResult", "1")
     virtual_fit_result.SetAttribute("VF:targetID", target_id)
     virtual_fit_result.SetAttribute("VF:rank", str(rank))
