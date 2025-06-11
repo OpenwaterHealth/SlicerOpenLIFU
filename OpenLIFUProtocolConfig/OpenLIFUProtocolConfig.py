@@ -584,8 +584,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onLoadProtocolFromFileClicked(self, checked:bool) -> None:
-        # You could load a non-cached protocol if you edit one, don't change
-        # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
             protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
@@ -611,8 +609,6 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     @display_errors
     def onLoadProtocolFromDatabaseClicked(self, checked:bool) -> None:
-        # You could load a non-cached protocol if you edit one, don't change
-        # protocols, then load the same protocol
         if self._cur_save_state == SaveState.UNSAVED_CHANGES:
             protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
