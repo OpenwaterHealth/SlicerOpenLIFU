@@ -13,12 +13,17 @@ def generate_skin_segmentation(volume_node:vtkMRMLScalarVolumeNode, foreground_m
     skin segmentation is added as a model node attribute. Note, this is different from the openlifu volume id.
 
     An already computed foreground_mask_array may optionally be provided if it's available, to save the time of recomputing it.
+    If the foreground_mask_array is provided, then it is assumed to be in correspondence with (so in the same index order as)
+    the array you would get by applying `slicer.util.arrayFromVolume` to `volume_node`.
     """
     volume_array = slicer.util.arrayFromVolume(volume_node).transpose((2,1,0)) # the array indices come in KJI rather than IJK so we permute them
     volume_affine_RAS = get_IJK2RAS(volume_node)
 
     if foreground_mask_array is None:
         foreground_mask_array = openlifu_lz().seg.skinseg.compute_foreground_mask(volume_array)
+    else:
+        # if foreground_mask_array was provided, we assume the same index permutation as above is needed:
+        foreground_mask_array = foreground_mask_array.transpose((2,1,0))
     foreground_mask_vtk_image = openlifu_lz().seg.skinseg.vtk_img_from_array_and_affine(foreground_mask_array, volume_affine_RAS)
     skin_mesh = openlifu_lz().seg.skinseg.create_closed_surface_from_labelmap(foreground_mask_vtk_image)
 

@@ -7,7 +7,7 @@ from slicer import (
     vtkMRMLMarkupsFiducialNode,
 )
 from slicer.parameterNodeWrapper import parameterPack
-from OpenLIFULib.util import get_openlifu_data_parameter_node
+from OpenLIFULib.util import get_openlifu_data_parameter_node, BusyCursor
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
 from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
@@ -17,6 +17,7 @@ from OpenLIFULib.targets import (
 )
 from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
+from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.transducer_tracking_results import get_transducer_tracking_results_in_openlifu_session_format
 
 if TYPE_CHECKING:
@@ -148,8 +149,15 @@ class SlicerOpenLIFUSession:
         """
 
         # Load volume
-        volume_node = load_volume_and_threshold_background(volume_info['data_abspath'])
+        volume_node, foreground_mask = load_volume_and_threshold_background(volume_info['data_abspath'])
         assign_openlifu_metadata_to_volume_node(volume_node, volume_info)
+
+        if (
+            any(len(transform_list)>0 for transform_list in session.virtual_fit_results.values()) # if there is a virtual fit result in the session
+            and get_skin_segmentation(volume_node) is None
+        ):
+            with BusyCursor():
+                generate_skin_segmentation(volume_node, foreground_mask) # provide foreground mask so that we don't waste time recomputing it
 
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]

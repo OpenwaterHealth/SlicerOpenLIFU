@@ -1,6 +1,8 @@
 """Volume thresholding tools"""
 
 import logging
+import numpy as np
+from typing import Tuple
 import vtk
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
@@ -19,11 +21,13 @@ def cast_volume_to_float(volume_node:vtkMRMLScalarVolumeNode) -> None:
     # so I hope poking `CreateDefaultDisplayNodes` here makes it do the right thing. If it's not needed then it's harmless anyway:
     volume_node.CreateDefaultDisplayNodes()
 
-def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> None:
+def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> np.ndarray:
     """Compute the foreground mask for a loaded volume and threshold the volume to strip out the background.
     This modifies the values of the background region in the volume and sets them to 1 less than the minimum value in the volume.
     This way we can simply enable volume thresholding to remove
     It can take a moment to actually compute the foreground mask.
+
+    Returns foreground mask. The array is in correspondence with what you'd get from slicer.util.arrayFromVolume on the volume node.
     """
     volume_array = slicer.util.arrayFromVolume(volume_node)
     volume_array_min = volume_array.min()
@@ -39,10 +43,14 @@ def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> 
     volume_node.GetDisplayNode().SetApplyThreshold(1)
     volume_node.GetDisplayNode().SetAutoThreshold(0)
     volume_node.Modified()
+    return foreground_mask
 
-def load_volume_and_threshold_background(volume_filepath) -> vtkMRMLScalarVolumeNode:
-    """Load a volume node from file, and also set the background values to a certain value that can be threshoded out, and threshold it out."""
+def load_volume_and_threshold_background(volume_filepath) -> Tuple[vtkMRMLScalarVolumeNode, np.ndarray]:
+    """Load a volume node from file, and also set the background values to a certain value that can be threshoded out, and threshold it out.
+    Returns the loaded volume node, as well as the foreground mask array. 
+    The foreground mask array is in correspondence with what you'd get from slicer.util.arrayFromVolume on the volume node.
+    """
     volume_node = slicer.util.loadVolume(volume_filepath)
     with BusyCursor():
-        threshold_volume_by_foreground_mask(volume_node)
-    return volume_node
+        foreground_mask = threshold_volume_by_foreground_mask(volume_node)
+    return volume_node, foreground_mask

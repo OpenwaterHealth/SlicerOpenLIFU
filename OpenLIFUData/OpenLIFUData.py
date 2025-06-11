@@ -2302,7 +2302,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
         volume_filepath = Path(volume_dir,volume_metadata['data_filename'])
-        loadedVolumeNode = load_volume_and_threshold_background(volume_filepath)
+        loadedVolumeNode, _ = load_volume_and_threshold_background(volume_filepath)
         # Note: OnNodeAdded/updateLoadedObjectsView is called before openLIFU metadata is assigned to the node so need
         # call updateLoadedObjectsView again to display openlifu name/id.
         assign_openlifu_metadata_to_volume_node(loadedVolumeNode, volume_metadata)
