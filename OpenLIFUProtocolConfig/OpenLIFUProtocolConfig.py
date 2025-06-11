@@ -448,6 +448,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     @display_errors
     def onNewProtocolClicked(self, checked: bool) -> None:
         """Set the widget fields with default protocol values."""
+
+        # Cache protocol if unsaved changes.
+        if self._cur_save_state == SaveState.UNSAVED_CHANGES:
+            protocol_changed = self.getProtocolFromGUI(post_init=False)
+            self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
+
         protocol = self.logic.get_default_new_protocol()
         
         # Make sure default new protocol initialization has a unique id
