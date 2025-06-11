@@ -2263,7 +2263,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         photocollection_reference_number:str,
         meshroom_pipeline:str,
         image_width:int,
-        window_radius:int,
+        window_radius:Optional[int],
         sampling_rate:int,
         progress_callback:Callable[[int,str],None],
     ) -> None:
@@ -2276,7 +2276,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             meshroom_pipeline: The name of the meshroom pipeline to use. See openlifu.nav.photoscan.get_meshroom_pipeline_names.
             image_width: The image width to which to resize input images before sending them into meshroom
             window_radius: The number of images forward and backward in the sequence to try and
-                match with, if None matches each images to all others.
+                match with, if None matches each image to all others.
             sampling_rate: Use only every n-th image after sorting. Must be >= 1.
             progress_callback: A function to be called by the underlying openlifu code when reporting progress
         """
@@ -2299,6 +2299,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                 input_resize_width = image_width,
                 use_masks = True,
                 window_radius = window_radius,
+                matching_mode = 'sequential_loop' if window_radius is not None else 'exhaustive',
                 progress_callback = progress_callback,
             )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
