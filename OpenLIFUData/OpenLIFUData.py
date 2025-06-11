@@ -391,6 +391,19 @@ class LoadSubjectDialog(qt.QDialog):
             self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
             self.tableWidget.setRowHeight(row, 36)
 
+    def appendSubjectToList(self, subject: "openlifu.db.subject.Subject") -> None:
+        row = self.tableWidget.rowCount
+        self.tableWidget.insertRow(row)
+
+        num_volumes = len(self.db.get_volume_ids(subject.id))
+        num_sessions = len(self.db.get_session_ids(subject.id))
+
+        self.tableWidget.setItem(row, 0, qt.QTableWidgetItem(subject.name))
+        self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(subject.id))
+        self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(str(num_volumes)))
+        self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
+        self.tableWidget.setRowHeight(row, 36)
+
     def on_add_subject_clicked(self, checked:bool) -> None:
         subjectdlg = AddNewSubjectDialog()
         returncode, subject_name, subject_id, load_checked = subjectdlg.customexec_()
@@ -404,10 +417,11 @@ class LoadSubjectDialog(qt.QDialog):
 
         # Add subject to database
         slicer.util.getModuleLogic("OpenLIFUData").add_subject_to_database(subject_name,subject_id)
-        self.updateSubjectsList()
+        new_subject = self.db.load_subject(subject_id)
+        self.appendSubjectToList(new_subject)
 
         if load_checked:
-            self.selected_subject = self.db.load_subject(subject_id)
+            self.selected_subject = new_subject
             self.accept()
 
     def onLoadSubjectClicked(self) -> None:
@@ -579,6 +593,35 @@ class LoadSessionDialog(qt.QDialog):
             self.table_widget.setRowHeight(row, 48)
 
     @display_errors
+    def append_session_to_list(self, session: "openlifu.db.session.Session") -> None:
+        row = self.table_widget.rowCount
+        self.table_widget.insertRow(row)
+
+        def safe_call(func, fallback="NA"):
+            try:
+                return func()
+            except Exception:
+                return fallback
+
+        protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
+        volume_name = safe_call(lambda: self.db.get_volume_info(session.id, session.volume_id)["name"])
+        transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
+
+        protocol_text = f"{protocol_name} ({session.protocol_id})"
+        volume_text = f"{volume_name} ({session.volume_id})"
+        transducer_text = f"{transducer_name} ({session.transducer_id})"
+
+        self.table_widget.setItem(row, 0, qt.QTableWidgetItem(session.name))
+        self.table_widget.setItem(row, 1, qt.QTableWidgetItem(session.id))
+        self.table_widget.setItem(row, 2, qt.QTableWidgetItem(protocol_text))
+        self.table_widget.setItem(row, 3, qt.QTableWidgetItem(volume_text))
+        self.table_widget.setItem(row, 4, qt.QTableWidgetItem(transducer_text))
+        self.table_widget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
+        self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
+
+        self.table_widget.setRowHeight(row, 48)
+
+    @display_errors
     def on_new_session_clicked(self, checked: bool) -> None:
         """
         Create a new session for the current subject, after applying user permission filtering on protocols.
@@ -611,10 +654,11 @@ class LoadSessionDialog(qt.QDialog):
             return
 
         slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
-        self.update_sessions_list()
+        new_session = self.db.load_session(self.subject, session_parameters["id"])
+        self.append_session_to_list(new_session)
 
         if load_checked:
-            self.selected_session = self.db.load_session(self.subject, session_parameters["id"])
+            self.selected_session = new_session
             self.accept()
 
     @display_errors
