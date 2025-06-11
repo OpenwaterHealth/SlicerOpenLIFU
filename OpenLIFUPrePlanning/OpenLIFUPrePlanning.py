@@ -853,13 +853,10 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         existing_vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
         
         if not existing_vf_results:
-            rank = 101 # Manually created VF results start at rank 101
+            rank = 1
         else:
             current_lowest_rank = int(existing_vf_results[-1].GetAttribute("VF:rank"))
-            if current_lowest_rank < 101:
-                rank = 101
-            else:
-                rank = current_lowest_rank + 1
+            rank = current_lowest_rank + 1
 
         vf_result_node = add_virtual_fit_result(
                 transform_node = transducer.transform_node,
@@ -913,7 +910,12 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         target_id = fiducial_to_openlifu_point_id(target)
         self.clear_virtual_fit_results(target = target)
 
-        vf_result_nodes = []
+        existing_vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
+        
+        if not existing_vf_results:
+            current_lowest_rank = 0
+        else:
+            current_lowest_rank = int(existing_vf_results[-1].GetAttribute("VF:rank"))
 
         for i,vf_transform in zip(range(10), vf_transforms): # We only add the top 10 virtual fit nodes, to not put so many transforms into the scene.
             node = add_virtual_fit_result(
@@ -922,7 +924,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 session_id = session_id,
                 approval_status = False,
                 clone_node=False,
-                rank = i+1,
+                rank = current_lowest_rank+i+1,
             )
             vf_result_nodes.append(node)
             transducer.move_node_into_transducer_sh_folder(node)
