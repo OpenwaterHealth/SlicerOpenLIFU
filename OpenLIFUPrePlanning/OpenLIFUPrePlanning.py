@@ -611,6 +611,18 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
 
+    def showSkin(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
+        """Enable visibility on the skin mesh node associted to a particular volume,
+        and update the associated visibility controls across SlicerOpenLIFU.
+
+        Raises an error if there is no skin mesh node.
+        """
+        skin_mesh_node = get_skin_segmentation(volume_node)
+        if skin_mesh_node is None:
+            raise RuntimeError(f"There is no skin mesh node associated to the volume {volume_node.GetID()}")
+        skin_mesh_node.SetDisplayVisibility(True)
+        slicer.modules.OpenLIFUTransducerTrackerWidget.updateModelRenderingSettings()
+
     def watchVirtualFit(self, virtual_fit_transform_node : vtkMRMLTransformNode):
         """Watch the virtual fit transform node to revoke approval in case the transform node is approved and then modified."""
         target_id = get_target_id_from_virtual_fit_result_node(virtual_fit_transform_node)

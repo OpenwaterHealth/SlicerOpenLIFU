@@ -158,6 +158,7 @@ class SlicerOpenLIFUSession:
         ):
             with BusyCursor():
                 generate_skin_segmentation(volume_node, foreground_mask) # provide foreground mask so that we don't waste time recomputing it
+            slicer.modules.OpenLIFUPrePlanningWidget.showSkin(volume_node)
 
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
