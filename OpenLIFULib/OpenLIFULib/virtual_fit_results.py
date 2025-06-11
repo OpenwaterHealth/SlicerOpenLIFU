@@ -78,6 +78,7 @@ def add_virtual_fit_result(
     virtual_fit_result.SetAttribute("VF:approvalStatus", "1" if approval_status else "0")
     if session_id is not None:
         virtual_fit_result.SetAttribute("VF:sessionID", session_id)
+    virtual_fit_result.CreateDefaultDisplayNodes()
 
     return virtual_fit_result
 
