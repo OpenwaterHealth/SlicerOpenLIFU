@@ -136,8 +136,6 @@ class CreateNewSessionDialog(qt.QDialog):
 
     def setup(self) -> None:
 
-        self.setMinimumWidth(200)
-
         formLayout = qt.QFormLayout()
         self.setLayout(formLayout)
 
@@ -223,8 +221,6 @@ class AddNewVolumeDialog(qt.QDialog):
 
     def setup(self):
 
-        self.setMinimumWidth(400)
-
         formLayout = qt.QFormLayout()
         self.setLayout(formLayout)
 
@@ -302,7 +298,6 @@ class LoadSubjectDialog(qt.QDialog):
 
         self.setWindowTitle("Load Subject")
         self.setWindowModality(qt.Qt.WindowModal)
-        self.resize(800, 400)
 
         self.db = db
         self.selected_subject: Optional["openlifu.db.Subject"] = None
@@ -312,9 +307,6 @@ class LoadSubjectDialog(qt.QDialog):
     def setup(self) -> None:
         self.boxLayout = qt.QVBoxLayout()
         self.setLayout(self.boxLayout)
-        self.setMinimumSize(800, 400)
-        self.setMaximumSize(1000, 600)
-
         # ---- Subjects Table ----
         cols = [
             "Subject Name",
@@ -338,9 +330,8 @@ class LoadSubjectDialog(qt.QDialog):
 
         header = self.tableWidget.horizontalHeader()
         header.setSectionResizeMode(0, qt.QHeaderView.Interactive)
-        header.resizeSection(0, 250)
-        header.setSectionResizeMode(1, qt.QHeaderView.Interactive)
-        header.resizeSection(1, 200)
+        header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, qt.QHeaderView.Stretch)
 
@@ -390,7 +381,7 @@ class LoadSubjectDialog(qt.QDialog):
             self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(subject.id))
             self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(str(num_volumes)))
             self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
-            self.tableWidget.setRowHeight(row, 36)
+        self.tableWidget.resizeRowsToContents()
 
     def appendSubjectToList(self, subject: "openlifu.db.subject.Subject") -> None:
         row = self.tableWidget.rowCount
@@ -403,7 +394,7 @@ class LoadSubjectDialog(qt.QDialog):
         self.tableWidget.setItem(row, 1, qt.QTableWidgetItem(subject.id))
         self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(str(num_volumes)))
         self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
-        self.tableWidget.setRowHeight(row, 36)
+        self.tableWidget.resizeRowsToContents()
 
     def on_add_subject_clicked(self, checked:bool) -> None:
         subjectdlg = AddNewSubjectDialog()
@@ -483,7 +474,6 @@ class LoadSessionDialog(qt.QDialog):
 
         self.setWindowTitle(f"View Sessions for {subject.name} ({subject_id})")
         self.setWindowModality(qt.Qt.WindowModal)
-        self.resize(700, 400)
 
         self.db = db
         self.subject_id = subject_id
@@ -497,8 +487,6 @@ class LoadSessionDialog(qt.QDialog):
     def setup(self):
         self.box_layout = qt.QVBoxLayout()
         self.setLayout(self.box_layout)
-        self.setMinimumSize(1200, 700)
-        self.setMaximumSize(1600, 1000)
 
         # ---- Sessions Table ----
         cols = [
@@ -517,11 +505,8 @@ class LoadSessionDialog(qt.QDialog):
         self.table_widget.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.table_widget.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
         self.table_widget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
-        self.table_widget.horizontalHeader().setDefaultSectionSize(120)
-        self.table_widget.horizontalHeader().setMinimumSectionSize(120)
         self.table_widget.horizontalHeader().setHighlightSections(False)
-        self.table_widget.horizontalHeader().setFixedHeight(30)
-        self.table_widget.verticalHeader().setDefaultSectionSize(18)
+        self.table_widget.horizontalHeader().setStretchLastSection(True)
         self.table_widget.verticalHeader().setVisible(False)
         self.table_widget.setShowGrid(False)
         self.table_widget.setFocusPolicy(qt.Qt.NoFocus)
@@ -599,7 +584,7 @@ class LoadSessionDialog(qt.QDialog):
             self.table_widget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
             self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
 
-            self.table_widget.setRowHeight(row, 48)
+        self.table_widget.resizeRowsToContents()
 
     @display_errors
     def append_session_to_list(self, session: "openlifu.db.session.Session") -> None:
@@ -628,7 +613,7 @@ class LoadSessionDialog(qt.QDialog):
         self.table_widget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
         self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
 
-        self.table_widget.setRowHeight(row, 48)
+        self.table_widget.resizeRowsToContents()
 
     @display_errors
     def on_new_session_clicked(self, checked: bool) -> None:
@@ -758,7 +743,6 @@ class StartPhotocollectionCaptureDialog(qt.QDialog):
 
     def setup(self):
 
-        self.setMinimumWidth(400)
         self.setContentsMargins(15, 15, 15, 15)
 
         vBoxLayout = qt.QVBoxLayout()
@@ -843,8 +827,6 @@ class AddNewPhotoscanDialog(qt.QDialog):
         self.setup()
 
     def setup(self):
-
-        self.setMinimumWidth(400)
 
         formLayout = qt.QFormLayout()
         self.setLayout(formLayout)
@@ -948,7 +930,6 @@ class ImportPhotocollectionFromDiskDialog(qt.QDialog):
         self.setup()
 
     def setup(self):
-        self.setMinimumWidth(600)
         self.setContentsMargins(15, 15, 15, 15)
 
         self.formLayout = qt.QFormLayout()
@@ -1015,8 +996,6 @@ class AddNewSubjectDialog(qt.QDialog):
         self.setup()
 
     def setup(self) -> None:
-        self.setMinimumWidth(200)
-
         formLayout = qt.QFormLayout()
         self.setLayout(formLayout)
 
@@ -1062,8 +1041,6 @@ class LoadPhotoscanDialog(qt.QDialog):
         self.setup()
 
     def setup(self):
-
-        self.setMinimumWidth(400)
 
         self.formLayout = qt.QFormLayout()
         self.setLayout(self.formLayout)
