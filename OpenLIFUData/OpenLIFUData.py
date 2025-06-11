@@ -583,7 +583,7 @@ class LoadSessionDialog(qt.QDialog):
                     return fallback
 
             protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
-            volume_name = safe_call(lambda: self.db.get_volume_info(session_id, session.volume_id)["name"])
+            volume_name = safe_call(lambda: self.db.get_volume_info(self.subject_id, session.volume_id)["name"])
             transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
 
             protocol_text = f"{protocol_name} ({session.protocol_id})"
@@ -613,7 +613,7 @@ class LoadSessionDialog(qt.QDialog):
                 return fallback
 
         protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
-        volume_name = safe_call(lambda: self.db.get_volume_info(session.id, session.volume_id)["name"])
+        volume_name = safe_call(lambda: self.db.get_volume_info(self.subject_id, session.volume_id)["name"])
         transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
 
         protocol_text = f"{protocol_name} ({session.protocol_id})"
