@@ -1402,7 +1402,7 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
         sampling_rate_validator = qt.QIntValidator(1, 99999, self)
         self.sampling_rate_line_edit.setValidator(sampling_rate_validator)
         self.sampling_rate_line_edit.text = "1"  # default sampling rate
-        form.addRow("Sampling rate:", self.sampling_rate_line_edit)
+        form.addRow("Image skipping:", self.sampling_rate_line_edit)
         self.sampling_rate_line_edit.setToolTip(
             "Use only every n^th image, where this entry is n."
         )
