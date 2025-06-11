@@ -1255,6 +1255,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Session collapsible section
         self.ui.chooseSessionButton.clicked.connect(self.on_load_session_clicked)
+        self.ui.saveSessionButton.clicked.connect(self.on_save_session_clicked)
 
         # ---- Issue updates that may not have been triggered yet ---
         
