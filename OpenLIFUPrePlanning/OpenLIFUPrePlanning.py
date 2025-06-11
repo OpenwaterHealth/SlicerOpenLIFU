@@ -515,8 +515,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         selected_vf_result = self.ui.virtualFitResultComboBox.currentData
         if not selected_vf_result:
             raise RuntimeError("The 'Update transducer position' button should not have been enabled with no selected result")
+        selected_vfresult_is_current = self.algorithm_input_widget.get_current_data()["Transducer"].transform_node.GetAttribute("matching_transform") == selected_vf_result.GetID()
+        if not selected_vfresult_is_current:
+            raise RuntimeError("Selected result does not match the current transducer position") # The button should not be enabled in this case
         self.logic.toggle_virtual_fit_approval(selected_vf_result)
-        # self.updateApproveButton()
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()  
         self.updateVFResultButtons()
@@ -526,9 +528,22 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if len(approved_target_ids) == 0:
             self.ui.approvalStatusLabel.text = "There are currently no virtual fit approvals."
         else:
+            # Display the names of the approved VF results alongside each target
+            formatted_targets = []
+            for target_id in approved_target_ids:
+                # Get the virtual fit results
+                approved_results = self.logic.find_approved_virtual_fit_results_for_target(target_id)
+                approved_results_names = [node.GetName() for node in approved_results]
+
+                if not approved_results:
+                    raise RuntimeError("Target cannot be approved without any approved virtual fit result nodes")
+                # Join the results with commas and enclose in parentheses
+                approved_result_name_strings = ", ".join(approved_results_names)
+                formatted_targets.append(f"{target_id} ({approved_result_name_strings})")
+
             self.ui.approvalStatusLabel.text = (
                 "Virtual fit is approved for the following targets:\n- "
-                + "\n- ".join(approved_target_ids)
+                + "\n- ".join(formatted_targets)
             )
 
     def updateWorkflowControls(self):
@@ -816,6 +831,12 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session_id = None if session is None else session.get_session_id()
         virtual_fit_result = get_best_virtual_fit_result_node(target_id=target_id, session_id=session_id)
         return virtual_fit_result
+    
+    def find_approved_virtual_fit_results_for_target(self, target_id: str) -> vtkMRMLTransformNode:
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        virtual_fit_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, approved_only = True))
+        return virtual_fit_results
 
     def get_virtual_fit_approval(self, target_id : str) -> bool:
         """Return whether there is a virtual fit approval for the target. In case there is not even a virtual
