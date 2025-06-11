@@ -1894,6 +1894,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         sliceNode = slicer.util.getFirstNodeByClassByName("vtkMRMLSliceNode", "Yellow")
         sliceNode.SetSliceVisible(True)
 
+        # === Set camera ===
+
+        threeDView = slicer.app.layoutManager().threeDWidget(0).threeDView()
+        threeDView.resetCamera()
+        threeDView.resetFocalPoint()
+
         # === Set the newly created session as the currently active session ===
 
         self.getParameterNode().loaded_session = new_session
