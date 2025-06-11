@@ -2,6 +2,7 @@
 from collections import defaultdict
 import itertools
 import warnings
+import logging
 from subprocess import CalledProcessError
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 
@@ -1368,8 +1369,11 @@ class PhotoscanPreviewDialog(qt.QDialog):
         self.accept()
 
 class PhotoscanGenerationOptionsDialog(qt.QDialog):
-    def __init__(self, meshroom_pipeline_names: list[str], parent=None):
+    def __init__(self, meshroom_pipeline_names: list[str], total_number_of_photos: int, parent=None):
         super().__init__(parent)
+
+        self.total_number_of_photos = total_number_of_photos
+
         self.setWindowTitle("Configure photoscan generation")
         self.setModal(True)
 
@@ -1398,14 +1402,36 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
             "Whether to match images sequentially as opposed to pairwise."
         )
 
-        self.sampling_rate_line_edit = qt.QLineEdit(self)
+        selection_group_box = qt.QGroupBox("Image Selection", self)
+        selection_layout = qt.QGridLayout(selection_group_box)
+
+        self.sampling_rate_radio = qt.QRadioButton("Take every:", selection_group_box)
+        self.sampling_rate_line_edit = qt.QLineEdit(selection_group_box)
         sampling_rate_validator = qt.QIntValidator(1, 99999, self)
         self.sampling_rate_line_edit.setValidator(sampling_rate_validator)
         self.sampling_rate_line_edit.text = "1"  # default sampling rate
-        form.addRow("Image skipping:", self.sampling_rate_line_edit)
-        self.sampling_rate_line_edit.setToolTip(
-            "Use only every n^th image, where this entry is n."
-        )
+        self.sampling_rate_line_edit.setToolTip("Use only every n^th image, where this entry is n.")
+
+        selection_layout.addWidget(self.sampling_rate_radio, 0, 0)
+        selection_layout.addWidget(self.sampling_rate_line_edit, 0, 1)
+
+        self.num_images_radio = qt.QRadioButton("Number of images:", selection_group_box)
+        self.num_images_line_edit = qt.QLineEdit(selection_group_box)
+        num_images_validator = qt.QIntValidator(1, total_number_of_photos, self)
+        self.num_images_line_edit.setValidator(num_images_validator)
+        self.default_num_images_value = str(min(50, total_number_of_photos))
+        self.num_images_line_edit.text = self.default_num_images_value # default number of images
+        self.num_images_line_edit.setToolTip("Use only every n^th image, setting n such that roughly this many images are used.")
+        self.img_count_label = qt.QLabel(f"/ {self.total_number_of_photos}", selection_group_box)
+
+        # initial state of the radio buttons
+        self.num_images_radio.checked = True
+
+        selection_layout.addWidget(self.num_images_radio, 1, 0)
+        selection_layout.addWidget(self.num_images_line_edit, 1, 1)
+        selection_layout.addWidget(self.img_count_label, 1, 2)
+
+        form.addRow(selection_group_box)
 
         buttons = qt.QDialogButtonBox(
             qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel,
@@ -1416,13 +1442,29 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
         form.addRow(buttons)
 
         self.ok_button = buttons.button(qt.QDialogButtonBox.Ok)
+
         self.image_width_line_edit.textChanged.connect(self._on_line_edit_changed)
         self.sampling_rate_line_edit.textChanged.connect(self._on_line_edit_changed)
+        self.num_images_line_edit.textChanged.connect(self._on_line_edit_changed)
+
+        self.sampling_rate_radio.toggled.connect(self._on_radio_button_toggled)
+        self.num_images_radio.toggled.connect(self._on_radio_button_toggled)
+
+        self._on_radio_button_toggled() # set initial enabled/disabled states related to the radio buttons
+        self._on_line_edit_changed("") # set initial OK button state
 
     def _on_line_edit_changed(self, text:str):
         valid_width = self.image_width_line_edit.hasAcceptableInput()
-        valid_rate = self.sampling_rate_line_edit.hasAcceptableInput()
-        self.ok_button.setEnabled(valid_width and valid_rate)
+        valid_image_selection = (
+            (self.sampling_rate_radio.checked and self.sampling_rate_line_edit.hasAcceptableInput())
+            or (self.num_images_radio.checked and self.num_images_line_edit.hasAcceptableInput())
+        )
+        self.ok_button.setEnabled(valid_width and valid_image_selection)
+
+    def _on_radio_button_toggled(self):
+        self.sampling_rate_line_edit.enabled = self.sampling_rate_radio.checked
+        self.num_images_line_edit.enabled = self.num_images_radio.checked
+        self._on_line_edit_changed("") # re-validate line edits when the selection changes, just in case
 
     def get_selected_meshroom_pipeline(self) -> str:
         return self.meshroom_pipeline_combobox.currentText
@@ -1433,8 +1475,12 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
     def get_sequential_checked(self) -> bool:
         return self.sequential_checkbox.isChecked()
 
-    def get_sampling_rate(self) -> int:
-        return int(self.sampling_rate_line_edit.text)
+    def get_image_selection_settings(self) -> Tuple[str, int]:
+        """Return a tuple containing the image selection mode ("take_every" or "num_images") and the corresponding value."""
+        if self.sampling_rate_radio.checked:
+            return "take_every", int(self.sampling_rate_line_edit.text)
+        else: # self.num_images_radio.checked
+            return "num_images", int(self.num_images_line_edit.text)
 
 #
 # OpenLIFUTransducerTracker
@@ -1797,8 +1843,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             raise RuntimeError("The photoscan generation button should not be clickable without an active session.")
         session_id = data_parameter_node.loaded_session.get_session_id()
         subject_id = data_parameter_node.loaded_session.get_subject_id()
+
+        if get_cur_db() is None:
+            raise RuntimeError("Cannot generate photoscan without a database connected to write it into.")
+        total_number_of_photos = len(
+            get_cur_db().get_photocollection_absolute_filepaths(
+                subject_id=subject_id,
+                session_id=session_id,
+                reference_number=selected_reference_number,
+            )
+        )
+
         photoscan_generation_options_dialog = PhotoscanGenerationOptionsDialog(
-            openlifu_lz().nav.photoscan.get_meshroom_pipeline_names()
+            meshroom_pipeline_names = openlifu_lz().nav.photoscan.get_meshroom_pipeline_names(),
+            total_number_of_photos = total_number_of_photos,
         )
         if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
 
@@ -1814,7 +1872,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
                     image_width = photoscan_generation_options_dialog.get_entered_image_width(),
                     window_radius=1 if photoscan_generation_options_dialog.get_sequential_checked() else None,
-                    sampling_rate=photoscan_generation_options_dialog.get_sampling_rate(),
+                    image_selection_settings = photoscan_generation_options_dialog.get_image_selection_settings(),
                     progress_callback = progress_callback,
                 )
             except CalledProcessError as e:
@@ -2264,7 +2322,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         meshroom_pipeline:str,
         image_width:int,
         window_radius:Optional[int],
-        sampling_rate:int,
+        image_selection_settings:Tuple[str,int],
         progress_callback:Callable[[int,str],None],
     ) -> None:
         """Call mesh reconstruction using openlifu, which should call Meshroom.
@@ -2277,7 +2335,10 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             image_width: The image width to which to resize input images before sending them into meshroom
             window_radius: The number of images forward and backward in the sequence to try and
                 match with, if None matches each image to all others.
-            sampling_rate: Use only every n-th image after sorting. Must be >= 1.
+            image_selection_settings: A pair consisting of an image selection _mode_ and an integer _value_:
+                If the _mode_ is "take_every" then we will use only every n images, where n is the specified _value_.
+                If the _mode_ is "num_images" then we will use only every n images, where n is chosen such that the
+                    total number of images is the specified _value_.
             progress_callback: A function to be called by the underlying openlifu code when reporting progress
         """
         if get_cur_db() is None:
@@ -2287,6 +2348,26 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             session_id=session_id,
             reference_number=photocollection_reference_number,
         )
+
+        image_selection_mode, image_selection_value = image_selection_settings
+        if image_selection_mode == "take_every":
+            sampling_rate = image_selection_value
+        elif image_selection_mode == "num_images":
+            sampling_rate = max(1, len(photocollection_filepaths) // image_selection_value)
+        else:
+            raise ValueError(f"Unrecognized image selection mode: {image_selection_mode}")
+
+        matching_mode = 'sequential_loop' if window_radius is not None else 'exhaustive'
+
+        logging.info(
+            "Mesh reconstruction settings:"
+            f" sampling_rate = {sampling_rate}"
+            f", pipeline_name = {meshroom_pipeline}"
+            f", input_resize_width = {image_width}"
+            f", window_radius = {window_radius}"
+            f", matching_mode = {matching_mode}"
+        )
+
         photocollection_filepaths = openlifu_lz().nav.photoscan.preprocess_image_paths(
             paths = photocollection_filepaths,
             sort_by = "filename",
@@ -2299,7 +2380,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                 input_resize_width = image_width,
                 use_masks = True,
                 window_radius = window_radius,
-                matching_mode = 'sequential_loop' if window_radius is not None else 'exhaustive',
+                matching_mode = matching_mode,
                 progress_callback = progress_callback,
             )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
