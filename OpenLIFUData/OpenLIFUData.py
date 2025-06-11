@@ -452,12 +452,18 @@ class LoadSubjectDialog(qt.QDialog):
         _enforcedButtons = [
             self.addButton,
         ]
+
+        _tooltips = [
+            "Add a new subject",
+        ]
+
         
         # === Don't enforce if no user account mode ===
 
         if not get_user_account_mode_state():
-            for button in _enforcedButtons:
+            for button, tooltip in zip(_enforcedButtons, _tooltips):
                 button.setEnabled(True)
+                button.setToolTip(tooltip)
             return
 
         # === Enforce ===
@@ -465,6 +471,7 @@ class LoadSubjectDialog(qt.QDialog):
         if not any(r in ("admin", "operator") for r in get_current_user().roles):
             for button in _enforcedButtons:
                 button.setEnabled(False)
+                button.setToolTip("You do not have the required role to perform this action.")
 
 class LoadSessionDialog(qt.QDialog):
     """ Interface for managing and selecting a session for a given subject """
@@ -711,17 +718,22 @@ class LoadSessionDialog(qt.QDialog):
         _enforced_buttons = [
             self.new_session_button
         ]
-        
+        _tooltips = [
+            "Create a new session for this subject"
+        ]
+
         # Don't enforce if no user account mode
         if not get_user_account_mode_state():
-            for button in _enforced_buttons:
+            for button, tooltip in zip(_enforced_buttons, _tooltips):
                 button.setEnabled(True)
+                button.setToolTip(tooltip)
             return
 
         # Enforce
         if not any(r in ("admin", "operator") for r in get_current_user().roles):
             for button in _enforced_buttons:
                 button.setEnabled(False)
+                button.setToolTip("You do not have the required role to perform this action.")
 
 class StartPhotocollectionCaptureDialog(qt.QDialog):
     """ Add new photocollection dialog """
