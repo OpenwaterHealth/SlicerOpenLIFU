@@ -482,6 +482,16 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QPushButton" name="exitSessionButton">
+           <property name="toolTip">
+            <string>Save the current session to the database</string>
+           </property>
+           <property name="text">
+            <string>Exit Session</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </widget>
       </item>
