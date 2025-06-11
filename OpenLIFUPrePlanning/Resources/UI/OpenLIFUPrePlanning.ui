@@ -319,7 +319,7 @@
             <item row="0" column="3">
              <widget class="QPushButton" name="pushButtonEnableInteraction">
               <property name="text">
-               <string>Enable interaction</string>
+               <string>Enable transform interaction</string>
               </property>
               <property name="checkable">
                <bool>true</bool>
