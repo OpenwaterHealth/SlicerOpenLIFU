@@ -1385,11 +1385,12 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
         self.meshroom_pipeline_combobox.setToolTip(
             "Meshroom pipelines are defined in the openlifu python library."
         )
+        self.meshroom_pipeline_combobox.setCurrentText('downsample_1x_pipeline')
 
         self.image_width_line_edit = qt.QLineEdit(self)
         image_width_validator = qt.QIntValidator(256, 16384, self)
         self.image_width_line_edit.setValidator(image_width_validator)
-        self.image_width_line_edit.text = "2048" # default value
+        self.image_width_line_edit.text = "1024" # default value
         form.addRow("Input image width:", self.image_width_line_edit)
         self.image_width_line_edit.setToolTip(
             "The width in pixels to which input photos should be resized before going through mesh reconstruction."
@@ -1419,7 +1420,7 @@ class PhotoscanGenerationOptionsDialog(qt.QDialog):
         self.num_images_line_edit = qt.QLineEdit(selection_group_box)
         num_images_validator = qt.QIntValidator(1, total_number_of_photos, self)
         self.num_images_line_edit.setValidator(num_images_validator)
-        self.default_num_images_value = str(min(50, total_number_of_photos))
+        self.default_num_images_value = str(min(45, total_number_of_photos))
         self.num_images_line_edit.text = self.default_num_images_value # default number of images
         self.num_images_line_edit.setToolTip("Use only every n^th image, setting n such that roughly this many images are used.")
         self.img_count_label = qt.QLabel(f"/ {self.total_number_of_photos}", selection_group_box)
@@ -1871,7 +1872,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     photocollection_reference_number = selected_reference_number,
                     meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
                     image_width = photoscan_generation_options_dialog.get_entered_image_width(),
-                    window_radius=1 if photoscan_generation_options_dialog.get_sequential_checked() else None,
+                    window_radius = 5 if photoscan_generation_options_dialog.get_sequential_checked() else None,
                     image_selection_settings = photoscan_generation_options_dialog.get_image_selection_settings(),
                     progress_callback = progress_callback,
                 )
