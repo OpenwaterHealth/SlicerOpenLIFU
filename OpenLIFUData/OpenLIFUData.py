@@ -1307,10 +1307,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionCollapsibleButton.setChecked(False)
             self.ui.sessionCollapsibleButton.setEnabled(False)
         else:
-            # Only start session expanded if the subject has volumes
+            # Only enable the sessions collapsible expanded if the subject has volumes
             subject_has_volumes = len(get_cur_db().get_volume_ids(self.logic.subject.id)) > 0
             self.ui.sessionCollapsibleButton.setChecked(subject_has_volumes)
-            self.ui.sessionCollapsibleButton.setEnabled(True)
+            self.ui.sessionCollapsibleButton.setEnabled(subject_has_volumes)
 
     def update_session_level_buttons_enabled(self) -> None:
         if self._parameterNode is None or self._parameterNode.loaded_session is None:
@@ -1341,6 +1341,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.logic.add_volume_to_database(self.logic.subject.id, volume_id, volume_name, volume_filepath)
         self.update_subject_status()
         self.update_volumes_table(self.logic.subject, get_cur_db())
+
+        # Update enabledness of session area in case the first volume was added
+        # and we need to enable the section
+        self.update_sessionCollapsibleButton_checked_and_enabled()
         return True
 
     @display_errors
