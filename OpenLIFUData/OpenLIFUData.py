@@ -355,6 +355,7 @@ class LoadSubjectDialog(qt.QDialog):
         self.loadSubjectButton = qt.QPushButton("Load Subject")
         self.loadSubjectButton.setToolTip("Load the selected subject")
         self.loadSubjectButton.clicked.connect(self.onLoadSubjectClicked)
+        self.tableWidget.clicked.connect(lambda: self.loadSubjectButton.setFocus())
         self.tableWidget.doubleClicked.connect(self.onLoadSubjectClicked)
         buttonRowLayout.addWidget(self.loadSubjectButton)
 
@@ -549,6 +550,7 @@ class LoadSessionDialog(qt.QDialog):
         self.new_session_button.clicked.connect(self.on_new_session_clicked)
         self.load_session_button.clicked.connect(self.on_load_session_clicked)
         self.table_widget.doubleClicked.connect(self.on_load_session_clicked)
+        self.table_widget.clicked.connect(lambda: self.load_session_button.setFocus())
 
         # ---- Cancel Button ----
         self.button_box = qt.QDialogButtonBox()
