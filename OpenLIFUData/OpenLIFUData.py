@@ -326,6 +326,8 @@ class LoadSubjectDialog(qt.QDialog):
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.setShowGrid(False)
         self.tableWidget.setFocusPolicy(qt.Qt.NoFocus)
+        self.tableWidget.setSortingEnabled(True)
+
         self.boxLayout.addWidget(self.tableWidget)
 
         header = self.tableWidget.horizontalHeader()
@@ -367,6 +369,8 @@ class LoadSubjectDialog(qt.QDialog):
         self._enforceUserPermissions()
 
     def updateSubjectsList(self) -> None:
+        self.tableWidget.setSortingEnabled(False) # turn off sorting during edit
+
         subject_ids = self.db.get_subject_ids()
 
         self.tableWidget.clearContents()
@@ -383,7 +387,11 @@ class LoadSubjectDialog(qt.QDialog):
             self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
         self.tableWidget.resizeRowsToContents()
 
+        self.tableWidget.setSortingEnabled(True) # turn on sorting after edit
+
     def appendSubjectToList(self, subject: "openlifu.db.subject.Subject") -> None:
+        self.tableWidget.setSortingEnabled(False) # turn off sorting during edit
+
         row = self.tableWidget.rowCount
         self.tableWidget.insertRow(row)
 
@@ -395,6 +403,8 @@ class LoadSubjectDialog(qt.QDialog):
         self.tableWidget.setItem(row, 2, qt.QTableWidgetItem(str(num_volumes)))
         self.tableWidget.setItem(row, 3, qt.QTableWidgetItem(str(num_sessions)))
         self.tableWidget.resizeRowsToContents()
+
+        self.tableWidget.setSortingEnabled(True) # turn on sorting after edit
 
     def on_add_subject_clicked(self, checked:bool) -> None:
         subjectdlg = AddNewSubjectDialog()
@@ -510,6 +520,7 @@ class LoadSessionDialog(qt.QDialog):
         self.table_widget.verticalHeader().setVisible(False)
         self.table_widget.setShowGrid(False)
         self.table_widget.setFocusPolicy(qt.Qt.NoFocus)
+        self.table_widget.setSortingEnabled(True)
 
         header = self.table_widget.horizontalHeader()
         for i in range(0, 6):
@@ -548,6 +559,8 @@ class LoadSessionDialog(qt.QDialog):
         self.update_sessions_list()
 
     def update_sessions_list(self):
+        self.table_widget.setSortingEnabled(False) # turn off sorting during edit
+
         session_ids = self.db.get_session_ids(self.subject_id)
 
         self.table_widget.clearContents()
@@ -585,9 +598,12 @@ class LoadSessionDialog(qt.QDialog):
             self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
 
         self.table_widget.resizeRowsToContents()
+        self.table_widget.setSortingEnabled(True) # turn on sorting after edit
 
     @display_errors
     def append_session_to_list(self, session: "openlifu.db.session.Session") -> None:
+        self.table_widget.setSortingEnabled(False) # turn off sorting during edit
+
         row = self.table_widget.rowCount
         self.table_widget.insertRow(row)
 
@@ -614,6 +630,7 @@ class LoadSessionDialog(qt.QDialog):
         self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
 
         self.table_widget.resizeRowsToContents()
+        self.table_widget.setSortingEnabled(True) # turn on sorting after edit
 
     @display_errors
     def on_new_session_clicked(self, checked: bool) -> None:
