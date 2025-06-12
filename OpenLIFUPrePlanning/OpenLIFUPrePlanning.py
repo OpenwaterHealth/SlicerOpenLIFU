@@ -514,16 +514,21 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onApproveClicked(self):
         
         selected_vf_result = self.ui.virtualFitResultComboBox.currentData
+        selected_index = self.ui.virtualFitResultComboBox.currentIndex
+        
         if not selected_vf_result:
             raise RuntimeError("The 'Update transducer position' button should not have been enabled with no selected result")
         selected_vfresult_is_current = self.algorithm_input_widget.get_current_data()["Transducer"].transform_node.GetAttribute("matching_transform") == selected_vf_result.GetID()
         if not selected_vfresult_is_current:
             raise RuntimeError("Selected result does not match the current transducer position") # The button should not be enabled in this case
         
-        self.logic.toggle_virtual_fit_approval(selected_vf_result)
+        self.logic.toggle_virtual_fit_approval(selected_vf_result) # Triggers data parameter node modified
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()  
-        self.updateVFResultButtons()
+        # Updates to the dataparameter node trigger updates to the algorithm inputs which
+        # resets the virtual fit selections index. Force the combo box to the recently selected result. 
+        self.ui.virtualFitResultComboBox.setCurrentIndex(selected_index) 
+
 
     def updateApprovalStatusLabel(self):
         approved_target_ids = self.logic.get_approved_target_ids()
@@ -801,7 +806,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.pushButtonEnableInteraction.setToolTip("No virtual fit result selected")
             return
 
-        elif selected_vfresult.GetDisplayNode().GetEditorVisibility():
+        elif selected_vfresult.GetDisplayNode() is not None and selected_vfresult.GetDisplayNode().GetEditorVisibility():
             return # Manual interaction in progress
 
         selected_vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == selected_vfresult.GetID()
