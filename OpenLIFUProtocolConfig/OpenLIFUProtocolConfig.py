@@ -390,6 +390,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.protocolSelector.setCurrentText(prev_protocol)
 
     def reloadProtocols(self):
+        """Reload the protocols in the dropdown selector.
+
+        Note: The displayed protocol name/id and the underlying protocol data
+        are all related to the original protocol data, not any WIP or cached
+        data."""
+
         self.ui.protocolSelector.clear()
         if (len(get_openlifu_data_parameter_node().loaded_protocols) + len(self.logic.new_protocol_ids)) == 0:
             tooltip = "Load a protocol first in order to select it for editing"
@@ -407,8 +413,15 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.setProtocolEditButtonEnabled(True)
 
         for protocol_id in self.logic.new_protocol_ids:
-            protocol = self.logic.cached_protocols[protocol_id]
-            self.ui.protocolSelector.addItem(f"[  ✱  ]  {protocol.name} (ID: {protocol.id})", protocol)
+            orig_protocol = self.logic.get_default_new_protocol()
+            # We need to manually assign the protocol_id here because the
+            # default protocol returned by get_default_new_protocol() does not
+            # have a unique name. To ensure each protocol in the UI, including
+            # new ones, have unique identifiers, each id in
+            # self.logic.new_protocol_ids was post-processed to guarantee
+            # uniqueness.
+            orig_protocol.id = protocol_id
+            self.ui.protocolSelector.addItem(f"[  ✱  ]  {orig_protocol.name} (ID: {orig_protocol.id})", orig_protocol)
 
         self.ui.protocolSelector.setToolTip(tooltip)
 
@@ -882,7 +895,13 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         self.dataLogic = slicer.util.getModuleLogic('OpenLIFUData')
 
+        """Holds cached protocol data for both new and loaded protocols"""
         self.cached_protocols = {}
+        
+        """Holds the protocol ids for new protocols generated in
+        OpenLIFUProtocolConfigWidget.onNewProtocolClicked(). These must be
+        stored because they uniquely identify new protocols even when a new
+        protocol has an edited ID that is no longer unique"""
         self.new_protocol_ids = set()
 
         ScriptedLoadableModuleLogic.__init__(self)
