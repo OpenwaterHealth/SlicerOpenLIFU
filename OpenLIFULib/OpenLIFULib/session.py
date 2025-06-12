@@ -153,7 +153,10 @@ class SlicerOpenLIFUSession:
         assign_openlifu_metadata_to_volume_node(volume_node, volume_info)
 
         if (
-            any(len(transform_list)>0 for transform_list in session.virtual_fit_results.values()) # if there is a virtual fit result in the session
+            (
+                any(len(transform_list)>0 for transform_list in session.virtual_fit_results.values()) # if there is a virtual fit result in the session
+                or len(session.transducer_tracking_results)>0 # or if there is a transducer tracking result
+            )
             and get_skin_segmentation(volume_node) is None
         ):
             with BusyCursor():
