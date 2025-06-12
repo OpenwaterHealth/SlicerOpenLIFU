@@ -398,10 +398,11 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         else:
             tooltip = "Select among the currently loaded protocols"
             for protocol_id, protocol_w in get_openlifu_data_parameter_node().loaded_protocols.items():
-                protocol_text = f"{protocol_w.protocol.name} (ID: {protocol_id})"
+                orig_protocol = protocol_w.protocol
+                protocol_text = f"{orig_protocol.name} (ID: {protocol_id})"
                 if protocol_id in self.logic.cached_protocols:
                     protocol_text = "[  ✱  ]  " + protocol_text
-                self.ui.protocolSelector.addItem(protocol_text, protocol_w.protocol)
+                self.ui.protocolSelector.addItem(protocol_text, orig_protocol)
                     
             self.setProtocolEditButtonEnabled(True)
 
@@ -419,10 +420,12 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             protocol_changed = self.getProtocolFromGUI(post_init=False)
             self.logic.cache_protocol(self._cur_protocol_id, protocol_changed)
 
-        protocol = self.ui.protocolSelector.currentData
-        if protocol is None:
+        orig_protocol = self.ui.protocolSelector.currentData
+        if orig_protocol is None:
             protocol = self.logic.get_default_protocol()
             self.setProtocolEditButtonEnabled(False)
+        else:
+            protocol = orig_protocol
 
         self._cur_protocol_id = protocol.id
 
@@ -486,24 +489,24 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         elif self.ui.protocolEditRevertDiscardButton.text == "Revert Changes":
             self.logic.delete_protocol_from_cache(self._cur_protocol_id)
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
-            prev_protocol = self.ui.protocolSelector.currentText
+            prev_protocol = self.ui.protocolSelector.currentText.lstrip("[  ✱  ] ")
             self.reloadProtocols()
-            self.ui.protocolSelector.setCurrentText(prev_protocol.lstrip("[  ✱  ] "))
+            self.ui.protocolSelector.setCurrentText(prev_protocol)
 
     @display_errors
     def onSaveProtocolToFileClicked(self, checked:bool) -> None:
         # Try getting entered protocol object from GUI. If it fails, print an error.
         try:
-            protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
+            entered_protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
         except Exception as e:
             slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}")
             return
 
         initial_dir = slicer.app.defaultScenePath
 
-        safe_protocol_id = "".join(c if c.isalnum() or c in (' ', '-', '_') else "_" for c in protocol.id)
+        safe_entered_protocol_id = "".join(c if c.isalnum() or c in (' ', '-', '_') else "_" for c in entered_protocol.id)
 
-        initial_file = Path(initial_dir) / f'{safe_protocol_id}.json'
+        initial_file = Path(initial_dir) / f'{safe_entered_protocol_id}.json'
         
         # Open a QFileDialog for saving a file
         filepath = qt.QFileDialog.getSaveFileName(
@@ -514,17 +517,17 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         )
 
         if filepath:
-            protocol.to_file(filepath)  # save to file
+            entered_protocol.to_file(filepath)  # save to file
             self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
             self.logic.delete_protocol_from_cache(self._cur_protocol_id)
 
             self._is_saving_changes = True
-            self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
+            self.logic.dataLogic.load_protocol_from_openlifu(entered_protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
             self.reloadProtocols()
-            self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # details might have changed
+            self.ui.protocolSelector.setCurrentText(f"{entered_protocol.name} (ID: {entered_protocol.id})")  # details might have changed
             self._is_saving_changes = False
-            self._cur_protocol_id = protocol.id  # id might have changed
+            self._cur_protocol_id = entered_protocol.id  # id might have changed
 
             self.setProtocolEditorEnabled(False)
 
@@ -532,34 +535,34 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onSaveProtocolToDatabaseClicked(self, checked: bool) -> None:
         # Try getting entered protocol object from GUI. If it fails, print an error.
         try:
-            protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
+            entered_protocol: "openlifu.plan.Protocol" = self.getProtocolFromGUI(post_init=True)
         except Exception as e:
             slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}")
             return
 
-        if protocol.id == "":
+        if entered_protocol.id == "":
             slicer.util.errorDisplay("You cannot save a protocol without entering in a Protocol ID.")
             return
 
-        if self.logic.protocol_id_is_in_database(protocol.id):
+        if self.logic.protocol_id_is_in_database(entered_protocol.id):
             if not slicer.util.confirmYesNoDisplay(
                 text = "This protocol ID already exists in the loaded database. Do you want to overwrite it?",
                 windowTitle = "Overwrite Confirmation",
             ):
                 return
 
-        self.logic.save_protocol_to_database(protocol)  # save to database
         self.ui.protocolDatabaseDeleteButton.setEnabled(True)  # can delete now
+        self.logic.save_protocol_to_database(entered_protocol)  # save to database
         self.updateWidgetSaveState(SaveState.SAVED_CHANGES)
 
         self.logic.delete_protocol_from_cache(self._cur_protocol_id)
 
         self._is_saving_changes = True
-        self.logic.dataLogic.load_protocol_from_openlifu(protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
+        self.logic.dataLogic.load_protocol_from_openlifu(entered_protocol, replace_confirmed=True)  # load (if new) or reload (if changes) to memory
         self.reloadProtocols()
-        self.ui.protocolSelector.setCurrentText(f"{protocol.name} (ID: {protocol.id})")  # details might have changed
+        self.ui.protocolSelector.setCurrentText(f"{entered_protocol.name} (ID: {entered_protocol.id})")  # details might have changed
         self._is_saving_changes = False
-        self._cur_protocol_id = protocol.id  # id might have changed
+        self._cur_protocol_id = entered_protocol.id  # id might have changed
 
         self.setProtocolEditorEnabled(False)
 
