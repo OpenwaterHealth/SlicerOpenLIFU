@@ -131,10 +131,22 @@ class WorkflowControls(qt.QWidget):
 
     @display_errors
     def on_save(self, clicked:bool):
+        data_module_parameter_node = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
+
+        if data_module_parameter_node.loaded_session is None:
+            slicer.util.errorDisplay("There is no loaded session.")
+            return
+
         self.save_session()
 
     @display_errors
     def on_exit(self, clicked:bool):
+        data_module_parameter_node = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
+
+        if data_module_parameter_node.loaded_session is None:
+            slicer.util.errorDisplay("There is no loaded session.")
+            return
+
         if slicer.util.confirmYesNoDisplay("Do you want to save your progress before exiting?", windowTitle="Save Confirmation"):
             self.close_session(save=True)
         else:
