@@ -463,9 +463,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.updateProtocolDisplayFromProtocol(protocol)
         self.ui.scrollArea.verticalScrollBar().setValue(0)
 
-        self._cur_protocol_id = protocol.id
-        self.logic.cache_protocol(self._cur_protocol_id, protocol)
-        self.logic.new_protocol_ids.add(protocol.id)
+        self._cur_protocol_id = unique_default_id
+        self.logic.cache_protocol(unique_default_id, protocol)
+        self.logic.new_protocol_ids.add(unique_default_id)
 
         # Set the text of the protocolSelector
         self.ui.protocolSelector.addItem(text := f'[  ✱  ]  {protocol.name} (ID: {protocol.id})', protocol)
