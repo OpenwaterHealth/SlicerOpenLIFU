@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>568</width>
+    <width>412</width>
     <height>943</height>
    </rect>
   </property>
@@ -218,7 +218,7 @@
           </widget>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="runVirtualFit" stretch="3,0,1">
+          <layout class="QHBoxLayout" name="runVirtualFit" stretch="3,1">
            <item>
             <widget class="QPushButton" name="virtualfitButton">
              <property name="sizePolicy">
@@ -228,17 +228,7 @@
               </sizepolicy>
              </property>
              <property name="text">
-              <string>Create virtual fit result(s)</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="runFittingAlgorithmCheckBox">
-             <property name="text">
-              <string>Run fitting algorithm</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
+              <string>Run auto-fitting algorithm</string>
              </property>
             </widget>
            </item>
@@ -284,45 +274,43 @@
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="label">
-           <property name="text">
-            <string>Select virtual fit result:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QWidget" name="virtualFitResultsOptions" native="true">
-           <layout class="QGridLayout" name="virtualFitResultsLayout">
-            <item row="0" column="0">
-             <widget class="QComboBox" name="virtualFitResultComboBox">
-              <property name="editable">
-               <bool>false</bool>
-              </property>
-              <property name="insertPolicy">
-               <enum>QComboBox::InsertAtTop</enum>
+           <layout class="QVBoxLayout" name="verticalLayout_8">
+            <item>
+             <widget class="QLabel" name="selectVFResultLabel">
+              <property name="text">
+               <string>Select virtual fit result:</string>
               </property>
              </widget>
             </item>
-            <item row="0" column="2">
-             <widget class="QPushButton" name="pushButtonSetTransducerTransform">
-              <property name="text">
-               <string>Set</string>
-              </property>
-              <property name="checkable">
-               <bool>true</bool>
-              </property>
-              <property name="checked">
-               <bool>false</bool>
-              </property>
-             </widget>
+            <item>
+             <widget class="QTableWidget" name="virtualFitResultTable"/>
             </item>
-            <item row="0" column="3">
-             <widget class="QPushButton" name="pushButtonEnableInteraction">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <widget class="QPushButton" name="addTransformPushButton">
+                <property name="text">
+                 <string>Add</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="modifyTransformPushButton">
+                <property name="text">
+                 <string>Modify</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QPushButton" name="approveButton">
               <property name="text">
-               <string>Modify</string>
-              </property>
-              <property name="checkable">
-               <bool>true</bool>
+               <string>Approve virtual fit</string>
               </property>
              </widget>
             </item>
@@ -330,13 +318,6 @@
           </widget>
          </item>
         </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="approveButton">
-        <property name="text">
-         <string>Approve virtual fit</string>
-        </property>
        </widget>
       </item>
      </layout>
