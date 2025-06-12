@@ -306,7 +306,7 @@
             <item row="0" column="2">
              <widget class="QPushButton" name="pushButtonSetTransducerTransform">
               <property name="text">
-               <string>Update transducer position</string>
+               <string>Set</string>
               </property>
               <property name="checkable">
                <bool>true</bool>
@@ -319,7 +319,7 @@
             <item row="0" column="3">
              <widget class="QPushButton" name="pushButtonEnableInteraction">
               <property name="text">
-               <string>Enable transform interaction</string>
+               <string>Modify</string>
               </property>
               <property name="checkable">
                <bool>true</bool>

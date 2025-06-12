@@ -812,8 +812,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.disable_manual_interaction(selected_transducer, selected_vf_result)
     
     def enable_manual_interaction(self, transducer: SlicerOpenLIFUTransducer, vf_result_node: vtkMRMLTransformNode):
-        self.ui.pushButtonEnableInteraction.text = "Disable transform interaction"
-        self.ui.pushButtonEnableInteraction.setToolTip("Turn off interaction handles on the selected virtual fit result.")
+        self.ui.pushButtonEnableInteraction.text = "Finish"
+        self.ui.pushButtonEnableInteraction.setToolTip("")
         
         self._vf_interaction_in_progress = True # Needed to prevent unwanted update routines
 
@@ -831,8 +831,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.virtualfitButton.enabled = False
     
     def disable_manual_interaction(self, transducer: SlicerOpenLIFUTransducer, vf_result_node: vtkMRMLTransformNode):
-        self.ui.pushButtonEnableInteraction.text = "Enable transform interaction"
-        self.ui.pushButtonEnableInteraction.setToolTip("Turn on interaction handles on the selected virtual fit result.")
+        self.ui.pushButtonEnableInteraction.text = "Modify"
+        self.ui.pushButtonEnableInteraction.setToolTip("Modify virtual fit transform")
         
         self._vf_interaction_in_progress = False # Needed to prevent unwanted update routines
 

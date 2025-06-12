@@ -286,11 +286,15 @@
         <widget class="QWidget" name="TransducerPhotoscanTracking">
          <layout class="QVBoxLayout" name="verticalLayout_7">
           <item>
-           <widget class="QPushButton" name="initializeTPRegistration">
-            <property name="text">
-             <string>Initialize transducer-photoscan transform</string>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="initialization">
+            <item>
+             <widget class="QPushButton" name="initializeTPRegistration">
+              <property name="text">
+               <string>Initialize transducer-photoscan transform</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
           <item>
            <widget class="QPushButton" name="runICPRegistrationTP">
