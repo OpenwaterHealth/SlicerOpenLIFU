@@ -300,7 +300,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
             data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             if not data_logic.session_loading_unloading_in_progress:
-                self.revokeApprovalIfAny(node, reason="The target was removed.\n" +
+                self.revokeTargetApprovalIfAny(node, reason="The target was removed.\n" +
                 "Any virtual fit transforms associated with this target will also be removed.")
 
                 # Clear affiliated virtual fit results if present
@@ -332,7 +332,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if not data_logic.session_loading_unloading_in_progress:
             reason = "The target was modified."
-            self.revokeApprovalIfAny(node, reason=reason)
+            self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
             slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
                         
@@ -342,7 +342,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if not data_logic.session_loading_unloading_in_progress:
             reason = "The target was modified."
-            self.revokeApprovalIfAny(node, reason=reason)
+            self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
             slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
 
@@ -362,7 +362,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.updateWorkflowControls()
             notify(f"Virtual fit results for {target_id} removed:\n{reason}")
 
-    def revokeApprovalIfAny(self, target : Union[str,vtkMRMLMarkupsFiducialNode], reason:str):
+    def revokeTargetApprovalIfAny(self, target : Union[str,vtkMRMLMarkupsFiducialNode], reason:str):
         """Revoke virtual fit approval for the target if there was an approval, and show a message dialog to that effect.
         The target can be provided as either a mrml node or an openlifu target ID.
         """
@@ -379,6 +379,26 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             notify(f"Virtual fit approval revoked:\n{reason}")
             self.updateVFResultButtons()
             self.updateApprovalStatusLabel()
+
+    def revokeVirtualFitApprovalIfAny(self, node: vtkMRMLTransformNode, reason:str):
+        """Revoke virtual fit approval for the virtual fit result node if there was an approval, and show a message dialog to that effect.
+        """
+
+        is_approved = get_approval_from_virtual_fit_result_node(node)
+        if is_approved:
+            set_approval_for_virtual_fit_result_node(
+            approval_state=not is_approved,
+            vf_result_node = node)
+            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic.update_underlying_openlifu_session()
+            notify(f"Virtual fit approval revoked:\n{reason}")
+            self.updateApprovalStatusLabel()
+            self.updateApproveButtonText(False)
+
+            # Need this because updates to the data parameter node resets the combo box 
+            most_recent_selection_index = self.ui.virtualFitResultComboBox.findText(node.GetName())
+            if most_recent_selection_index != -1:
+                self.ui.virtualFitResultComboBox.setCurrentIndex(most_recent_selection_index)
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
@@ -511,6 +531,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def updateVirtualfitButtonEnabled(self):
         """Update the enabled status of the virtual fit button based on whether all inputs have valid selections"""
+        
+        # Don't update any of the buttons if manual interaction with a virtual fit result is in progress
+        active_nodes = self.get_currently_active_interaction_node()
+        if active_nodes or active_nodes is None:
+            return
+        
         if self.algorithm_input_widget.has_valid_selections():
             self.ui.virtualfitButton.enabled = True
             self.ui.virtualfitButton.setToolTip("Run virtual fit algorithm to automatically suggest a transducer positioning")
@@ -530,6 +556,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             raise RuntimeError("Selected result does not match the current transducer position") # The button should not be enabled in this case
         
         approval_status = self.logic.toggle_virtual_fit_approval(selected_vf_result) # Triggers data parameter node modified
+        if approval_status:
+            self.watchVirtualFit(selected_vf_result)
+        else:
+            self.unwatchVirtualFit(selected_vf_result)
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()  
         # Updates to the dataparameter node trigger updates to the algorithm inputs which
@@ -703,7 +733,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         # Don't update any of the buttons if manual interaction with a virtual fit result is in progress
         active_nodes = self.get_currently_active_interaction_node()
-        print("Active nodes", active_nodes)
         if active_nodes or active_nodes is None:
             return
 
@@ -776,9 +805,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         selected_transducer = self.algorithm_input_widget.get_current_data()["Transducer"]
         if not selected_vf_result:
             raise RuntimeError("No virtual fit results selected") # The button should not be enabled in this case
-        selected_vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == selected_vf_result.GetID()
-        if not selected_vfresult_is_current:
-            raise RuntimeError("Selected result does not match the current transducer position") # The button should not be enabled in this case
 
         if not selected_vf_result.GetDisplayNode().GetEditorVisibility():
             self.enable_manual_interaction(selected_transducer, selected_vf_result)
@@ -850,6 +876,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Enables or disables the 'Enable Manual Interaction' button based on currently selected virtual fit result.
         The button can only be pressed when the selected vf result matches the current transducer position."""
 
+        # Don't update the buttons if manual interaction with a virtual fit result is in progress
+        active_nodes = self.get_currently_active_interaction_node()
+        if active_nodes or active_nodes is None:
+            return
+
         activeData = self.algorithm_input_widget.get_current_data()
         selected_transducer = activeData["Transducer"]
         if selected_transducer is None:
@@ -873,12 +904,14 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def watchVirtualFit(self, virtual_fit_transform_node : vtkMRMLTransformNode):
         """Watch the virtual fit transform node to revoke approval in case the transform node is approved and then modified."""
-        target_id = get_target_id_from_virtual_fit_result_node(virtual_fit_transform_node)
-        self.addObserver(
-            virtual_fit_transform_node,
+        self.node_observations[virtual_fit_transform_node.GetID()].append(virtual_fit_transform_node.AddObserver(
             slicer.vtkMRMLTransformNode.TransformModifiedEvent,
-            lambda caller, event: self.revokeApprovalIfAny(target_id, reason="The virtual fit transform was modified."),
-        )
+            lambda node, event: self.revokeVirtualFitApprovalIfAny(node, reason="The virtual fit transform was modified.")))
+        
+    def unwatchVirtualFit(self, virtual_fit_transform_node : vtkMRMLTransformNode):
+        """Un-does watchVirtualFit; see watchVirtualFit."""
+        for tag in self.node_observations.pop(virtual_fit_transform_node.GetID()):
+            virtual_fit_transform_node.RemoveObserver(tag)
 
 #
 # OpenLIFUPrePlanningLogic
