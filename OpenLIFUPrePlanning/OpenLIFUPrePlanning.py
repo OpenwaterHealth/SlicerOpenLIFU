@@ -601,11 +601,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # TODO: Make the virtual fit button both update the transducer transform and populate in the virtual fit results
             activeData["Transducer"].set_current_transform_to_match_transform_node(virtual_fit_result)
             self.watchVirtualFit(virtual_fit_result)
-            skin_mesh_node = get_skin_segmentation(activeData["Volume"])
-            skin_mesh_node.SetDisplayVisibility(True)
             activeData["Transducer"].set_visibility(True)
             slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
-            slicer.modules.OpenLIFUTransducerTrackerWidget.updateModelRenderingSettings()
+            self.showSkin(activeData["Volume"])
 
         self.updateApproveButton()
         self.updateApprovalStatusLabel()

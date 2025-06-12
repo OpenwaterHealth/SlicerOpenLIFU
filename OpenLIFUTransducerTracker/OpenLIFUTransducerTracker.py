@@ -1969,9 +1969,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateDistanceFromVFLabel()
         
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
-            skin_seg = get_skin_segmentation(activeData["Volume"])
-            self.ui.skinMeshVisibilityCheckBox.setChecked(True)
-            self.updateModelRenderingSettings()
+            slicer.modules.OpenLIFUPrePlanningWidget.showSkin(volume_node)
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
