@@ -109,8 +109,8 @@ class WorkflowControls(qt.QWidget):
             main_group_box_layout.addLayout(button_row2_layout)
             self.save_button.clicked.connect(self.on_save)
             self.exit_button.clicked.connect(self.on_exit)
-            self.save_button.setToolTip("Save and close the session")
-            self.exit_button.setToolTip("Close the session without saving it")
+            self.save_button.setToolTip("Save the active session")
+            self.exit_button.setToolTip("Close the active session")
 
         self.update()
 
