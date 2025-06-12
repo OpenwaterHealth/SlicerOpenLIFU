@@ -1885,9 +1885,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.session_loading_unloading_in_progress = True
 
         loaded_session = self.getParameterNode().loaded_session
+
         if loaded_session is None:
+            self.session_loading_unloading_in_progress = False
             return # There is no active session to clear
+
         self.getParameterNode().loaded_session = None
+
         if clean_up_scene:
             loaded_session.clear_volume_and_target_nodes()
             if loaded_session.get_transducer_id() in self.getParameterNode().loaded_transducers:
@@ -1910,7 +1914,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
 
-            self.session_loading_unloading_in_progress = False
+        self.session_loading_unloading_in_progress = False
 
     def save_session(self) -> None:
         """Save the current session to the openlifu database.
