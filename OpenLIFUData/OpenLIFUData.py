@@ -1604,6 +1604,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
+
         session_status_field_widgets = [
             self.ui.sessionStatusSubjectNameIdValueLabel,
             self.ui.sessionStatusSessionNameIdValueLabel,
@@ -2324,7 +2325,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
         slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
-        slicer.util.getModuleWidget('OpenLIFUTransducerTracker').updateVirtualFitResultForDisplay()
+        slicer.util.getModuleWidget('OpenLIFUTransducerTracker').updateVirtualFitResultDisplay()
 
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:

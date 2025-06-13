@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>404</width>
-    <height>592</height>
+    <width>412</width>
+    <height>943</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -25,11 +25,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="targetsCollapsible" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="targetsCollapsible">
+     <property name="text">
       <string>Targets</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -168,11 +168,11 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="virtualfitCollapsible">
+     <property name="text">
       <string>Virtual Fitting</string>
      </property>
-     <property name="collapsed" stdset="0">
+     <property name="collapsed">
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -218,14 +218,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="approveButton">
-           <property name="text">
-            <string>Approve virtual fit</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="3,1">
+          <layout class="QHBoxLayout" name="runVirtualFit" stretch="3,1">
            <item>
             <widget class="QPushButton" name="virtualfitButton">
              <property name="sizePolicy">
@@ -235,7 +228,7 @@
               </sizepolicy>
              </property>
              <property name="text">
-              <string>Virtual fit</string>
+              <string>Run auto-fitting algorithm</string>
              </property>
             </widget>
            </item>
@@ -248,7 +241,7 @@
               </sizepolicy>
              </property>
              <property name="toolTip">
-              <string>Whether to dump debugging information such as skin meshes and search points.</string>
+              <string>Whether to dump debugging information such as skin meshes and search points from fitting algorithm.</string>
              </property>
              <property name="text">
               <string>Debug</string>
@@ -278,6 +271,50 @@
            <property name="text">
             <string>TextLabel</string>
            </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="virtualFitResultsOptions" native="true">
+           <layout class="QVBoxLayout" name="verticalLayout_8">
+            <item>
+             <widget class="QLabel" name="selectVFResultLabel">
+              <property name="text">
+               <string>Select virtual fit result:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QTableWidget" name="virtualFitResultTable"/>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <widget class="QPushButton" name="addTransformPushButton">
+                <property name="text">
+                 <string>Add</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="modifyTransformPushButton">
+                <property name="text">
+                 <string>Modify</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QPushButton" name="approveButton">
+              <property name="text">
+               <string>Approve virtual fit</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </widget>
          </item>
         </layout>
