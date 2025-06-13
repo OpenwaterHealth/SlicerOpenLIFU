@@ -243,7 +243,7 @@ class Workflow:
 
     def starting_module(self) -> str:
         """Get the name of the first module in the guided workflow."""
-        return self.modules[0]
+        return "OpenLIFUData"
 
     def furthest_module_to_which_can_proceed(self) -> str:
         """Get the name of the furthest module along the workflow to which we `can_proceed`."""
