@@ -216,7 +216,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateGuidedModeButton()
-        self.logic.workflow.enforceGuidedModeVisibility(self._parameterNode.guided_mode)
+        if self._parameterNode is not None:
+            self.logic.workflow.enforceGuidedModeVisibility(self._parameterNode.guided_mode)
 
         # Update whether transducer tracking is enabled/disabled based on guided_mode state
         transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerTracker').widgetRepresentation()
