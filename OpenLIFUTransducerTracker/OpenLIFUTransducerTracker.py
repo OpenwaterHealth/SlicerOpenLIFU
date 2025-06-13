@@ -960,12 +960,13 @@ class TransducerTrackingWizard(qt.QWizard):
 
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan)
 
-            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
-            target_id = fiducial_to_openlifu_point_id(self.target)
-            )
-            # When not in guided mode, there does not need to be a virtual fit result to be able to run tracking
-            if best_virtual_fit_result_node is not None:
-                self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
+            if self.target:
+                best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
+                target_id = fiducial_to_openlifu_point_id(self.target)
+                )
+                # When not in guided mode, there does not need to be a virtual fit result to be able to run tracking
+                if best_virtual_fit_result_node is not None:
+                    self.transducer.set_cloned_virtual_fit_model(best_virtual_fit_result_node)
 
             self.setupViewNodes()
 
@@ -1607,7 +1608,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
-        algorithm_input_names = ["Protocol","Volume","Transducer", "Target", "Photoscan"]
+        algorithm_input_names = ["Protocol","Volume","Transducer","Photoscan"]
         self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names)
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
@@ -1832,13 +1833,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.previewPhotoscanButton.enabled = True
             self.ui.previewPhotoscanButton.setToolTip("Preview and toggle approval of the selected photoscan before registration")
 
+    def get_currently_selected_target_from_preplanning(self):
+
+        preplanning_widget_input_data = slicer.modules.OpenLIFUPrePlanningWidget.algorithm_input_widget.get_current_data()
+        preplanning_target = preplanning_widget_input_data["Target"]
+
+        return preplanning_target
+
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
         if self.algorithm_input_widget.has_valid_selections():
             current_data = self.algorithm_input_widget.get_current_data()
             transducer = current_data['Transducer']
             photoscan = current_data['Photoscan']
-            target = current_data["Target"]
+            target = self.get_currently_selected_target_from_preplanning()
             
             target_is_approved = False
             if target:
@@ -1953,7 +1961,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         activeData = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
         selected_transducer = activeData["Transducer"]
-        selected_target = activeData["Target"]
+        selected_target = self.get_currently_selected_target_from_preplanning()
 
         self._running_wizard = True
         self.wizard = TransducerTrackingWizard(
@@ -2013,8 +2021,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # compute a quantitative measure comparing it with the tracked result
         activeData = self.algorithm_input_widget.get_current_data()
         selected_transducer = activeData["Transducer"]
-        selected_target = activeData["Target"]
         selected_photoscan = activeData["Photoscan"]
+        selected_target = self.get_currently_selected_target_from_preplanning()
 
         if not selected_target or not selected_photoscan or not selected_transducer:
             self.ui.quantitativeTransducerTrackingMetricLabel.hide()
@@ -2097,8 +2105,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         approved for the selected target or if the selected photoscan is not
         approved for transducer tracking"""
         
-        current_data = self.algorithm_input_widget.get_current_data()
-        selected_target = current_data["Target"]
+        selected_target = self.get_currently_selected_target_from_preplanning()
         warnings = ''
         if selected_target:
             target_id = fiducial_to_openlifu_point_id(selected_target)
@@ -2129,7 +2136,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             return
 
         current_data = self.algorithm_input_widget.get_current_data()
-        selected_target = current_data["Target"]
+        selected_target = self.get_currently_selected_target_from_preplanning()
         selected_transducer = current_data["Transducer"]
 
         if not selected_target or not selected_transducer:
@@ -2667,7 +2674,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
 
     def initialize_node_from_virtual_fit_result(self,
             transducer: SlicerOpenLIFUTransducer,
-            target: vtkMRMLMarkupsFiducialNode) -> vtkMRMLTransformNode:
+            target: Optional[vtkMRMLMarkupsFiducialNode]) -> vtkMRMLTransformNode:
         """Initializes a transform node using the best available virtual fit result for a 
         target fiducial. If no virtual fit result is found, the transform is initialized to the identity matrix. 
         Args:
@@ -2675,22 +2682,25 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             target: The target for which the virtual fit result should be retrieved.
         """
       
-        # Initialize with virtual fit result if available
-        best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
-            target_id = fiducial_to_openlifu_point_id(target)
-            )
+        if target:
+            # Initialize with virtual fit result if available
+            best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
+                target_id = fiducial_to_openlifu_point_id(target)
+                )
+
+            if best_virtual_fit_result_node:
+                virtual_fit_transform = vtk.vtkMatrix4x4()
+                best_virtual_fit_result_node.GetMatrixTransformToParent(virtual_fit_transform)
+                transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+                transform_node.SetMatrixTransformToParent(virtual_fit_transform)
+                transform_node.CreateDefaultDisplayNodes()
+                return transform_node
         
-        if best_virtual_fit_result_node is None:
-            # Initialize transform with identity matrix
-            transform_node = transducer_transform_node_from_openlifu(
-                openlifu_transform_matrix = np.eye(4) ,
-                transducer = transducer.transducer.transducer,
-                transform_units = transducer.transducer.transducer.units)
-        else:
-            virtual_fit_transform = vtk.vtkMatrix4x4()
-            best_virtual_fit_result_node.GetMatrixTransformToParent(virtual_fit_transform)
-            transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-            transform_node.SetMatrixTransformToParent(virtual_fit_transform)
+        # Initialize transform with identity matrix
+        transform_node = transducer_transform_node_from_openlifu(
+            openlifu_transform_matrix = np.eye(4) ,
+            transducer = transducer.transducer.transducer,
+            transform_units = transducer.transducer.transducer.units)
         transform_node.CreateDefaultDisplayNodes()
 
         return transform_node
