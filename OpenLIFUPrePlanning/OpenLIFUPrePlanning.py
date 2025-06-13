@@ -121,6 +121,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+        self._setting_virtual_fit_result = False
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -213,7 +214,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.virtualfitButton.clicked.connect(self.onRunAutoFitClicked)
 
         # ---- Virtual fit result options ----
-        self.ui.virtualFitResultTable.itemSelectionChanged.connect(self.onVirtualFitResultSelectionChanged)
+        self.ui.virtualFitResultTable.itemClicked.connect(self.onVirtualFitResultSelected)
         self.ui.modifyTransformPushButton.clicked.connect(self.onModifyTransformClicked)
         self.ui.modifyTransformPushButton.setStyleSheet("""
         QPushButton:checked {
@@ -225,6 +226,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.addTransformPushButton.clicked.connect(self.onAddVirtualFitResultClicked)
         self.ui.addTransformPushButton.clicked.connect("Create new virtual fit result")
         self.updateVirtualFitResultsTable()
+        slicer.util.getModule("OpenLIFUTransducerTracker").widgetRepresentation() 
+        self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking)
         # ------------------------------------
 
         self.updateWorkflowControls()
@@ -433,7 +436,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
-        self.updateInputOptions()
+        # if not self._setting_virtual_fit_result:
+        self.updateInputOptions() 
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
 
@@ -531,8 +535,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def updateInputOptions(self):
         """Update the algorithm input options"""
+
+        self._input_update_in_progress = True
         self.algorithm_input_widget.update()
+        self._input_update_in_progress = False  # Prevents repeated function calls due to combo box index changed signals
+
         self.updateVirtualfitButtonEnabled()
+        self.updateVirtualFitResultsTable()
 
     def updateVirtualfitButtonEnabled(self):
         """Update the enabled status of the virtual fit button based on whether all inputs have valid selections"""
@@ -625,6 +634,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """ Updates the list of virtual list results shown. This is dependent on the 
         currently selected target in the algorithm inputs."""
         
+        # Ignore function calls while the algorithm inputs are updated.
+        if self._input_update_in_progress:
+            return
+
         most_recent_selection = self.ui.virtualFitResultTable.currentRow
         self.ui.virtualFitResultTable.clearContents()
         self.ui.virtualFitResultTable.setRowCount(0) # Remove all rows
@@ -681,6 +694,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approveButton.setToolTip("Please select a virtual fit first")
             self.ui.modifyTransformPushButton.enabled = False
             self.ui.addTransformPushButton.enabled = False
+            # slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(None) # Initialize based on target
 
     def getCurrentVirtualFitSelection(self):
         """ Returns the virtual fit transform node associated with the current selection."""
@@ -786,12 +800,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         
         return virtual_fit_result
 
-    def onVirtualFitResultSelectionChanged(self):
+    def onVirtualFitResultSelected(self):
         """Updates the transducer transform to match the currently selected virtual fit result"""
 
         selected_vf_result = self.getCurrentVirtualFitSelection()
+        
+        # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
+        self.logic.chosen_virtual_fit = selected_vf_result #Temporary functionality till radio buttons are added
         if selected_vf_result is None:
             return
+
+        # self._setting_virtual_fit_result = True
         activeData = self.algorithm_input_widget.get_current_data()
         activeData["Transducer"].set_current_transform_to_match_transform_node(selected_vf_result)
         # Incase they were not previously shown
@@ -803,10 +822,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.modifyTransformPushButton.enabled = True
         self.ui.addTransformPushButton.enabled = True
         self.updateApproveButton()
+        # self._setting_virtual_fit_result = False
 
-        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
-        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitStatus()
-
+        self.setCurrentVirtualFitSelection(selected_vf_result) # Because the above steps trigger table updates!
 
     def onModifyTransformClicked(self):
 
@@ -913,8 +931,35 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self._chosen_virtual_fit = None
+        """The currently chosen virtual fit result to be used for tracking. Do not set this directly -- use the `chosen_virtual_fit` property."""
+
+        self._on_chosen_virtual_fit_changed_callbacks : List[Callable[[Optional[vtkMRMLTransformNode]],None]] = []
+        """List of functions to call when `chosen_virtual_fit` property is changed."""
+
     def getParameterNode(self):
         return OpenLIFUPrePlanningParameterNode(super().getParameterNode())
+
+    def call_on_chosen_virtual_fit_changed(self, f : Callable[[Optional[vtkMRMLTransformNode]],None]) -> None:
+        """Set a function to be called whenever the `chosen_virtual_fit` property is changed.
+        The provided callback should accept a single argument which will be the new chosen virtual fit result (or None).
+        """
+        self._on_chosen_virtual_fit_changed_callbacks.append(f)
+
+    @property
+    def chosen_virtual_fit(self) -> Optional[vtkMRMLTransformNode]:
+        """The currently chosen virtual fit result that will be used for transducer tracking.
+
+        Callbacks registered with `call_on_chosen_virtual_fit_changed` will be invoked when the virtual fit changes.
+
+        """
+        return self._chosen_virtual_fit
+
+    @chosen_virtual_fit.setter
+    def chosen_virtual_fit(self, transform_node : Optional[vtkMRMLTransformNode]):
+        self._chosen_virtual_fit = transform_node
+        for f in self._on_chosen_virtual_fit_changed_callbacks:
+            f(self._chosen_virtual_fit)
 
     def get_approved_target_ids(self) -> List[str]:
         """Return a list of target IDs that have approved virtual fit, for the currently active session.
