@@ -1667,7 +1667,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         if self.logic.subject is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Load a subject to proceed."
-        elif self._parameterNode.loaded_session is None:
+        elif self._parameterNode is None or self._parameterNode.loaded_session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Load a session to proceed."
         else:
