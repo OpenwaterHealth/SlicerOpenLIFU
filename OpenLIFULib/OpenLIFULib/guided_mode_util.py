@@ -152,6 +152,9 @@ class WorkflowControls(qt.QWidget):
         else:
             self.close_session(save=False)
 
+        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+        home_module_logic.workflow_go_to_start()
+
     def save_session(self):
         data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
         data_module_logic.save_session()
@@ -159,11 +162,9 @@ class WorkflowControls(qt.QWidget):
     def close_session(self, save:bool):
         """Close the session, saving it or not depending on `save`"""
         data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
-        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
         if save:
             self.save_session()
         data_module_logic.clear_session(clean_up_scene=True)
-        home_module_logic.workflow_go_to_start()
 
     def update_next_button(self):
         """Update next button enabledness and tooltip"""
