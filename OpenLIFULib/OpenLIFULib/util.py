@@ -207,5 +207,6 @@ def get_cloned_node(node_to_clone: vtkMRMLNode) -> vtkMRMLNode:
     itemIDToClone = shNode.GetItemByDataNode(node_to_clone)
     clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
     cloned_node = shNode.GetItemDataNode(clonedItemID)
+    cloned_node.SetAttribute("cloned", "True")
 
     return cloned_node

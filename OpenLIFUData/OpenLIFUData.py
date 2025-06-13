@@ -1597,6 +1597,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def updateSessionStatus(self):
         """Update the active session status view and related buttons"""
+
         session_status_field_widgets = [
             self.ui.sessionStatusSubjectNameIdValueLabel,
             self.ui.sessionStatusSessionNameIdValueLabel,
