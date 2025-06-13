@@ -935,6 +935,12 @@ class TransducerTrackingWizard(qt.QWizard):
 
         self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerTracker')
         
+        pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
+        pluginLogic = pluginHandler.pluginLogic()
+        self.current_allowed_context_menu_actions = pluginLogic.allowedViewContextMenuActionNames
+        # Hide all context menu items
+        pluginLogic.allowedViewContextMenuActionNames = ["NoActionsAllowed"]
+
         with BusyCursor():
 
             self.transducer = transducer
@@ -1116,11 +1122,6 @@ class TransducerTrackingWizard(qt.QWizard):
 
     def onFinish(self):
         """Handle Finish button click."""
-        self.resetViewNodes()
-
-        # Reset the transducer surface to observe the transducer transform
-        self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
-        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         # Copy photoscan and skin segmentation landmarks to slicer scene
         # There may not be fiducials created of the user is viewing previous tracking results
@@ -1156,30 +1157,41 @@ class TransducerTrackingWizard(qt.QWizard):
 
         else:
             raise RuntimeError("Something went wrong. You should not be able to complete the wizard without creating transducer tracking transforms.")
-
-        self.clearWizardNodes() #remove the wizard-level node
-            
+  
         # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
         # This forced set of the interaction node is needed to solve that. 
         interactionNode = slicer.app.applicationLogic().GetInteractionNode()
         interactionNode.SwitchToViewTransformMode()
 
+        self.clean_up()
         self.accept()  # Closes the wizard
 
     def onCancel(self):
         """Handle Cancel button click."""
+
+        self.clean_up()
+
+        # Exit place mode - needed due to node removal during clean
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SwitchToViewTransformMode()
+        self.reject()  # Closes the wizard
+    
+    def clean_up(self):
+        """Clean up routine before exiting wizard"""
+
         self.resetViewNodes()
+
         # Reset the transducer surface to observe the transducer transform
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
         self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+
         self.clearWizardNodes()
 
-        # Exit place mode
-        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SwitchToViewTransformMode()
+        # Enable right click context menus
+        pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
+        pluginLogic = pluginHandler.pluginLogic()
+        pluginLogic.allowedViewContextMenuActionNames = self.current_allowed_context_menu_actions
 
-        self.reject()  # Closes the wizard
-    
     def clearWizardNodes(self):
         # Ensure any temporary variables are cleared. Nodes in the scene are not updated
         for node in self.photoscanMarkupPage.temp_markup_fiducials.values():
@@ -1231,7 +1243,6 @@ class TransducerTrackingWizard(qt.QWizard):
         # If the transducer surface has specific view nodes associated with it, maintain those view nodes
         # We need to check for current view settings since the transducer exists in the scene
         # before the wizard.
-        
         self.current_transducer_surface_visibility = self.transducer_surface.GetDisplayNode().GetVisibility()
         self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
@@ -1250,7 +1261,6 @@ class TransducerTrackingWizard(qt.QWizard):
 
         # Hide all displayable nodes in the scene from the wizard view nodes
         hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
-
         
     def resetViewNodes(self):
         """Resets the view nodes of all models created by the wizard to null '()'. This allows the
