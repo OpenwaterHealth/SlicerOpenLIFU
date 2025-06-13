@@ -121,7 +121,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self._setting_virtual_fit_result = False
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -284,6 +283,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+        
+        if node.GetAttribute("cloned"):
+            return
+
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.watch_fiducial_node(node)
 
@@ -292,6 +295,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
+
+        if node.GetAttribute("cloned"):
+            return
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.unwatch_fiducial_node(node)
 
@@ -436,10 +442,16 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
-        # if not self._setting_virtual_fit_result:
         self.updateInputOptions() 
-        self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
+        self.updateVirtualFitRelatedLabels()
+
+    def updateVirtualFitRelatedLabels(self):
+        """ When virtual fit approval is revoked or toggled, the messages displayed 
+        in the data module, transducer tracking module and pre-planning module need to be updated."""
+        self.updateApprovalStatusLabel()
+        slicer.modules.OpenLIFUDataWidget.updateSessionStatus()  
+        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitStatus() 
 
     def updateEditTargetEnabled(self):
         """Update whether the controls that edit targets are enabled"""
@@ -560,7 +572,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onApproveClicked(self):
         
-        most_recent_selection = self.ui.virtualFitResultTable.currentRow
+        most_recent_selection = self.ui.virtualFitResultTable.currentRow()
         selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
             raise RuntimeError("No virtual fit result selected")
@@ -570,9 +582,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         else:
             self.unwatchVirtualFit(selected_vf_result)
         
-        self.updateApprovalStatusLabel()
         self.updateApproveButton()
-        self.updateWorkflowControls()  
+        self.updateWorkflowControls()
+
+        # Update table
+        approval_status = "True" if approval_status else "False"
+        self.ui.virtualFitResultTable.setItem(most_recent_selection, 1, qt.QTableWidgetItem(approval_status))
 
         # Restore the most recent selection if it's still valid
         self.setCurrentVirtualFitSelection(selected_vf_result)
@@ -694,7 +709,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approveButton.setToolTip("Please select a virtual fit first")
             self.ui.modifyTransformPushButton.enabled = False
             self.ui.addTransformPushButton.enabled = False
-            # slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(None) # Initialize based on target
+            slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(None) # Initialize based on target
 
     def getCurrentVirtualFitSelection(self):
         """ Returns the virtual fit transform node associated with the current selection."""
@@ -805,12 +820,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         selected_vf_result = self.getCurrentVirtualFitSelection()
         
-        # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
-        self.logic.chosen_virtual_fit = selected_vf_result #Temporary functionality till radio buttons are added
         if selected_vf_result is None:
+            # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
+            self.logic.chosen_virtual_fit = None  #Temporary functionality till radio buttons are added
             return
 
-        # self._setting_virtual_fit_result = True
         activeData = self.algorithm_input_widget.get_current_data()
         activeData["Transducer"].set_current_transform_to_match_transform_node(selected_vf_result)
         # Incase they were not previously shown
@@ -822,9 +836,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.modifyTransformPushButton.enabled = True
         self.ui.addTransformPushButton.enabled = True
         self.updateApproveButton()
-        # self._setting_virtual_fit_result = False
 
-        self.setCurrentVirtualFitSelection(selected_vf_result) # Because the above steps trigger table updates!
+        # self.setCurrentVirtualFitSelection(selected_vf_result) # Because the above steps trigger table updates!
+        # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
+        self.logic.chosen_virtual_fit = selected_vf_result #Temporary functionality till radio buttons are added
 
     def onModifyTransformClicked(self):
 
@@ -909,6 +924,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         
     def unwatchVirtualFit(self, virtual_fit_transform_node : vtkMRMLTransformNode):
         """Un-does watchVirtualFit; see watchVirtualFit."""
+        if virtual_fit_transform_node.GetID() not in self.node_observations:
+            return
         for tag in self.node_observations.pop(virtual_fit_transform_node.GetID()):
             virtual_fit_transform_node.RemoveObserver(tag)
 

@@ -774,7 +774,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.registrationSurfaceVisibilityCheckBox.stateChanged.connect(
             lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(
-                lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
+            lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
 
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
@@ -1556,7 +1556,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # This is needed to prevent slicer from
         # crashing after the wizard is closed. 
         self.wizard = None
-        self._setting_vf_clone = False
         self._running_wizard = False
 
         self._virtual_fit_transform_for_tracking = None
@@ -1626,7 +1625,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateInputRelatedWidgets)
 
         # ---- Model rendering options ----
-        self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.updateVirtualFitResultDisplay)
+        self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.showVirtualFitResult)
         self.ui.photoscanVisibilityCheckBox.stateChanged.connect(self.updateModelRendering)
         self.ui.skinMeshVisibilityCheckBox.stateChanged.connect(self.updateModelRendering)
         self.ui.skinMeshOpacitySlider.valueChanged.connect(self.updateModelRendering)
@@ -1698,6 +1697,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         """ Update volume and photoscan combo boxes when nodes are removed from the scene"""
+
+        if node.GetAttribute("cloned"):
+            return
+
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
@@ -1711,6 +1714,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeAdded(self, caller, event, node : slicer.vtkMRMLNode) -> None:
         """ Update volume and photoscan combo boxes when nodes are added to the scene"""
+
+        if node.GetAttribute("cloned"):
+            return
+
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.watch_fiducial_node(node)
         self.updateInputOptions()
@@ -1752,8 +1759,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.checkCanRunTracking() # Determine whether transducer tracking can be run
         self.checkCanPreviewPhotoscan()
-        # if not self._setting_vf_clone:
-        #     self.updateVirtualFitResultDisplay() # virtual fit rendering checkbox
+        self.updateVirtualFitResultDisplay() # virtual fit rendering checkbox
         self.updateModelRenderingSettings() #model rendering options
         self.updateDistanceFromVFLabel()
 
@@ -2139,6 +2145,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def setVirtualFitResultForTracking(self, vf_result: Optional[vtkMRMLTransformNode]):
 
+        if self._running_wizard:
+            return
         current_result = self._virtual_fit_transform_for_tracking
         # If there is a virtual fit result selected in the pre-planning module
         if vf_result:
@@ -2153,10 +2161,26 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self._virtual_fit_transform_for_tracking = best_virtual_fit_result_node # Could be None
         
         # If the transform node has chanfed
-        if current_result is None or \
-            self._virtual_fit_transform_for_tracking.GetID() != current_result.GetID():
-            self.updateVirtualFitResultDisplay()
-            self.updateVirtualFitStatus()
+        # if current_result is None or \
+        #     self._virtual_fit_transform_for_tracking.GetID() != current_result.GetID():
+        self.updateVirtualFitResultDisplay()
+        self.updateVirtualFitStatus()
+
+    def showVirtualFitResult(self):
+        """Toggles display of the transducer at the virtual fit result position.
+        The virtual fit result shown is determined in `setVirtualFitResultForTracking`"""
+
+        # Control visibility based on the checkbox state
+        is_visible = self.ui.viewVirtualFitCheckBox.isChecked()
+
+        current_data = self.algorithm_input_widget.get_current_data()
+        selected_transducer = current_data["Transducer"]
+        selected_transducer.set_cloned_virtual_fit_model(self._virtual_fit_transform_for_tracking)
+        selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(is_visible)
+
+        if selected_transducer.cloned_virtual_fit_model.GetDisplayVisibility() != is_visible:
+            selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(is_visible)
+
 
     def updateVirtualFitResultDisplay(self):
         """
@@ -2179,7 +2203,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.viewVirtualFitCheckBox.setToolTip("Select a transducer to view the affiliated virtual fit result")
             return
         
-        if not self._virtual_fit_transform_for_tracking:
+        if self._virtual_fit_transform_for_tracking is None:
             self.ui.viewVirtualFitCheckBox.enabled = False
             self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
             return
@@ -2194,14 +2218,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.viewVirtualFitCheckBox.enabled = True
         self.ui.viewVirtualFitCheckBox.setToolTip("")
 
-        self._setting_vf_clone = True
-        selected_transducer.set_cloned_virtual_fit_model(self._virtual_fit_transform_for_tracking)
-        self._setting_vf_clone = False
-
-        # Control visibility based on the checkbox state
-        is_visible = self.ui.viewVirtualFitCheckBox.isChecked()
-        if selected_transducer.cloned_virtual_fit_model.GetDisplayVisibility() != is_visible:
-            selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(is_visible)
+        # # Control visibility based on the checkbox state
+        # is_visible = self.ui.viewVirtualFitCheckBox.isChecked()
+        # if selected_transducer.cloned_virtual_fit_model.GetDisplayVisibility() != is_visible:
+        #     self.showVirtualFitResult()
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
@@ -2339,7 +2359,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         self.update_photoscan_approval(photoscan_id = photoscan_id, approval_state = False)
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         data_logic.update_underlying_openlifu_session()
-            
 
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
