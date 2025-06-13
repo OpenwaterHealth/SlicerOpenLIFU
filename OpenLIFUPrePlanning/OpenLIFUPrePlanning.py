@@ -223,6 +223,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         }
         """)
         self.ui.addTransformPushButton.clicked.connect(self.onAddVirtualFitResultClicked)
+        self.ui.addTransformPushButton.clicked.connect("Create new virtual fit result")
         self.updateVirtualFitResultsTable()
         # ------------------------------------
 
