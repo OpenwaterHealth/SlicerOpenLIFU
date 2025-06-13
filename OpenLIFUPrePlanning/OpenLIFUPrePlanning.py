@@ -517,15 +517,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def updateApproveButton(self):
 
-        selected_items = self.ui.virtualFitResultTable.selectedItems()
-        if not selected_items:
-            return
-        selected_item = selected_items[0] 
-        selected_vf_result = selected_item.data(qt.Qt.UserRole)
-        
+        selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
             return
-
         approved : bool = get_approval_from_virtual_fit_result_node(selected_vf_result)
 
         if not approved:
@@ -558,14 +552,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onApproveClicked(self):
         
         most_recent_selection = self.ui.virtualFitResultTable.currentRow
-        selected_items = self.ui.virtualFitResultTable.selectedItems()
-        if not selected_items:
-            return
-        selected_item = selected_items[0] # Get the first selected item (usually from col 0 if SelectRows)
-        selected_vf_result = selected_item.data(qt.Qt.UserRole)
+        selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
-            return
-
+            raise RuntimeError("No virtual fit result selected")
         approval_status = self.logic.toggle_virtual_fit_approval(selected_vf_result) # Triggers data parameter node modified
         if approval_status:
             self.watchVirtualFit(selected_vf_result)
@@ -693,6 +682,18 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.modifyTransformPushButton.enabled = False
             self.ui.addTransformPushButton.enabled = False
 
+    def getCurrentVirtualFitSelection(self):
+        """ Returns the virtual fit transform node associated with the current selection."""
+
+        selected_items = self.ui.virtualFitResultTable.selectedItems()
+        if not selected_items:
+            return None
+        selected_item = selected_items[0] # Get the first selected item (usually from col 0 if SelectRows)
+        selected_vf_result = selected_item.data(qt.Qt.UserRole)
+        if selected_vf_result is None:
+            raise RuntimeError("No transform node found in association with the selected virtual fit result")
+        return selected_vf_result
+
     def setCurrentVirtualFitSelection(self, node: vtkMRMLTransformNode):
         """ Selects the row associated with the given transform node in the results table.
         If different to the current selection, this updates the transducer position."""
@@ -742,7 +743,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Display the skin segmentation and transducer
         self.showSkin(activeData["Volume"])
         activeData["Transducer"].set_visibility(True)
-        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
 
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
@@ -789,14 +789,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onVirtualFitResultSelectionChanged(self):
         """Updates the transducer transform to match the currently selected virtual fit result"""
 
-        selected_items = self.ui.virtualFitResultTable.selectedItems()
-        if not selected_items:
-            return
-        selected_item = selected_items[0] # Get the first selected item (usually from col 0 if SelectRows)
-        selected_vf_result = selected_item.data(qt.Qt.UserRole)
+        selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
             return
-
         activeData = self.algorithm_input_widget.get_current_data()
         activeData["Transducer"].set_current_transform_to_match_transform_node(selected_vf_result)
         # Incase they were not previously shown
@@ -809,16 +804,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.addTransformPushButton.enabled = True
         self.updateApproveButton()
 
+        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitResultForDisplay()
+        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitStatus()
+
+
     def onModifyTransformClicked(self):
 
-        selected_items = self.ui.virtualFitResultTable.selectedItems()
-        if not selected_items:
-            return
-        selected_item = selected_items[0] # Get the first selected item (usually from col 0 if SelectRows)
-        selected_vf_result = selected_item.data(qt.Qt.UserRole)
-        if not selected_vf_result:
-            raise RuntimeError("No virtual fit results selected") # The button should not be enabled in this case
-
+        selected_vf_result = self.getCurrentVirtualFitSelection()
+        if selected_vf_result is None:
+            raise RuntimeError("No virtual fit result selected")
         selected_transducer = self.algorithm_input_widget.get_current_data()["Transducer"]
 
         if not selected_vf_result.GetDisplayNode().GetEditorVisibility():

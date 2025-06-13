@@ -64,7 +64,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
 from OpenLIFULib.notifications import notify
-from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target
+from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
 
 # These imports are for IDE and static analysis purposes only
 if TYPE_CHECKING:
@@ -1682,7 +1682,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
-        self.updateApprovalWarningsIfAny()
+        self.updateVirtualFitStatus()
         self.updateInputOptions()
         self.updateWorkflowControls()
         
@@ -1743,7 +1743,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.checkCanRunTracking() # Determine whether transducer tracking can be run
         self.checkCanPreviewPhotoscan()
-        self.updateApprovalWarningsIfAny()
+        self.updateVirtualFitStatus()
         if not self._setting_vf_clone:
             self.updateVirtualFitResultForDisplay() # virtual fit rendering checkbox
         self.updateModelRenderingSettings() #model rendering options
@@ -1833,12 +1833,24 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.previewPhotoscanButton.enabled = True
             self.ui.previewPhotoscanButton.setToolTip("Preview and toggle approval of the selected photoscan before registration")
 
-    def get_currently_selected_target_from_preplanning(self):
-
+    def get_currently_selected_target_from_preplanning(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
+        """Returns the currently selected target in the pre-planning module. Returns None if no target is selected"""
+        
         preplanning_widget_input_data = slicer.modules.OpenLIFUPrePlanningWidget.algorithm_input_widget.get_current_data()
         preplanning_target = preplanning_widget_input_data["Target"]
-
         return preplanning_target
+    
+    def get_currently_selected_virtualfit_transform_from_preplanning(self) -> Optional[vtkMRMLTransformNode]:
+        """Returns the currently selected virtual fit result  in the pre-planning module. Returns None if no result is selected
+        TODO: In the future, we will add a 'Radio button' which is used to specify the 'chosen' virtual fit result. That could
+        be different from the currenlty selected row in the table. """
+        
+        # The virtual fit selections are tied to the selected target. So there won't be virtual fit results if a target isn't selected
+        selected_target = self.get_currently_selected_target_from_preplanning()
+        if not selected_target:
+            return None
+        preplanning_virtualfit = slicer.modules.OpenLIFUPrePlanningWidget.getCurrentVirtualFitSelection()
+        return preplanning_virtualfit
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
@@ -2100,25 +2112,30 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             )
         self.ui.approvalStatusLabel.text = tt_approval_status
     
-    def updateApprovalWarningsIfAny(self):
+    def updateVirtualFitStatus(self):
         """ Updates the status message that warns the user if virtual fit is not 
         approved for the selected target or if the selected photoscan is not
         approved for transducer tracking"""
         
+        self.ui.approvalWarningLabel.styleSheet = "color:black;"
         selected_target = self.get_currently_selected_target_from_preplanning()
-        warnings = ''
+        status = ''
         if selected_target:
             target_id = fiducial_to_openlifu_point_id(selected_target)
-            target_is_approved = slicer.util.getModuleLogic('OpenLIFUPrePlanning').get_virtual_fit_approval(target_id)
-            if not target_is_approved:
-                warnings += '\n-Virtual fit is not approved for the selected target.'
-        
-        if warnings:
-            self.ui.approvalWarningLabel.text = "WARNING(S):" + warnings
-            self.ui.approvalWarningLabel.styleSheet = "color:red;"
-        else:
-            self.ui.approvalWarningLabel.text = ""
-    
+            status += f"Selected Target: {target_id}"
+            selected_virtual_fit = self.get_currently_selected_virtualfit_transform_from_preplanning()
+            if selected_virtual_fit:
+                vf_is_approved = get_approval_from_virtual_fit_result_node(selected_virtual_fit)
+                status += f"\nVirtual Fit: {selected_virtual_fit.GetName()}"
+                if vf_is_approved:
+                    self.ui.approvalWarningLabel.styleSheet = "color:green;"
+                else:
+                    status += '\nWARNING: Virtual fit is not approved for the selected target.'
+                    self.ui.approvalWarningLabel.styleSheet = "color:red;"
+            else:
+                status += f"\nNo virtual fit result selected"
+
+        self.ui.approvalWarningLabel.text = status
 
     def updateVirtualFitResultForDisplay(self):
         """
