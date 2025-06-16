@@ -381,7 +381,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self.logic.get_virtual_fit_approval(target_id):
             self.logic.revoke_virtual_fit_approval(target_id)
             notify(f"Virtual fit approval revoked:\n{reason}")
-            self.updateApproveButton()
             self.updateApprovalStatusLabel()
 
     def revokeVirtualFitApprovalIfAny(self, node: vtkMRMLTransformNode, reason:str):
@@ -397,10 +396,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             data_logic.update_underlying_openlifu_session()
             notify(f"Virtual fit approval revoked:\n{reason}")
             self.updateApprovalStatusLabel()
-            self.updateApproveButton()
 
             # Need this because updates to the data parameter node resets the combo box 
             self.setCurrentVirtualFitSelection(node)
+            self.updateApproveButton(approved = False) # Depends on the currently selected item
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
@@ -532,12 +531,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             raise RuntimeError("It should not be possible to click the lock button with no target selected.")
         node.SetLocked(not node.GetLocked())
 
-    def updateApproveButton(self):
-
-        selected_vf_result = self.getCurrentVirtualFitSelection()
-        if selected_vf_result is None:
-            return
-        approved : bool = get_approval_from_virtual_fit_result_node(selected_vf_result)
+    def updateApproveButton(self, approved: bool):
 
         if not approved:
             self.ui.approveButton.setText("Approve virtual fit")
@@ -582,16 +576,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.watchVirtualFit(selected_vf_result)
         else:
             self.unwatchVirtualFit(selected_vf_result)
-        
-        self.updateApproveButton()
-        self.updateWorkflowControls()
-
-        # Update table
-        approval_status = "True" if approval_status else "False"
-        self.ui.virtualFitResultTable.setItem(most_recent_selection, 1, qt.QTableWidgetItem(approval_status))
 
         # Restore the most recent selection if it's still valid
         self.setCurrentVirtualFitSelection(selected_vf_result)
+        self.updateApproveButton(approved = approval_status)
+        self.updateWorkflowControls()
 
     def updateApprovalStatusLabel(self):
         approved_target_ids = self.logic.get_approved_target_ids()
@@ -694,15 +683,26 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             if 0 <= most_recent_selection < self.ui.virtualFitResultTable.rowCount:
                 self.ui.virtualFitResultTable.selectRow(most_recent_selection)
             
-            self.updateApproveButton()
+            # Defaults to the first result
+            approved : bool = get_approval_from_virtual_fit_result_node(vf_results[0])
+            self.updateApproveButton(approved)
 
         self.ui.virtualFitResultTable.resizeColumnsToContents()
+        self.ui.virtualFitResultTable.resizeRowsToContents()
         self.ui.virtualFitResultTable.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.ui.virtualFitResultTable.setSelectionMode(qt.QAbstractItemView.SingleSelection) # Allow single row selection
         self.ui.virtualFitResultTable.horizontalHeader().setSectionResizeMode(0, qt.QHeaderView.Stretch)
 
+        # Don't update any of the buttons if manual interaction with a virtual fit result is in progress
+        # Approval updates occur through `onDataParamaterNode` modified (through updating the underlying session)
+        # therefore we are okay with the above talbe updats occuring i.e when approval is automatically revoking due
+        # transform modifications
+        active_nodes = self.get_currently_active_interaction_node()
+        if active_nodes or active_nodes is None:
+            return
+
         # If nothing is selected or no results are available
-        if not vf_results or self.ui.virtualFitResultTable.currentRow() == -1:
+        if not vf_results:
             # Disable, add, modify and approve buttons
             self.ui.approveButton.enabled = False
             self.ui.approveButton.setText("Approve virtual fit")
@@ -730,7 +730,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not selected_item:
             raise RuntimeError("Cannot find the given node in the virtual fit results table")
         self.ui.virtualFitResultTable.selectRow(selected_item[0].row())
-        self.ui.virtualFitResultTable.setFocus()
         
     def onRunAutoFitClicked(self):  
         self.create_virtual_fit_result(auto_fit = True)
@@ -834,9 +833,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.approveButton.enabled = True
         self.ui.modifyTransformPushButton.enabled = True
         self.ui.addTransformPushButton.enabled = True
-        self.updateApproveButton()
 
-        # self.setCurrentVirtualFitSelection(selected_vf_result) # Because the above steps trigger table updates!
+        self.setCurrentVirtualFitSelection(selected_vf_result) # Because the above steps trigger table updates!
+        approved : bool = get_approval_from_virtual_fit_result_node(selected_vf_result)
+        self.updateApproveButton(approved) 
         # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
         self.logic.chosen_virtual_fit = selected_vf_result #Temporary functionality till radio buttons are added
 
@@ -1109,7 +1109,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         target_id = fiducial_to_openlifu_point_id(target)
-        self.clear_virtual_fit_results(target = target)
+        self.clear_virtual_fit_results(target = target) # TODO: This should only clear the previously computed automatic ones
 
         existing_vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
         
