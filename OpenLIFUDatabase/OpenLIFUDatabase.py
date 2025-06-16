@@ -176,6 +176,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
                 "Confirm initialize database"
             ):
                 self.logic.db = None
+                self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: 1px solid red;")
                 return
             self.logic.copy_preinitialized_database(path)
 
