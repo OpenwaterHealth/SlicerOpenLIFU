@@ -1101,6 +1101,16 @@ class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFo
         spacing_spinbox = self._field_widgets['spacing']
         self.modify_widget_spinbox(spacing_spinbox, default_value=1.0, min_value=0.1, max_value=2.0)
 
+        # Customize the button names and table size of the simulation options
+        # ('options')
+        options_dicttablewidget = self._field_widgets['options']
+        options_dicttablewidget.key_name = "Simulation Option"
+        options_dicttablewidget.val_name = "Value"
+        options_dicttablewidget.add_button.text = "Add Simulation Option"
+        options_dicttablewidget.remove_button.text = "Remove Simulation Option"
+        options_dicttablewidget.table.setHorizontalHeaderLabels(["Simulation Option", "Value"])
+        options_dicttablewidget.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
+
 class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
     def __init__(self):
         super().__init__([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
