@@ -168,7 +168,18 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
-        self.logic.load_database(Path(self.ui.databaseDirectoryLineEdit.currentPath))
+        path = Path(self.ui.databaseDirectoryLineEdit.currentPath)
+
+        if not self.logic.path_is_openlifu_database_root(path):
+            if not slicer.util.confirmYesNoDisplay(
+                f"An openlifu database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
+                "Confirm initialize database"
+            ):
+                self.logic.db = None
+                return
+            self.logic.copy_preinitialized_database(path)
+
+        self.logic.load_database(path)
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -329,16 +340,6 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         Args:
             path: Path to the openlifu database folder on disk.
         """
-        if not self.path_is_openlifu_database_root(path):
-            if not slicer.util.confirmYesNoDisplay(
-                f"An openlifu database was not found at the entered path ({str(path)}). Do you want to initialize a default one?",
-                "Confirm initialize database"
-            ):
-                self.db = None
-                return
-
-            self.copy_preinitialized_database(path)
-
         self.db = openlifu_lz().Database(path)
         add_slicer_log_handler_for_openlifu_object(self.db)
     
