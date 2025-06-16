@@ -1683,6 +1683,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateApprovalStatusLabel()
         self.updateApprovalWarningsIfAny()
         self.updateInputOptions()
+        self.updateWorkflowControls()
         
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:

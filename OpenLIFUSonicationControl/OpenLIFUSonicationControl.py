@@ -333,6 +333,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._cur_solution_id = solution_parameter_pack.solution.solution.id
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
+        self.updateWorkflowControls()
+
     def updateReinitializeLIFUInterfacePushButtonEnabled(self):
 
         if self.logic.running:
