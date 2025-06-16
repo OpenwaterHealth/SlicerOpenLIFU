@@ -709,7 +709,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approveButton.setText("Approve virtual fit")
             self.ui.approveButton.setToolTip("Please select a virtual fit first")
             self.ui.modifyTransformPushButton.enabled = False
-            slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(None) # Initialize based on target
+            self.logic.chosen_virtual_fit = None
+        
+        slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(self.logic.chosen_virtual_fit)
 
     def getCurrentVirtualFitSelection(self):
         """ Returns the virtual fit transform node associated with the current selection."""
@@ -822,7 +824,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         
         if selected_vf_result is None:
             # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
-            self.logic.chosen_virtual_fit = None  #Temporary functionality till radio buttons are added
             return
 
         activeData = self.algorithm_input_widget.get_current_data()
