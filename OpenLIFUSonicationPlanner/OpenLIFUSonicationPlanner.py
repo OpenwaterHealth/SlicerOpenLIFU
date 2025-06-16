@@ -155,8 +155,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
-        self.updateVirtualFitApprovalStatus()
-        self.updateTrackingApprovalStatus()
+        self.updateVirtualFitApprovalStatusLabel()
+        self.updateTrackingApprovalStatusLabel()
         self.updateSolutionAnalysis()
 
         # Add observers on the Data module's parameter node and this module's own parameter node
@@ -287,8 +287,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
-        self.updateVirtualFitApprovalStatus()
-        self.updateTrackingApprovalStatus()
+        self.updateVirtualFitApprovalStatusLabel()
+        self.updateTrackingApprovalStatusLabel()
         self.updateApproveButton()
 
         if get_openlifu_data_parameter_node().loaded_solution is None:
@@ -348,7 +348,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNode.solution_analysis = None
             notify(f"Solution deleted:\n{reason}")
 
-    def updateVirtualFitApprovalStatus(self) -> None:
+    def updateVirtualFitApprovalStatusLabel(self) -> None:
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         if loaded_session is not None:
             target_ids = loaded_session.get_virtual_fit_approvals()
@@ -362,7 +362,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.virtualFitApprovalStatusLabel.text = ""
 
-    def updateTrackingApprovalStatus(self) -> None:
+    def updateTrackingApprovalStatusLabel(self) -> None:
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         if loaded_session is not None:
             photoscan_ids = loaded_session.get_transducer_tracking_approvals()
