@@ -27,6 +27,7 @@ from OpenLIFULib import (
     openlifu_lz,
 )
 from OpenLIFULib.class_definition_widgets import (
+    CreateKeyAbstractClassValueDialog,
     DictTableWidget,
     instantiate_without_post_init,
     ListTableWidget,
@@ -1244,6 +1245,36 @@ class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMul
             materials_dicttablewidget.remove_button.text = "Remove Material"
             materials_dicttablewidget.table.setHorizontalHeaderLabels(["Material", "Definition"])
             materials_dicttablewidget.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
+            
+            # We also want to change the _open_add_dialog not to use post init,
+            # as this will throw in the case of trying to enter in a Material
+            # class definition. To do this, we also have to re-connect the
+            # add_button signal!
+            materials_dicttablewidget.add_button.clicked.disconnect(materials_dicttablewidget._open_add_dialog)
+            materials_dicttablewidget._open_add_dialog = types.MethodType(custom_open_add_dialog, materials_dicttablewidget)
+            materials_dicttablewidget.add_button.clicked.connect(materials_dicttablewidget._open_add_dialog)
+
+def custom_open_add_dialog(self, *args):
+    """
+    Custom implementation of _open_add_dialog for a DictTableWidget such
+    that it does not use post_init with the abstract class created in its
+    value type.
+
+    This override is necessary because the 'materials' DictTableWidget uses
+    a specialized dialog to create value types. These value types can raise
+    exceptions during their post-initialization (__post_init__) phase. Since
+    the default system doesn't handle such errors gracefully, this method
+    disables post-init during dialog execution to avoid runtime crashes and
+    ensures a smoother user experience.
+    """
+    existing_keys = list(self.to_dict().keys())
+    createDlg = CreateKeyAbstractClassValueDialog(self.key_name, self.val_name, self.val_type, existing_keys, use_post_init=False)
+
+    returncode, key, val = createDlg.customexec_()
+    if not returncode:
+        return
+
+    self._add_row(key, val)
 
 class OpenLIFUParameterConstraintsWidget(DictTableWidget):
 

@@ -21,7 +21,7 @@ import slicer
 from slicer.i18n import tr as _
 
 # OpenLIFULib imports
-from OpenLIFULib.util import get_hints
+from OpenLIFULib.util import display_errors, get_hints
 
 
 def instantiate_without_post_init(cls: Type, **kwargs) -> Any:
@@ -288,7 +288,7 @@ class CreateKeyAbstractClassValueDialog(CreateKeyValueDialog):
     classes) into dictionaries
     """
 
-    def __init__(self, key_name: str, val_name: str, val_type: Type, existing_keys: List[str], parent="mainWindow"):
+    def __init__(self, key_name: str, val_name: str, val_type: Type, existing_keys: List[str], use_post_init: bool = True, parent="mainWindow"):
         """
         Args:
             key_name (str): Label for the key input field.
@@ -298,6 +298,7 @@ class CreateKeyAbstractClassValueDialog(CreateKeyValueDialog):
             parent (QWidget or str): Parent widget or "mainWindow". Defaults to "mainWindow".
         """
         self.val_type = val_type
+        self.use_post_init = use_post_init
         super().__init__(key_name, val_name, existing_keys, slicer.util.mainWindow() if parent == "mainWindow" else parent)
 
     def setup(self):
@@ -327,7 +328,7 @@ class CreateKeyAbstractClassValueDialog(CreateKeyValueDialog):
         Ensure a key does not exist and that inputs are valid
         """
         typed_key = self.key_input.text
-        typed_val = self.val_input.get_form_as_class()
+        typed_val = self.val_input.get_form_as_class(post_init=self.use_post_init)
 
         if not typed_key:
             slicer.util.errorDisplay(f"{self.key_name} field cannot be empty.", parent=self)
@@ -343,7 +344,7 @@ class CreateKeyAbstractClassValueDialog(CreateKeyValueDialog):
     def customexec_(self):
         returncode = self.exec_()
         if returncode == qt.QDialog.Accepted:
-            return (returncode, self.key_input.text, self.val_input.get_form_as_class())
+            return (returncode, self.key_input.text, self.val_input.get_form_as_class(post_init=self.use_post_init))
         return (returncode, None, None)
 
 class DictTableWidget(qt.QWidget):
@@ -398,6 +399,24 @@ class DictTableWidget(qt.QWidget):
         top_level_layout.addLayout(buttons_layout)
 
     def _open_add_dialog(self):
+        """
+        Opens a dialog for adding a new key-value pair to the data structure.
+
+        This function creates and displays a dialog based on the type of values
+        expected (`self.val_type`). The user is prompted to enter a key and
+        corresponding value. 
+
+        - If `self.val_type` is `str`, a standard dialog
+          (`CreateKeyValueDialog`) is used to collect string inputs for both the
+          key and the value.
+        - If `self.val_type` is not `str`, a specialized dialog
+          (`CreateKeyAbstractClassValueDialog`) is shown. This dialog allows the
+          user to define the value as an instance of an abstract class, using a
+          form driven by `OpenLIFUAbstractDataclassDefinitionFormWidget`.
+
+        If the dialog is accepted (i.e., the user clicks "OK"), the entered
+        key-value pair is added to the internal data via `self._add_row`.
+        """
         existing_keys = list(self.to_dict().keys())
         if self.val_type is str:
             createDlg = CreateKeyValueDialog(self.key_name, self.val_name, existing_keys)
