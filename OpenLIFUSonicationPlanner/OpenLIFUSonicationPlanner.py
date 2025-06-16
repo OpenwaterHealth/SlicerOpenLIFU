@@ -294,6 +294,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if get_openlifu_data_parameter_node().loaded_solution is None:
             self.logic.getParameterNode().solution_analysis = None
 
+        self.updateWorkflowControls()
+
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
         self.addObserver(node,slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.onPointAddedOrRemoved)
