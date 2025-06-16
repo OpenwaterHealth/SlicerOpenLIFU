@@ -1233,8 +1233,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Session collapsible section
         self.ui.chooseSessionButton.clicked.connect(self.on_load_session_clicked)
-        self.ui.saveSessionButton.clicked.connect(self.on_save_session_clicked)
-        self.ui.exitSessionButton.clicked.connect(self.on_exit_session_clicked)
 
         # ---- Issue updates that may not have been triggered yet ---
         
@@ -1246,7 +1244,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_loadSubjectButton_enabled()
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_sessionCollapsibleButton_checked_and_enabled()
-        self.update_session_level_buttons_enabled()
         self.updateWorkflowControls()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
@@ -1293,18 +1290,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             subject_has_volumes = len(get_cur_db().get_volume_ids(self.logic.subject.id)) > 0
             self.ui.sessionCollapsibleButton.setChecked(subject_has_volumes)
             self.ui.sessionCollapsibleButton.setEnabled(subject_has_volumes)
-
-    def update_session_level_buttons_enabled(self) -> None:
-        if self._parameterNode is None or self._parameterNode.loaded_session is None:
-            self.ui.saveSessionButton.setEnabled(False)
-            self.ui.saveSessionButton.setToolTip("There is no active session")
-            self.ui.exitSessionButton.setEnabled(False)
-            self.ui.exitSessionButton.setToolTip("There is no active session")
-        else:
-            self.ui.saveSessionButton.setEnabled(True)
-            self.ui.saveSessionButton.setToolTip("Save the current session to the database, including session-specific transducer and target configurations")
-            self.ui.exitSessionButton.setEnabled(True)
-            self.ui.exitSessionButton.setToolTip("Exit this session and clear all session data.")
 
     @display_errors
     def on_load_subject_clicked(self, checked: bool) -> bool:
@@ -1395,16 +1380,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         transducer_tracking_widget.algorithm_input_widget.update()
         
         return True
-
-    @display_errors
-    def on_save_session_clicked(self, checked:bool) -> None:
-        self.logic.save_session()
-
-    @display_errors
-    def on_exit_session_clicked(self, checked:bool) -> None:
-        if slicer.util.confirmYesNoDisplay("Do you want to save your progress before exiting?", windowTitle="Save Confirmation"):
-            self.logic.save_session()
-        self.logic.clear_session(clean_up_scene=True)
 
     @display_errors
     def onLoadProtocolPressed(self, checked:bool) -> None:
@@ -1686,7 +1661,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Perform module-level updates
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
-        self.update_session_level_buttons_enabled()
         self.updateWorkflowControls()
 
     def cleanup(self) -> None:
