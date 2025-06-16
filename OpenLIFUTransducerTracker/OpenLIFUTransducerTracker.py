@@ -1058,6 +1058,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             self.transducer_body.GetDisplayNode().SetVisibility(False)
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
@@ -1074,6 +1075,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             self.transducer_body.GetDisplayNode().SetVisibility(False)
+            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
             self.photoscan.model_node.SetDisplayVisibility(self.photoscanVolumeTrackingPage.ui.photoscanVisibilityCheckBox.isChecked())
             self.photoscan.model_node.GetDisplayNode().SetOpacity(self.photoscanVolumeTrackingPage.ui.photoscanOpacitySlider.value)
