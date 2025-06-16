@@ -13,6 +13,9 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+from OpenLIFULib import (
+    get_openlifu_data_parameter_node,
+)
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 from OpenLIFULib.lazyimport import (
     check_and_install_python_requirements,
