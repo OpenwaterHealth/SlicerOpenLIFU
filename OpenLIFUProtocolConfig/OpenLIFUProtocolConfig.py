@@ -1167,6 +1167,17 @@ class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMul
         """
         Overwrite of __init__ that mimics most of super()'s behavior, except
         accounts for the unique inheritance structure of SegmentationMethod.
+
+        The unique inheritance structure of SegmentationMethod in openlifu
+        suggests that while UniformWater and UniformTissue inherit from
+        UniformSegmentation (i.e. are child classes), they should be mutually
+        exclusive when selecting which implementation of the ABC
+        SegmentationMethod should be chosen. The only tangible difference is
+        that UniformWater and UniformTissue should not let you change the
+        Reference material; everything else should be the same. This means that
+        the implementation of the form widget below, for creating these classes,
+        must account for the immutability of the Reference Material only when
+        those classes are chosen.
         """
         # ---- Begin constructor overwrite ----
 
@@ -1221,6 +1232,18 @@ class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMul
         ref_material_line_edit = uniformwater_definition_form_widget._field_widgets['ref_material']
         ref_material_line_edit.setEnabled(False)
 
+        # ---- Edit the materials table for *each* ABC form ----
+
+        # Each form has a table for the segmentation materials. We want to
+        # customize the table in the same exact way for each ABC form.
+        for abc_form_widget_index in range(self.forms.count):
+            materials_dicttablewidget = self.forms.widget(abc_form_widget_index)._field_widgets['materials']
+            materials_dicttablewidget.key_name = "Material"
+            materials_dicttablewidget.val_name = "Definition"
+            materials_dicttablewidget.add_button.text = "Add Material"
+            materials_dicttablewidget.remove_button.text = "Remove Material"
+            materials_dicttablewidget.table.setHorizontalHeaderLabels(["Material", "Definition"])
+            materials_dicttablewidget.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
 
 class OpenLIFUParameterConstraintsWidget(DictTableWidget):
 
