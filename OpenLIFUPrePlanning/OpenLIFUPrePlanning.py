@@ -391,7 +391,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         is_approved = get_approval_from_virtual_fit_result_node(node)
         if is_approved:
             set_approval_for_virtual_fit_result_node(
-                approval_state=not is_approved,
+                approval_state= False,
                 vf_result_node = node)
             data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             data_logic.update_underlying_openlifu_session()
@@ -568,7 +568,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onApproveClicked(self):
         
-        most_recent_selection = self.ui.virtualFitResultTable.currentRow()
         selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
             raise RuntimeError("No virtual fit result selected")

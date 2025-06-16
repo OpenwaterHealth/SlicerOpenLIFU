@@ -2150,7 +2150,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         if self._running_wizard:
             return
-        current_result = self._virtual_fit_transform_for_tracking
         # If there is a virtual fit result selected in the pre-planning module
         if vf_result:
             self._virtual_fit_transform_for_tracking = vf_result
