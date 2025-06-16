@@ -1759,7 +1759,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.checkCanRunTracking() # Determine whether transducer tracking can be run
         self.checkCanPreviewPhotoscan()
-        self.updateVirtualFitResultDisplay() # virtual fit rendering checkbox
+        self.checkCanDisplayVirtualFitResult() # virtual fit rendering checkbox
         self.updateModelRenderingSettings() #model rendering options
         self.updateDistanceFromVFLabel()
 
@@ -2011,6 +2011,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateWorkflowControls()
 
             self.updateDistanceFromVFLabel()
+            self.checkCanDisplayVirtualFitResult()
         
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
             slicer.modules.OpenLIFUPrePlanningWidget.showSkin(activeData["Volume"])
@@ -2160,10 +2161,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     target_id = fiducial_to_openlifu_point_id(selected_target))
                 self._virtual_fit_transform_for_tracking = best_virtual_fit_result_node # Could be None
         
-        # If the transform node has chanfed
-        # if current_result is None or \
-        #     self._virtual_fit_transform_for_tracking.GetID() != current_result.GetID():
-        self.updateVirtualFitResultDisplay()
+        self.checkCanDisplayVirtualFitResult()
         self.updateVirtualFitStatus()
 
     def showVirtualFitResult(self):
@@ -2181,13 +2179,10 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if selected_transducer.cloned_virtual_fit_model.GetDisplayVisibility() != is_visible:
             selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(is_visible)
 
-
-    def updateVirtualFitResultDisplay(self):
+    def checkCanDisplayVirtualFitResult(self):
         """
-        Updates the virtual fit result displayed when the `View virtual fit result` checkbox is toggled. 
-        It clones the virtual fit result, sets its opacity, and stores it for potential further use.
-        If no target is selected or no virtual fit result is found for the selected target, the 
-        visibility of the virtual fit checkbox is disabled.
+        Enables or disables the `View virtual fit result` checkbox depending on the current transducer position 
+        and whether a valid transducer is currently selected.
         """
 
         # Prevents a recursive loop when NodeAdded/Removed (when cloning VF result)
@@ -2217,11 +2212,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.ui.viewVirtualFitCheckBox.enabled = True
         self.ui.viewVirtualFitCheckBox.setToolTip("")
-
-        # # Control visibility based on the checkbox state
-        # is_visible = self.ui.viewVirtualFitCheckBox.isChecked()
-        # if selected_transducer.cloned_virtual_fit_model.GetDisplayVisibility() != is_visible:
-        #     self.showVirtualFitResult()
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
