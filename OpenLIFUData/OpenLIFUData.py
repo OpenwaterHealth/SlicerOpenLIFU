@@ -2325,7 +2325,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
         slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
-        slicer.util.getModuleWidget('OpenLIFUTransducerTracker').updateVirtualFitResultDisplay()
+        slicer.util.getModuleWidget('OpenLIFUTransducerTracker').checkCanDisplayVirtualFitResult()
 
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:
