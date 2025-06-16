@@ -369,6 +369,10 @@ class LoadSubjectDialog(qt.QDialog):
         self.updateSubjectsList()
         self._enforceUserPermissions()
 
+        # Resize according to desktop size
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.25), int(screen.height() * 0.25))
+
     def updateSubjectsList(self) -> None:
         self.tableWidget.setSortingEnabled(False) # turn off sorting during edit
 
@@ -558,6 +562,10 @@ class LoadSessionDialog(qt.QDialog):
 
         # ---- Populate Table ----
         self.update_sessions_list()
+
+        # Resize according to desktop size
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.50), int(screen.height() * 0.25))
 
     def update_sessions_list(self):
         self.table_widget.setSortingEnabled(False) # turn off sorting during edit
