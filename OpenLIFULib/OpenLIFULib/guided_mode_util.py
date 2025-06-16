@@ -85,20 +85,30 @@ class WorkflowControls(qt.QWidget):
         button_row1_layout = qt.QHBoxLayout()
         main_group_box_layout.addLayout(button_row1_layout)
 
-        if self.previous_module_name is not None:
-            self.back_button = qt.QPushButton("Back")
-            button_row1_layout.addWidget(self.back_button)
-            self.back_button.clicked.connect(self.on_back)
+        # Add back button
 
-        if self.next_module_name is not None:
-            self.next_button = qt.QPushButton("Next")
-            button_row1_layout.addWidget(self.next_button)
-            self.next_button.clicked.connect(self.on_next)
-            self.jump_ahead_button = qt.QPushButton(">>")
-            button_row1_layout.addWidget(self.jump_ahead_button)
-            self.jump_ahead_button.clicked.connect(self.on_jump_ahead)
-            self.jump_ahead_button.setToolTip("Jump ahead to the nearest unfinished step of the workflow")
+        self.back_button = qt.QPushButton("Back")
+        button_row1_layout.addWidget(self.back_button)
+        self.back_button.clicked.connect(self.on_back)
 
+        if self.previous_module_name is None:
+            self.back_button.enabled = False
+
+        # Add forward button
+
+        self.next_button = qt.QPushButton("Next")
+        button_row1_layout.addWidget(self.next_button)
+        self.next_button.clicked.connect(self.on_next)
+        self.jump_ahead_button = qt.QPushButton(">>")
+        button_row1_layout.addWidget(self.jump_ahead_button)
+        self.jump_ahead_button.clicked.connect(self.on_jump_ahead)
+        self.jump_ahead_button.setToolTip("Jump ahead to the nearest unfinished step of the workflow")
+
+        if self.next_module_name is None:
+            self.next_button.enabled = False
+            self.jump_ahead_button.enabled = False
+
+        # Add session controls
 
         if include_session_controls:
             button_row2_layout = qt.QHBoxLayout()
@@ -170,7 +180,7 @@ class WorkflowControls(qt.QWidget):
         """Update next button enabledness and tooltip"""
         if not hasattr(self, "next_button"):
             return
-        enabled = self.can_proceed or not get_guided_mode_state()
+        enabled = self.can_proceed or not get_guided_mode_state() and self.next_module_name is not None
         self.next_button.setEnabled(enabled)
         if enabled:
             self.next_button.setToolTip(f"Go to the {self.next_module_name} module.")
@@ -180,7 +190,8 @@ class WorkflowControls(qt.QWidget):
     def update_back_button_enabledness(self):
         if not hasattr(self, "back_button"):
             return
-        self.back_button.setEnabled(True)
+        enabled = self.previous_module_name is not None
+        self.back_button.setEnabled(enabled)
         self.back_button.setToolTip(f"Go to the {self.previous_module_name} module.")
 
     def update_status_label(self):
@@ -238,7 +249,7 @@ class Workflow:
                 parent = None, # The widget will be parented when it is injected into a module
                 previous_module_name = previous_module,
                 next_module_name = next_module,
-                include_session_controls = current_module not in ["OpenLIFUDatabase", "OpenLIFULogin", "OpenLIFUData"],
+                include_session_controls = True,  # All modules have session controls now, disabled conditionally.
             )
 
     def starting_module(self) -> str:
