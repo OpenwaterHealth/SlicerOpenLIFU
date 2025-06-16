@@ -659,11 +659,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         target_id = fiducial_to_openlifu_point_id(target)
         vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
 
-        # Define Table Headers
-        headers = ["Name", "Approved"] 
-        self.ui.virtualFitResultTable.setColumnCount(len(headers))
-        self.ui.virtualFitResultTable.setHorizontalHeaderLabels(headers)
-
         # Populate the table
         if vf_results:
             self.ui.virtualFitResultTable.setRowCount(len(vf_results)) 
@@ -688,11 +683,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             approved : bool = get_approval_from_virtual_fit_result_node(vf_results[0])
             self.updateApproveButton(approved)
 
-        self.ui.virtualFitResultTable.resizeColumnsToContents()
-        self.ui.virtualFitResultTable.resizeRowsToContents()
-        self.ui.virtualFitResultTable.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
-        self.ui.virtualFitResultTable.setSelectionMode(qt.QAbstractItemView.SingleSelection) # Allow single row selection
-        self.ui.virtualFitResultTable.horizontalHeader().setSectionResizeMode(0, qt.QHeaderView.Stretch)
+            self.ui.virtualFitResultTable.resizeRowsToContents()
 
         # Don't update any of the buttons if manual interaction with a virtual fit result is in progress
         # Approval updates occur through `onDataParamaterNode` modified (through updating the underlying session)
