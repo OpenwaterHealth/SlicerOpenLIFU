@@ -850,8 +850,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             # Initialize transform with identity matrix
             self.transducer_to_volume_transform_node = transducer_transform_node_from_openlifu(
                 openlifu_transform_matrix = np.eye(4) ,
-                transducer = transducer.transducer.transducer,
-                transform_units = transducer.transducer.transducer.units)
+                transducer = self.wizard().transducer.transducer.transducer,
+                transform_units = self.wizard().transducer.transducer.transducer.units)
         
         self.transducer_to_volume_transform_node.CreateDefaultDisplayNodes()
         self.setupTransformNode()
