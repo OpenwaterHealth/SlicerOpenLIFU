@@ -213,7 +213,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.virtualfitButton.clicked.connect(self.onRunAutoFitClicked)
 
         # ---- Virtual fit result options ----
-        self.ui.virtualFitResultTable.itemClicked.connect(self.onVirtualFitResultSelected)
+        # self.ui.virtualFitResultTable.itemClicked.connect(self.onVirtualFitResultSelected)
+        self.ui.virtualFitResultTable.itemSelectionChanged.connect(self.onVirtualFitResultSelected)
         self.ui.modifyTransformPushButton.clicked.connect(self.onModifyTransformClicked)
         self.ui.modifyTransformPushButton.setStyleSheet("""
         QPushButton:checked {
@@ -730,6 +731,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not selected_item:
             raise RuntimeError("Cannot find the given node in the virtual fit results table")
         self.ui.virtualFitResultTable.selectRow(selected_item[0].row())
+        self.ui.virtualFitResultTable.scrollToItem(selected_item[0], qt.QAbstractItemView.PositionAtCenter)
         
     def onRunAutoFitClicked(self):  
         self.create_virtual_fit_result(auto_fit = True)
