@@ -68,6 +68,7 @@ from OpenLIFULib.virtual_fit_results import (
 if TYPE_CHECKING:
     import openlifu
     import openlifu.nav.photoscan
+    from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
 
 #
@@ -1692,6 +1693,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.workflow_controls.status_text = "Session loaded, proceed to the next step."
 
     def onParameterNodeModified(self, caller, event) -> None:
+        # Pass any new session onto the home module global workflow object
+        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+        if self._parameterNode is None or self._parameterNode.loaded_session is None:
+            home_module_logic.workflow.global_session = None
+        else:
+            home_module_logic.workflow.global_session = self._parameterNode.loaded_session.session
+
+        # Perform module-level updates
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.update_session_level_buttons_enabled()

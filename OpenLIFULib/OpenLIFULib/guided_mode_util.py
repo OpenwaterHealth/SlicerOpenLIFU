@@ -5,6 +5,7 @@ from OpenLIFULib.util import display_errors, replace_widget
 from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget
 
 if TYPE_CHECKING:
+    import openlifu
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
     from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
 
@@ -238,6 +239,7 @@ class Workflow:
 
     def __init__(self):
         
+        self._global_session : "Optional[openlifu.db.session.Session]" = None
         self.workflow_controls : Dict[str,WorkflowControls] = {}
         
         for previous_module, current_module, next_module in zip(
@@ -252,6 +254,23 @@ class Workflow:
                 include_session_controls = True,  # All modules have session controls now, disabled conditionally.
             )
 
+        self.update_all()  # init state-related updates in workflow controls
+
+    @property
+    def global_session(self) ->  "openlifu.db.session.Session":
+        """The openlifu session recognized by the workflow. If a session is
+        always supposed to be global, global_session must still be manually set
+        in a syncing routine with the other session. It is recommended to set
+        up the sync routine in the object responsible for holding the Workflow
+        object"""
+        return self._global_session
+
+    @global_session.setter
+    def global_session(self, new_val : "openlifu.db.session.Session"):
+        self._global_session = new_val
+        self.update_save_buttons_enabledness()
+        self.update_exit_buttons_enabledness()
+
     def starting_module(self) -> str:
         """Get the name of the first module in the guided workflow."""
         return "OpenLIFUData"
@@ -262,8 +281,45 @@ class Workflow:
             if not self.workflow_controls[module_name].can_proceed:
                 return module_name
         return self.modules[-1]
+
+    def update_save_buttons_enabledness(self):
+        """Update save button enabledness for all workflow controls at once"""
+        if self.global_session is None:
+            enabled = False
+            tooltip = "There is no loaded session to save."
+        else:
+            enabled = True
+            tooltip = "Save the currently loaded session."
+
+        for module_name in self.modules:
+            controls = self.workflow_controls[module_name]
+            if not hasattr(controls, "save_button"):
+                return
+
+            controls.save_button.setEnabled(enabled)
+            controls.save_button.setToolTip(tooltip)
+
+    def update_exit_buttons_enabledness(self):
+        """Update exit button enabledness for all workflow controls at once"""
+        if self.global_session is None:
+            enabled = False
+            tooltip = "There is no loaded session to exit/unload."
+        else:
+            enabled = True
+            tooltip = "Exit the currently loaded session."
+
+        for module_name in self.modules:
+            controls = self.workflow_controls[module_name]
+            if not hasattr(controls, "exit_button"):
+                return
+
+            controls.exit_button.setEnabled(enabled)
+            controls.exit_button.setToolTip(tooltip)
     
     def update_all(self):
+        self.update_save_buttons_enabledness()
+        self.update_exit_buttons_enabledness()
+
         for workflow_controls in self.workflow_controls.values():
             workflow_controls.update()
 
