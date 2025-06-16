@@ -1217,6 +1217,8 @@ class TransducerTrackingWizard(qt.QWizard):
 
     def clean_up_observers(self, node: vtkMRMLNode):
         """ Removes any tagged observers associated with this node """
+        if node.GetID() not in self.node_observations:
+            return
         for tag in self.node_observations.pop(node.GetID()):
             node.RemoveObserver(tag)
         
