@@ -639,19 +639,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
         
         # Set the center of the transformation to the center of the photocan model node
-        bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.wizard().photoscan.model_node.GetRASBounds(bounds)
-        center_world = [
-            (bounds[0] + bounds[1]) / 2,
-            (bounds[2] + bounds[3]) / 2,
-            (bounds[4] + bounds[5]) / 2
-        ]
-        
-        center_local = [0.0,0.0,0.0]
-        transform_from_world = vtk.vtkGeneralTransform()
-        self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
-        transform_from_world.TransformPoint(center_world,center_local )
-        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(center_local)
+        centroid_local = self.getPhotoscanCentroidRAS()
+        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(centroid_local)
 
         self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
         # Add observer after setup
@@ -737,11 +726,41 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.update_runICPRegistrationPV_button()
     
     def updateScaledTransformNode(self):
+        """Creates a composite transform that scales the photoscan from the centroid of the model, applying the scaling value
+        set using the  the sliding widget"""
 
+        compositeTransform = vtk.vtkTransform()
+        compositeTransform.Identity()
+        centroid_local = self.getPhotoscanCentroidRAS()
+        compositeTransform.Translate(-centroid_local[0], -centroid_local[1], -centroid_local[2]) # Translate the centroid to the origin
+        
         scaling_value = self.ui.scalingTransformMRMLSliderWidget.value
-        scaling_matrix = np.diag([scaling_value, scaling_value, scaling_value, 1])
-        # Need to also update the origin of the scaling transform
-        self.scaling_transform_node.SetMatrixTransformToParent(numpy_to_vtk_4x4(scaling_matrix))
+        compositeTransform.Scale(scaling_value, scaling_value, scaling_value) # apply scaling
+        
+        compositeTransform.Translate(centroid_local[0], centroid_local[1], centroid_local[2])
+
+        finalMatrix = vtk.vtkMatrix4x4()
+        compositeTransform.GetMatrix(finalMatrix)
+
+        self.scaling_transform_node.SetMatrixTransformToParent(finalMatrix)
+    
+    def getPhotoscanCentroidRAS(self):
+        """Calculates the centroid of the photoscan model node"""
+
+        bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.wizard().photoscan.model_node.GetRASBounds(bounds)
+        center_world = [
+            (bounds[0] + bounds[1]) / 2,
+            (bounds[2] + bounds[3]) / 2,
+            (bounds[4] + bounds[5]) / 2
+        ]
+
+        center_local = [0.0,0.0,0.0]
+        transform_from_world = vtk.vtkGeneralTransform()
+        self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
+        transform_from_world.TransformPoint(center_world,center_local )
+
+        return center_local
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
