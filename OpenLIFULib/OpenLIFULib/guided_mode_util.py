@@ -164,7 +164,7 @@ class WorkflowControls(qt.QWidget):
             self.close_session(save=False)
 
         home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
-        home_module_logic.workflow_go_to_start()
+        home_module_logic.workflow_jump_ahead()
 
     def save_session(self):
         data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
@@ -273,7 +273,7 @@ class Workflow:
 
     def starting_module(self) -> str:
         """Get the name of the first module in the guided workflow."""
-        return "OpenLIFUData"
+        return "OpenLIFUDatabase"
 
     def furthest_module_to_which_can_proceed(self) -> str:
         """Get the name of the furthest module along the workflow to which we `can_proceed`."""
