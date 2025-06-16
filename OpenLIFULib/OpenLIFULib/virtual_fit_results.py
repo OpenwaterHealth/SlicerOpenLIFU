@@ -159,7 +159,7 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
     return virtual_fit_results_openlifu
 
 def add_virtual_fit_results_from_openlifu_session_format(
-    vf_results_openlifu : "Dict[str,Tuple[bool,List[ArrayTransform]]]",
+    vf_results_openlifu : "Dict[str, List[Tuple[bool, ArrayTransform]]]",
     session_id:str,
     transducer:"Transducer",
     replace = False,
@@ -181,7 +181,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
     See also the reverse function `get_virtual_fit_results_in_openlifu_session_format`
     """
     nodes_that_have_been_added = []
-    for target_id, list_of_transforms in vf_results_openlifu.items(): 
+    for target_id, list_of_transforms in vf_results_openlifu.items():
         for i, (is_approved, array_transform) in enumerate(list_of_transforms):
             virtual_fit_result_transform = transducer_transform_node_from_openlifu(
                 openlifu_transform_matrix = array_transform.matrix,
