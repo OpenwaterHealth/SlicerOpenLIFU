@@ -222,8 +222,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         padding: 4px;
         }
         """)
+        self.ui.modifyTransformPushButton.setToolTip("Modify virtual fit transform")
         self.ui.addTransformPushButton.clicked.connect(self.onAddVirtualFitResultClicked)
-        self.ui.addTransformPushButton.clicked.connect("Create new virtual fit result")
+        self.ui.addTransformPushButton.setToolTip("Create new virtual fit result")
         self.updateVirtualFitResultsTable()
         slicer.util.getModule("OpenLIFUTransducerTracker").widgetRepresentation() 
         self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking)
@@ -688,7 +689,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             
             self.ui.approveButton.enabled = True
             self.ui.modifyTransformPushButton.enabled = True
-            self.ui.addTransformPushButton.enabled = True
 
             # Restore the most recent selection if it's still valid
             if 0 <= most_recent_selection < self.ui.virtualFitResultTable.rowCount:
@@ -708,7 +708,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.approveButton.setText("Approve virtual fit")
             self.ui.approveButton.setToolTip("Please select a virtual fit first")
             self.ui.modifyTransformPushButton.enabled = False
-            self.ui.addTransformPushButton.enabled = False
             slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(None) # Initialize based on target
 
     def getCurrentVirtualFitSelection(self):
