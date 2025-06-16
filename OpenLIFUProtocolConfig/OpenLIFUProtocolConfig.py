@@ -1387,9 +1387,16 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
     def __init__(self):
         super().__init__(key_name="Parameter", val_name="Parameter Constraint")
 
-    # Override the add dialog to use a special dialog just for the parameter
-    # constraint
+        # Customize the name of the "Add entry" button, which is given by the
+        # super class DictTableWidget
+        self.add_button.text = "Add Parameter Constraint"
+        self.remove_button.text = "Remove Parameter Constraint"
+
     def _open_add_dialog(self):
+        """ Override the add dialog to use a special dialog just for the
+        parameter constraint. This is because parameter constraints are more
+        complex than what DictTableWidget, the parent class, provides as a
+        dialog for entering data"""
         existing_keys = list(self.to_dict().keys())
         createDlg = self.CreateParameterParameterConstraintDialog(existing_keys)
         returncode, param, param_constraint = createDlg.customexec_()
