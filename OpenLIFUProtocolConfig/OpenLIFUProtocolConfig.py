@@ -1083,7 +1083,7 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
 
 class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
     def __init__(self, parent: Optional[qt.QWidget] = None):
-        super().__init__(openlifu_lz().sim.SimSetup, parent, is_collapsible=True, collapsible_title="Sim Setup")
+        super().__init__(openlifu_lz().sim.SimSetup, parent, is_collapsible=True, collapsible_title="Simulation Setup")
 
         # Modify the defaults and ranges for x_extent, y_extent, and z_extent
         x_ext_hbox = self._field_widgets['x_extent'].layout()
