@@ -826,8 +826,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         if self.runningRegistration:
             self.disable_manual_registration()
 
-        if self.wizard().transducer.cloned_virtual_fit_model:
-            self.wizard().transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
+        self.ui.viewVirtualFitCheckBox.checked = False
+        self.ui.registrationSurfaceVisibilityCheckBox.checked = False
 
     def onTransformModified(self, node, eventID,):
         
@@ -980,17 +980,6 @@ class TransducerTrackingWizard(qt.QWizard):
 
             self.setupViewNodes()
 
-        self.setWindowTitle("Transducer Tracking Wizard")
-        self.photoscanMarkupPage = PhotoscanMarkupPage(self)
-        self.skinSegmentationMarkupPage = SkinSegmentationMarkupPage(self)
-        self.photoscanVolumeTrackingPage = PhotoscanVolumeTrackingPage(self)
-        self.transducerPhotoscanTrackingPage = TransducerPhotoscanTrackingPage(self)
-
-        self.addPage(self.photoscanMarkupPage)
-        self.addPage(self.skinSegmentationMarkupPage)
-        self.addPage(self.photoscanVolumeTrackingPage)
-        self.addPage(self.transducerPhotoscanTrackingPage)
-
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setWizardStyle(qt.QWizard.ClassicStyle)
         self.setButtonText(qt.QWizard.FinishButton,"Approve")
@@ -1022,6 +1011,17 @@ class TransducerTrackingWizard(qt.QWizard):
         # Mapping from mrml node ID to a list of vtkCommand tags that can later be used to remove the observation
         self.node_observations : Dict[str,List[int]] = defaultdict(list)
         
+        self.setWindowTitle("Transducer Tracking Wizard")
+        self.photoscanMarkupPage = PhotoscanMarkupPage(self)
+        self.skinSegmentationMarkupPage = SkinSegmentationMarkupPage(self)
+        self.photoscanVolumeTrackingPage = PhotoscanVolumeTrackingPage(self)
+        self.transducerPhotoscanTrackingPage = TransducerPhotoscanTrackingPage(self)
+
+        self.addPage(self.photoscanMarkupPage)
+        self.addPage(self.skinSegmentationMarkupPage)
+        self.addPage(self.photoscanVolumeTrackingPage)
+        self.addPage(self.transducerPhotoscanTrackingPage)
+
         self.adjustSize()
         
     def customexec_(self):
@@ -1170,12 +1170,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
         else:
             raise RuntimeError("Something went wrong. You should not be able to complete the wizard without creating transducer tracking transforms.")
-  
-        # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
-        # This forced set of the interaction node is needed to solve that. 
-        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SwitchToViewTransformMode()
-
+        
         self.clean_up()
         self.accept()  # Closes the wizard
 
@@ -1183,10 +1178,7 @@ class TransducerTrackingWizard(qt.QWizard):
         """Handle Cancel button click."""
 
         self.clean_up()
-
-        # Exit place mode - needed due to node removal during clean
-        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SwitchToViewTransformMode()
+        self.transducer.update_color()
         self.reject()  # Closes the wizard
     
     def clean_up(self):
@@ -1199,6 +1191,10 @@ class TransducerTrackingWizard(qt.QWizard):
         self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         self.clearWizardNodes()
+        # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
+        # This forced set of the interaction node is needed to solve that. 
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SwitchToViewTransformMode()
 
         # Enable right click context menus
         pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
@@ -1241,6 +1237,10 @@ class TransducerTrackingWizard(qt.QWizard):
         photoscan_id = self.photoscan.get_id()
         if self.photoscan.view_node is None:
             self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
+            
+            # Update the photoscan stored in the data parameter node 
+            get_openlifu_data_parameter_node().loaded_photoscans[self.photoscan.get_id()] = self.photoscan
+        
         self.volume_view_node = get_threeD_transducer_tracking_view_node()
         wizard_view_nodes = [self.photoscan.view_node, self.volume_view_node]
 
@@ -1262,7 +1262,6 @@ class TransducerTrackingWizard(qt.QWizard):
         self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.transducer_surface.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
-        
         self.current_transducer_body_visibility = self.transducer_body.GetDisplayNode().GetVisibility()
         self.current_transducer_body_viewnodes = self.transducer_body.GetDisplayNode().GetViewNodeIDs()
         self.transducer_body.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
@@ -1322,7 +1321,11 @@ class PhotoscanPreviewDialog(qt.QDialog):
 
         set_threeD_view_node(self.viewWidget, threeD_view_node = self.photoscan.view_node)
         # Display the photoscan 
-        self.photoscan.model_node.GetDisplayNode().SetVisibility(True) # Specify a view node for display
+        self.photoscan.model_node.GetDisplayNode().SetVisibility(True) 
+        # save current opacity
+        self.current_photoscan_opacity = self.photoscan.model_node.GetDisplayNode().GetOpacity()
+        self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
+
         # Reset the camera associated with the view node based on the photoscan model
         reset_view_node_camera(self.photoscan.view_node)
 
@@ -1353,6 +1356,9 @@ class PhotoscanPreviewDialog(qt.QDialog):
         if self.photoscan.view_node is None:
             self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
 
+            # Update the photoscan stored in the data parameter node 
+            get_openlifu_data_parameter_node().loaded_photoscans[self.photoscan.get_id()] = self.photoscan
+
         # Set view nodes on the photoscan
         self.photoscan.set_view_nodes([self.photoscan.view_node])
         
@@ -1362,6 +1368,7 @@ class PhotoscanPreviewDialog(qt.QDialog):
     def resetViewNodes(self):
         
         self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
+        self.photoscan.model_node.GetDisplayNode().SetOpacity(self.current_photoscan_opacity)
         self.photoscan.set_view_nodes([])
 
     def onClose(self):
@@ -1897,6 +1904,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         previewDialog.exec_()
         previewDialog.deleteLater()
+        self.updateModelRendering()
 
     def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
         # If the photoscan combo box has valid data selected then enable the preview photoscan button
@@ -2057,11 +2065,18 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
         self._running_wizard = False
 
+        # Restore previous photoscan/skin segmentation visibility states
+        self.updateModelRendering()
+        self.updateModelRenderingSettings()
+
         if returncode:
             # This shouldn't be possible
             if photoscan_to_volume_transform_node is None or transducer_to_volume_transform_node is None:
                 raise RuntimeError("Transducer tracking wizard was completed without generating valid transducer tracking transforms")
             
+            # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
+            slicer.modules.OpenLIFUPrePlanningWidget.showSkin(activeData["Volume"])
+
             # Watch the transducer tracking results for any deletions/modifications
             self.watchTransducerTrackingNode(photoscan_to_volume_transform_node)
             self.watchTransducerTrackingNode(transducer_to_volume_transform_node)
@@ -2073,9 +2088,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             self.updateDistanceFromVFLabel()
             self.checkCanDisplayVirtualFitResult()
-        
-            # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
-            slicer.modules.OpenLIFUPrePlanningWidget.showSkin(activeData["Volume"])
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
@@ -2255,11 +2267,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         if not selected_transducer:
             self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.checked = False
             self.ui.viewVirtualFitCheckBox.setToolTip("Select a transducer to view the affiliated virtual fit result")
             return
         
         if self._virtual_fit_transform_for_tracking is None:
             self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.checked = False
             self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
             return
 
@@ -2267,6 +2281,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         vfresult_is_current = selected_transducer.transform_node.GetAttribute("matching_transform") == self._virtual_fit_transform_for_tracking.GetID()
         if vfresult_is_current:
             self.ui.viewVirtualFitCheckBox.enabled = False
+            self.ui.viewVirtualFitCheckBox.checked = False
             self.ui.viewVirtualFitCheckBox.setToolTip("Transducer is already at the virtual fit position.")
             return
 

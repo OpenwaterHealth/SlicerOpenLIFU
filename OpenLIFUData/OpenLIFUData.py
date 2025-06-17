@@ -1646,21 +1646,23 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
             # Build the additional info message here; this is status text that conditionally displays.
             additional_info_messages : List[str] = []
-            approved_vf_targets = self.logic.get_virtual_fit_approvals_in_session()
-            num_vf_approved = len(approved_vf_targets)
-            if num_vf_approved > 0:
-                additional_info_messages.append(
-                    "Virtual fit approved for "
-                    + (f"{num_vf_approved} targets" if num_vf_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
-                )
+            # Add a validity check here since this function call is triggered when a session is invalidated. 
+            if self.logic.validate_session():
+                approved_vf_targets = self.logic.get_virtual_fit_approvals_in_session()
+                num_vf_approved = len(approved_vf_targets)
+                if num_vf_approved > 0:
+                    additional_info_messages.append(
+                        "Virtual fit approved for "
+                        + (f"{num_vf_approved} targets" if num_vf_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
+                    )
 
-            approved_tt_photoscans = self.logic.get_transducer_tracking_approvals_in_session()
-            num_tt_approved = len(approved_tt_photoscans)
-            if num_tt_approved > 0:
-                additional_info_messages.append(
-                    "Transducer tracking approved for "
-                    + (f"{num_tt_approved} photoscans" if num_tt_approved > 1 else f"photoscan \"{approved_tt_photoscans[0]}\"")
-                )
+                approved_tt_photoscans = self.logic.get_transducer_tracking_approvals_in_session()
+                num_tt_approved = len(approved_tt_photoscans)
+                if num_tt_approved > 0:
+                    additional_info_messages.append(
+                        "Transducer tracking approved for "
+                        + (f"{num_tt_approved} photoscans" if num_tt_approved > 1 else f"photoscan \"{approved_tt_photoscans[0]}\"")
+                    )
             self.ui.sessionStatusAdditionalInfoLabel.setText('\n'.join(additional_info_messages))
 
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
