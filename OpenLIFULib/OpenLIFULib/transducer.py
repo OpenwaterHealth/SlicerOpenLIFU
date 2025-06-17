@@ -184,18 +184,27 @@ class SlicerOpenLIFUTransducer:
 
     def set_matching_transform(self, node: vtkMRMLTransformNode = None) -> None:
         
-        model_color = TRANSDUCER_MODEL_COLORS["default"]
         if node:
             self.transform_node.SetAttribute("matching_transform", node.GetID())
+        else:
+            self.transform_node.SetAttribute("matching_transform", None)
+        
+        self.update_color()
 
-            # Set the color of the transdcer model to indicate whether it matches a virtual fit result or tt result
+    def update_color(self) -> None:
+        """ Updates the color of the transducer model nodes based on the transform node
+         specified using the "matching_transform" attribute."""
+        
+        matching_node_id = self.transform_node.GetAttribute("matching_transform")
+        # Set the color of the transdcer model to indicate whether it matches a virtual fit result or tt result
+        model_color = TRANSDUCER_MODEL_COLORS["default"]
+        if matching_node_id:
+            node = slicer.mrmlScene.GetNodeByID(matching_node_id)
             if is_virtual_fit_result_node(node):
                 model_color = TRANSDUCER_MODEL_COLORS["virtual_fit_result"]
             elif is_transducer_tracking_result_node(node):
                 model_color = TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]
-        else:
-            self.transform_node.SetAttribute("matching_transform", None)
-        
+
         # Normalize color to 0-1 range
         normalized_color = [c / 255.0 for c in model_color]
         self.model_node.GetDisplayNode().SetColor(normalized_color)

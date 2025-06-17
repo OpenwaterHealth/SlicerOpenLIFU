@@ -122,6 +122,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
+        self._vf_interaction_in_progress = False
+
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
@@ -613,7 +615,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
-        if not get_target_candidates():
+        if self._vf_interaction_in_progress:
+            self.workflow_controls.can_proceed = False
+            self.workflow_controls.status_text = "Finish modifying the virtual fit transform before proceeding."
+        elif not get_target_candidates():
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Create a target to proceed."
         elif not list(get_virtual_fit_result_nodes(session_id=session_id)):
@@ -867,6 +872,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.virtualFitResultTable.enabled = False 
         self.ui.virtualfitButton.enabled = False
         self.ui.addTransformPushButton.enabled = False
+        self.updateWorkflowControls()
     
     def disable_manual_interaction(self, transducer: SlicerOpenLIFUTransducer, vf_result_node: vtkMRMLTransformNode):
         self.ui.modifyTransformPushButton.text = "Modify"
@@ -884,11 +890,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         vf_result_node.GetDisplayNode().SetEditorVisibility(False)
 
-        # Disable other VF functionality
+        # Enable other VF functionality
         self.ui.approveButton.enabled = True
         self.ui.virtualFitResultTable.enabled = True
         self.ui.virtualfitButton.enabled = True
         self.ui.addTransformPushButton.enabled = True
+        self.updateWorkflowControls()
     
     def get_currently_active_interaction_node(self) -> Optional[List[vtkMRMLTransformNode]]:
         """Returns a list of virtual fit result nodes with interaction handles enabled """
