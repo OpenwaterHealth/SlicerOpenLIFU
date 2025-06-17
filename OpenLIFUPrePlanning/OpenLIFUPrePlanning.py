@@ -561,7 +561,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         
         if self.algorithm_input_widget.has_valid_selections():
             self.ui.virtualfitButton.enabled = True
-            self.ui.virtualfitButton.setToolTip("Run virtual fit algorithm to automatically suggest a transducer positioning")
+            self.ui.virtualfitButton.setToolTip("Run virtual fit algorithm to automatically suggest a transducer positioning." \
+                "Any existing virtual fit results for the selected target will be removed.")
         else:
             self.ui.virtualfitButton.enabled = False
             self.ui.virtualfitButton.setToolTip("Specify all required inputs to enable virtual fitting")
@@ -723,7 +724,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not selected_item:
             raise RuntimeError("Cannot find the given node in the virtual fit results table")
         self.ui.virtualFitResultTable.selectRow(selected_item[0].row())
-        self.ui.virtualFitResultTable.scrollToItem(selected_item[0], qt.QAbstractItemView.PositionAtCenter)
         
     def onRunAutoFitClicked(self):  
         self.create_virtual_fit_result(auto_fit = True)
@@ -791,6 +791,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         def progress_callback(progress_percent:int, step_description:str) -> None:
             self.setVirtualFitProgressDisplay(value = progress_percent, status_text = step_description)
             slicer.app.processEvents()
+
+        target_id = fiducial_to_openlifu_point_id(target)
+        notify(f"Removing any existing virtual fit results for {target_id}.")
 
         with BusyCursor():
             try:
