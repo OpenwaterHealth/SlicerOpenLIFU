@@ -2247,11 +2247,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # Place virtual fit results under the transducer folder
             newly_loaded_transducer.move_node_into_transducer_sh_folder(vf_node)
             
-            # For the best virtual fit result nodes, check if the current transducer
-            # transform matches the virtual fit result in terms of matrix values.
-            if int(vf_node.GetAttribute("VF:rank")) == 1 and newly_loaded_transducer.is_matching_transform(vf_node):
+            # Check if the current transducer transform matches the virtual fit result in terms of matrix values.
+            if newly_loaded_transducer.is_matching_transform(vf_node):
                 newly_loaded_transducer.set_matching_transform(vf_node)
                 newly_loaded_transducer.set_visibility(True)
+                slicer.util.getModuleLogic("OpenLIFUPrePlanning").chosen_virtual_fit = vf_node
 
         # === Load transducer tracking results ===
 
