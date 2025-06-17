@@ -1267,7 +1267,7 @@ def custom_open_add_dialog(self, *args):
     disables post-init during dialog execution to avoid runtime crashes and
     ensures a smoother user experience.
     """
-    existing_keys = list(self.to_dict().keys())
+    existing_keys = list(self.to_dict(post_init=False).keys())
     createDlg = CreateKeyAbstractClassValueDialog(self.key_name, self.val_name, self.val_type, existing_keys, use_post_init=False)
 
     returncode, key, val = createDlg.customexec_()

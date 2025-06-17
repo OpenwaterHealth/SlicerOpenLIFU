@@ -455,13 +455,43 @@ class DictTableWidget(qt.QWidget):
         val_item.setFlags(val_item.flags() & ~qt.Qt.ItemIsEditable)
         self.table.setItem(row_position, 1, val_item)
 
-    def to_dict(self):
+    def to_dict(self, post_init: bool = True):
+        """
+        Extracts the key-value pairs from the DictTableWidget as a dictionary.
+
+        Args:
+            post_init (bool): If True (default), this method attempts to reconstruct 
+                each value using the class constructor (i.e., `self.val_type`) by 
+                passing the value's `__dict__` as keyword arguments. This is useful 
+                for verifying that the stored value is valid and can be reconstructed 
+                with the expected class initialization.
+
+                If False, values are returned as-is from qt.UserRole without any 
+                re-instantiation.
+
+        Notes:
+            In workflows where DictTableWidget is used to capture complex value
+            types (e.g., dataclasses), it may be necessary to temporarily skip
+            post-init behavior to allow users to interactively build up values.
+            In such cases, the table may have qt.UserRole entries in the value
+            column that may not pass post init checks. Validation or object
+            creation can be deferred until a final `to_dict` is called. Setting
+            `post_init=True` ensures that these values are checked for validity
+            before export or downstream use.
+        """
         result = {}
+
         for row in range(self.table.rowCount):
             key_item = self.table.item(row, 0)
             val_item = self.table.item(row, 1)
             if key_item and val_item:
-                result[key_item.text()] = val_item.data(qt.Qt.UserRole)
+                key = key_item.text()
+                val = val_item.data(qt.Qt.UserRole)
+
+                if post_init and self.val_type is not str:
+                    val = self.val_type(**val.__dict__)
+
+                result[key] = val
         return result
 
     def from_dict(self, data: dict):
@@ -723,11 +753,21 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                             # row is a single widget
                             _set_widget_value(row_widget, row_val)
 
-    def get_form_as_dict(self) -> dict[str, Any]:
+    def get_form_as_dict(self, post_init: bool = True) -> dict[str, Any]:
         """
         Returns the current form values as a dictionary.
-        """
-        
+
+        The `post_init` flag is mainly used for DictTableWidgets containing
+        complex value types. When True (default), it attempts to reconstruct
+        each value using its class constructor to ensure it could be validly
+        initialized, before returning its dictionary representation.
+
+        Args:
+            post_init (bool): If True, reconstructs values in DictTableWidgets to verify
+            they are valid instances of the expected type. Has no effect on simple types
+            or non-DictTableWidget fields.
+        """        
+
         def _extract_widget_value(widget: qt.QWidget) -> Any:
             """
             Helper method to get a value from a widget based on its type.
@@ -753,7 +793,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             elif isinstance(w, qt.QCheckBox):
                 values[name] = w.isChecked()
             elif isinstance(w, DictTableWidget):
-                values[name] = w.to_dict()
+                values[name] = w.to_dict(post_init=post_init)
             elif isinstance(w, qt.QWidget):  # assumed to be flat or nested tuple
                 layout = w.layout()
                 if isinstance(layout, qt.QHBoxLayout): # flat tuple (hbox)
@@ -813,9 +853,9 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             A new instance of the class populated with the form's current values.
         """
         if post_init:
-            return self._cls(**self.get_form_as_dict())
+            return self._cls(**self.get_form_as_dict(post_init=post_init))
         else:
-            return instantiate_without_post_init(self._cls, **self.get_form_as_dict())
+            return instantiate_without_post_init(self._cls, **self.get_form_as_dict(post_init=post_init))
 
     def add_value_changed_signals(self, callback) -> None:
         """
