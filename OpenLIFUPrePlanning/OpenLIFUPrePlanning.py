@@ -845,7 +845,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
-            raise RuntimeError("No virtual fit result selected")
+            self.ui.modifyTransformPushButton.checked = False
+            return
         selected_transducer = self.algorithm_input_widget.get_current_data()["Transducer"]
 
         if not selected_vf_result.GetDisplayNode().GetEditorVisibility():
