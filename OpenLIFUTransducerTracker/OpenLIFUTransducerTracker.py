@@ -639,8 +639,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.wizard().photoscanMarkupPage.facial_landmarks_fiducial_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
         
         # Set the center of the transformation to the center of the photocan model node
-        centroid_local = self.getPhotoscanCentroidRAS()
-        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(centroid_local)
+        photoscan_centroid = self.getTransformedPhotoscanCentroid()
+        self.photoscan_to_volume_transform_node.SetCenterOfTransformation(photoscan_centroid)
 
         self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.scaling_transform_node.GetID())
         # Add observer after setup
@@ -731,36 +731,39 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
         compositeTransform = vtk.vtkTransform()
         compositeTransform.Identity()
-        centroid_local = self.getPhotoscanCentroidRAS()
-        compositeTransform.Translate(-centroid_local[0], -centroid_local[1], -centroid_local[2]) # Translate the centroid to the origin
+        photoscan_centroid = self.getTransformedPhotoscanCentroid()
+        compositeTransform.Translate(-photoscan_centroid[0], -photoscan_centroid[1], -photoscan_centroid[2]) # Translate the centroid to the origin
         
         scaling_value = self.ui.scalingTransformMRMLSliderWidget.value
         compositeTransform.Scale(scaling_value, scaling_value, scaling_value) # apply scaling
         
-        compositeTransform.Translate(centroid_local[0], centroid_local[1], centroid_local[2])
+        compositeTransform.Translate(photoscan_centroid[0], photoscan_centroid[1], photoscan_centroid[2])
 
         finalMatrix = vtk.vtkMatrix4x4()
         compositeTransform.GetMatrix(finalMatrix)
 
         self.scaling_transform_node.SetMatrixTransformToParent(finalMatrix)
     
-    def getPhotoscanCentroidRAS(self):
-        """Calculates the centroid of the photoscan model node"""
+    def getTransformedPhotoscanCentroid(self):
+        """Returns the centroid of the photoscan model node.
+        The centroid is initially calculated in the photoscan's native RAS coordinate 
+        system and then transformed into the volume's coordinate space
+        using the `photoscan_to_volume_transform_node`."""
 
         bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.wizard().photoscan.model_node.GetRASBounds(bounds)
-        center_world = [
+        centroid_world = [
             (bounds[0] + bounds[1]) / 2,
             (bounds[2] + bounds[3]) / 2,
             (bounds[4] + bounds[5]) / 2
         ]
 
-        center_local = [0.0,0.0,0.0]
+        centroid_transformed = [0.0,0.0,0.0]
         transform_from_world = vtk.vtkGeneralTransform()
         self.photoscan_to_volume_transform_node.GetTransformFromWorld(transform_from_world)
-        transform_from_world.TransformPoint(center_world,center_local )
+        transform_from_world.TransformPoint(centroid_world,centroid_transformed)
 
-        return center_local
+        return centroid_transformed
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
