@@ -541,7 +541,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.algorithm_input_widget.update()
         self._input_update_in_progress = False  # Prevents repeated function calls due to combo box index changed signals
 
-        self.updateVirtualfitButtons()
         self.updateVirtualFitResultsTable()
 
     def updateVirtualfitButtons(self):
