@@ -1774,6 +1774,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Un-does watch_fiducial_node; see watch_fiducial_node."""
+        if node.GetID() not in self.node_observations:
+            return
         for tag in self.node_observations.pop(node.GetID()):
             node.RemoveObserver(tag)
 
