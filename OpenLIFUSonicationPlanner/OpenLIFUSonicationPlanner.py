@@ -648,6 +648,8 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
         volRenLogic.CopyDisplayToVolumeRenderingDisplayNode(displayNode)
         for view_node in slicer.util.getNodesByClass("vtkMRMLViewNode"):
+            if view_node.GetAttribute("isWizardViewNode") == "true": # Just incase, skip the wizard view nodes
+                continue
             view_node.SetRaycastTechnique(slicer.vtkMRMLViewNode.MaximumIntensityProjection)
         displayNode.SetVisibility(True)
         scalar_opacity_mapping = displayNode.GetVolumePropertyNode().GetVolumeProperty().GetScalarOpacity()
