@@ -60,6 +60,7 @@ def create_threeD_photoscan_view_node(photoscan_id: str):
         viewNode.SetLayoutColor(layoutColor)
         viewNode.SetName(f'view-{photoscan_id}')
         viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
+        viewNode.SetAttribute("isWizardViewNode", "true") 
 
     # Customize view node. 
     viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
@@ -89,6 +90,7 @@ def get_threeD_transducer_tracking_view_node():
         viewNode.SetLayoutColor(layoutColor)
         viewNode.SetName(f'view-transducertracking')
         viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
+        viewNode.SetAttribute("isWizardViewNode", "true")  # Set an attribute to identify this as a wizard view nodee
 
     # Customize view node. 
     viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
@@ -102,23 +104,36 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
 
     # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
     all_view_nodes = slicer.util.getNodesByClass('vtkMRMLViewNode')
-    views_mainwindow = [node.GetID() for node in all_view_nodes if node not in wizard_view_nodes]
-
+    wizard_node_ids = [node.GetID() for node in wizard_view_nodes]
+    views_mainwindow = [node.GetID() for node in all_view_nodes if node.GetID() not in wizard_node_ids]
+    
     # Set the view nodes for all displayable nodes.
     # If GetViewNodeIDs() is (), the node is displayed in all views so we need to exclude the photoscan view
     for displayable_node in list(slicer.util.getNodesByClass('vtkMRMLDisplayableNode')):
+        
+        # If the node has a custom set of view nodes, we need to preserve them
+        if displayable_node.GetDisplayNode() and displayable_node.GetDisplayNode().GetViewNodeIDs():
+            view_nodes = [node_id for node_id in displayable_node.GetDisplayNode().GetViewNodeIDs() if node_id not in wizard_node_ids]
+        else:
+            view_nodes = views_mainwindow
+
         if displayable_node.IsA('vtkMRMLScalarVolumeNode'):
             # Check for any volume renderings
             vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(displayable_node)
-            if vrDisplayNode and vrDisplayNode.GetVisibility() and not vrDisplayNode.GetViewNodeIDs():
-                    vrDisplayNode.SetViewNodeIDs(views_mainwindow)
+            if vrDisplayNode and vrDisplayNode.GetVisibility():
+                # If the node has a custom set of view nodes, we need to preserve them
+                if vrDisplayNode.GetViewNodeIDs():
+                    view_nodes = [node_id for node_id  in vrDisplayNode.GetViewNodeIDs() if node_id not in wizard_node_ids]
+                else:
+                    view_nodes = views_mainwindow
+                vrDisplayNode.SetViewNodeIDs(view_nodes)
         elif displayable_node.IsA('vtkMRMLTransformNode') and displayable_node.GetDisplayNode() is not None:
             displayable_node.GetDisplayNode().SetEditorVisibility(False)
         elif displayable_node.IsA('vtkMRMLMarkupsNode') and displayable_node.GetDisplayVisibility():
-            fiducial_views = views_mainwindow + ['vtkMRMLSliceNodeRed','vtkMRMLSliceNodeYellow','vtkMRMLSliceNodeGreen']
+            fiducial_views = view_nodes + ['vtkMRMLSliceNodeRed','vtkMRMLSliceNodeYellow','vtkMRMLSliceNodeGreen']
             displayable_node.GetDisplayNode().SetViewNodeIDs(fiducial_views)
         elif displayable_node.GetDisplayVisibility() and not displayable_node.GetDisplayNode().GetViewNodeIDs():
-            displayable_node.GetDisplayNode().SetViewNodeIDs(views_mainwindow)
+            displayable_node.GetDisplayNode().SetViewNodeIDs(view_nodes)
     
     # Set the view nodes for the Red, Green and Yellow slice nodes if empty
     for slice_node in list(slicer.util.getNodesByClass('vtkMRMLSliceNode')):
