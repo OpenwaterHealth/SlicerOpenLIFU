@@ -129,7 +129,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.initializeParameterNode()
 
         # Call the routine to update from data parameter node
-        self.updateWorkflowControls()
+        self.updateAll()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -139,7 +139,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         """Called each time the user opens this module."""
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-        self.updateWorkflowControls()
+        self.updateAll()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -242,13 +242,19 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         ]:
             self.updateSettingFromParameter(parameter_name)
 
-        # Update workflow controls
-        self.updateWorkflowControls()
+        # Update UI state
+        self.updateAll()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
-        self.updateWorkflowControls()
+        self.updateAll()
         if db is not None:
             self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: 1px solid green;")
+
+    def updateDatabaseConnectedStateLabel(self):
+        if self.logic.db is None:
+            self.ui.databaseConnectedStateLabel.text = "🔴 Database (not connected)"
+        else:
+            self.ui.databaseConnectedStateLabel.text = "🟢 Database (connected)"
 
     def updateWorkflowControls(self):
         if self.logic.db is None:
@@ -257,6 +263,10 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Database connected, proceed to the next step."
+
+    def updateAll(self):
+        self.updateDatabaseConnectedStateLabel()
+        self.updateWorkflowControls()
 
     def on_database_directory_path_changed(self, new_path: str):
         """Called every time the ctkPathLineEdit is changed, even a single
