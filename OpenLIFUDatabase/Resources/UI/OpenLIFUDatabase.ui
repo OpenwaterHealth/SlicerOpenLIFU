@@ -7,126 +7,98 @@
     <x>0</x>
     <y>0</y>
     <width>337</width>
-    <height>933</height>
+    <height>784</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QScrollArea" name="scrollArea">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
+    <widget class="QWidget" name="permissionsWidget1" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+      </stringlist>
      </property>
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>1</height>
-      </size>
-     </property>
-     <property name="widgetResizable">
-      <bool>true</bool>
-     </property>
-     <widget class="QWidget" name="scrollAreaWidgetContents_2">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>311</width>
-        <height>111</height>
-       </rect>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_4">
-       <item>
-        <widget class="QWidget" name="permissionsWidget1" native="true">
-         <property name="slicer.openlifu.allowed-roles" stdset="0">
-          <stringlist>
-           <string>admin</string>
-          </stringlist>
-         </property>
-         <layout class="QVBoxLayout" name="verticalLayout_2">
-          <property name="leftMargin">
-           <number>0</number>
-          </property>
-          <property name="topMargin">
-           <number>0</number>
-          </property>
-          <property name="rightMargin">
-           <number>0</number>
-          </property>
-          <property name="bottomMargin">
-           <number>0</number>
-          </property>
-          <item>
-           <widget class="QLabel" name="databaseDirectoryLabel">
-            <property name="text">
-             <string>Database directory:</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
-            <property name="filters">
-             <set>ctkPathLineEdit::Dirs</set>
-            </property>
-            <property name="showBrowseButton">
-             <bool>false</bool>
-            </property>
-            <property name="showHistoryButton">
-             <bool>false</bool>
-            </property>
-            <property name="SlicerParameterName" stdset="0">
-             <string>databaseDirectory</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QWidget" name="permissionsWidget2" native="true">
-         <property name="slicer.openlifu.allowed-roles" stdset="0">
-          <stringlist>
-           <string>admin</string>
-          </stringlist>
-         </property>
-         <layout class="QVBoxLayout" name="verticalLayout_3">
-          <property name="leftMargin">
-           <number>0</number>
-          </property>
-          <property name="topMargin">
-           <number>0</number>
-          </property>
-          <property name="rightMargin">
-           <number>0</number>
-          </property>
-          <property name="bottomMargin">
-           <number>0</number>
-          </property>
-          <item>
-           <widget class="QPushButton" name="chooseDatabaseLocationButton">
-            <property name="text">
-             <string>Choose Database Location</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-      </layout>
-     </widget>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="databaseDirectoryLabel">
+        <property name="text">
+         <string>Database directory:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkPathLineEdit" name="databaseDirectoryLineEdit">
+        <property name="filters">
+         <set>ctkPathLineEdit::Dirs</set>
+        </property>
+        <property name="showBrowseButton">
+         <bool>false</bool>
+        </property>
+        <property name="showHistoryButton">
+         <bool>false</bool>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>databaseDirectory</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
-    <widget class="ctkDynamicSpacer" name="DynamicSpacer">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
+    <widget class="QWidget" name="permissionsWidget2" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+      </stringlist>
      </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="chooseDatabaseLocationButton">
+        <property name="text">
+         <string>Choose Database Location</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
    </item>
    <item>
     <widget class="QWidget" name="workflowControlsPlaceholder" native="true">
@@ -138,11 +110,6 @@
   </layout>
  </widget>
  <customwidgets>
-  <customwidget>
-   <class>ctkDynamicSpacer</class>
-   <extends>QWidget</extends>
-   <header>ctkDynamicSpacer.h</header>
-  </customwidget>
   <customwidget>
    <class>ctkPathLineEdit</class>
    <extends>QWidget</extends>
