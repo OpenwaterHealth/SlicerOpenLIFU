@@ -113,6 +113,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             "returnPressed()",
             lambda : self.onLoadDatabaseClicked(checked=True)
         )
+        self.ui.connectDatabaseButton.clicked.connect(self.onLoadDatabaseClicked)
         self.ui.databaseDirectoryLineEdit.currentPathChanged.connect(self.on_database_directory_path_changed)
 
         # You do not need to connect databaseDirectoryLineEdit
