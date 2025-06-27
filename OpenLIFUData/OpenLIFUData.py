@@ -801,9 +801,9 @@ class StartPhotocollectionCaptureDialog(qt.QDialog):
         # The path /sdcard/DCIM/Camera/ is the standard internal storage path
         # from the Android device’s perspective when accessed via adb, not the
         # computer’s mounted file system like with Android File Transfer.
-        android_dir = Path("/sdcard/DCIM/Camera")
+        android_dir = "/sdcard/DCIM/Camera"
         result = subprocess.run(
-            ["adb", "shell", "ls", android_dir/f"{self.reference_number}_*.jpeg"],
+            ["adb", "shell", "ls", f"{android_dir}/{self.reference_number}_*"],
             capture_output=True, text=True
         ) 
 
