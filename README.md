@@ -91,10 +91,12 @@ sudo apt install android-tools-adb
 
 **Windows (PowerShell):**  
 
+> Make sure not to run PowerShell as admin.
+
 ```powershell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 irm get.scoop.sh | iex
-scoop install android-platform-tools
+scoop install adb
 ```
 
 Or download from [Google's
