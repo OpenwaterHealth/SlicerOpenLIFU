@@ -92,6 +92,9 @@
      <property name="text">
       <string>Connect Database</string>
      </property>
+     <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+      <bool>true</bool>
+     </property>
     </widget>
    </item>
    <item>
@@ -101,6 +104,9 @@
      </property>
      <property name="frameShadow">
       <enum>QFrame::Raised</enum>
+     </property>
+     <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
