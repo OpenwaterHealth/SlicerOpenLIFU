@@ -534,6 +534,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateDeviceConnectedStateFromDevice(self):
         if self.logic.get_lifu_device_connected():
             self.updateDeviceConnectedState(DeviceConnectedState.CONNECTED)
+            self.status = self.logic.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_SYS_ON)
         else:
             self.updateDeviceConnectedState(DeviceConnectedState.NOT_CONNECTED)
 
@@ -619,7 +620,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- LIFU Interface Connection ----
 
-        self.cur_lifu_interface: Optional[openlifu.io.LIFUInterface] = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+        self.cur_lifu_interface: Optional[openlifu.io.LIFUInterface] = openlifu_lz().io.LIFUInterface(run_async=False, TX_test_mode=False, HV_test_mode=False)
         """The active LIFUInterface object to the ultrasound hardware."""
 
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
@@ -627,6 +628,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
         self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
+        # TODO: self.cur_lifu_interface.signal_data_received.connect(self.update_run_progress_from_lifuinterface)
 
         # self.cur_lifu_interface.txdevice.enum_tx7332_devices(2) TODO: @georgevigelette : Is this necessary?
 
@@ -638,7 +640,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             self.monitoring_loop.stop()
             self.monitoring_loop.run_forever()
         self.monitoring_timer = qt.QTimer()
-        self.monitoring_timer.setInterval(500)
+        self.monitoring_timer.setInterval(1)
         self.monitoring_timer.timeout.connect(pumpMonitoringLoop)
         self.monitoring_timer.start()
 
@@ -759,50 +761,96 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             return  # Ignore non-transmitter messages
 
         # Parse progress
+        status = re.search(r'STATUS:(\w+)', message)
+        if status.group(1) == "RUNNING":
+            if self.cur_lifu_interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_RUNNING:
+                self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_RUNNING)
+                logging.debug("Hardware status set to RUNNING")
         
-        match = re.search(r'PULSE:\[(\d+)/100\]', message)  # TODO: format subject to change
-        if not match:
+        match = re.search(r'PULSE_TRAIN:\[(\d+)/(\d+)\]', message)
+        if match:
+            current = int(match.group(1))
+            total = int(match.group(2))
+            logging.debug(f"Current: {current}, Total: {total}")
+        else:
+            logging.debug("No match for progress in message:", message)
             return
-        progress = int(match.group(1))
+        
+        if current <= 0 or total <= 0:
+            progress = 0
+        else:
+            progress = int((current/total) * 100)  # Convert to percentage
+        logging.debug("Parsed progress:", progress)
+
+        # if progress >= 100 or status == "STOPPED":
+        if progress >= 100:
+            self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED)
         self.run_progress = progress
 
+    def get_total_runtime(self) -> float:
+        """Returns the total runtime of the sonication run in seconds."""
+        if get_openlifu_data_parameter_node().loaded_solution is None:
+            raise RuntimeError("No solution loaded; cannot get total runtime.")
+
+        sequence = get_openlifu_data_parameter_node().loaded_solution.solution.solution.sequence
+        pulse_interval = sequence.pulse_interval
+        pulse_count = sequence.pulse_count
+        pulse_train_interval = sequence.pulse_train_interval
+        pulse_train_count = sequence.pulse_train_count
+
+        return ((pulse_interval * pulse_count) + (pulse_train_count * pulse_train_interval))
+        
     def run(self):
         " Returns True when the sonication control algorithm is done"
 
         if get_openlifu_data_parameter_node().loaded_solution is None:
             raise RuntimeError("No solution loaded; cannot run sonication.")
 
+        timer_value_ms = 500 # milliseconds
         self.run_progress = 0
         self.sonication_run_complete = False
 
+        total_sonication_time = self.get_total_runtime()
+        progress = 0
+        
         # ---- Start the run ----
         self.running = True
         self.cur_lifu_interface.start_sonication()
+        # TODO: self.cur_lifu_interface.txdevice.async_mode(True)  # Set the TX device to async mode
         # -----------------------
 
-        self.cur_lifu_interface.signal_data_received.connect(self.update_run_progress_from_lifuinterface)
+        # TODO: self.cur_lifu_interface.signal_data_received.connect(self.update_run_progress_from_lifuinterface)
 
         def poll():
             self.run_hardware_status = self.cur_lifu_interface.get_status()
-
+            nonlocal total_sonication_time
+            nonlocal progress 
             # In non-test mode we simulate the run bars
             if self.cur_lifu_interface._test_mode:
                 self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
-                self.sonication_run_complete = self.run_progress >= 99
+                if self.run_progress >= 100:
+                    self.run_progress = 100
+                self.sonication_run_complete = self.run_progress >= 100
             else:
-                self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
+                self.run_progress = int((progress/total_sonication_time) * 100)
+                if self.run_progress >= 100:
+                    self.run_progress = 100
+                    self.sonication_run_complete = True
+                progress += timer_value_ms / 1000  # Increment progress by the timer interval in seconds
+                # TODO: self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
 
             if self.sonication_run_complete:
                 self.timer.stop()
                 self.running = False
                 self.cur_lifu_interface.stop_sonication()
+                # TODO: self.cur_lifu_interface.txdevice.async_mode(False)
 
                 # disconnect signals
                 self.cur_lifu_interface.signal_data_received.disconnect(self.update_run_progress_from_lifuinterface)
 
         self.timer = qt.QTimer()
         self.timer.timeout.connect(poll)
-        self.timer.start(500)
+        self.timer.start(timer_value_ms)
 
     def abort(self) -> None:
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
@@ -871,12 +919,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # If in test mode, we mock start_monitoring for better feedback in app
 
         if test_mode:
-            self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=True, HV_test_mode=True)
+            self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=False, TX_test_mode=True, HV_test_mode=True)
             self.current_monitoring_task = self.monitoring_loop.create_task(self.test_mode_start_monitoring())
         else:
-            self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+            self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=False, TX_test_mode=False, HV_test_mode=False)
             self.current_monitoring_task = self.monitoring_loop.create_task(self.cur_lifu_interface.start_monitoring())
-
+            # self.updateDeviceConnectedStateFromDevice()
         # self.cur_lifu_interface.txdevice.enum_tx7332_devices(2) TODO: @georgevigelette : Is this necessary?
 
         # Reconnect the signals. The old cur_lifu_interface was destroyed
