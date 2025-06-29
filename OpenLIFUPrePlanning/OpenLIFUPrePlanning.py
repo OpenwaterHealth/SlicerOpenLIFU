@@ -337,7 +337,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
         self.updateWorkflowControls()
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if not data_logic.session_loading_unloading_in_progress:
+        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerTracker")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
@@ -347,7 +347,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateTargetPositionInputs()
 
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if not data_logic.session_loading_unloading_in_progress:
+        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerTracker")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
