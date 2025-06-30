@@ -2,6 +2,9 @@
 import asyncio
 import logging
 import re
+import asyncio
+import sys
+import threading
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Callable, Dict, List, TYPE_CHECKING
@@ -28,6 +31,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_widget
 
+
 # This import is deferred at runtime using openlifu_lz, 
 # but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
@@ -36,7 +40,6 @@ if TYPE_CHECKING:
 #
 # OpenLIFUSonicationControl
 #
-
 
 class OpenLIFUSonicationControl(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -61,10 +64,14 @@ class OpenLIFUSonicationControl(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
+        
 
 class DeviceConnectedState(Enum):
     NOT_CONNECTED=0
     CONNECTED=1
+    CONFIGURED = 2
+    READY = 3
+    RUNNING = 4
 
 class SolutionOnHardwareState(Enum):
     SUCCESSFUL_SEND=0
@@ -430,9 +437,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.logic.create_openlifu_run(run_parameters)
 
     @display_errors
-    def onDeviceConnected(self):
-        slicer.util.infoDisplay(text="Ultrasound device connected")
-
+    def onDeviceConnected(self):        
         # Even though this call explicitly tells us whether "Connected" or
         # "Disconnected", we still update from the actual hardware for the best
         # possible synchronization
@@ -442,8 +447,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onDeviceDisconnected(self):
-        slicer.util.infoDisplay(text="Ultrasound device disconnected")
-
         # Even though this call explicitly tells us whether "Connected" or
         # "Disconnected", we still update from the actual hardware for the best
         # possible synchronization
@@ -454,13 +457,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     @display_errors
     def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
         new_test_mode_state = not self.logic.cur_lifu_interface._test_mode
-        if new_test_mode_state:
-            self.logic.reinitialize_lifu_interface(test_mode=True)
-            slicer.util.infoDisplay(text="LIFUInterface reinitialized in test_mode")
-        else:
-            self.logic.reinitialize_lifu_interface(test_mode=False)
-            slicer.util.infoDisplay(text="LIFUInterface reinitialized not in test_mode")
-
+        logging.info("Reinitializing LIFUInterface with test_mode =", new_test_mode_state)
+        
+        self.logic.reinitialize_lifu_interface(test_mode=new_test_mode_state)
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtons()
@@ -477,7 +476,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
                 
         except Exception as e:
-            print("Exception thrown:", e)
+            logging.error("Exception thrown:", e)
             import traceback
             traceback.print_exc()
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND, self.logic.cur_lifu_interface.get_status())
@@ -579,8 +578,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 # OpenLIFUSonicationControlLogic
 #
 
-
 class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
+
+    def _run_monitor_loop(self):
+        """Runs the asyncio event loop to monitor USB device status."""
+        asyncio.set_event_loop(self._monitor_loop)
+        try:
+            self._monitor_loop.run_until_complete(
+                self.cur_lifu_interface.start_monitoring(interval=1)
+            )
+        except Exception as e:
+            logging.error(f"[LIFU] Monitor loop error: {e}")
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
@@ -617,33 +625,28 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._on_lifu_device_disconnected_callbacks = []
         """List of functions to call when the LIFU interface is disconnected."""
 
-        # ---- LIFU Interface Connection ----
+        self._on_lifu_device_data_received_callbacks = []
+        """List of functions to call when the LIFU interface receives data."""
 
-        self.cur_lifu_interface: Optional[openlifu.io.LIFUInterface] = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
-        """The active LIFUInterface object to the ultrasound hardware."""
+        # ---- LIFU Interface Connection ----
+        
+        self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+
+        # Set up asyncio event loop and monitoring thread
+        self._monitor_loop = asyncio.new_event_loop()
+        self._monitor_thread = threading.Thread(
+            target=self._run_monitor_loop,
+            daemon=True
+        )
+        self._monitor_thread.start()
+
+        # Connect signals
+        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
+        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
+        self.cur_lifu_interface.signal_data_received.connect(self.on_lifu_data_received)
 
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
         """The active Solution object last sent to the ultrasound hardware."""
-
-        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
-        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-
-        # self.cur_lifu_interface.txdevice.enum_tx7332_devices(2) TODO: @georgevigelette : Is this necessary?
-
-        # Set up an event loop just for start_monitoring
-
-        self.monitoring_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.monitoring_loop)
-        def pumpMonitoringLoop():
-            self.monitoring_loop.stop()
-            self.monitoring_loop.run_forever()
-        self.monitoring_timer = qt.QTimer()
-        self.monitoring_timer.setInterval(500)
-        self.monitoring_timer.timeout.connect(pumpMonitoringLoop)
-        self.monitoring_timer.start()
-
-        # Allow us to change the task between self.cur_lifu_interface.start_monitoring() and self.test_mode_start_monitoring()
-        self.current_monitoring_task = self.monitoring_loop.create_task(self.cur_lifu_interface.start_monitoring())
 
         # Set logging
         logging.getLogger("LIFUInterface").setLevel(logging.WARNING)
@@ -651,9 +654,18 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         logging.getLogger("LIFUHVController").setLevel(logging.WARNING)
         logging.getLogger("LIFUTXDevice").setLevel(logging.WARNING)
 
+    def stop_monitoring(self):
+        if self.cur_lifu_interface:
+            self.cur_lifu_interface.stop_monitoring()
+        if self._monitor_loop.is_running():
+            self._monitor_loop.call_soon_threadsafe(self._monitor_loop.stop)
+
+    def reinitialize_lifu_interface(self, test_mode: bool = False):
+        """Cleanly shut down and reinitialize the LIFUInterface."""
+        pass
 
     def __del__(self):
-        self.cur_lifu_interface.stop_monitoring()
+        print("OpenLIFUSonicationControlLogic.__del__ called")
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
@@ -691,6 +703,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
     def call_on_lifu_device_disconnected(self, f) -> None:
         """Set a function to be called whenever the LIFU device is disconnected. """
         self._on_lifu_device_disconnected_callbacks.append(f)
+
+    def call_on_lifu_device_data_received(self, f) -> None:
+        """Set a function to be called whenever the LIFU device is disconnected. """
+        self._on_lifu_device_data_received_callbacks.append(f)
 
     @property
     def running(self) -> bool:
@@ -736,35 +752,99 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_run_hardware_status_updated_callbacks:
             f(self._run_hardware_status)
 
-    def on_lifu_device_connected(self, *args, **kwargs):
+    def parse_status_string(self, status_str):
+        result = {
+            "status": None,
+            "mode": None,
+            "pulse_train_percent": None,
+            "pulse_percent": None,
+            "temp_tx": None,
+            "temp_ambient": None
+        }
+
+        try:
+            # Match top-level fields
+            pattern = re.compile(
+                r"STATUS:(\w+),"
+                r"MODE:(\w+),"
+                r"PULSE_TRAIN:\[(\d+)/(\d+)\],"
+                r"PULSE:\[(\d+)/(\d+)\],"
+                r"TEMP_TX:([0-9.]+),"
+                r"TEMP_AMBIENT:([0-9.]+)"
+            )
+            match = pattern.match(status_str.strip())
+
+            if not match:
+                raise ValueError("Input string format is invalid.")
+
+            (
+                status,
+                mode,
+                pt_current, pt_total,
+                p_current, p_total,
+                temp_tx,
+                temp_ambient
+            ) = match.groups()
+
+            # Convert and compute percentages
+            pt_current = int(pt_current)
+            pt_total = int(pt_total)
+            p_current = int(p_current)
+            p_total = int(p_total)
+
+            result["status"] = status
+            result["mode"] = mode
+            result["pulse_train_percent"] = (pt_current / pt_total * 100) if pt_total > 0 else 0
+            result["pulse_percent"] = (p_current / p_total * 100) if p_total > 0 else 0
+            result["temp_tx"] = float(temp_tx)
+            result["temp_ambient"] = float(temp_ambient)
+
+            return result
+
+        except Exception as e:
+            logging.error(f"Failed to parse status string: {e}")
+            return result
+        
+    def on_lifu_device_connected(self, descriptor, port):
         # This would be useful to uncomment if debugging hardware/software integration
-        #print("on_lifu_device_connected called in sonication control module. The arguments given in were:")
-        #print("Positional arguments:", args)
-        #print("Keyword arguments:", kwargs)
+        logging.info(f"🔌 CONNECTED: {descriptor} on port {port}")
+        
         for f in self._on_lifu_device_connected_callbacks:
             f()
 
-    def on_lifu_device_disconnected(self, *args, **kwargs):
+    def on_lifu_device_disconnected(self, descriptor, port):
         # This would be useful to uncomment if debugging hardware/software integration
-        #print("on_lifu_device_disconnected called in sonication control module. The arguments given in were:")
-        #print("Positional arguments:", args)
-        #print("Keyword arguments:", kwargs)
+        logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
+        
         for f in self._on_lifu_device_disconnected_callbacks:
             f()
-            
-    def update_run_progress_from_lifuinterface(self, descriptor, message):
-        """ Parses the status message from LIFUInterface. """
+    
+    def on_lifu_data_received(self, descriptor, message):
+        """Called when the LIFUInterface receives data from the hardware.
+        This is used to update the run progress and hardware status.
+        """
+        logging.info(f"📦 DATA [{descriptor}]: {message}")
 
-        if descriptor != "TX":  
-            return  # Ignore non-transmitter messages
+        if descriptor == "TX":
+            try:
+                parsed = self.parse_status_string(message)
+                # self.run_progress = parsed["pulse_train_percent"]
 
-        # Parse progress
-        
-        match = re.search(r'PULSE:\[(\d+)/100\]', message)  # TODO: format subject to change
-        if not match:
-            return
-        progress = int(match.group(1))
-        self.run_progress = progress
+                if parsed["status"] in {"RUNNING", "STOPPED"}:
+                    # Update internal trigger state and notify QML
+                    if parsed["status"] == "STOPPED":
+                        logging.info("Trigger is stopped.")
+                        
+                    else:
+                        #update status
+                        pass
+
+            except Exception as e:
+                logging.error(f"Failed to parse and update trigger state: {e}")
+
+
+        for f in self._on_lifu_device_data_received_callbacks:
+            f(descriptor, message)
 
     def run(self):
         " Returns True when the sonication control algorithm is done"
@@ -777,46 +857,21 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- Start the run ----
         self.running = True
-        self.cur_lifu_interface.start_sonication()
-        # -----------------------
-
-        self.cur_lifu_interface.signal_data_received.connect(self.update_run_progress_from_lifuinterface)
-
-        def poll():
-            self.run_hardware_status = self.cur_lifu_interface.get_status()
-
-            # In non-test mode we simulate the run bars
-            if self.cur_lifu_interface._test_mode:
-                self.run_progress = 0.9*self.run_progress+11 # 11 because deq converges to 99 because of integer division if adding 10
-                self.sonication_run_complete = self.run_progress >= 99
-            else:
-                self.sonication_run_complete = self.cur_lifu_interface.get_status() == openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED
-
-            if self.sonication_run_complete:
-                self.timer.stop()
-                self.running = False
-                self.cur_lifu_interface.stop_sonication()
-
-                # disconnect signals
-                self.cur_lifu_interface.signal_data_received.disconnect(self.update_run_progress_from_lifuinterface)
-
-        self.timer = qt.QTimer()
-        self.timer.timeout.connect(poll)
-        self.timer.start(500)
+        
+        # TODO START SONICATION on HARDWARE
+        self.cur_lifu_interface.start_sonication()        
 
     def abort(self) -> None:
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
         # that callback can be called here. 
-        self.timer.stop()
+        
+        # STOP SONICATION on HARDWARE
+        self.cur_lifu_interface.stop_sonication()
+        
         self.sonication_run_complete = False
 
         # ---- Stop the run ----
         self.running = False
-        self.cur_lifu_interface.stop_sonication()
-        # -----------------------
-
-        # disconnect signals
-        self.cur_lifu_interface.signal_data_received.disconnect(self.update_run_progress_from_lifuinterface)
 
     def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
 
@@ -851,48 +906,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         
         return run
 
-    def reinitialize_lifu_interface(self, test_mode=False):
-        """ Reinitializes the LIFUInterface and switches out the monitoring task
-        with the test mode version """
-
-        # Note: in test_mode, the true start_monitoring() was never called
-
-        self.cur_lifu_interface.stop_monitoring()
-
-        # Cancel current task if it's running
-
-        if self.current_monitoring_task and not self.current_monitoring_task.done():
-            self.current_monitoring_task.cancel()
-            try:
-                self.monitoring_loop.run_until_complete(self.current_monitoring_task)  # Ensure it's fully canceled
-            except asyncio.CancelledError:
-                pass
-
-        # If in test mode, we mock start_monitoring for better feedback in app
-
-        if test_mode:
-            self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=True, HV_test_mode=True)
-            self.current_monitoring_task = self.monitoring_loop.create_task(self.test_mode_start_monitoring())
-        else:
-            self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
-            self.current_monitoring_task = self.monitoring_loop.create_task(self.cur_lifu_interface.start_monitoring())
-
-        # self.cur_lifu_interface.txdevice.enum_tx7332_devices(2) TODO: @georgevigelette : Is this necessary?
-
-        # Reconnect the signals. The old cur_lifu_interface was destroyed
-
-        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
-        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-
     def get_lifu_device_connected(self) -> bool:
         tx_connected = self.cur_lifu_interface.txdevice.is_connected()
         hv_connected = self.cur_lifu_interface.hvcontroller.is_connected()
         return tx_connected and hv_connected
-
-    async def test_mode_start_monitoring(self, interval=1):
-        """Simulate an asynchronous, repeating call (meant for USB device
-        monitoring)"""
-        while True:
-            # This would be useful to uncomment if debugging hardware/software integration
-            #print(f"{__file__}:{inspect.currentframe().f_lineno} - test_mode_start_monitoring() loop iteration to simulate LIFUInterface USB device monitoring")
-            await asyncio.sleep(interval)
+    
