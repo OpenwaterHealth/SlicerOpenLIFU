@@ -433,11 +433,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         """If the soniction_run_complete variable changes from False to True, then open the RunComplete 
         dialog to determine whether the run should be saved. Saving the run creates a SlicerOpenLIFURun object and 
         writes the run to the database (only if there is an active session)."""
+        self.logic.cur_lifu_interface.stop_sonication()
         if new_sonication_run_complete_state:
             runCompleteDialog = OnRunCompletedDialog(True)
             returncode, run_parameters = runCompleteDialog.customexec_()
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
+        self.logic.stop()
         self.updateAllButtonsEnabled()
 
     @display_errors
@@ -883,6 +885,13 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         
         # TODO START SONICATION on HARDWARE
         self.cur_lifu_interface.start_sonication()        
+
+    def stop(self):
+        # ---- Start the run ----
+        self.running = False
+        
+        # TODO START SONICATION on HARDWARE
+        self.cur_lifu_interface.stop_sonication()    
 
     def abort(self) -> None:
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
