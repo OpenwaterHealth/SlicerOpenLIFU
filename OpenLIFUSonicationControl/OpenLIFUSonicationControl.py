@@ -257,6 +257,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.call_on_lifu_device_connected(self.onDeviceConnected)
         self.logic.call_on_lifu_device_disconnected(self.onDeviceDisconnected)
 
+        self.logic.qt_signals.runProgressUpdated.connect(self.updateRunProgressBar)
+
         # Initialize UI
         self.updateRunProgressBar()
         self.updateDeviceConnectedStateFromDevice()
@@ -577,6 +579,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
 # OpenLIFUSonicationControlLogic
 #
+class LIFUQtSignals(qt.QObject):
+    runProgressUpdated = qt.Signal(float)  # Expecting pulse_train_percent as float
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
 class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
@@ -630,6 +637,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- LIFU Interface Connection ----
         
+        self.qt_signals = LIFUQtSignals()
+
+
         self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
 
         # Set up asyncio event loop and monitoring thread
@@ -828,7 +838,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if descriptor == "TX":
             try:
                 parsed = self.parse_status_string(message)
-                # self.run_progress = parsed["pulse_train_percent"]
+                progress = parsed["pulse_train_percent"]
+                self.qt_signals.runProgressUpdated.emit(progress) 
 
                 if parsed["status"] in {"RUNNING", "STOPPED"}:
                     # Update internal trigger state and notify QML
