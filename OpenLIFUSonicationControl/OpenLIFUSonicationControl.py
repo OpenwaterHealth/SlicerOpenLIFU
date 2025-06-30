@@ -438,6 +438,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             returncode, run_parameters = runCompleteDialog.customexec_()
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
+        self.updateAllButtonsEnabled()
 
     @display_errors
     def onDeviceConnected(self):        
