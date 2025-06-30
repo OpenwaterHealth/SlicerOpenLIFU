@@ -826,12 +826,16 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for f in self._on_lifu_device_connected_callbacks:
             f()
 
+        slicer.app.processEvents()
+
     def on_lifu_device_disconnected(self, descriptor, port):
         # This would be useful to uncomment if debugging hardware/software integration
         logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
         
         for f in self._on_lifu_device_disconnected_callbacks:
             f()
+
+        slicer.app.processEvents()
     
     def on_lifu_data_received(self, descriptor, message):
         """Called when the LIFUInterface receives data from the hardware.
@@ -862,6 +866,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         for f in self._on_lifu_device_data_received_callbacks:
             f(descriptor, message)
+
+        slicer.app.processEvents()
 
     def run(self):
         " Returns True when the sonication control algorithm is done"
