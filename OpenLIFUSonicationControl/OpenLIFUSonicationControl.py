@@ -599,8 +599,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
 
     def _pumpMonitoringLoop(self):
-        self._monitor_loop.stop()
-        self._monitor_loop.run_forever()
+        if self._monitor_loop.is_running():
+            # Harmless tickle: sends a no-op callback into the loop to keep it alive
+            self._monitor_loop.call_soon_threadsafe(lambda: None)
 
     def _run_monitor_loop(self):
         """Runs the asyncio event loop to monitor USB device status."""
@@ -666,7 +667,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._monitor_thread.start()
 
         self.monitoring_timer = qt.QTimer()
-        self.monitoring_timer.setInterval(1)
+        self.monitoring_timer.setInterval(100)
         self.monitoring_timer.timeout.connect(self._pumpMonitoringLoop)
         self.monitoring_timer.start()
 
