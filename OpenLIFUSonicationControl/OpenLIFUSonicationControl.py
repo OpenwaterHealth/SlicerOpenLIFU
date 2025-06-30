@@ -593,6 +593,11 @@ class LIFUQtSignals(qt.QObject):
 
 class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
+
+    def _pumpMonitoringLoop(self):
+        self._monitor_loop.stop()
+        self._monitor_loop.run_forever()
+
     def _run_monitor_loop(self):
         """Runs the asyncio event loop to monitor USB device status."""
         asyncio.set_event_loop(self._monitor_loop)
@@ -645,7 +650,6 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         
         self.qt_signals = LIFUQtSignals()
 
-
         self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
 
         # Set up asyncio event loop and monitoring thread
@@ -655,6 +659,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             daemon=True
         )
         self._monitor_thread.start()
+
+        self.monitoring_timer = qt.QTimer()
+        self.monitoring_timer.setInterval(1)
+        self.monitoring_timer.timeout.connect(self._pumpMonitoringLoop)
+        self.monitoring_timer.start()
 
         # Connect signals
         self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
@@ -856,21 +865,19 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                         logging.info("Trigger is stopped.")
                         self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED)
                         self.qt_signals.finishScanning.emit(True)  # Signal that scanning is finished 
-                        
                     else:
                         #update status
                         self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_RUNNING)
-                        pass
-
+        
             except Exception as e:
                 logging.error(f"Failed to parse and update trigger state: {e}")
-
+        
 
         for f in self._on_lifu_device_data_received_callbacks:
             f(descriptor, message)
 
         slicer.app.processEvents()
-
+    
     def run(self):
         " Returns True when the sonication control algorithm is done"
 
@@ -882,7 +889,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- Start the run ----
         self.running = True
-        
+
         # TODO START SONICATION on HARDWARE
         self.cur_lifu_interface.start_sonication()        
 
