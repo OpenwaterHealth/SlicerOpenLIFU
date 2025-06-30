@@ -258,6 +258,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.call_on_lifu_device_disconnected(self.onDeviceDisconnected)
 
         self.logic.qt_signals.runProgressUpdated.connect(self.updateRunProgressBar)
+        self.logic.qt_signals.finishScanning.connect(self.onRunCompleted)
 
         # Initialize UI
         self.updateRunProgressBar()
@@ -524,6 +525,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             else:
                 self.ui.runProgressBar.value = 100
 
+
     def updateRunHardwareStatusLabel(self, new_run_hardware_status_value=None):
         """Update the label indicating the hardware status of the running hardware."""
         if self.logic.running:
@@ -581,6 +583,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 #
 class LIFUQtSignals(qt.QObject):
     runProgressUpdated = qt.Signal(float)  # Expecting pulse_train_percent as float
+    finishScanning = qt.Signal(bool)  # Signal to indicate that scanning is finished
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -840,14 +843,16 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 parsed = self.parse_status_string(message)
                 progress = parsed["pulse_train_percent"]
                 self.qt_signals.runProgressUpdated.emit(progress) 
-
                 if parsed["status"] in {"RUNNING", "STOPPED"}:
                     # Update internal trigger state and notify QML
                     if parsed["status"] == "STOPPED":
                         logging.info("Trigger is stopped.")
+                        self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED)
+                        self.qt_signals.finishScanning.emit(True)  # Signal that scanning is finished 
                         
                     else:
                         #update status
+                        self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_RUNNING)
                         pass
 
             except Exception as e:
