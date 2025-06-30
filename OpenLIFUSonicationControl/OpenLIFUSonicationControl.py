@@ -462,6 +462,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
+
+        slicer.util.warningDisplay(
+            text = f"Reinitializing the LIFUInterface in test mode is not fully supported and may result in unexpected application behavior. If this was a mistake, restart the app and use the real transducer hardware.",
+            windowTitle="Test Mode Not Supported", parent = slicer.util.mainWindow()
+        )
+
         new_test_mode_state = not self.logic.cur_lifu_interface._test_mode
         logging.info("Reinitializing LIFUInterface with test_mode =", new_test_mode_state)
         
