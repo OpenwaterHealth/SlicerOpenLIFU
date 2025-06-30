@@ -434,6 +434,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         dialog to determine whether the run should be saved. Saving the run creates a SlicerOpenLIFURun object and 
         writes the run to the database (only if there is an active session)."""
         self.logic.cur_lifu_interface.stop_sonication()
+        
+        self.ui.runHardwareStatusLabel.setProperty("text", "Run Completed.")
+        
         if new_sonication_run_complete_state:
             runCompleteDialog = OnRunCompletedDialog(True)
             returncode, run_parameters = runCompleteDialog.customexec_()
@@ -526,7 +529,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateRunProgressBar(self, new_run_progress_value = None):
         """Update the run progress bar. 0% if there is no existing  run, 100% if there is an existing run."""
         self.ui.runProgressBar.maximum = 100 
-        if new_run_progress_value is not None:
+        if new_run_progress_value is not None:            
+            self.ui.runHardwareStatusLabel.setProperty("text", "Run in progress.")
             self.ui.runProgressBar.value = new_run_progress_value
         else:
             if get_openlifu_data_parameter_node().loaded_run is None:
@@ -611,6 +615,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             self._monitor_loop.run_until_complete(
                 self.cur_lifu_interface.start_monitoring(interval=1)
             )
+            self._monitor_loop.run_forever()
         except Exception as e:
             logging.error(f"[LIFU] Monitor loop error: {e}")
 
