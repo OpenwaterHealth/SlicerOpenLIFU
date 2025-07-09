@@ -2918,7 +2918,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 f"Photocollection reference_number {photocollection_parameters['reference_number']} already exists in the database for session {session_id}. Overwrite photocollection?",
                 "Photocollection already exists"
             ):
-                return
+                raise RuntimeError("Could not overwrite photocollection because user declined.")
 
         reference_number = photocollection_parameters.get("reference_number")
         photo_abspaths = photocollection_parameters.get("photo_paths")
