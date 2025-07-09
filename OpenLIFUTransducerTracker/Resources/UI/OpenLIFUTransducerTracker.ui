@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>563</width>
-    <height>768</height>
+    <height>842</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -55,6 +55,49 @@
            </property>
            <property name="margin">
             <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="photocollectionCaptureLayout">
+           <property name="spacing">
+            <number>12</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="referenceNumberLabel">
+             <property name="text">
+              <string>Photocollection Reference Number:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="referenceNumberLineEdit">
+             <property name="font">
+              <font>
+               <family>Courier New</family>
+              </font>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="referenceNumberRefreshButton">
+             <property name="text">
+              <string>🔄</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QPushButton" name="transferPhotocollectionFromAndroidDeviceButton">
+           <property name="toolTip">
+            <string>Start a photocollection capture from the 3D Open Water app</string>
+           </property>
+           <property name="text">
+            <string>Transfer Photocollection from Android Device</string>
            </property>
           </widget>
          </item>
