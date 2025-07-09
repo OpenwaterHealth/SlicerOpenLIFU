@@ -1892,7 +1892,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             )
             return
 
-        data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        # Below is done twice because session_photocollections stored in the
+        # data parameter node is not the same as those stored in
+        # SlicerOpenLIFUSession and both must be updated
+        if photocollection_dict["reference_number"] not in data_parameter_node.session_photocollections:
+            data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
         data_logic.update_photocollections_affiliated_with_loaded_session()
 
         slicer.util.infoDisplay(

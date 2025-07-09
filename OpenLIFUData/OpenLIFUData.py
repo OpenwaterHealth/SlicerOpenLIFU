@@ -1345,7 +1345,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             return False
 
         self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
-        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+
+        # Below is done twice because session_photocollections stored in the
+        # data parameter node is not the same as those stored in
+        # SlicerOpenLIFUSession and both must be updated
+        if photocollection_dict["reference_number"] not in self._parameterNode.session_photocollections:
+            self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
         self.logic.update_photocollections_affiliated_with_loaded_session()
 
     @display_errors
@@ -1971,7 +1976,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_id = loaded_session.get_session_id()
         
         # Keep track of any photocollections associated with the session
-        affiliated_photocollections = [num for num in get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)]
+        affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         if affiliated_photocollections:
             loaded_session.set_affiliated_photocollections(affiliated_photocollections)
 
@@ -2047,25 +2052,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 idx = loaded_volume_ids.index(session_openlifu.volume_id)
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
-        session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        conflicting_session_photocollections =  [num for num in session_affiliated_photocollections if num in self.getParameterNode().session_photocollections]
-        if (
-            conflicting_session_photocollections
-            # TODO: We should add a way for sessions to associate with
-            # photocollections. See @ebrahimebrahim's comment on
-            # https://github.com/OpenwaterHealth/OpenLIFU-python/pull/235#pullrequestreview-2662421403
-            # and (
-            #     loaded_session is None
-            #       or not any(session_openlifu.photocollection_id != loaded_session.get_photocollection_id())
-            #     # (we are okay reloading the photocollection if it's just the one affiliated with the session, since user already decided to replace the session)
-            #     )
-        ):
-            if not slicer.util.confirmYesNoDisplay(
-                f"Loading this session will replace the already loaded photocollection(s) with reference_number(s) {conflicting_session_photocollections}. Proceed?",
-                "Confirm replace photocollection"
-            ):
-                return
-            
         session_affiliated_photoscans = get_cur_db().get_photoscan_ids(subject_id, session_id)
         if loaded_session is not None:
             # (we are okay reloading photoscans if they are just the one affiliated with the session, since user already decided to replace the session)
@@ -2183,15 +2169,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.update_photoscans_affiliated_with_loaded_session()
 
         # === Load photocollections as all reference_numbers ===
-        # There is no openlifu object for photocollections, so we just add them to the list!
-
         session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        self.getParameterNode().session_photocollections.extend(session_affiliated_photocollections)
-
-        # === Also keep track of affiliated photocollections and unload any conflicting photocollections that have been previously loaded ===
-        for photocollection_reference_number in conflicting_session_photocollections:
-            self.remove_photocollection(photocollection_reference_number) 
-        self.update_photocollections_affiliated_with_loaded_session()
+        self.getParameterNode().session_photocollections = session_affiliated_photocollections
 
         # If there are any *approved* transducer tracking results that we have just loaded in newly_added_tt_result_nodes,
         # then we check to see if any of them match the current transducer transform in terms of matrix values.
