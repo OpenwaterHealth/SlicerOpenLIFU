@@ -1669,7 +1669,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         data_module = slicer.util.getModuleWidget('OpenLIFUData')
         self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.on_capture_photocollection_clicked)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
-        self.ui.importPhotocollectionFromDiskButton.clicked.connect(data_module.onLoadPhotocollectionPressed)
         self.resetPhotoscanGeneratorProgressDisplay()
         # ------------------------------------------
 
@@ -2164,18 +2163,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.startPhotoscanGenerationButton.setEnabled(True)
             self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
 
-    def updateImportPhotocollectionFromDiskButton(self):
-        if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.importPhotocollectionFromDiskButton.setEnabled(False)
-            self.ui.importPhotocollectionFromDiskButton.setToolTip("Adding a photocollection requires an active session.")
-        else:
-            self.ui.importPhotocollectionFromDiskButton.setEnabled(True)
-            self.ui.importPhotocollectionFromDiskButton.setToolTip("Add a photocollection to the active session.")
-
     def updatePhotoscanGenerationButtons(self):
         self.updateStartPhotocollectionCaptureButton()
         self.updateStartPhotoscanGenerationButton()
-        self.updateImportPhotocollectionFromDiskButton()
 
     def updateApprovalStatusLabel(self):
         """ Updates the status message that displays which photoscans have been approved or have
