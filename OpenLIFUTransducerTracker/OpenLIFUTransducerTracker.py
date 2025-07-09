@@ -1671,10 +1671,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
         # ---- Photoscan generation connections ----
-        data_module = slicer.util.getModuleWidget('OpenLIFUData')
         self.ui.referenceNumberRefreshButton.clicked.connect(self.on_reference_number_refresh_clicked)
         self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
-        self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.on_capture_photocollection_clicked)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         self.resetPhotoscanGeneratorProgressDisplay()
 
@@ -2217,14 +2215,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.quantitativeTransducerTrackingMetricLabel.hide()
             return
 
-    def updateStartPhotocollectionCaptureButton(self):
-        if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.startPhotocollectionCaptureButton.setEnabled(False)
-            self.ui.startPhotocollectionCaptureButton.setToolTip("Adding a photocollection requires an active session.")
-        else:
-            self.ui.startPhotocollectionCaptureButton.setEnabled(True)
-            self.ui.startPhotocollectionCaptureButton.setToolTip("Add a photocollection to the active session.")
-
     def updateStartPhotoscanGenerationButton(self):
         if get_openlifu_data_parameter_node().loaded_session is None:
             self.ui.startPhotoscanGenerationButton.setEnabled(False)
@@ -2237,7 +2227,6 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
 
     def updatePhotoscanGenerationButtons(self):
-        self.updateStartPhotocollectionCaptureButton()
         self.updateStartPhotoscanGenerationButton()
 
     def updateApprovalStatusLabel(self):
