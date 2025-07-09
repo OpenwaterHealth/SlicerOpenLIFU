@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>563</width>
-    <height>722</height>
+    <height>768</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -59,31 +59,14 @@
           </widget>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="photoscanGeneratorButtons">
-           <item>
-            <widget class="QPushButton" name="startPhotocollectionCaptureButton">
-             <property name="toolTip">
-              <string>Start a photocollection capture from the 3D Open Water app</string>
-             </property>
-             <property name="text">
-              <string>Start Photocollection Capture</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="importPhotocollectionFromDiskButton">
-             <property name="toolTip">
-              <string>Import a photocollection from a directory of photos on disk</string>
-             </property>
-             <property name="text">
-              <string>Import Photocollection From Disk</string>
-             </property>
-             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
+          <widget class="QPushButton" name="startPhotocollectionCaptureButton">
+           <property name="toolTip">
+            <string>Start a photocollection capture from the 3D Open Water app</string>
+           </property>
+           <property name="text">
+            <string>Start Photocollection Capture</string>
+           </property>
+          </widget>
          </item>
          <item>
           <widget class="QPushButton" name="startPhotoscanGenerationButton">
@@ -230,7 +213,7 @@
               <property name="value">
                <double>0.500000000000000</double>
               </property>
-              <property name="quantity">
+              <property name="quantity" stdset="0">
                <string notr="true"/>
               </property>
              </widget>
@@ -273,7 +256,7 @@
               <property name="value">
                <double>0.500000000000000</double>
               </property>
-              <property name="quantity">
+              <property name="quantity" stdset="0">
                <string notr="true"/>
               </property>
              </widget>
@@ -318,17 +301,6 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>qMRMLSliderWidget</class>
-   <extends>ctkSliderWidget</extends>
-   <header>qMRMLSliderWidget.h</header>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLWidget</class>
-   <extends>QWidget</extends>
-   <header>qMRMLWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
@@ -338,6 +310,17 @@
    <class>ctkSliderWidget</class>
    <extends>QWidget</extends>
    <header>ctkSliderWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLSliderWidget</class>
+   <extends>ctkSliderWidget</extends>
+   <header>qMRMLSliderWidget.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
