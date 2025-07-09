@@ -1864,7 +1864,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             )
             return
 
-        pulled_files = self.logic.pull_photocollection_from_android(cur_reference_number)
+        with BusyCursor():
+            pulled_files = self.logic.pull_photocollection_from_android(cur_reference_number)
+
         photocollection_dict = {
             "reference_number" : cur_reference_number,
             "photo_paths" : pulled_files,
