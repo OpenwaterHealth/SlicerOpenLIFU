@@ -1223,6 +1223,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
+        self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
 
         # Inject guided mode workflows
@@ -1356,21 +1357,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def on_import_photocollection_clicked(self, checked:bool):
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is None:
-            raise RuntimeError("Cannot import photocollection because a session is not loaded.")
-
-        importDlg = ImportPhotocollectionFromDiskDialog()
-        returncode, photocollection_dict = importDlg.customexec_()
-        if not returncode:
-            return False
-
-        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
-        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.update_photocollections_affiliated_with_loaded_session()
-
-    @display_errors
     def on_capture_photocollection_clicked(self, checked:bool) -> bool:
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is None:
@@ -1462,6 +1448,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups.
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
+
+    @display_errors
+    def onLoadPhotocollectionPressed(self, checked:bool):
+        loaded_session = self._parameterNode.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot import photocollection because a session is not loaded.")
+
+        importDlg = ImportPhotocollectionFromDiskDialog()
+        returncode, photocollection_dict = importDlg.customexec_()
+        if not returncode:
+            return False
+
+        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
+        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        self.logic.update_photocollections_affiliated_with_loaded_session()
 
     @display_errors
     def onLoadPhotoscanPressed(self, checked:bool) -> None:
