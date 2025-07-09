@@ -2920,8 +2920,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        reference_number = photocollection_parameters.pop("reference_number")
-        photo_abspaths = photocollection_parameters.pop("photo_paths")
+        reference_number = photocollection_parameters.get("reference_number")
+        photo_abspaths = photocollection_parameters.get("photo_paths")
+
+        if reference_number is None:
+            raise ValueError("Missing required parameter: 'reference_number'")
+        if photo_abspaths is None:
+            raise ValueError("Missing required parameter: 'photo_paths'")
 
         get_cur_db().write_photocollection(subject_id, session_id, reference_number,
                                       photo_abspaths, on_conflict =
