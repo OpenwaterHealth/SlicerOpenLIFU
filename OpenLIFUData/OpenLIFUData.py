@@ -1,11 +1,6 @@
 # Standard library imports
 import json
 import os
-import random
-import shutil
-import string
-import subprocess
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Optional, List, Tuple, Dict, Sequence, TYPE_CHECKING
@@ -748,101 +743,6 @@ class LoadSessionDialog(qt.QDialog):
                 button.setEnabled(False)
                 button.setToolTip("You do not have the required role to perform this action.")
 
-class StartPhotocollectionCaptureDialog(qt.QDialog):
-    """ Add new photocollection dialog """
-
-    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN=1
-
-    def __init__(self, parent="mainWindow"):
-        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-        self.setWindowTitle("Add New Photocollection")
-        self.setWindowModality(qt.Qt.WindowModal)
-
-        self.reference_number = "".join(random.choices(string.digits, k=8))
-        self.pulled_files = []
-
-        temp_dir = tempfile.gettempdir()
-        self.temp_photocollection_path = os.path.join(temp_dir, self.reference_number)
-        os.makedirs(self.temp_photocollection_path, exist_ok=True)
-
-        self.setup()
-
-    def setup(self):
-
-        self.setContentsMargins(15, 15, 15, 15)
-
-        vBoxLayout = qt.QVBoxLayout()
-        vBoxLayout.setSpacing(10)
-        self.setLayout(vBoxLayout)
-
-        self.directionLabel1 = qt.QLabel(
-            f"Please create a 3D Open Water photocollection with the following reference number: {self.reference_number}. "
-            "Click \"OK\" when the Android device has finished and is plugged into the computer."
-        )
-        self.directionLabel1.setWordWrap(True)
-        vBoxLayout.addWidget(self.directionLabel1)
-
-        vBoxLayout.addStretch(1)
-
-        self.buttonBox = qt.QDialogButtonBox()
-        self.buttonBox.setStandardButtons(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        vBoxLayout.addWidget(self.buttonBox)
-
-        self.buttonBox.rejected.connect(self.reject)
-        self.buttonBox.accepted.connect(self.validateInputs)
-
-    def validateInputs(self):
-        """
-        We need to make sure that the android file system has the files
-        associated with the reference id in the right location.
-        """
-        # The path /sdcard/DCIM/Camera/ is the standard internal storage path
-        # from the Android device’s perspective when accessed via adb, not the
-        # computer’s mounted file system like with Android File Transfer.
-        android_dir = "/sdcard/DCIM/Camera"
-        result = subprocess.run(
-            ["adb", "shell", "ls", f"{android_dir}/{self.reference_number}_*"],
-            capture_output=True, text=True
-        ) 
-
-        if result.returncode != 0:
-            slicer.util.errorDisplay(
-              "Error finding files on Android device."
-              " Please make sure the device is connected,"
-              " you have installed android platform tools on this machine,"
-              " you have enabled developer mode on the device,"
-              " and you have enabled USB debugging on the device.",
-              parent = self
-            )
-            return
-        
-        files = [f for f in result.stdout.strip().split('\n') if f]
-
-        if not files or len(files) < self.MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN:
-            slicer.util.errorDisplay(f"Not enough photos were found in the photocollection.", parent = self)
-            return
-
-        for file in files:
-            filename = os.path.basename(file)
-            dest_path = os.path.join(self.temp_photocollection_path, filename)
-            subprocess.run(
-                ["adb", "pull", f"{android_dir}/{filename}", dest_path]
-            )
-            self.pulled_files.append(dest_path)
-
-        self.accept()
-
-    def customexec_(self):
-
-        returncode = self.exec_()
-        photocollection_dict = {
-            "reference_number" : self.reference_number,
-            "photo_paths" : self.pulled_files,
-        }
-        return (returncode, photocollection_dict)
-
 class AddNewPhotoscanDialog(qt.QDialog):
     """ Add new photoscan dialog """
 
@@ -1354,22 +1254,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         self.logic.clear_session(clean_up_scene=True)
         self.logic.load_session(self.logic.subject.id, new_session.id)
-        return True
-
-    @display_errors
-    def on_capture_photocollection_clicked(self, checked:bool) -> bool:
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is None:
-            raise RuntimeError("Cannot start photocollection capture because a session is not loaded.")
-
-        photocollectiondlg = StartPhotocollectionCaptureDialog()
-        returncode, photocollection_dict = photocollectiondlg.customexec_()
-        if not returncode:
-            return False
-
-        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
-        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.update_photocollections_affiliated_with_loaded_session()
         return True
 
     @display_errors
