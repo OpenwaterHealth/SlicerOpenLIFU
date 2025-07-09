@@ -1,9 +1,14 @@
 # Standard library imports
 from collections import defaultdict
 import itertools
+import os
 import warnings
 import logging
+import random
+import string
+import subprocess
 from subprocess import CalledProcessError
+import tempfile
 from typing import Callable, Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 
 # Third-party imports
@@ -1667,9 +1672,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # ---- Photoscan generation connections ----
         data_module = slicer.util.getModuleWidget('OpenLIFUData')
+        self.ui.referenceNumberRefreshButton.clicked.connect(self.on_reference_number_refresh_clicked)
+        self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
         self.ui.startPhotocollectionCaptureButton.clicked.connect(data_module.on_capture_photocollection_clicked)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         self.resetPhotoscanGeneratorProgressDisplay()
+
+        # Restrict reference number line edit to alphanumeric. Useful tip:
+        # The validator should be set in 'self' or else it is removed by the
+        # gc and the validator doesn't work
+        self.alphanumericValidator = qt.QRegExpValidator(qt.QRegExp(r"[A-Za-z0-9]+"))
+        self.ui.referenceNumberLineEdit.setValidator(self.alphanumericValidator)
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
@@ -1693,6 +1706,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
+
+        # Start with randomized photocollection reference number
+        self.randomize_photocollection_reference_number()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -1828,6 +1844,63 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.photoscanGenerationStatusMessage.text = status_text
         self.ui.photoscanGeneratorProgressBar.show()
         self.ui.photoscanGenerationStatusMessage.show()
+
+    def randomize_photocollection_reference_number(self):
+        """Randomize the number displayed in the photocollection reference
+        number line edit"""
+        # alphanumeric
+        new_reference_number = "".join(random.choices(string.ascii_letters + string.ascii_uppercase + string.digits, k=8))
+        self.ui.referenceNumberLineEdit.text = new_reference_number
+
+    @display_errors
+    def on_reference_number_refresh_clicked(self, checked:bool):
+        self.randomize_photocollection_reference_number()
+
+    @display_errors
+    def on_transfer_photocollection_from_android_device_clicked(self, checked:bool):
+        cur_reference_number = self.ui.referenceNumberLineEdit.text
+        if len(cur_reference_number) < 1:
+            slicer.util.errorDisplay(
+                text="Error: Reference number cannot be empty.",
+                windowTitle="Reference Number Error"
+            )
+            return
+
+        pulled_files = self.logic.pull_photocollection_from_android(cur_reference_number)
+        photocollection_dict = {
+            "reference_number" : cur_reference_number,
+            "photo_paths" : pulled_files,
+        }
+
+        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_parameter_node = get_openlifu_data_parameter_node()
+        subject_id = data_parameter_node.loaded_session.get_subject_id()
+        session_id = data_parameter_node.loaded_session.get_session_id()
+
+        data_logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
+
+        # Verify that there exist imported files when querying the database
+
+        imported_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
+            subject_id=subject_id,
+            session_id=session_id,
+            reference_number=cur_reference_number,
+        )
+
+        if not imported_filepaths:
+            slicer.util.errorDisplay(
+                text="Error importing files: No files found or import failed.",
+                windowTitle="Import Error"
+            )
+            return
+
+        data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        data_logic.update_photocollections_affiliated_with_loaded_session()
+
+        slicer.util.infoDisplay(
+            text=f"{len(imported_filepaths)} files successfully imported.",# for subject \"{subject_id}\", session \"{session_id}\"",
+            windowTitle="Import Successful"
+        )
 
     @display_errors
     def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
@@ -2320,6 +2393,71 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
 
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
+
+    def pull_photocollection_from_android(self, reference_number: str) -> List[str]:
+        """
+        Pulls photo files from an Android device matching the given reference
+        number. The reference number is used to identify a collection of photos
+        on the Android device in accordance with the output format of a
+        specifically-tailored app. See [3D Open
+        Water](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner) for
+        details. Files are stored in a temporary directory named after the
+        reference number.
+        
+        Args:
+            reference_number: A string identifying the photo collection stored
+            on the Android device.
+        
+        Returns:
+            A list of full file paths to the pulled photos stored in the temp dir.
+        
+        Raises:
+            RuntimeError: If no files are found or adb fails to connect.
+        """
+        android_dir = "/sdcard/DCIM/Camera"
+        temp_path = os.path.join(tempfile.gettempdir(), reference_number)
+        os.makedirs(temp_path, exist_ok=True)
+
+        result = subprocess.run(
+            ["adb", "shell", "ls", f"{android_dir}/{reference_number}_*"],
+            capture_output=True, text=True
+        )
+
+        if result.returncode != 0:
+            # Check if *at least* the base directory exists
+            dir_check = subprocess.run(
+                ["adb", "shell", "ls", android_dir],
+                capture_output=True, text=True
+            )
+
+            if dir_check.returncode != 0:
+                raise RuntimeError(
+                    "Error connecting to Android device. Please "
+                    "make sure the device is connected, you have "
+                    "installed android platform tools on this machine, "
+                    "you have enabled developer mode on the device, "
+                    "and you have enabled USB debugging on the "
+                    "device."
+                )
+            else:
+                raise FileNotFoundError(
+                    f"No photos found with reference number '{reference_number}' "
+                    f"on the android device. Please make sure you typed the correct "
+                    f"reference number into the 3D Open Water app."
+                    )
+
+        files = [f for f in result.stdout.strip().split('\n') if f]
+        if not files:
+            raise RuntimeError("No files found for the given reference number.")
+
+        pulled_files = []
+        for file in files:
+            filename = os.path.basename(file)
+            dest_path = os.path.join(temp_path, filename)
+            subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
+            pulled_files.append(dest_path)
+
+        return pulled_files
 
     def generate_photoscan(self,
         subject_id:str,
