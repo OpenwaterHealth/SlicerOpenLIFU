@@ -1,11 +1,6 @@
 # Standard library imports
 import json
 import os
-import random
-import shutil
-import string
-import subprocess
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Optional, List, Tuple, Dict, Sequence, TYPE_CHECKING
@@ -748,101 +743,6 @@ class LoadSessionDialog(qt.QDialog):
                 button.setEnabled(False)
                 button.setToolTip("You do not have the required role to perform this action.")
 
-class StartPhotocollectionCaptureDialog(qt.QDialog):
-    """ Add new photocollection dialog """
-
-    MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN=1
-
-    def __init__(self, parent="mainWindow"):
-        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-        self.setWindowTitle("Add New Photocollection")
-        self.setWindowModality(qt.Qt.WindowModal)
-
-        self.reference_number = "".join(random.choices(string.digits, k=8))
-        self.pulled_files = []
-
-        temp_dir = tempfile.gettempdir()
-        self.temp_photocollection_path = os.path.join(temp_dir, self.reference_number)
-        os.makedirs(self.temp_photocollection_path, exist_ok=True)
-
-        self.setup()
-
-    def setup(self):
-
-        self.setContentsMargins(15, 15, 15, 15)
-
-        vBoxLayout = qt.QVBoxLayout()
-        vBoxLayout.setSpacing(10)
-        self.setLayout(vBoxLayout)
-
-        self.directionLabel1 = qt.QLabel(
-            f"Please create a 3D Open Water photocollection with the following reference number: {self.reference_number}. "
-            "Click \"OK\" when the Android device has finished and is plugged into the computer."
-        )
-        self.directionLabel1.setWordWrap(True)
-        vBoxLayout.addWidget(self.directionLabel1)
-
-        vBoxLayout.addStretch(1)
-
-        self.buttonBox = qt.QDialogButtonBox()
-        self.buttonBox.setStandardButtons(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        vBoxLayout.addWidget(self.buttonBox)
-
-        self.buttonBox.rejected.connect(self.reject)
-        self.buttonBox.accepted.connect(self.validateInputs)
-
-    def validateInputs(self):
-        """
-        We need to make sure that the android file system has the files
-        associated with the reference id in the right location.
-        """
-        # The path /sdcard/DCIM/Camera/ is the standard internal storage path
-        # from the Android device’s perspective when accessed via adb, not the
-        # computer’s mounted file system like with Android File Transfer.
-        android_dir = "/sdcard/DCIM/Camera"
-        result = subprocess.run(
-            ["adb", "shell", "ls", f"{android_dir}/{self.reference_number}_*"],
-            capture_output=True, text=True
-        ) 
-
-        if result.returncode != 0:
-            slicer.util.errorDisplay(
-              "Error finding files on Android device."
-              " Please make sure the device is connected,"
-              " you have installed android platform tools on this machine,"
-              " you have enabled developer mode on the device,"
-              " and you have enabled USB debugging on the device.",
-              parent = self
-            )
-            return
-        
-        files = [f for f in result.stdout.strip().split('\n') if f]
-
-        if not files or len(files) < self.MINIMUM_NUMBER_OF_PHOTOS_FOR_PHOTOSCAN:
-            slicer.util.errorDisplay(f"Not enough photos were found in the photocollection.", parent = self)
-            return
-
-        for file in files:
-            filename = os.path.basename(file)
-            dest_path = os.path.join(self.temp_photocollection_path, filename)
-            subprocess.run(
-                ["adb", "pull", f"{android_dir}/{filename}", dest_path]
-            )
-            self.pulled_files.append(dest_path)
-
-        self.accept()
-
-    def customexec_(self):
-
-        returncode = self.exec_()
-        photocollection_dict = {
-            "reference_number" : self.reference_number,
-            "photo_paths" : self.pulled_files,
-        }
-        return (returncode, photocollection_dict)
-
 class AddNewPhotoscanDialog(qt.QDialog):
     """ Add new photoscan dialog """
 
@@ -1223,6 +1123,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
+        self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
 
         # Inject guided mode workflows
@@ -1356,37 +1257,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def on_import_photocollection_clicked(self, checked:bool):
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is None:
-            raise RuntimeError("Cannot import photocollection because a session is not loaded.")
-
-        importDlg = ImportPhotocollectionFromDiskDialog()
-        returncode, photocollection_dict = importDlg.customexec_()
-        if not returncode:
-            return False
-
-        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
-        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.update_photocollections_affiliated_with_loaded_session()
-
-    @display_errors
-    def on_capture_photocollection_clicked(self, checked:bool) -> bool:
-        loaded_session = self._parameterNode.loaded_session
-        if loaded_session is None:
-            raise RuntimeError("Cannot start photocollection capture because a session is not loaded.")
-
-        photocollectiondlg = StartPhotocollectionCaptureDialog()
-        returncode, photocollection_dict = photocollectiondlg.customexec_()
-        if not returncode:
-            return False
-
-        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
-        self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        self.logic.update_photocollections_affiliated_with_loaded_session()
-        return True
-
-    @display_errors
     def on_add_photoscan_clicked(self, checked:bool) -> bool:
         loaded_session = self._parameterNode.loaded_session
         if loaded_session is None:
@@ -1462,6 +1332,26 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups.
         ioManager = slicer.app.ioManager()
         return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
+
+    @display_errors
+    def onLoadPhotocollectionPressed(self, checked:bool):
+        loaded_session = self._parameterNode.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot import photocollection because a session is not loaded.")
+
+        importDlg = ImportPhotocollectionFromDiskDialog()
+        returncode, photocollection_dict = importDlg.customexec_()
+        if not returncode:
+            return False
+
+        self.logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
+
+        # Below is done twice because session_photocollections stored in the
+        # data parameter node is not the same as those stored in
+        # SlicerOpenLIFUSession and both must be updated
+        if photocollection_dict["reference_number"] not in self._parameterNode.session_photocollections:
+            self._parameterNode.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        self.logic.update_photocollections_affiliated_with_loaded_session()
 
     @display_errors
     def onLoadPhotoscanPressed(self, checked:bool) -> None:
@@ -2086,7 +1976,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_id = loaded_session.get_session_id()
         
         # Keep track of any photocollections associated with the session
-        affiliated_photocollections = [num for num in get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)]
+        affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         if affiliated_photocollections:
             loaded_session.set_affiliated_photocollections(affiliated_photocollections)
 
@@ -2162,25 +2052,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 idx = loaded_volume_ids.index(session_openlifu.volume_id)
                 slicer.mrmlScene.RemoveNode(loaded_volumes[idx])
 
-        session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        conflicting_session_photocollections =  [num for num in session_affiliated_photocollections if num in self.getParameterNode().session_photocollections]
-        if (
-            conflicting_session_photocollections
-            # TODO: We should add a way for sessions to associate with
-            # photocollections. See @ebrahimebrahim's comment on
-            # https://github.com/OpenwaterHealth/OpenLIFU-python/pull/235#pullrequestreview-2662421403
-            # and (
-            #     loaded_session is None
-            #       or not any(session_openlifu.photocollection_id != loaded_session.get_photocollection_id())
-            #     # (we are okay reloading the photocollection if it's just the one affiliated with the session, since user already decided to replace the session)
-            #     )
-        ):
-            if not slicer.util.confirmYesNoDisplay(
-                f"Loading this session will replace the already loaded photocollection(s) with reference_number(s) {conflicting_session_photocollections}. Proceed?",
-                "Confirm replace photocollection"
-            ):
-                return
-            
         session_affiliated_photoscans = get_cur_db().get_photoscan_ids(subject_id, session_id)
         if loaded_session is not None:
             # (we are okay reloading photoscans if they are just the one affiliated with the session, since user already decided to replace the session)
@@ -2298,15 +2169,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         self.update_photoscans_affiliated_with_loaded_session()
 
         # === Load photocollections as all reference_numbers ===
-        # There is no openlifu object for photocollections, so we just add them to the list!
-
         session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        self.getParameterNode().session_photocollections.extend(session_affiliated_photocollections)
-
-        # === Also keep track of affiliated photocollections and unload any conflicting photocollections that have been previously loaded ===
-        for photocollection_reference_number in conflicting_session_photocollections:
-            self.remove_photocollection(photocollection_reference_number) 
-        self.update_photocollections_affiliated_with_loaded_session()
+        self.getParameterNode().session_photocollections = session_affiliated_photocollections
 
         # If there are any *approved* transducer tracking results that we have just loaded in newly_added_tt_result_nodes,
         # then we check to see if any of them match the current transducer transform in terms of matrix values.
@@ -2904,12 +2768,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         get_cur_db().write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
-    def add_photocollection_to_database(self, subject_id: str, session_id: str, photocollection_parameters: Dict) -> None:
+    def add_photocollection_to_database(self, subject_id: str, session_id: str, photocollection_parameters: Dict) -> bool:
         """ Add new photocollection to selected subject/session in the loaded openlifu database
         Args:
             subject_id: ID of subject associated with the photocollection (str)
             session_id: ID of session associated with the photocollection (str)
             photocollection_parameters: Dictionary containing the required parameters for adding a photocollection to database
+
+        Returns:
+            bool: True if the photocollection was successfully added or overwritten in the database.
+                  False if the operation was canceled by the user when prompted to overwrite.
+    
+        Raises:
+            ValueError: If 'reference_number' or 'photo_paths' is missing from photocollection_parameters.
         """
         photocollection_reference_numbers = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         if photocollection_parameters['reference_number'] in photocollection_reference_numbers:
@@ -2917,14 +2788,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 f"Photocollection reference_number {photocollection_parameters['reference_number']} already exists in the database for session {session_id}. Overwrite photocollection?",
                 "Photocollection already exists"
             ):
-                return
+                return False
 
-        reference_number = photocollection_parameters.pop("reference_number")
-        photo_abspaths = photocollection_parameters.pop("photo_paths")
+        reference_number = photocollection_parameters.get("reference_number")
+        photo_abspaths = photocollection_parameters.get("photo_paths")
+
+        if reference_number is None:
+            raise ValueError("Missing required parameter: 'reference_number'")
+        if photo_abspaths is None:
+            raise ValueError("Missing required parameter: 'photo_paths'")
 
         get_cur_db().write_photocollection(subject_id, session_id, reference_number,
                                       photo_abspaths, on_conflict =
                                       openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        return True
 
     def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_parameters: Dict) -> None:
         """ Add new photoscan to selected subject/session in the loaded openlifu database
