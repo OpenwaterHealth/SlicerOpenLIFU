@@ -2768,12 +2768,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         get_cur_db().write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
-    def add_photocollection_to_database(self, subject_id: str, session_id: str, photocollection_parameters: Dict) -> None:
+    def add_photocollection_to_database(self, subject_id: str, session_id: str, photocollection_parameters: Dict) -> bool:
         """ Add new photocollection to selected subject/session in the loaded openlifu database
         Args:
             subject_id: ID of subject associated with the photocollection (str)
             session_id: ID of session associated with the photocollection (str)
             photocollection_parameters: Dictionary containing the required parameters for adding a photocollection to database
+
+        Returns:
+            bool: True if the photocollection was successfully added or overwritten in the database.
+                  False if the operation was canceled by the user when prompted to overwrite.
+    
+        Raises:
+            ValueError: If 'reference_number' or 'photo_paths' is missing from photocollection_parameters.
         """
         photocollection_reference_numbers = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         if photocollection_parameters['reference_number'] in photocollection_reference_numbers:
@@ -2781,7 +2788,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 f"Photocollection reference_number {photocollection_parameters['reference_number']} already exists in the database for session {session_id}. Overwrite photocollection?",
                 "Photocollection already exists"
             ):
-                raise RuntimeError("Could not overwrite photocollection because user declined.")
+                return False
 
         reference_number = photocollection_parameters.get("reference_number")
         photo_abspaths = photocollection_parameters.get("photo_paths")
@@ -2794,6 +2801,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         get_cur_db().write_photocollection(subject_id, session_id, reference_number,
                                       photo_abspaths, on_conflict =
                                       openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        return True
 
     def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_parameters: Dict) -> None:
         """ Add new photoscan to selected subject/session in the loaded openlifu database

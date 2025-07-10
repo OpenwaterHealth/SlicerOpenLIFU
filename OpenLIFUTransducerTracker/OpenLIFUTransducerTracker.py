@@ -1877,7 +1877,8 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         subject_id = data_parameter_node.loaded_session.get_subject_id()
         session_id = data_parameter_node.loaded_session.get_session_id()
 
-        data_logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict)
+        if not data_logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict):
+            return # The logic is responsible for verifying overwrites with the user
 
         # Verify that there exist imported files when querying the database
 
