@@ -1847,7 +1847,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Randomize the number displayed in the photocollection reference
         number line edit"""
         # alphanumeric
-        new_reference_number = "".join(random.choices(string.ascii_letters + string.ascii_uppercase + string.digits, k=8))
+        new_reference_number = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
         self.ui.referenceNumberLineEdit.text = new_reference_number
 
     @display_errors
