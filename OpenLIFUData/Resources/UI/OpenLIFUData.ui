@@ -453,10 +453,10 @@
       <string>OpenLIFU Objects</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="collapsed">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
       <bool>true</bool>
@@ -501,6 +501,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="loadPhotocollectionButton">
+        <property name="toolTip">
+         <string>Choose a directory of photos to add to the session as a photocollection.</string>
+        </property>
         <property name="text">
          <string>Load Photocollection</string>
         </property>
