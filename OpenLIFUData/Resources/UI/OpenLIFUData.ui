@@ -500,6 +500,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="loadPhotoscanButton">
+        <property name="toolTip">
+         <string>Load a Photoscan into the Slicer scene</string>
+        </property>
+        <property name="text">
+         <string>Load Photoscan</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="loadedObjectsLabel">
         <property name="text">
          <string>Loaded OpenLIFU objects:</string>
