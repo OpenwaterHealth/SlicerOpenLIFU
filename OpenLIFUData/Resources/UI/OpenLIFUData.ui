@@ -500,23 +500,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="loadPhotocollectionButton">
-        <property name="toolTip">
-         <string>Choose a directory of photos to add to the session as a photocollection.</string>
-        </property>
-        <property name="text">
-         <string>Load Photocollection</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="loadPhotoscanButton">
-        <property name="text">
-         <string>Load Photoscan</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QLabel" name="loadedObjectsLabel">
         <property name="text">
          <string>Loaded OpenLIFU objects:</string>
