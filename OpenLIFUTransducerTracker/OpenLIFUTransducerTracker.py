@@ -1846,7 +1846,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
         self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
-        self.ui.addPhotoscanButton.clicked.connect(self.on_add_photoscan_clicked)
+        self.ui.addPhotoscanButton.clicked.connect(self.onAddPhotoscanPressed)
         self.resetPhotoscanGeneratorProgressDisplay()
 
         # Restrict reference number line edit to alphanumeric. Useful tip:
@@ -2104,7 +2104,13 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         data_logic.update_photocollections_affiliated_with_loaded_session()
 
     @display_errors
-    def on_add_photoscan_clicked(self, checked:bool) -> bool:
+    def onAddPhotoscanPressed(self, checked:bool) -> bool:
+        """Opens a dialog for the user to add a photoscan from a specified 
+        location on disk. If a photoscan is successfully specified, it is
+        written to the database under the currently active session. After 
+        adding the photoscan, the list of photoscans affiliated with the loaded 
+        session is updated."""
+
         data_logic = slicer.util.getModuleLogic("OpenLIFUData")
         data_parameter_node = get_openlifu_data_parameter_node()
 
@@ -2120,12 +2126,9 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         data_logic.add_photoscan_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photoscan_dict.copy())  # logic mutates the dict
         data_logic.update_photoscans_affiliated_with_loaded_session()
 
-        # Update the transducer tracking drop down to reflect new photoscans 
-        transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
-        transducer_tracking_widget.algorithm_input_widget.update()
+        self.updateInputOptions()
+        self.updateWorkflowControls()
         
-        return True
-
     @display_errors
     def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
         add_slicer_log_handler("MeshRecon", "Mesh reconstruction")

@@ -1145,6 +1145,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     @display_errors
     def onLoadPhotoscanPressed(self, checked:bool) -> None:
+        """Opens a dialog for the user to select and load a photoscan into the scene.
+        The user can choose either a model file (e.g., `.obj`) along with a corresponding
+        texture file (e.g., `.jpg`), or a single JSON file that encapsulates both model
+        and texture metadata. 
+        """
         load_photoscan_dlg = LoadPhotoscanDialog()
         returncode, model_or_json_filepath, texture_filepath = load_photoscan_dlg.customexec_()
         if not returncode:
