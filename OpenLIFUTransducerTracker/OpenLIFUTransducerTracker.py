@@ -2452,8 +2452,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.startPhotoscanGenerationButton.setEnabled(True)
             self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
 
+    def updateAddPhotoscanButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.addPhotoscanButton.setEnabled(False)
+            self.ui.addPhotoscanButton.setToolTip("Adding a photoscan requires an active session.")
+        else:
+            self.ui.addPhotoscanButton.setEnabled(True)
+            self.ui.addPhotoscanButton.setToolTip("Browse for a photoscan on disk.")
+
     def updatePhotoscanGenerationButtons(self):
         self.updateStartPhotoscanGenerationButton()
+        self.updateAddPhotoscanButton()
 
     def updateApprovalStatusLabel(self):
         """ Updates the status message that displays which photoscans have been approved or have
