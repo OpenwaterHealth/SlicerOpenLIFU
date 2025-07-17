@@ -175,7 +175,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="loadPhotoscanButton">
+               <widget class="QPushButton" name="addPhotoscanButton">
                 <property name="toolTip">
                  <string>Browse for a photoscan on disk</string>
                 </property>

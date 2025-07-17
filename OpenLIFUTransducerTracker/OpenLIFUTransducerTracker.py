@@ -1567,78 +1567,105 @@ class ImportPhotocollectionFromDiskDialog(qt.QDialog):
         }
         return returncode, photocollection_dict
 
-class LoadPhotoscanDialog(qt.QDialog):
-    """ Load photoscan dialog """
+class AddNewPhotoscanDialog(qt.QDialog):
+    """ Add new photoscan dialog """
 
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-        self.setWindowTitle("Load photoscan")
+        self.setWindowTitle("Add New Photoscan")
         self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
     def setup(self):
 
-        self.formLayout = qt.QFormLayout()
-        self.setLayout(self.formLayout)
+        formLayout = qt.QFormLayout()
+        self.setLayout(formLayout)
 
         # Model filepath
         self.photoscanModelFilePath = ctk.ctkPathLineEdit()
         self.photoscanModelFilePath.filters = ctk.ctkPathLineEdit.Files
         # Allowable photoscan filetypes
-        self.photoscan_model_extensions = ("Photoscan Model" + " (*.obj *.vtk *.stl *.ply *.vtp *.g *json);;" +
+        self.photoscan_model_extensions = ("Photoscan Model" + " (*.obj *.vtk *.stl *.ply *.vtp *.g);;" +
         "All Files" + " (*)")
         self.photoscanModelFilePath.nameFilters = [self.photoscan_model_extensions]
-        self.photoscanModelFilePath.currentPathChanged.connect(self.updateDialog)
-        self.formLayout.addRow(_("Photoscan JSON or Model Filepath:"), self.photoscanModelFilePath)
+        self.photoscanModelFilePath.currentPathChanged.connect(self.updatePhotoscanDetails)
+        formLayout.addRow(_("Model Filepath:"), self.photoscanModelFilePath)
+
+        # Texture filepath
+        self.photoscanTextureFilePath = ctk.ctkPathLineEdit()
+        self.photoscanTextureFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allowable photoscan filetypes
+        self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
+        "All Files" + " (*)")
+        self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
+        formLayout.addRow(_("Texture Filepath:"), self.photoscanTextureFilePath)
+
+        # MTL filepath
+        self.photoscanMTLFilePath = ctk.ctkPathLineEdit()
+        self.photoscanMTLFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allowable photoscan filetypes
+        self.photoscan_mtl_extensions = ("Photoscan Material" + " (*.mtl);;" +
+        "All Files" + " (*)")
+        self.photoscanMTLFilePath.nameFilters = [self.photoscan_mtl_extensions]
+        formLayout.addRow(_("Materials Filepath (Optional):"), self.photoscanMTLFilePath)
+
+        self.photoscanName = qt.QLineEdit()
+        formLayout.addRow(_("Photoscan Name:"), self.photoscanName)
+
+        self.photoscanID = qt.QLineEdit()
+        formLayout.addRow(_("Photoscan ID:"), self.photoscanID)
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
                                           qt.QDialogButtonBox.Cancel)
-        self.formLayout.addWidget(self.buttonBox)
+        formLayout.addWidget(self.buttonBox)
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.validateInputs)
 
-    def updateDialog(self):
-        """If the selected model file path is an .obj (or related format) model file, then
-        the user needs to specify the corresponding texture file. This function updates the 
-        dialog to prompt the user to select the texture image. If the user selects a .json file
-        as the model file, then the model and texture filepaths are determined from the json file."""
-
+    def updatePhotoscanDetails(self):
         current_filepath = Path(self.photoscanModelFilePath.currentPath)
-        if current_filepath.suffix != '.json' and self.formLayout.rowCount() == 2:
-            # Texture filepath
-            self.photoscanTextureFilePath = ctk.ctkPathLineEdit()
-            self.photoscanTextureFilePath.filters = ctk.ctkPathLineEdit.Files
-            # Allowable photoscan filetypes
-            self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
-            "All Files" + " (*)")
-            self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
-            self.formLayout.insertRow(1,_("Texture Filepath:"), self.photoscanTextureFilePath)
-        elif current_filepath.suffix == '.json' and self.formLayout.rowCount() == 3:
-            self.formLayout.removeRow(1) 
+        if current_filepath.is_file():
+            while current_filepath.suffix:
+                current_filepath = current_filepath.with_suffix('')
+            photoscan_name = current_filepath.stem
+            if not len(self.photoscanName.text):
+                self.photoscanName.setText(photoscan_name)
+            if not len(self.photoscanID.text):
+                self.photoscanID.setText(photoscan_name)
 
     def validateInputs(self):
-        photoscan_model_filepath = Path(self.photoscanModelFilePath.currentPath)
-        if photoscan_model_filepath.suffix != '.json':
-            photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath  
-            if not len(photoscan_texture_filepath):
-                slicer.util.errorDisplay("Model and texture files both need to be specified", parent = self)
-                return
-            elif not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
-                slicer.util.errorDisplay("Invalid photoscan filetype specified", parent = self)
-                return
-        self.accept()
+        """
+        The MTL filepath is an optional input for writing a photoscan to the database.
+        """
+        photoscan_name = self.photoscanName.text
+        photoscan_id = self.photoscanID.text
+        photoscan_model_filepath = self.photoscanModelFilePath.currentPath
+        photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath  
+
+        if not len(photoscan_name) or not len(photoscan_id) or not len(photoscan_model_filepath) or not len(photoscan_texture_filepath):
+            slicer.util.errorDisplay("Required fields are missing", parent = self)
+        elif not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
+            slicer.util.errorDisplay("Invalid photoscan filetype specified", parent = self)
+        else:
+            self.accept()
 
     def customexec_(self):
+
         returncode = self.exec_()
-        model_or_json_filepath = self.photoscanModelFilePath.currentPath
-        if len(model_or_json_filepath) and Path(model_or_json_filepath).suffix != '.json':
-            texture_filepath = self.photoscanTextureFilePath.currentPath
-            return returncode, model_or_json_filepath, texture_filepath
+        if not len(self.photoscanMTLFilePath.currentPath):
+            mtl_filepath = None
         else:
-            return returncode, model_or_json_filepath, None
-    
+            mtl_filepath = self.photoscanMTLFilePath.currentPath
+        photoscan_dict = {
+            "model_abspath" : self.photoscanModelFilePath.currentPath,
+            "texture_abspath" : self.photoscanTextureFilePath.currentPath,
+            "mtl_abspath" : mtl_filepath,
+            "name": self.photoscanName.text,
+            "id": self.photoscanID.text
+        }
+        return (returncode, photoscan_dict)
+
 #
 # OpenLIFUTransducerTracker
 #
@@ -1819,7 +1846,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
         self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
-        self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
+        self.ui.addPhotoscanButton.clicked.connect(self.on_add_photoscan_clicked)
         self.resetPhotoscanGeneratorProgressDisplay()
 
         # Restrict reference number line edit to alphanumeric. Useful tip:
@@ -2077,16 +2104,27 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         data_logic.update_photocollections_affiliated_with_loaded_session()
 
     @display_errors
-    def onLoadPhotoscanPressed(self, checked:bool) -> None:
+    def on_add_photoscan_clicked(self, checked:bool) -> bool:
         data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_parameter_node = get_openlifu_data_parameter_node()
 
-        load_photoscan_dlg = LoadPhotoscanDialog()
-        returncode, model_or_json_filepath, texture_filepath = load_photoscan_dlg.customexec_()
+        loaded_session = data_parameter_node.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot add photoscan because a session is not loaded.")
+
+        photoscandlg = AddNewPhotoscanDialog()
+        returncode, photoscan_dict = photoscandlg.customexec_()
         if not returncode:
-            return
+            return False
 
-        data_logic.load_photoscan_from_file(model_or_json_filepath, texture_filepath)
-        slicer.util.getModuleWidget("OpenLIFUData").updateLoadedObjectsView() # Call function here to update view based on node attributes (for texture volume)
+        data_logic.add_photoscan_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photoscan_dict.copy())  # logic mutates the dict
+        data_logic.update_photoscans_affiliated_with_loaded_session()
+
+        # Update the transducer tracking drop down to reflect new photoscans 
+        transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+        transducer_tracking_widget.algorithm_input_widget.update()
+        
+        return True
 
     @display_errors
     def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
