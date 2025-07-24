@@ -102,7 +102,6 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
 
     def setupMarkupsWidget(self):
         self.markupsWidget.setMRMLScene(slicer.mrmlScene)
-        self.markupsWidget.enabled = False
 
         tableWidget = self.markupsWidget.tableWidget()
         tableWidget.setSelectionMode(tableWidget.SingleSelection)
@@ -124,6 +123,9 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             total_height += tableWidget.rowHeight(row)
         tableWidget.setFixedHeight(total_height)
         tableWidget.setSizePolicy(tableWidget.sizePolicy.horizontalPolicy(), qt.QSizePolicy.Fixed)
+
+        if self.page_locked:
+            self.markupsWidget.enabled = False
 
     def markupTableWidgetSelected(self, item):
         if self.page_locked:
@@ -336,17 +338,19 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
                     node_name = "photoscan-wizard-faciallandmarks",
                     existing_landmarks_node=existing_fiducial_node)
 
+        if not self.wizard()._valid_tt_result_exists and self.facial_landmarks_fiducial_node is None:
+            self.ui.pageLockButton.clicked() # Programtically unlock page
+        
         self.setupMarkupsWidget()
-        self.updatePageLock()
         self.updateLandmarkPlacementStatus()
-    
+        self.updatePageLock()
+
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
         self.ui.controlsWidget.enabled = not self.page_locked
 
     def onPageUnlocked(self):
-
         if self.facial_landmarks_fiducial_node is None:
             self._initialize_facial_landmarks_fiducial_node(node_name = "photoscan-wizard-faciallandmarks")
             self.setupMarkupsWidget()
@@ -377,8 +381,6 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
             if self.wizard()._valid_tt_result_exists:
                 self.ui.landmarkPlacementStatus.text = "A previous transducer tracking result is available. Unlock the page to place "\
                     "new facial landmarks on this photoscan, or click Next to proceed."
-            else:
-                self.ui.landmarkPlacementStatus.text = "Unlock the page to place facial landmarks on this photoscan."
         elif self.page_locked:
             self.ui.landmarkPlacementStatus.text = "Unlock the page to edit the facial landmarks on this photoscan"
         elif self._checkAllLandmarksDefined():
@@ -399,7 +401,6 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         self.ui.dialogControls.setCurrentIndex(1)
         self.markupsWidget = self.ui.skinSegMarkupsWidget  # Assign the correct markups widget
         self.ui.pageLockButton.clicked.connect(self.onPageUnlocked)
-        self.page_locked: bool = True
 
     def initializePage(self):
         view_node = self.wizard().volume_view_node
@@ -420,8 +421,10 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
                     node_name = "skinseg-wizard-faciallandmarks",
                     existing_landmarks_node=existing_skin_seg_fiducials)
 
-        self.setupMarkupsWidget()
+        if not self.wizard()._valid_tt_result_exists and self.facial_landmarks_fiducial_node is None:
+            self.ui.pageLockButton.clicked() # programatically unlock page
         self.updatePageLock()
+        self.setupMarkupsWidget()
         self.updateLandmarkPlacementStatus()
     
     def updatePageLock(self):
@@ -532,13 +535,17 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         set_threeD_view_node(self.viewWidget, view_node)
 
         # Show the existing transform node if the tt_result has not yet been modified by the wizard
-        if not self.photoscan_to_volume_transform_node and self.wizard()._valid_tt_result_exists:
-            # Clone the existing node
-            existing_transform_node = self.wizard().photoscan_to_volume_transform_node
-            self.photoscan_to_volume_transform_node = get_cloned_node(existing_transform_node)
-            self.photoscan_to_volume_transform_node.CreateDefaultDisplayNodes()
-            self.photoscan_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
-            self.photoscan_to_volume_transform_node.RemoveAttribute('isTT-PHOTOSCAN_TO_VOLUME')
+        if not self.photoscan_to_volume_transform_node:
+            if self.wizard()._valid_tt_result_exists:
+                # Clone the existing node
+                existing_transform_node = self.wizard().photoscan_to_volume_transform_node
+                self.photoscan_to_volume_transform_node = get_cloned_node(existing_transform_node)
+                self.photoscan_to_volume_transform_node.CreateDefaultDisplayNodes()
+                self.photoscan_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
+                self.photoscan_to_volume_transform_node.RemoveAttribute('isTT-PHOTOSCAN_TO_VOLUME')
+            else:
+                # If there isn't a current transform in the scene or if its been invalidated, unlock the page
+                self.page_locked = False
 
         # Check for facial landmarks
         self.has_facial_landmarks = (
@@ -608,11 +615,11 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if not isinstance(current_page, PhotoscanVolumeTrackingPage):
             return
 
-        # If the transform node was initiaized based on a previously computed tt result, modifying the transform
+        # If the transform node was initialized based on a previously computed tt result, modifying the transform
         # invalidates the result 
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
-
+        
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
 
@@ -797,12 +804,15 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
 
-        if not self.transducer_to_volume_transform_node and self.wizard().transducer_to_volume_transform_node:
-            # Clone the existing node
-            existing_transform_node = self.wizard().transducer_to_volume_transform_node
-            self.transducer_to_volume_transform_node = get_cloned_node(existing_transform_node)
-            self.transducer_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
-            self.transducer_to_volume_transform_node.RemoveAttribute('isTT-TRANSDUCER_TO_VOLUME')
+        if not self.transducer_to_volume_transform_node:
+            if self.wizard().transducer_to_volume_transform_node:
+                # Clone the existing node
+                existing_transform_node = self.wizard().transducer_to_volume_transform_node
+                self.transducer_to_volume_transform_node = get_cloned_node(existing_transform_node)
+                self.transducer_to_volume_transform_node.GetDisplayNode().SetVisibility(False)
+                self.transducer_to_volume_transform_node.RemoveAttribute('isTT-TRANSDUCER_TO_VOLUME')
+            else:
+                self.page_locked = False
 
         if self.transducer_to_volume_transform_node:
             self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
