@@ -406,12 +406,19 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def updateTargetsListView(self):
         """Update the list of targets in the target management UI"""
+        currently_selected_row = self.ui.targetListWidget.currentRow
+        
         self.ui.targetListWidget.clear()
         for target_node in get_target_candidates():
             item = qt.QListWidgetItem(target_node.GetName())
             item.setFlags(item.flags() | qt.Qt.ItemIsEditable) # Make it possible to click and rename items
             item.setData(qt.Qt.UserRole, target_node)
             self.ui.targetListWidget.addItem(item)
+        
+        if currently_selected_row == -1:
+            self.ui.targetListWidget.setCurrentRow(0)
+        else:
+            self.ui.targetListWidget.setCurrentRow(currently_selected_row)
 
     def getTargetsListViewCurrentSelection(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
         """Get the fiducial node associated to the currently selected target in the list view;
