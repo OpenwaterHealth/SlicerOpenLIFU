@@ -344,7 +344,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if self.logic.solution_analysis_exists():
-            data_logic.clear_solution(clean_up_scene=False)
+            data_logic.clear_solution(clean_up_scene=True)
             self._parameterNode.solution_analysis = None
             notify(f"Solution deleted:\n{reason}")
 
