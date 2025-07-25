@@ -223,8 +223,10 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
 
         self.exitPlaceFiducialMode()
-        self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
-        slicer.mrmlScene.RemoveNode(self.currently_placing_node)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
+            self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
+            slicer.mrmlScene.RemoveNode(self.currently_placing_node)
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
         if self._checkAllLandmarksDefined():
             self.updateLandmarkPlacementStatus()
@@ -264,12 +266,13 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def _clear_downstream_results_if_any(self):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
-            self.wizard().photoscanVolumeTrackingPage.resetScalingTransform()
-            # Clear downstream nodes
-            slicer.mrmlScene.RemoveNode(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
-            slicer.mrmlScene.RemoveNode(self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
-            self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
             self.wizard()._existing_approval_revoked = True
+        self.wizard().photoscanVolumeTrackingPage.resetScalingTransform()
+        # Clear downstream nodes
+        slicer.mrmlScene.RemoveNode(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
+        slicer.mrmlScene.RemoveNode(self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
+        self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
+        self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
 
     def exitPlaceFiducialMode(self):
         if self._pointModifiedObserverTag:
@@ -620,6 +623,10 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.wizard()._valid_tt_result_exists:
             self.wizard()._valid_tt_result_exists = False
         
+        # Clear downstream result
+        slicer.mrmlScene.RemoveNode(self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
+        self.wizard().transducerPhotoscanTrackingPage.transducer_to_volume_transform_node = None
+        
     def onInitializeRegistrationClicked(self):
         """ This function is called when the user clicks 'Next'."""
 
@@ -805,7 +812,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         set_threeD_view_node(self.viewWidget, view_node)
 
         if not self.transducer_to_volume_transform_node:
-            if self.wizard().transducer_to_volume_transform_node:
+            if self.wizard()._valid_tt_result_exists:
                 # Clone the existing node
                 existing_transform_node = self.wizard().transducer_to_volume_transform_node
                 self.transducer_to_volume_transform_node = get_cloned_node(existing_transform_node)
