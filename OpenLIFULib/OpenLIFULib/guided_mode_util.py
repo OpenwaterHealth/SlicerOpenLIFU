@@ -181,7 +181,7 @@ class WorkflowControls(qt.QWidget):
         """Update next button enabledness and tooltip"""
         if not hasattr(self, "next_button"):
             return
-        enabled = self.can_proceed or not get_guided_mode_state() and self.next_module_name is not None
+        enabled = (self.can_proceed or not get_guided_mode_state()) and self.next_module_name is not None
         self.next_button.setEnabled(enabled)
         if enabled:
             self.next_button.setToolTip(f"Go to the {self.next_module_name} module.")
