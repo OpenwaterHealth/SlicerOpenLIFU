@@ -1,2 +1,2 @@
-openlifu==v0.8.0
+openlifu==v0.8.1
 bcrypt
