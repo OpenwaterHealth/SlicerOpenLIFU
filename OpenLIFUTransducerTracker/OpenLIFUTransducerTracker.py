@@ -1083,7 +1083,8 @@ class TransducerTrackingWizard(qt.QWizard):
             self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             self.transducer_body.GetDisplayNode().SetVisibility(False)
-            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
+            if self.transducer.cloned_virtual_fit_model:
+                self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
             if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
                 self.photoscanMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
@@ -1100,7 +1101,8 @@ class TransducerTrackingWizard(qt.QWizard):
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             self.transducer_body.GetDisplayNode().SetVisibility(False)
-            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
+            if self.transducer.cloned_virtual_fit_model:
+                self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetVisibility(False)
 
             self.photoscan.model_node.SetDisplayVisibility(self.photoscanVolumeTrackingPage.ui.photoscanVisibilityCheckBox.isChecked())
             self.photoscan.model_node.GetDisplayNode().SetOpacity(self.photoscanVolumeTrackingPage.ui.photoscanOpacitySlider.value)
@@ -2404,6 +2406,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             self.updateDistanceFromVFLabel()
             self.checkCanDisplayVirtualFitResult()
+            self.updateApprovalStatusLabel()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
@@ -2818,8 +2821,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         session_id = None if session is None else session.get_session_id()
         set_transducer_tracking_approval_for_photoscan(approval_state = False, photoscan_id = photoscan_id, session_id = session_id)
         self.update_photoscan_approval(photoscan_id = photoscan_id, approval_state = False)
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        data_logic.update_underlying_openlifu_session()
+        if session:
+            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic.update_underlying_openlifu_session()
 
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
@@ -3137,10 +3141,18 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         """
         
         session = get_openlifu_data_parameter_node().loaded_session
-        session_id : Optional[str] = session.get_session_id() if session is not None else None
 
-        # Check if there is already a transducer tracking result associated with the session. If there is, revoke approval first
-        approved_photoscan_id = session.get_transducer_tracking_approvals()
+        if session is not None:
+            session_id : Optional[str] = session.get_session_id()
+            # Check if there is already a transducer tracking result associated with the session. If there is, revoke approval first
+            approved_photoscan_id = session.get_transducer_tracking_approvals()
+        else:
+            session_id = None
+            approved_photoscan_id = self.get_photoscan_ids_with_approved_tt_results()
+        
+        if len(approved_photoscan_id) > 1:
+            raise RuntimeError("Transudcer tracking is currently approved for more than one photoscan. This should not be possible")
+        
         if approved_photoscan_id and (photoscan_id != approved_photoscan_id[0]):
             self.revoke_transducer_tracking_approval(photoscan_id = approved_photoscan_id[0]) # This does not trigger an info box
             transducer.set_matching_transform(None)
@@ -3166,8 +3178,9 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         transducer.move_node_into_transducer_sh_folder(tv_transform_node)
     
         # This should trigger `onDataParameterNodeModified` which will trigger the approval status update
-        data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
-        data_logic.update_underlying_openlifu_session()
+        if session:
+            data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic.update_underlying_openlifu_session()
 
         return (pv_transform_node, tv_transform_node)
     
