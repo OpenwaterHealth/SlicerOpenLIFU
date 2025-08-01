@@ -221,13 +221,14 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         self.currently_placing_node.GetNthControlPointPosition(0, position)
         self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
-
+        self.facial_landmarks_fiducial_node.SetLocked(False)
         self.exitPlaceFiducialMode()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
             self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
             slicer.mrmlScene.RemoveNode(self.currently_placing_node)
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
+        
         if self._checkAllLandmarksDefined():
             self.updateLandmarkPlacementStatus()
 
