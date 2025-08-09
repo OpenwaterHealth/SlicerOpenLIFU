@@ -40,7 +40,7 @@ from OpenLIFULib.util import (
 )
 from OpenLIFULib.notifications import notify
 
-# These imports are deferred at runtime using openlifu_lz, 
+# These imports are deferred at runtime using openlifu_lz,
 # but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
@@ -108,6 +108,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self._updating_solution_analysis = False
         """Flag to help prevent recursive event when onParameterNodeModified causes the parameter node to be modified"""
+        self._updating_gui_from_sliders = False
+        """Flag to prevent recursive updates when setting slider values programmatically."""
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -155,6 +157,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
+        self.updatePNPSliders()
         self.updateVirtualFitApprovalStatusLabel()
         self.updateTrackingApprovalStatusLabel()
         self.updateSolutionAnalysis()
@@ -170,6 +173,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.solutionPushButton.clicked.connect(self.onComputeSolutionClicked)
         self.ui.renderPNPCheckBox.clicked.connect(self.onrenderPNPCheckBoxClicked)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
+
+        # Connect PNP sliders
+        self.ui.pnpColorSlider.valuesChanged.connect(self.onPnpColorSliderChanged)
+        self.ui.pnpOpacitySlider.valueChanged.connect(self.onPnpOpacitySliderChanged)
 
         self.checkCanComputeSolution()
         self.updateApproveButton()
@@ -282,11 +289,79 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.renderPNPCheckBox.enabled = True
             self.ui.renderPNPCheckBox.setToolTip("Show the PNP volume in the 3D view with maximum intensity projection")
 
+    def updatePNPSliders(self, caller=None, event=None) -> None:
+        """
+        Updates the enabled state and ranges of the PNP color and opacity sliders
+        based on the rendering state and the current solution analysis.
+        """
+        is_pnp_rendered = self.ui.renderPNPCheckBox.isChecked() and self.ui.renderPNPCheckBox.enabled
+        self.ui.pnpColorSlider.enabled = is_pnp_rendered
+        self.ui.pnpOpacitySlider.enabled = is_pnp_rendered
+        
+        # Set visibility of labels as well
+        self.ui.pnpColorLabel.enabled = is_pnp_rendered
+        self.ui.pnpOpacityLabel.enabled = is_pnp_rendered
+
+        if not is_pnp_rendered:
+            return
+
+        analysis_wrapper = self._parameterNode.solution_analysis
+        target_pressure = 0.0
+
+        if analysis_wrapper and hasattr(analysis_wrapper, 'analysis') and analysis_wrapper.analysis:
+            solution_analysis = analysis_wrapper.analysis
+            if hasattr(solution_analysis, 'global_pnp_MPa') and solution_analysis.global_pnp_MPa:
+                try:
+                    target_pressure = max(solution_analysis.global_pnp_MPa)
+                except (ValueError, TypeError) as e:
+                    warnings.warn(f"Could not determine maximum global PNP: {e}. Disabling PNP sliders.")
+                    self.ui.pnpColorSlider.enabled = False
+                    self.ui.pnpOpacitySlider.enabled = False
+                    return
+            else:
+                warnings.warn("Solution analysis is missing 'global_pnp_MPa' data. Disabling PNP sliders.")
+                self.ui.pnpColorSlider.enabled = False
+                self.ui.pnpOpacitySlider.enabled = False
+                return
+        else:
+            self.ui.pnpColorSlider.enabled = False
+            self.ui.pnpOpacitySlider.enabled = False
+            return
+
+        if target_pressure <= 0:
+            warnings.warn(f"Target pressure must be positive, but found {target_pressure}. Disabling PNP sliders.")
+            self.ui.pnpColorSlider.enabled = False
+            self.ui.pnpOpacitySlider.enabled = False
+            return
+
+        # Block signals to prevent update functions from firing while we set default values
+        self._updating_gui_from_sliders = True
+        self.ui.pnpColorSlider.blockSignals(True)
+        self.ui.pnpOpacitySlider.blockSignals(True)
+
+        # Configure Color Slider: Range is 0 to Target Pressure, default is the full range.
+        self.ui.pnpColorSlider.setRange(0, target_pressure)
+        self.ui.pnpColorSlider.setValues(0, target_pressure)
+
+        # Configure Opacity Slider: Range is 0 to Target Pressure, default is 10% of the range.
+        self.ui.pnpOpacitySlider.setRange(0, target_pressure)
+        self.ui.pnpOpacitySlider.setValue(0.1 * target_pressure)
+
+        # Unblock signals
+        self.ui.pnpColorSlider.blockSignals(False)
+        self.ui.pnpOpacitySlider.blockSignals(False)
+        self._updating_gui_from_sliders = False
+
+        # Manually trigger the update to sync the rendering with the new default values
+        self.onPnpColorSliderChanged(self.ui.pnpColorSlider.minimumValue, self.ui.pnpColorSlider.maximumValue)
+        self.onPnpOpacitySliderChanged(self.ui.pnpOpacitySlider.value)
+
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateInputOptions()
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
+        self.updatePNPSliders()
         self.updateVirtualFitApprovalStatusLabel()
         self.updateTrackingApprovalStatusLabel()
         self.updateApproveButton()
@@ -337,6 +412,22 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.render_pnp()
         else:
             self.logic.hide_pnp()
+        self.updatePNPSliders()
+
+    def onPnpColorSliderChanged(self, min_val: float, max_val: float) -> None:
+        """Called when the PNP color slider values are changed."""
+        slicer.app.processEvents() # Ensures slider remains responsive
+        # TODO: Implement logic to update volume rendering color transfer function
+        print(f"PNP Color Range Changed: Min={min_val:.3f}, Max={max_val:.3f}")
+        pass
+
+    def onPnpOpacitySliderChanged(self, value: float) -> None:
+        """Called when the PNP opacity slider value is changed."""
+        slicer.app.processEvents() # Ensures slider remains responsive
+        # TODO: Implement logic to update volume rendering opacity transfer function
+        # This will set the cutoff for the opacity ramp.
+        print(f"PNP Opacity Threshold Changed: Value={value:.3f}")
+        pass
 
     def deleteSolutionAndSolutionAnalysisIfAny(self, reason:str):
         """Delete the solution in the data module and the solution analysis in
