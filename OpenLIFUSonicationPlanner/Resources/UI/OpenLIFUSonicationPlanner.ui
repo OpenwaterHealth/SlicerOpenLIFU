@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>358</width>
-    <height>640</height>
+    <width>440</width>
+    <height>760</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_10">
@@ -187,6 +187,22 @@ analysis.</string>
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="approveButton">
+        <property name="text">
+         <string>Approve solution</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+     <property name="text">
+      <string>Peak Negative Pressure Rendering</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_8">
+      <item>
        <widget class="QCheckBox" name="renderPNPCheckBox">
         <property name="enabled">
          <bool>false</bool>
@@ -200,9 +216,42 @@ analysis.</string>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="approveButton">
+       <widget class="QLabel" name="pnpColorLabel">
         <property name="text">
-         <string>Approve solution</string>
+         <string>PNP Color Intensity Range:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkDoubleRangeSlider" name="pnpColorSlider">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="maximum">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.010000000000000</double>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="pnpOpacityLabel">
+        <property name="text">
+         <string>PNP Opacity Threshold:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkDoubleSlider" name="pnpOpacitySlider">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
         </property>
        </widget>
       </item>
@@ -220,15 +269,25 @@ analysis.</string>
  </widget>
  <customwidgets>
   <customwidget>
-   <class>qMRMLWidget</class>
-   <extends>QWidget</extends>
-   <header>qMRMLWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkDoubleRangeSlider</class>
+   <extends>QWidget</extends>
+   <header>ctkDoubleRangeSlider.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkDoubleSlider</class>
+   <extends>QWidget</extends>
+   <header>ctkDoubleSlider.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
