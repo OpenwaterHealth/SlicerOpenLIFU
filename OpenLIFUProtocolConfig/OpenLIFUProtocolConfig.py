@@ -495,6 +495,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onEditRevertDiscardProtocolClicked(self, checked: bool) -> None:
         if self.ui.protocolEditRevertDiscardButton.text == "Edit Protocol":
             self.setProtocolEditorEnabled(True)
+            self.updateWidgetSaveState(SaveState.UNSAVED_CHANGES)
         elif self.ui.protocolEditRevertDiscardButton.text == "Discard New Protocol":
             self.logic.delete_protocol_from_cache(self._cur_protocol_id)
             self.updateWidgetSaveState(SaveState.NO_CHANGES)
