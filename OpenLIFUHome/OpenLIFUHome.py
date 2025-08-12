@@ -3,6 +3,7 @@ from typing import Optional, TYPE_CHECKING
 
 # Third-party imports
 import vtk
+import qt
 
 # Slicer imports
 import slicer
@@ -13,14 +14,15 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
-from OpenLIFULib import (
-    get_openlifu_data_parameter_node,
-)
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 from OpenLIFULib.lazyimport import (
     check_and_install_python_requirements,
     python_requirements_exist,
 )
+# These imports are done only for IDE and static analysis purposes
+if TYPE_CHECKING:
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataWidget
+    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 #
 # OpenLIFUHome
@@ -95,6 +97,22 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUHomeLogic()
+
+        # ---- Set up prompt to save on app exit ----
+        def onSlicerExiting():
+            data_widget : OpenLIFUDataWidget = slicer.modules.OpenLIFUDataWidget
+
+            if data_widget._parameterNode is None or data_widget._parameterNode.loaded_session is None:
+                return
+
+            openlifu_session = data_widget._parameterNode.loaded_session.session
+            if not slicer.util.confirmYesNoDisplay(f"You're working on session {openlifu_session.name} (ID: {openlifu_session.id}). Do you want to save it now?", windowTitle="Save Confirmation"):
+                return
+
+            data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+            data_module_logic.save_session()
+
+        qt.QApplication.instance().aboutToQuit.connect(onSlicerExiting)
 
         # === Connections and UI setup =======
 
