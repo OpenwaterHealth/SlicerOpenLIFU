@@ -105,7 +105,9 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
     # IDs of all the view nodes in the main Window. This excludes the photoscan's view node
     all_view_nodes = slicer.util.getNodesByClass('vtkMRMLViewNode')
     wizard_node_ids = [node.GetID() for node in wizard_view_nodes]
-    views_mainwindow = [node.GetID() for node in all_view_nodes if node.GetID() not in wizard_node_ids]
+
+    # Exclude any wizard related nodes. Even view nodes associated with other photoscans.
+    views_mainwindow = [node.GetID() for node in all_view_nodes if node.GetAttribute("isWizardViewNode") != "true"]
     
     # Set the view nodes for all displayable nodes.
     # If GetViewNodeIDs() is (), the node is displayed in all views so we need to exclude the photoscan view
@@ -132,7 +134,7 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
         elif displayable_node.IsA('vtkMRMLMarkupsNode') and displayable_node.GetDisplayVisibility():
             fiducial_views = view_nodes + ['vtkMRMLSliceNodeRed','vtkMRMLSliceNodeYellow','vtkMRMLSliceNodeGreen']
             displayable_node.GetDisplayNode().SetViewNodeIDs(fiducial_views)
-        elif displayable_node.GetDisplayVisibility() and not displayable_node.GetDisplayNode().GetViewNodeIDs():
+        elif displayable_node.GetDisplayVisibility():
             displayable_node.GetDisplayNode().SetViewNodeIDs(view_nodes)
     
     # Set the view nodes for the Red, Green and Yellow slice nodes if empty
