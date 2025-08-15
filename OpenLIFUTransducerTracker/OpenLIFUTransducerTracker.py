@@ -1271,7 +1271,12 @@ class TransducerTrackingWizard(qt.QWizard):
         self.volume_view_node = get_threeD_transducer_tracking_view_node()
         wizard_view_nodes = [self.photoscan.view_node, self.volume_view_node]
 
+        # Hide all displayable nodes in the scene from the wizard view nodes
+        hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
+
         # Set view nodes for the skin mesh, transducer and photoscan
+        # We are okay with overwriting the view nodes and potentially hiding these models from the main view. 
+        # This ensures that visibility settings or transformations applied in the wizard are not simultaneously visible in the main window. 
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.skin_mesh_node.GetDisplayNode().SetOpacity(1.0)
         self.skin_mesh_node.SetSelectable(True)
@@ -1284,7 +1289,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
         # If the transducer surface has specific view nodes associated with it, maintain those view nodes
         # We need to check for current view settings since the transducer exists in the scene
-        # before the wizard.
+        # before the wizard. Note: the transducer model remains visible in the scene
         self.current_transducer_surface_visibility = self.transducer_surface.GetDisplayNode().GetVisibility()
         self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
@@ -1299,9 +1304,6 @@ class TransducerTrackingWizard(qt.QWizard):
 
         self.photoscan.set_view_nodes(wizard_view_nodes)
         self.photoscan.model_node.GetDisplayNode().SetOpacity(1.0)
-
-        # Hide all displayable nodes in the scene from the wizard view nodes
-        hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
         
     def resetViewNodes(self):
         """Resets the view nodes of all models created by the wizard to null '()'. This allows the
@@ -1389,7 +1391,7 @@ class PhotoscanPreviewDialog(qt.QDialog):
         # Set view nodes on the photoscan
         self.photoscan.set_view_nodes([self.photoscan.view_node])
         
-        # Hide all displayable nodes in the scene from the wizard view ndoes
+        # Hide all displayable nodes in the scene from the wizard view nodes
         hide_displayable_nodes_from_view(wizard_view_nodes = [self.photoscan.view_node])
         
     def resetViewNodes(self):
