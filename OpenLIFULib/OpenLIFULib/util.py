@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, List, Optional, get_type_hints, Annotated
 from typing_extensions import get_type_hints as get_type_hints_ext # for <3.10 compatibility
 import logging
+from pathlib import Path
 import qt
 import slicer
 from slicer import vtkMRMLNode
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginLogic
+    from OpenLIFUDatabase.OpenLIFUDatabase import OpenLIFUDatabaseLogic
 
 # Use this to ensure compatibility in Python 3.9
 get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext
@@ -32,7 +34,12 @@ def get_openlifu_database_parameter_node() -> "OpenLIFUDatabaseParameterNode":
 
 def get_cur_db() -> "Optional[Database]":
     """Get the current openlifu.db.Database loaded in the OpenLIFU Database module"""
-    return slicer.util.getModuleLogic('OpenLIFUDatabase').db
+    db_logic : OpenLIFUDatabaseLogic = slicer.util.getModuleLogic('OpenLIFUDatabase')
+    if db_logic.db is None:
+        db_dir : Path = db_logic.getParameterNode().databaseDirectory
+        if db_dir.exists():
+            db_logic.load_database(db_dir)
+    return db_logic.db
 
 def get_openlifu_data_parameter_node() -> "OpenLIFUDataParameterNode":
     """Get the parameter node of the OpenLIFU Data module"""
