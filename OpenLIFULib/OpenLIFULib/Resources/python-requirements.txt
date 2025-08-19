@@ -1,2 +1,3 @@
-openlifu==v0.9.0
+openlifu==v0.10.0
 bcrypt
+threadpoolctl
