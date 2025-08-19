@@ -18,7 +18,12 @@ def install_python_requirements() -> None:
 
 def python_requirements_exist() -> bool:
     """Check and return whether python requirements are installed."""
-    return importlib.util.find_spec('openlifu') is not None
+    try:
+        import threadpoolctl
+        import bcrypt
+    except ModuleNotFoundError:
+        return False
+    return importlib.util.find_spec('openlifu') is not None # openlifu import causes a delay so we check for it without actually importing yet
 
 def check_and_install_python_requirements(prompt_if_found = False) -> None:
     """Check whether python requirements are installed and prompt to install them if not.
@@ -73,3 +78,10 @@ def bcrypt_lz() -> "bcrypt":
         with BusyCursor():
             import bcrypt
     return sys.modules["bcrypt"]
+
+def threadpoolctl_lz() -> "threadpoolctl":
+    """Import threadpoolctl and return the module, checking that it is installed along the way."""
+    if "threadpoolctl" not in sys.modules:
+        check_and_install_python_requirements(prompt_if_found=False)
+        import threadpoolctl
+    return sys.modules["threadpoolctl"]
