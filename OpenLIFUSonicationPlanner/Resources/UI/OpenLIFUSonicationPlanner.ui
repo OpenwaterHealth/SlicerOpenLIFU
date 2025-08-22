@@ -226,21 +226,15 @@ analysis.</string>
        </widget>
       </item>
       <item>
-       <widget class="ctkDoubleRangeSlider" name="pnpColorSlider">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
+       <widget class="ctkRangeWidget" name="pnpColorSlider">
         <property name="toolTip">
          <string>Modify the window level</string>
-        </property>
-        <property name="maximum">
-         <double>1.000000000000000</double>
         </property>
         <property name="singleStep">
          <double>0.010000000000000</double>
         </property>
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+        <property name="maximum">
+         <double>1.000000000000000</double>
         </property>
        </widget>
       </item>
@@ -255,18 +249,18 @@ analysis.</string>
        </widget>
       </item>
       <item>
-       <widget class="ctkDoubleSlider" name="pnpOpacitySlider">
-        <property name="enabled">
-         <bool>false</bool>
+       <widget class="ctkSliderWidget" name="pnpOpacitySlider">
+        <property name="singleStep">
+         <double>0.010000000000000</double>
         </property>
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+        <property name="pageStep">
+         <double>0.100000000000000</double>
         </property>
-        <property name="handleToolTip">
-         <string>Modify the minimum cutoff for rendering the volume</string>
+        <property name="maximum">
+         <double>1.000000000000000</double>
         </property>
         <property name="invertedAppearance">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -290,14 +284,14 @@ analysis.</string>
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>ctkDoubleRangeSlider</class>
+   <class>ctkRangeWidget</class>
    <extends>QWidget</extends>
-   <header>ctkDoubleRangeSlider.h</header>
+   <header>ctkRangeWidget.h</header>
   </customwidget>
   <customwidget>
-   <class>ctkDoubleSlider</class>
+   <class>ctkSliderWidget</class>
    <extends>QWidget</extends>
-   <header>ctkDoubleSlider.h</header>
+   <header>ctkSliderWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
