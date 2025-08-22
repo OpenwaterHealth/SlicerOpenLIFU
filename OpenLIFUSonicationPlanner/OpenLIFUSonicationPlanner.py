@@ -291,71 +291,70 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def updatePNPSliders(self, caller=None, event=None) -> None:
         """
-        Updates the enabled state and ranges of the PNP color and opacity sliders
-        based on the rendering state and the current solution analysis.
+        Updates the ranges and default values of the PNP color and opacity sliders
+        based on the target pressure from the loaded protocol.
         """
-        is_pnp_rendered = self.ui.renderPNPCheckBox.isChecked() and self.ui.renderPNPCheckBox.enabled
-        self.ui.pnpColorSlider.enabled = is_pnp_rendered
-        self.ui.pnpOpacitySlider.enabled = is_pnp_rendered
-        
-        # Set visibility of labels as well
-        self.ui.pnpColorLabel.enabled = is_pnp_rendered
-        self.ui.pnpOpacityLabel.enabled = is_pnp_rendered
-
-        if not is_pnp_rendered:
+        # Disable sliders and labels by default. They will be enabled if all data is valid.
+        self.ui.pnpColorSlider.enabled = False
+        self.ui.pnpOpacitySlider.enabled = False
+        self.ui.pnpColorLabel.enabled = False
+        self.ui.pnpOpacityLabel.enabled = False
+    
+        # Get target pressure from the current protocol with validation checks.
+        data_parameter_node = get_openlifu_data_parameter_node()
+        if not data_parameter_node:
+            return
+    
+        solution_wrapper = data_parameter_node.loaded_solution
+        if not solution_wrapper or not solution_wrapper.solution or not solution_wrapper.solution.solution:
+            return
+    
+        solution_openlifu = solution_wrapper.solution.solution
+        protocols = data_parameter_node.loaded_protocols
+        if not protocols or solution_openlifu.protocol_id not in protocols:
+            return
+    
+        protocol_openlifu= protocols[solution_openlifu.protocol_id].protocol
+        if not protocol_openlifu or not protocol_openlifu.focal_pattern or not hasattr(protocol_openlifu.focal_pattern, 'target_pressure'):
+            return
+    
+        target_pressure = protocol_openlifu.focal_pattern.target_pressure
+        if not isinstance(target_pressure, (int, float)) or target_pressure <= 0:
             return
 
-        analysis_wrapper = self._parameterNode.solution_analysis
-        target_pressure = 0.0
-
-        if analysis_wrapper and hasattr(analysis_wrapper, 'analysis') and analysis_wrapper.analysis:
-            solution_analysis = analysis_wrapper.analysis
-            if hasattr(solution_analysis, 'global_pnp_MPa') and solution_analysis.global_pnp_MPa:
-                try:
-                    target_pressure = max(solution_analysis.global_pnp_MPa)
-                except (ValueError, TypeError) as e:
-                    warnings.warn(f"Could not determine maximum global PNP: {e}. Disabling PNP sliders.")
-                    self.ui.pnpColorSlider.enabled = False
-                    self.ui.pnpOpacitySlider.enabled = False
-                    return
-            else:
-                warnings.warn("Solution analysis is missing 'global_pnp_MPa' data. Disabling PNP sliders.")
-                self.ui.pnpColorSlider.enabled = False
-                self.ui.pnpOpacitySlider.enabled = False
-                return
-        else:
-            self.ui.pnpColorSlider.enabled = False
-            self.ui.pnpOpacitySlider.enabled = False
-            return
-
-        if target_pressure <= 0:
-            warnings.warn(f"Target pressure must be positive, but found {target_pressure}. Disabling PNP sliders.")
-            self.ui.pnpColorSlider.enabled = False
-            self.ui.pnpOpacitySlider.enabled = False
-            return
-
-        # Block signals to prevent update functions from firing while we set default values
+        pnp_volume_node: "vtkMRMLScalarVolumeNode" = solution_wrapper.pnp
+        max_pnp_in_array = pnp_volume_node.GetImageData().GetPointData().GetScalars().GetRange()[1]
+    
+        # If all checks passed, enable the UI elements.
+        self.ui.pnpColorSlider.enabled = True
+        self.ui.pnpOpacitySlider.enabled = True
+        self.ui.pnpColorLabel.enabled = True
+        self.ui.pnpOpacityLabel.enabled = True
+    
+        # Block slider signals to prevent premature updates.
         self._updating_gui_from_sliders = True
         self.ui.pnpColorSlider.blockSignals(True)
         self.ui.pnpOpacitySlider.blockSignals(True)
-
-        # Configure Color Slider: Range is 0 to Target Pressure, default is the full range.
-        self.ui.pnpColorSlider.setRange(0, target_pressure)
-        self.ui.pnpColorSlider.setValues(0, target_pressure)
-
-        # Configure Opacity Slider: Range is 0 to Target Pressure, default is 10% of the range.
-        self.ui.pnpOpacitySlider.setRange(0, target_pressure)
-        self.ui.pnpOpacitySlider.setValue(0.1 * target_pressure)
-
-        # Unblock signals
+    
+        # Configure the color slider (double-handled).
+        self.ui.pnpColorSlider.minimum = 0
+        self.ui.pnpColorSlider.maximum = target_pressure * 1.5
+        self.ui.pnpColorSlider.minimumValue = 0
+        self.ui.pnpColorSlider.maximumValue = target_pressure
+    
+        # Configure the opacity slider (single-handled).
+        self.ui.pnpOpacitySlider.minimum = 0
+        self.ui.pnpOpacitySlider.maximum = max_pnp_in_array
+        self.ui.pnpOpacitySlider.value = 0.1 * target_pressure
+    
+        # Unblock signals.
         self.ui.pnpColorSlider.blockSignals(False)
         self.ui.pnpOpacitySlider.blockSignals(False)
         self._updating_gui_from_sliders = False
-
-        # Manually trigger the update to sync the rendering with the new default values
+    
+        # Manually trigger updates to apply the new default values.
         self.onPnpColorSliderChanged(self.ui.pnpColorSlider.minimumValue, self.ui.pnpColorSlider.maximumValue)
         self.onPnpOpacitySliderChanged(self.ui.pnpOpacitySlider.value)
-
 
     def onDataParameterNodeModified(self,caller, event) -> None:
         self.updateInputOptions()
