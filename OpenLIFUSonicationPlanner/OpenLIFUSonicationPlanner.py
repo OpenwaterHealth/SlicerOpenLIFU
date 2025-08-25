@@ -742,7 +742,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
     def render_pnp(self) -> None:
         """
         Renders the PNP solution in both the 3D view (as a volume rendering)
-        and all 2D slice views (as a foreground overlay).
+        and all 2D slice views (as a fully opaque foreground overlay).
         """
         pnp = self.get_pnp()
         if pnp is None:
@@ -769,8 +769,8 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         scalar_opacity_mapping.AddPoint(vmax,1.0)
         
         # --- 2D Slice View Logic (Foreground Layer) ---
-        # The best way to SET the foreground layer universally.
-        slicer.util.setSliceViewerLayers(foreground=pnp, foregroundOpacity=0.5)
+        # Set the foreground layer with 100% opacity.
+        slicer.util.setSliceViewerLayers(foreground=pnp, foregroundOpacity=1.0)
 
     def hide_pnp(self) -> None:
         """
