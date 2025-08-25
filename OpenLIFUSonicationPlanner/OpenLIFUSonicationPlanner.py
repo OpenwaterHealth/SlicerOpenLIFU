@@ -419,12 +419,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onPnpColorSliderChanged(self, new_min_val: float, new_max_val: float) -> None:
         """Called when the PNP color slider values are changed."""
-        slicer.app.processEvents() # Ensures slider remains responsive
-
         data_parameter_node = get_openlifu_data_parameter_node()
         pnp_volume_node: "vtkMRMLScalarVolumeNode" = data_parameter_node.loaded_solution.pnp
         pnp_volume_node.GetDisplayNode().AutoWindowLevelOff()
-        #pnp_volume_node.GetDisplayNode().SetWindowLevel(new_min_val, new_max_val)
         pnp_volume_node.GetDisplayNode().SetWindowLevelMinMax(new_min_val, new_max_val)
 
         vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(pnp_volume_node)
@@ -433,8 +430,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onPnpOpacitySliderChanged(self, new_min_val: float) -> None:
         """Called when the PNP opacity slider value is changed."""
-        slicer.app.processEvents() # Ensures slider remains responsive
-
         data_parameter_node = get_openlifu_data_parameter_node()
         pnp_volume_node: "vtkMRMLScalarVolumeNode" = data_parameter_node.loaded_solution.pnp
         pnp_volume_node.GetDisplayNode().SetThreshold(new_min_val, self.ui.pnpOpacitySlider.maximum)
