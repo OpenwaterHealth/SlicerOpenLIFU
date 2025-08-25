@@ -322,7 +322,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if not isinstance(target_pressure, (int, float)) or target_pressure <= 0:
             return
 
-        pnp_volume_node: "vtkMRMLScalarVolumeNode" = solution_wrapper.pnp
+        pnp_volume_node: "vtkMRMLScalarVolumeNode" = self.logic.get_pnp()
         max_pnp_in_array = pnp_volume_node.GetImageData().GetPointData().GetScalars().GetRange()[1]
     
         # If all checks passed, enable the UI elements.
@@ -429,14 +429,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onPnpColorSliderChanged(self, new_min_val: float, new_max_val: float) -> None:
         """Called when the PNP color slider values are changed."""
-        data_parameter_node = get_openlifu_data_parameter_node()
-        pnp_volume_node: "vtkMRMLScalarVolumeNode" = data_parameter_node.loaded_solution.pnp
+        pnp_volume_node: "vtkMRMLScalarVolumeNode" = self.logic.get_pnp()
         pnp_volume_node.GetDisplayNode().SetWindowLevelMinMax(new_min_val, new_max_val)
 
     def onPnpOpacitySliderChanged(self, new_min_val: float) -> None:
         """Called when the PNP opacity slider value is changed."""
-        data_parameter_node = get_openlifu_data_parameter_node()
-        pnp_volume_node: "vtkMRMLScalarVolumeNode" = data_parameter_node.loaded_solution.pnp
+        pnp_volume_node: "vtkMRMLScalarVolumeNode" = self.logic.get_pnp()
         pnp_volume_node.GetDisplayNode().SetThreshold(new_min_val, self.ui.pnpOpacitySlider.maximum)
 
 
