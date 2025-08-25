@@ -741,36 +741,66 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         return solution.pnp
 
     def render_pnp(self) -> None:
+        """
+        Renders the PNP solution in both the 3D view (as a volume rendering)
+        and all 2D slice views (as a foreground overlay).
+        """
         pnp = self.get_pnp()
         if pnp is None:
             raise RuntimeError("Cannot render PNP as there is no active solution.")
+
+        # --- 3D View Logic (Volume Rendering) ---
         pnp.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFilePlasma.txt")
         volRenLogic = slicer.modules.volumerendering.logic()
         displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
         if not displayNode:
             displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
-        volRenLogic.CopyDisplayToVolumeRenderingDisplayNode(displayNode)
+            volRenLogic.CopyDisplayToVolumeRenderingDisplayNode(displayNode)
+
         for view_node in slicer.util.getNodesByClass("vtkMRMLViewNode"):
             if view_node.GetAttribute("isWizardViewNode") == "true": # Just incase, skip the wizard view nodes
                 continue
             view_node.SetRaycastTechnique(slicer.vtkMRMLViewNode.MaximumIntensityProjection)
+        
         displayNode.SetVisibility(True)
         scalar_opacity_mapping = displayNode.GetVolumePropertyNode().GetVolumeProperty().GetScalarOpacity()
         scalar_opacity_mapping.RemoveAllPoints()
         vmin, vmax = pnp.GetImageData().GetScalarRange()
         scalar_opacity_mapping.AddPoint(vmin,0.0)
         scalar_opacity_mapping.AddPoint(vmax,1.0)
+        
+        # --- 2D Slice View Logic (Foreground Layer) ---
+        # The best way to SET the foreground layer universally.
+        slicer.util.setSliceViewerLayers(foreground=pnp, foregroundOpacity=0.5)
 
     def hide_pnp(self) -> None:
-        """Hide the PNP volume from the 3D view, if it is displayed. If there is no PNP volume then just do nothing."""
+        """
+        Hide the PNP volume from the 3D view and remove it from the
+        foreground of slice views ONLY IF it is the active foreground volume.
+        This prevents accidentally clearing other user-set foregrounds.
+        """
         pnp = self.get_pnp()
         if pnp is None:
             return
+
+        # --- 3D View Logic (Volume Rendering) ---
         volRenLogic = slicer.modules.volumerendering.logic()
         displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(pnp)
-        if not displayNode:
-            displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(pnp)
-        displayNode.SetVisibility(False)
+        if displayNode:
+            displayNode.SetVisibility(False)
+            
+        # --- 2D Slice View Logic (Surgical Foreground Clearing) ---
+        # Iterate through each slice view to check its state before modifying it.
+        pnp_id = pnp.GetID()
+        layoutManager = slicer.app.layoutManager()
+        for sliceViewName in layoutManager.sliceViewNames():
+            sliceWidget = layoutManager.sliceWidget(sliceViewName)
+            compositeNode = sliceWidget.mrmlSliceCompositeNode()
+            
+            # Check if the PNP volume is the one in the foreground
+            if compositeNode.GetForegroundVolumeID() == pnp_id:
+                # If it is, clear the foreground for this view only
+                compositeNode.SetForegroundVolumeID("") # Set to empty string to clear
 
     def solution_analysis_exists(self) -> bool:
         """
