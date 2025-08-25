@@ -171,7 +171,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
 
         self.ui.solutionPushButton.clicked.connect(self.onComputeSolutionClicked)
-        self.ui.renderPNPCheckBox.clicked.connect(self.onrenderPNPCheckBoxClicked)
+        self.ui.renderPNPCheckBox.toggled.connect(self.onrenderPNPCheckBoxToggled)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
         # Connect PNP sliders
@@ -404,9 +404,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             finally:
                 self.updateSolutionProgressBar()
 
+        self.ui.renderPNPCheckBox.checked = True
+
         self.updateWorkflowControls()
 
-    def onrenderPNPCheckBoxClicked(self, checked:bool):
+    def onrenderPNPCheckBoxToggled(self, checked:bool):
         if checked:
             self.logic.render_pnp()
         else:
