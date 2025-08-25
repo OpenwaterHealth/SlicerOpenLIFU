@@ -337,15 +337,18 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.pnpOpacitySlider.blockSignals(True)
     
         # Configure the color slider (double-handled).
+        N_STEPS = 200.
         self.ui.pnpColorSlider.minimum = 0
         self.ui.pnpColorSlider.maximum = target_pressure * 1.5
         self.ui.pnpColorSlider.minimumValue = 0
         self.ui.pnpColorSlider.maximumValue = target_pressure
+        self.ui.pnpColorSlider.singleStep = (target_pressure - 0) / N_STEPS
     
         # Configure the opacity slider (single-handled).
         self.ui.pnpOpacitySlider.minimum = 0
         self.ui.pnpOpacitySlider.maximum = max_pnp_in_array
         self.ui.pnpOpacitySlider.value = 0.1 * target_pressure
+        self.ui.pnpOpacitySlider.singleStep = (max_pnp_in_array - 0) / N_STEPS
     
         # Unblock signals.
         self.ui.pnpColorSlider.blockSignals(False)
@@ -413,7 +416,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.render_pnp()
         else:
             self.logic.hide_pnp()
-        self.updatePNPSliders()
 
     def onPnpColorSliderChanged(self, new_min_val: float, new_max_val: float) -> None:
         """Called when the PNP color slider values are changed."""
