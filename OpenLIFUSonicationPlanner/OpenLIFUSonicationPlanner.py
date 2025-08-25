@@ -359,12 +359,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         pnp_volume_node.GetDisplayNode().SetAutoWindowLevel(0)
         pnp_volume_node.GetDisplayNode().SetApplyThreshold(1)
 
-        vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(pnp_volume_node)
-        if vrDisplayNode is not None and not vrDisplayNode.GetFollowVolumeDisplayNode():
-          vrDisplayNode.SetFollowVolumeDisplayNode(1)
-        if vrDisplayNode is not None and vrDisplayNode.GetIgnoreVolumeDisplayNodeThreshold():
-          vrDisplayNode.SetIgnoreVolumeDisplayNodeThreshold(0)
-
         # Manually trigger updates to apply the new default values.
         self.onPnpColorSliderChanged(self.ui.pnpColorSlider.minimumValue, self.ui.pnpColorSlider.maximumValue)
         self.onPnpOpacitySliderChanged(self.ui.pnpOpacitySlider.value)
@@ -432,10 +426,23 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         pnp_volume_node: "vtkMRMLScalarVolumeNode" = self.logic.get_pnp()
         pnp_volume_node.GetDisplayNode().SetWindowLevelMinMax(new_min_val, new_max_val)
 
+        vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(pnp_volume_node)
+        if vrDisplayNode is not None and not vrDisplayNode.GetFollowVolumeDisplayNode():
+          vrDisplayNode.SetFollowVolumeDisplayNode(1)
+        if vrDisplayNode is not None and vrDisplayNode.GetIgnoreVolumeDisplayNodeThreshold():
+          vrDisplayNode.SetIgnoreVolumeDisplayNodeThreshold(0)
+
+
     def onPnpOpacitySliderChanged(self, new_min_val: float) -> None:
         """Called when the PNP opacity slider value is changed."""
         pnp_volume_node: "vtkMRMLScalarVolumeNode" = self.logic.get_pnp()
         pnp_volume_node.GetDisplayNode().SetThreshold(new_min_val, self.ui.pnpOpacitySlider.maximum)
+
+        vrDisplayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(pnp_volume_node)
+        if vrDisplayNode is not None and not vrDisplayNode.GetFollowVolumeDisplayNode():
+          vrDisplayNode.SetFollowVolumeDisplayNode(1)
+        if vrDisplayNode is not None and vrDisplayNode.GetIgnoreVolumeDisplayNodeThreshold():
+          vrDisplayNode.SetIgnoreVolumeDisplayNodeThreshold(0)
 
 
     def deleteSolutionAndSolutionAnalysisIfAny(self, reason:str):
