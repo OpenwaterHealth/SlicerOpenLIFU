@@ -7,8 +7,8 @@ project(SlicerOpenLIFU)
 set(EXTENSION_HOMEPAGE "https://github.com/OpenwaterHealth/SlicerOpenLIFU")
 set(EXTENSION_CONTRIBUTORS "Ebrahim Ebrahim (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Andrew Howe (Kitware), Sadhana Ravikumar (Kitware), Brad Moore (Kitware)")
 set(EXTENSION_DESCRIPTION "A 3D Slicer extension for Openwater’s OpenLIFU (Low Intensity Focused Ultrasound) research platform. Licensed under AGPL (a strong copyleft license that may impose restrictions on combined works).")
-set(EXTENSION_ICONURL "https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/SlicerOpenLIFU.png")
-set(EXTENSION_SCREENSHOTURLS "https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/screenshots/1.png")
+set(EXTENSION_ICONURL "https://github.com/OpenwaterHealth/SlicerOpenLIFU/raw/main/SlicerOpenLIFU.png")
+set(EXTENSION_SCREENSHOTURLS "https://github.com/OpenwaterHealth/SlicerOpenLIFU/raw/main/screenshots/1.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
 
 #-----------------------------------------------------------------------------
