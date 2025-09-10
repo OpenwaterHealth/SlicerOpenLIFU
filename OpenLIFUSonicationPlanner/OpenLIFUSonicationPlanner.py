@@ -874,19 +874,14 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
     def compute_analysis_from_solution(self, solution:SlicerOpenLIFUSolution) -> Optional[SlicerOpenLIFUSolutionAnalysis]:
         """Compute solution analysis from a given solution.
         Returns the SlicerOpenLIFUSolutionAnalysis on success.
-        If the protocol or transducer used to compute the solution are not present, then this returns None.
+        If the protocol used to compute the solution is not present, then this returns None.
         """
-        solution_openlifu = solution.solution.solution
+        solution_openlifu : "openlifu.plan.Solution" = solution.solution.solution
         data_parameter_node = get_openlifu_data_parameter_node()
-        if (
-            solution_openlifu.transducer_id not in data_parameter_node.loaded_transducers
-            or solution_openlifu.protocol_id not in data_parameter_node.loaded_protocols
-        ):
+        if solution_openlifu.protocol_id not in data_parameter_node.loaded_protocols:
             return None
-        transducer = data_parameter_node.loaded_transducers[solution_openlifu.transducer_id]
         protocol = data_parameter_node.loaded_protocols[solution_openlifu.protocol_id]
         analysis_openlifu = solution_openlifu.analyze(
-            transducer=transducer.transducer.transducer,
             options=protocol.protocol.analysis_options
         )
         return SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
