@@ -2066,7 +2066,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         protocolConfigLogic.delete_protocol_from_cache(protocol_id)
 
     def load_transducer_from_file(self, filepath:str) -> None:
-        transducer = openlifu_lz().Transducer.from_file(filepath)
+        transducer = openlifu_lz().xdc.util.load_transducer_from_file(filepath, convert_array=True)
         transducer_parent_dir = Path(filepath).parent
 
         transducer_abspaths_info = {
