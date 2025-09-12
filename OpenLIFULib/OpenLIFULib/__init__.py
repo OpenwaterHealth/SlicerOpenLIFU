@@ -1,4 +1,4 @@
-from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz
+from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz, threadpoolctl_lz
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPoint,
     SlicerOpenLIFUXADataset,
@@ -33,6 +33,7 @@ __all__ = [
     "openlifu_lz",
     "xarray_lz",
     "bcrypt_lz",
+    "threadpoolctl_lz"
     "SlicerOpenLIFUSolution",
     "SlicerOpenLIFUProtocol",
     "SlicerOpenLIFUTransducer",

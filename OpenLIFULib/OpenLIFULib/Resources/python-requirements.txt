@@ -1,2 +1,3 @@
-openlifu==v0.9.0
+git+https://github.com/OpenwaterHealth/OpenLIFU-python@9698607e90ad34431bf70049f752755d0ab68b5f
 bcrypt
+threadpoolctl
