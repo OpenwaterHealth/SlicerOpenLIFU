@@ -73,6 +73,7 @@ from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
 from OpenLIFULib.notifications import notify
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
+from OpenLIFULib.install_asset_dialog import InstallAssetDialog
 
 # These imports are for IDE and static analysis purposes only
 if TYPE_CHECKING:
@@ -2183,6 +2184,20 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             )
         )
 
+        # We set download_masking_model=False when we call run_reconstruction in generate_photoscan, so that we can manage getting the model here:
+        modnet_path : Path = openlifu_lz().util.assets.get_modnet_path()
+        if not modnet_path.exists():
+            install_dialog = InstallAssetDialog(modnet_path.name, parent = slicer.util.mainWindow())
+            if install_dialog.exec_() != qt.QDialog.Accepted:
+                return # If the user closes out of the dialog, abort photoscan generation.
+            action, path = install_dialog.get_result()
+            if action == "download":
+                openlifu_lz().util.assets.download_and_install_modnet()
+            elif action =="browse":
+                openlifu_lz().util.assets.install_modnet_from_file(path)
+            else:
+                raise RuntimeError("Unrecognized dialog action") # should never happen
+
         photoscan_generation_options_dialog = PhotoscanGenerationOptionsDialog(
             meshroom_pipeline_names = openlifu_lz().nav.photoscan.get_meshroom_pipeline_names(),
             total_number_of_photos = total_number_of_photos,
@@ -2776,6 +2791,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                 window_radius = window_radius,
                 matching_mode = matching_mode,
                 progress_callback = progress_callback,
+                download_masking_model = False,
             )
         photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
         photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
