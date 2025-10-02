@@ -1,4 +1,4 @@
-from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz, threadpoolctl_lz
+from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz, threadpoolctl_lz, check_and_install_kwave_binaries
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPoint,
     SlicerOpenLIFUXADataset,
@@ -55,4 +55,5 @@ __all__ = [
     "fiducial_to_openlifu_point_in_transducer_coords",
     "openlifu_point_to_fiducial",
     "assign_openlifu_metadata_to_volume_node",
+    "check_and_install_kwave_binaries",
 ]

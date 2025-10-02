@@ -2192,7 +2192,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 return # If the user closes out of the dialog, abort photoscan generation.
             action, path = install_dialog.get_result()
             if action == "download":
-                openlifu_lz().util.assets.download_and_install_modnet()
+                try:
+                    openlifu_lz().util.assets.download_and_install_modnet()
+                except Exception as e:
+                    slicer.util.errorDisplay(
+                        text = f"An error occurred while downloading {modnet_path.name}: {e}",
+                        windowTitle = f"Error downloading {modnet_path.name}"
+                    )
+                    return
             elif action =="browse":
                 openlifu_lz().util.assets.install_modnet_from_file(path)
             else:

@@ -20,6 +20,7 @@ from slicer.util import VTKObservationMixin
 # OpenLIFULib imports
 from OpenLIFULib import (
     BusyCursor,
+    check_and_install_kwave_binaries,
     openlifu_lz,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
@@ -398,6 +399,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onComputeSolutionClicked(self, checked:bool):
         activeData = self.algorithm_input_widget.get_current_data()
 
+        if not check_and_install_kwave_binaries():
+            raise RuntimeError("Cannot find kwave binaries required to compute sonication solutions.")
+    
         # In case a PNP was previously being displayed, hide it since it is about to no longer belong to the active solution.
         self.ui.renderPNPCheckBox.checked = False
         self.logic.hide_pnp()

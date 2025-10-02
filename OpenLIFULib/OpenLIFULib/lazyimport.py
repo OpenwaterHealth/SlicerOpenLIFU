@@ -75,7 +75,14 @@ def check_and_install_kwave_binaries() -> bool:
                 return False
             action, path = install_dialog.get_result()
             if action == "download":
-                openlifu.util.assets.download_and_install_kwave_assets()
+                try:
+                    openlifu.util.assets.download_and_install_kwave_assets()
+                except Exception as e:
+                    slicer.util.errorDisplay(
+                        text = f"An error occurred while downloading {install_path.name}: {e}",
+                        windowTitle = f"Error downloading {install_path.name}"
+                    )
+                    return False
             elif action =="browse":
                 openlifu.util.assets.install_kwave_asset_from_file(path)
             else:
