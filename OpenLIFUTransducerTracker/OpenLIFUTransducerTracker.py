@@ -2199,7 +2199,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                         text = f"An error occurred while downloading {modnet_path.name}: {e}",
                         windowTitle = f"Error downloading {modnet_path.name}"
                     )
-                    return
+                    raise e
             elif action =="browse":
                 openlifu_lz().util.assets.install_modnet_from_file(path)
             else:

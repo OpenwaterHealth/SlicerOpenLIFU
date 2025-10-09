@@ -82,7 +82,7 @@ def check_and_install_kwave_binaries() -> bool:
                         text = f"An error occurred while downloading {install_path.name}: {e}",
                         windowTitle = f"Error downloading {install_path.name}"
                     )
-                    return False
+                    raise e
             elif action =="browse":
                 openlifu.util.assets.install_kwave_asset_from_file(path)
             else:
