@@ -39,3 +39,13 @@ slicerMacroBuildScriptedModule(
   SCRIPTS ${MODULE_PYTHON_SCRIPTS}
   RESOURCES ${MODULE_PYTHON_RESOURCES}
   )
+
+# If building SlicerOpenLIFU within the custom application
+# download the kwave and modnet assets for offline use
+if(DEFINED Slicer_SOURCE_DIR)
+  add_custom_target(download_openlifu_assets ALL
+    COMMAND ${PYTHON_EXECUTABLE} -c "import openlifu; openlifu.util.assets.download_and_install_kwave_assets(); openlifu.util.assets.download_and_install_modnet()"
+    COMMENT "Downloading kwave and modnet assets using openlifu"
+    VERBATIM
+  )
+endif()
