@@ -48,4 +48,7 @@ if(DEFINED Slicer_SOURCE_DIR)
     COMMENT "Downloading kwave and modnet assets using openlifu"
     VERBATIM
   )
+  add_dependencies(download_openlifu_assets python-sliceropenlifu-requirements)
 endif()
+
+
