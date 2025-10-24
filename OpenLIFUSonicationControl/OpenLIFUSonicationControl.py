@@ -36,6 +36,7 @@ from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_wid
 # but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
+    import openlifu.io
 
 #
 # OpenLIFUSonicationControl
@@ -552,6 +553,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateDeviceConnectedState(DeviceConnectedState.CONNECTED)
         else:
             self.updateDeviceConnectedState(DeviceConnectedState.NOT_CONNECTED)
+        self.updateVersionsLabel()
 
     def updateDeviceConnectedState(self, connected_state: DeviceConnectedState):
         self._cur_solution_on_hardware_state = connected_state
@@ -560,6 +562,22 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         elif connected_state == DeviceConnectedState.NOT_CONNECTED:
             self.ui.connectedStateLabel.setProperty("text", "🔴 LIFU Device (not connected)")
         self.updateAllButtonsEnabled()
+
+    def updateVersionsLabel(self):
+        li : "openlifu.io.LIFUInterface" = self.logic.cur_lifu_interface
+
+        tx_version_string = li.txdevice.get_version()
+        try:
+            hvcontroller_version_string = li.hvcontroller.get_version()
+        except ValueError:
+            hvcontroller_version_string = "Error"
+
+        self.ui.versionsLabel.text = (
+            f"Transmit module version: {tx_version_string}"
+            f"\nConsole version: {hvcontroller_version_string}"
+            f"\nopenlifu version: {openlifu_lz().__version__}"
+        )
+
 
     def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu.io.LIFUInterfaceStatus | None" = None):
         self._cur_solution_on_hardware_state = solution_state
