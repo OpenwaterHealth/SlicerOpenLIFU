@@ -566,7 +566,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateVersionsLabel(self):
         li : "openlifu.io.LIFUInterface" = self.logic.cur_lifu_interface
 
-        tx_version_string = li.txdevice.get_version()
+        try:
+            tx_version_string = li.txdevice.get_version()
+        except ValueError:
+            tx_version_string = "Error"
+
         try:
             hvcontroller_version_string = li.hvcontroller.get_version()
         except ValueError:
