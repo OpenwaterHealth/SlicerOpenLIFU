@@ -221,7 +221,7 @@ class AddNewVolumeDialog(qt.QDialog):
         self.setLayout(formLayout)
 
         self.volumeFilePath = ctk.ctkPathLineEdit()
-        self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files
+        self.volumeFilePath.filters = ctk.ctkPathLineEdit.Dirs
 
         # Allowable volume filetypes
         self.volume_extensions = ("Volume" + " (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
@@ -266,7 +266,7 @@ class AddNewVolumeDialog(qt.QDialog):
 
         if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
             slicer.util.errorDisplay("Required fields are missing", parent = self)
-        elif not slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
+        elif (not Path(volume_filepath).is_dir()) and (not slicer.app.coreIOManager().fileType(volume_filepath) in ['VolumeFile', 'DICOMFileImport']):
             slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
         else:
             self.accept()
