@@ -221,7 +221,8 @@ class AddNewVolumeDialog(qt.QDialog):
         self.setLayout(formLayout)
 
         self.volumeFilePath = ctk.ctkPathLineEdit()
-        self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files
+        # Allow both files and directories (for DICOM folders)
+        self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Dirs
 
         # Allowable volume filetypes
         self.volume_extensions = ("Volume" + " (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
@@ -257,6 +258,13 @@ class AddNewVolumeDialog(qt.QDialog):
                 self.volumeName.setText(volume_name)
             if not len(self.volumeID.text):
                 self.volumeID.setText(volume_name)
+        elif current_filepath.is_dir():
+            # For directories (DICOM folders), use the directory name
+            volume_name = current_filepath.name
+            if not len(self.volumeName.text):
+                self.volumeName.setText(volume_name)
+            if not len(self.volumeID.text):
+                self.volumeID.setText(volume_name)
 
     def validateInputs(self):
 
@@ -266,10 +274,16 @@ class AddNewVolumeDialog(qt.QDialog):
 
         if not len(volume_name) or not len(volume_id) or not len(volume_filepath):
             slicer.util.errorDisplay("Required fields are missing", parent = self)
-        elif not slicer.app.coreIOManager().fileType(volume_filepath) == 'VolumeFile':
-            slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
         else:
-            self.accept()
+            # Check if it's a valid volume file or a directory (for DICOM folders)
+            filepath_obj = Path(volume_filepath)
+            file_type = slicer.app.coreIOManager().fileType(volume_filepath)
+
+            if filepath_obj.is_dir() or file_type == 'VolumeFile':
+                self.accept()
+            else:
+                slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
+
 
     def customexec_(self):
 
