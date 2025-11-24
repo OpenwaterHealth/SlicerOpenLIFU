@@ -2675,30 +2675,34 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         Water](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner) for
         details. Files are stored in a temporary directory named after the
         reference number.
-        
+
         Args:
             reference_number: A string identifying the photo collection stored
             on the Android device.
-        
+
         Returns:
             A list of full file paths to the pulled photos stored in the temp dir.
-        
+
         Raises:
             RuntimeError: If no files are found or adb fails to connect.
         """
-        android_dir = "/sdcard/DCIM/Camera"
+        android_dir = f"/sdcard/OpenLIFU-3DScanner/{reference_number}"
         temp_path = os.path.join(tempfile.gettempdir(), reference_number)
         os.makedirs(temp_path, exist_ok=True)
 
+        # Common image file extensions
+        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif',
+                          '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}
+
         result = subprocess.run(
-            ["adb", "shell", "ls", f"{android_dir}/{reference_number}_*"],
+            ["adb", "shell", "ls", android_dir],
             capture_output=True, text=True
         )
 
         if result.returncode != 0:
             # Check if *at least* the base directory exists
             dir_check = subprocess.run(
-                ["adb", "shell", "ls", android_dir],
+                ["adb", "shell", "ls", "/sdcard/OpenLIFU-3DScanner"],
                 capture_output=True, text=True
             )
 
@@ -2725,9 +2729,11 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         pulled_files = []
         for file in files:
             filename = os.path.basename(file)
-            dest_path = os.path.join(temp_path, filename)
-            subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
-            pulled_files.append(dest_path)
+            # Only pull files with image extensions
+            if any(filename.lower().endswith(ext) for ext in image_extensions):
+                dest_path = os.path.join(temp_path, filename)
+                subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
+                pulled_files.append(dest_path)
 
         return pulled_files
 
