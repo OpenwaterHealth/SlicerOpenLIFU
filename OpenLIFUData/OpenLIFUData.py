@@ -277,12 +277,17 @@ class AddNewVolumeDialog(qt.QDialog):
         else:
             # Check if it's a valid volume file or a directory (for DICOM folders)
             filepath_obj = Path(volume_filepath)
-            file_type = slicer.app.coreIOManager().fileType(volume_filepath)
 
-            if filepath_obj.is_dir() or file_type == 'VolumeFile':
+            # Accept directories directly (assumed to be DICOM folders)
+            if filepath_obj.is_dir():
                 self.accept()
             else:
-                slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
+                # For files, check if it's a valid volume file type
+                file_type = slicer.app.coreIOManager().fileType(volume_filepath)
+                if file_type == 'VolumeFile':
+                    self.accept()
+                else:
+                    slicer.util.errorDisplay("Invalid volume filetype specified", parent = self)
 
 
     def customexec_(self):
