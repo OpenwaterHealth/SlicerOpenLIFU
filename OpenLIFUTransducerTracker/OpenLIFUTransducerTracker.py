@@ -2061,47 +2061,92 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             return
 
         with BusyCursor():
-            pulled_files = self.logic.pull_photocollection_from_android(cur_reference_number)
-
-        photocollection_dict = {
-            "reference_number" : cur_reference_number,
-            "photo_paths" : pulled_files,
-        }
+            data_type, pulled_files = self.logic.pull_photocollection_from_android(cur_reference_number)
 
         data_logic = slicer.util.getModuleLogic("OpenLIFUData")
         data_parameter_node = get_openlifu_data_parameter_node()
         subject_id = data_parameter_node.loaded_session.get_subject_id()
         session_id = data_parameter_node.loaded_session.get_session_id()
 
-        if not data_logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict):
-            return # The logic is responsible for verifying overwrites with the user
+        if data_type == 'photoscan':
+            # Handle photoscan import from Android scan directory
+            # Expected files: texturedMesh.obj, material_0.png, material.mtl, config.json
+            obj_file = None
+            texture_file = None
+            mtl_file = None
 
-        # Verify that there exist imported files when querying the database
+            for file_path in pulled_files:
+                filename = os.path.basename(file_path)
+                if filename.endswith('.obj'):
+                    obj_file = file_path
+                elif filename.endswith('.png') or filename.endswith('.jpg'):
+                    texture_file = file_path
+                elif filename.endswith('.mtl'):
+                    mtl_file = file_path
 
-        imported_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
-            subject_id=subject_id,
-            session_id=session_id,
-            reference_number=cur_reference_number,
-        )
+            if not obj_file or not texture_file:
+                slicer.util.errorDisplay(
+                    text="Error: Photoscan is missing required files (model or texture).",
+                    windowTitle="Import Error"
+                )
+                return
 
-        if not imported_filepaths:
-            slicer.util.errorDisplay(
-                text="Error importing files: No files found or import failed.",
-                windowTitle="Import Error"
+            # Create photoscan dictionary with appropriate structure
+            photoscan_dict = {
+                "model_abspath": obj_file,
+                "texture_abspath": texture_file,
+                "mtl_abspath": mtl_file,
+                "name": f"Photoscan_{cur_reference_number}",
+                "id": cur_reference_number
+            }
+
+            # Add photoscan to database
+            data_logic.add_photoscan_to_database(subject_id, session_id, photoscan_dict.copy())
+            data_logic.update_photoscans_affiliated_with_loaded_session()
+
+            self.updateInputOptions()
+            self.updateWorkflowControls()
+
+            slicer.util.infoDisplay(
+                text=f"Photoscan '{cur_reference_number}' has been successfully imported from the Android device.",
+                windowTitle="Photoscan Imported"
             )
-            return
 
-        # Below is done twice because session_photocollections stored in the
-        # data parameter node is not the same as those stored in
-        # SlicerOpenLIFUSession and both must be updated
-        if photocollection_dict["reference_number"] not in data_parameter_node.session_photocollections:
-            data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
-        data_logic.update_photocollections_affiliated_with_loaded_session()
+        else:
+            # Handle photocollection (photos) import
+            photocollection_dict = {
+                "reference_number": cur_reference_number,
+                "photo_paths": pulled_files,
+            }
 
-        slicer.util.infoDisplay(
-            text=f"{len(imported_filepaths)} files successfully imported.",# for subject \"{subject_id}\", session \"{session_id}\"",
-            windowTitle="Import Successful"
-        )
+            if not data_logic.add_photocollection_to_database(subject_id, session_id, photocollection_dict):
+                return # The logic is responsible for verifying overwrites with the user
+
+            # Verify that there exist imported files when querying the database
+            imported_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
+                subject_id=subject_id,
+                session_id=session_id,
+                reference_number=cur_reference_number,
+            )
+
+            if not imported_filepaths:
+                slicer.util.errorDisplay(
+                    text="Error importing files: No files found or import failed.",
+                    windowTitle="Import Error"
+                )
+                return
+
+            # Below is done twice because session_photocollections stored in the
+            # data parameter node is not the same as those stored in
+            # SlicerOpenLIFUSession and both must be updated
+            if photocollection_dict["reference_number"] not in data_parameter_node.session_photocollections:
+                data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+            data_logic.update_photocollections_affiliated_with_loaded_session()
+
+            slicer.util.infoDisplay(
+                text=f"{len(imported_filepaths)} files successfully imported.",# for subject \"{subject_id}\", session \"{session_id}\"",
+                windowTitle="Import Successful"
+            )
 
     @display_errors
     def onLoadPhotocollectionPressed(self, checked:bool):
@@ -2666,22 +2711,27 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
 
-    def pull_photocollection_from_android(self, reference_number: str) -> List[str]:
+    def pull_photocollection_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """
-        Pulls photo files from an Android device matching the given reference
-        number. The reference number is used to identify a collection of photos
-        on the Android device in accordance with the output format of a
+        Pulls photo files or photoscan files from an Android device matching the
+        given reference number. The reference number is used to identify a collection
+        of photos on the Android device in accordance with the output format of a
         specifically-tailored app. See [3D Open
         Water](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner) for
         details. Files are stored in a temporary directory named after the
         reference number.
 
+        If a 'scan' subdirectory exists, the photoscan files will be pulled instead
+        of the raw photos.
+
         Args:
-            reference_number: A string identifying the photo collection stored
-            on the Android device.
+            reference_number: A string identifying the photo collection or photoscan
+            stored on the Android device.
 
         Returns:
-            A list of full file paths to the pulled photos stored in the temp dir.
+            A tuple of (data_type, file_paths) where data_type is either 'photos' or
+            'photoscan', and file_paths is a list of full file paths to the pulled
+            files stored in the temp dir.
 
         Raises:
             RuntimeError: If no files are found or adb fails to connect.
@@ -2690,10 +2740,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         temp_path = os.path.join(tempfile.gettempdir(), reference_number)
         os.makedirs(temp_path, exist_ok=True)
 
-        # Common image file extensions
-        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif',
-                          '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}
-
+        # Check if the base directory exists
         result = subprocess.run(
             ["adb", "shell", "ls", android_dir],
             capture_output=True, text=True
@@ -2726,16 +2773,49 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         if not files:
             raise RuntimeError("No files found for the given reference number.")
 
-        pulled_files = []
-        for file in files:
-            filename = os.path.basename(file)
-            # Only pull files with image extensions
-            if any(filename.lower().endswith(ext) for ext in image_extensions):
+        # Check if 'scan' subdirectory exists (indicates photoscan is available)
+        has_scan_dir = 'scan' in files
+
+        if has_scan_dir:
+            # Pull photoscan files from scan subdirectory
+            scan_dir = f"{android_dir}/scan"
+            scan_result = subprocess.run(
+                ["adb", "shell", "ls", scan_dir],
+                capture_output=True, text=True
+            )
+
+            if scan_result.returncode != 0:
+                raise RuntimeError(f"Failed to list files in scan directory: {scan_dir}")
+
+            scan_files = [f for f in scan_result.stdout.strip().split('\n') if f]
+            if not scan_files:
+                raise RuntimeError("Scan directory exists but contains no files.")
+
+            # Pull all files from scan directory
+            pulled_files = []
+            for file in scan_files:
+                filename = os.path.basename(file)
                 dest_path = os.path.join(temp_path, filename)
-                subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
+                subprocess.run(["adb", "pull", f"{scan_dir}/{filename}", dest_path])
                 pulled_files.append(dest_path)
 
-        return pulled_files
+            return ('photoscan', pulled_files)
+        else:
+            # Pull photo files from base directory (offline mode)
+            # Common image file extensions
+            image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif',
+                              '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}
+
+            pulled_files = []
+            for file in files:
+                filename = os.path.basename(file)
+                # Only pull files with image extensions
+                if any(filename.lower().endswith(ext) for ext in image_extensions):
+                    dest_path = os.path.join(temp_path, filename)
+                    subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
+                    pulled_files.append(dest_path)
+
+            return ('photos', pulled_files)
 
     def generate_photoscan(self,
         subject_id:str,
