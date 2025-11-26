@@ -221,8 +221,6 @@ class AddNewVolumeDialog(qt.QDialog):
         self.setLayout(formLayout)
 
         self.volumeFilePath = ctk.ctkPathLineEdit()
-        # Allow both files and directories (for DICOM folders)
-        self.volumeFilePath.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Dirs
 
         # Allowable volume filetypes
         self.volume_extensions = ("Volume" + " (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic);;" +
@@ -230,9 +228,20 @@ class AddNewVolumeDialog(qt.QDialog):
         "All Files" + " (*)")
         self.volumeFilePath.nameFilters = [self.volume_extensions]
 
+        # We hide CTK's browse button because it does not support hybrid
+        # file/dirs. We add a similar button below that opens a dialog with
+        # special event-handling built in
+        self.volumeFilePath.showBrowseButton = False
         self.volumeFilePath.currentPathChanged.connect(self.updateVolumeDetails)
+        browseButton = qt.QPushButton("...")
+        browseButton.setMaximumWidth(50)
+        browseButton.clicked.connect(self.browseForVolume)
 
-        formLayout.addRow(_("Filepath:"), self.volumeFilePath)
+        # Now, we add both the CTK file path and the custom browse button
+        filePathLayout = qt.QHBoxLayout()
+        filePathLayout.addWidget(self.volumeFilePath)
+        filePathLayout.addWidget(browseButton)
+        formLayout.addRow(_("Filepath:"), filePathLayout)
 
         self.volumeName = qt.QLineEdit()
         formLayout.addRow(_("Volume Name:"), self.volumeName)
@@ -247,6 +256,26 @@ class AddNewVolumeDialog(qt.QDialog):
 
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.accepted.connect(self.validateInputs)
+
+    def browseForVolume(self):
+        """Open file dialog with dual file/directory selection support."""
+        dlg = qt.QFileDialog(self)
+        dlg.setOption(qt.QFileDialog.DontUseNativeDialog, True)
+        dlg.setNameFilters(self.volumeFilePath.nameFilters)
+
+        # To be able to select both directories and files, we must reactively
+        # change the file mode of the dialog when a file or directory is
+        # selected
+        def on_item_changed(path):
+            if qt.QFileInfo(path).isDir():
+                dlg.setFileMode(qt.QFileDialog.Directory)
+            else:
+                dlg.setFileMode(qt.QFileDialog.ExistingFile)
+
+        dlg.currentChanged.connect(on_item_changed)
+
+        if dlg.exec_():
+            self.volumeFilePath.currentPath = dlg.selectedFiles()[0]
 
     def updateVolumeDetails(self):
         current_filepath = Path(self.volumeFilePath.currentPath)
