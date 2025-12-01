@@ -2061,7 +2061,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             return
 
         with BusyCursor():
-            data_type, pulled_files = self.logic.pull_photocollection_from_android(cur_reference_number)
+            data_type, pulled_files = self.logic.pull_photo_data_from_android(cur_reference_number)
 
         data_logic = slicer.util.getModuleLogic("OpenLIFUData")
         data_parameter_node = get_openlifu_data_parameter_node()
@@ -2108,11 +2108,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateWorkflowControls()
 
             slicer.util.infoDisplay(
-                text=f"Photoscan '{cur_reference_number}' has been successfully imported from the Android device.",
+                text=f"Photoscan '{cur_reference_number}' has been successfully imported from the Android device. You do not need to generate a photoscan locally.",
                 windowTitle="Photoscan Imported"
             )
 
-        else:
+        elif data_type == 'photos':
             # Handle photocollection (photos) import
             photocollection_dict = {
                 "reference_number": cur_reference_number,
@@ -2144,9 +2144,12 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             data_logic.update_photocollections_affiliated_with_loaded_session()
 
             slicer.util.infoDisplay(
-                text=f"{len(imported_filepaths)} files successfully imported.",# for subject \"{subject_id}\", session \"{session_id}\"",
-                windowTitle="Import Successful"
+                text=f"Photo collection successfully imported ({len(imported_filepaths)} photos). You will need to generate a photoscan locally.",
+                windowTitle="Photo Collection Imported"
             )
+
+        else:
+            raise ValueError(f"Unexpected data_type '{data_type}' returned from pull_photo_data_from_android. Expected 'photoscan' or 'photos'.")
 
     @display_errors
     def onLoadPhotocollectionPressed(self, checked:bool):
@@ -2711,7 +2714,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
 
-    def pull_photocollection_from_android(self, reference_number: str) -> tuple[str, List[str]]:
+    def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """
         Pulls photo files or photoscan files from an Android device matching the
         given reference number. The reference number is used to identify a collection
