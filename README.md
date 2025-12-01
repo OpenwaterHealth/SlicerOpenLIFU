@@ -112,7 +112,8 @@ add it to your `PATH`.
 5. When prompted, allow USB debugging access to your computer.  (Check "Always
    allow" to avoid repeated prompts.)
 
-## Meshroom environment
+## Meshroom Setup (Optional)
 
-The photoscan generation requires that the meshroom executable be in the system path in the environment in which Slicer is launched.
-Follow the instructions [here](https://github.com/OpenwaterHealth/OpenLIFU-python?tab=readme-ov-file#installing-meshroom) to add download and add meshroom to the system path.
+This application is designed to work with the [OpenLIFU 3D Scanner Android app](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner). With credits purchased in the app, computationally intensive tasks such as photogrammetric mesh reconstruction are performed in the cloud, eliminating the need for local Meshroom installation.
+
+If you prefer to perform mesh reconstruction locally instead of using cloud processing, you will need to install Meshroom and add it to your system PATH. Follow the instructions [here](https://github.com/OpenwaterHealth/OpenLIFU-python?tab=readme-ov-file#installing-meshroom) to download and configure Meshroom for local photoscan generation.

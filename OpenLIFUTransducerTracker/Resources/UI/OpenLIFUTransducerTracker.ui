@@ -61,7 +61,7 @@
          <item>
           <widget class="QGroupBox" name="groupBox_2">
            <property name="title">
-            <string>Step 1: Import Photocollection</string>
+            <string>Import Photo Data</string>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_8">
             <item>
@@ -146,7 +146,7 @@
          <item>
           <widget class="QGroupBox" name="groupBox_3">
            <property name="title">
-            <string>Step 2: Generate Photoscan</string>
+            <string>Generate Photoscan Locally</string>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_9">
             <item>
