@@ -1,6 +1,7 @@
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
 
+import os
 # Third-party imports
 import vtk
 
@@ -283,6 +284,65 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         """Do whatever is needed to reset the state - typically a scene clear will be enough."""
         slicer.mrmlScene.Clear()
 
+    def downloadTestData(self):
+        """Download test data from dvc."""
+        pass  # TODO: Implement data download from dvc  
+
+    def load_subject_session(self):
+
+        from OpenLIFUData import LoadSubjectDialog, LoadSessionDialog
+        from OpenLIFULib import get_cur_db
+        import qt
+
+        dvc_dir = r"C:\Users\sadhana.ravikumar\Documents\KitwareProjects\OpenWater\OpenLIFU-python\db_dvc"
+        slicer.util.selectModule("OpenLIFUDatabase")
+        dbw = slicer.modules.OpenLIFUDatabaseWidget
+        dbw.ui.databaseDirectoryLineEdit.currentPath = dvc_dir
+        slicer.util.selectModule("OpenLIFUDatabase")
+        dbw.onLoadDatabaseClicked(True) 
+        
+        slicer.app.processEvents()
+
+        curr_db = get_cur_db()
+        assert curr_db is not None, "Database failed to load"
+
+        slicer.util.selectModule("OpenLIFUData")
+        dw = slicer.modules.OpenLIFUDataWidget
+
+        # Load subject
+        load_subject_dlg = LoadSubjectDialog(curr_db)
+
+        def simulate_user():
+            load_subject_dlg.tableWidget.selectRow(0) # Manually choose first subject
+            load_subject_dlg.onLoadSubjectClicked() 
+
+        qt.QTimer.singleShot(0, simulate_user) # Needed since the dialog is modal
+
+        result  = dw.on_load_subject_clicked(True, load_subject_dlg)
+
+        # Verify that the subject was loaded
+        assert result is True
+        assert dw.logic.subject.id == "ow_ex001"
+
+        # Simulate session selection
+        load_session_dlg = LoadSessionDialog(curr_db, dw.logic.subject.id)
+        def simulate_user_session():
+            load_session_dlg.table_widget.selectRow(0) # Manually choose first session
+            load_session_dlg.on_load_session_clicked()
+
+        qt.QTimer.singleShot(0, simulate_user_session) # Needed since the dialog is modal   
+        
+        result = dw.on_load_session_clicked(True, load_session_dlg)
+        # Verify that the session was loaded
+
+        assert result is True
+        assert dw.logic.getParameterNode().loaded_session.get_session_id() == "neuromod_2x_demo"
+
     def runTest(self):
         """Run as few or as many tests as needed here."""
         self.setUp()
+
+        # self.downloadTestData()
+        # For now, don't worry about guided mode and user login.
+
+        self.load_subject_session()
