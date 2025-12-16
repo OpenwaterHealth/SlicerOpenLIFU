@@ -1096,8 +1096,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionCollapsibleButton.setEnabled(subject_has_volumes)
 
     @display_errors
-    def on_load_subject_clicked(self, checked: bool) -> bool:
-        load_subject_dlg = LoadSubjectDialog(get_cur_db())
+    def on_load_subject_clicked(self, checked: bool, load_subject_dlg = None) -> bool:
+        if load_subject_dlg is None:
+            load_subject_dlg = LoadSubjectDialog(get_cur_db())
         new_subject = load_subject_dlg.exec_and_get_subject()
 
         if not new_subject:
@@ -1123,8 +1124,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def on_load_session_clicked(self, checked:bool) -> bool:
-        load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
+    def on_load_session_clicked(self, checked:bool, load_session_dlg = None) -> bool:
+        if load_session_dlg is None:
+            load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
         new_session = load_session_dlg.exec_and_get_session()
 
         if not new_session:
