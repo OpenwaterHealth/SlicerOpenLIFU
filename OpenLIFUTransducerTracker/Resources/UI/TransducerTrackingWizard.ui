@@ -133,11 +133,33 @@
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="runICPRegistrationPV">
-            <property name="text">
-             <string>Run ICP-based registration fine-tuning</string>
-            </property>
-           </widget>
+
+            <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <item>
+             <widget class="QPushButton" name="runICPRegistrationPV">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>Run ICP-based registration fine-tuning</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="viewRoiSubmeshCheckbox">
+              <property name="toolTip">
+               <string>For debugging puproses, display the facial ROI submesh that is extracted from the photoscan and used for ICP. This submesh should contain skin only, with no elements of hair or the device.</string>
+              </property>
+              <property name="text">
+               <string>Show ROI</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+
           </item>
           <item>
            <widget class="ctkCollapsibleButton" name="ManualRegistrationGroupBox">

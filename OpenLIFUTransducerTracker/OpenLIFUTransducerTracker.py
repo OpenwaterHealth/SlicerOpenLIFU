@@ -530,6 +530,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.photoscan_to_volume_transform_node: vtkMRMLTransformNode = None
         self.scaling_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
         self.scaling_transform_node.SetName("wizard_photoscan_volume-scaling_factor")
+        self.photoscan_roi_submesh: Optional[vtkMRMLModelNode] = None
     
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
@@ -701,8 +702,13 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         photoscan_landmarks_hardened.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
         photoscan_landmarks_hardened.HardenTransform()
 
+        # Remove any existing facial submesh that was being previewed
+        if self.photoscan_roi_submesh is not None:
+            slicer.mrmlScene.RemoveNode(self.photoscan_roi_submesh)
+            self.photoscan_roi_submesh = None
+
         with BusyCursor():
-            photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
+            self.photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
                 fiducial_node = photoscan_landmarks_hardened,
                 surface_model_node = photoscan_hardened
             )
@@ -710,7 +716,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             try:
                 self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
                     input_fixed_model = self.wizard().skin_mesh_node,
-                    input_moving_model = photoscan_roi_submesh)
+                    input_moving_model = self.photoscan_roi_submesh)
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
@@ -729,7 +735,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 # Remove temporary hardened nodes
                 slicer.mrmlScene.RemoveNode(photoscan_hardened)
                 slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
-                slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
+                if not self.ui.viewRoiSubmeshCheckbox.checked:
+                    slicer.mrmlScene.RemoveNode(self.photoscan_roi_submesh)
+                    self.photoscan_roi_submesh = None
 
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
@@ -1247,6 +1255,9 @@ class TransducerTrackingWizard(qt.QWizard):
         if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
             self.clean_up_observers(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
             slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
+
+        if self.photoscanVolumeTrackingPage.photoscan_roi_submesh is not None:
+            slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_roi_submesh)
 
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
         slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
@@ -3133,7 +3144,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             for landmark_label in required_landmarks:
                 if fiducial_node.GetControlPointIndexByLabel(landmark_label) == -1:
                     raise ValueError(f"Landmark '{landmark_label}' not found in fiducial node.")
-                    return None
 
             # Interpolate between the  right ear/nasion and nasion/left ear fiducial pairs to generate a dense sampling of
             # control points across the face
@@ -3144,7 +3154,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             pointsLocator.SetDataSet(surface_model_node.GetPolyData())
             pointsLocator.BuildLocator()
 
-            def linear_interpolate_3d(p1, p2, num_points):
+            def linear_interpolate_3d(p1, p2, t):
                 x = (1 - t) * p1[0] + t * p2[0]
                 y = (1 - t) * p1[1] + t * p2[1]
                 z = (1 - t) * p1[2] + t * p2[2]
@@ -3172,7 +3182,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             selectByPointsModeler.SetNodeReferenceID("SelectByPoints.InputFiducial", interpolated_facial_landmarks.GetID())
             submesh_model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", 'Result_SP')  # this node will store the submesh
             selectByPointsModeler.SetNodeReferenceID("SelectByPoints.SelectedFacesModel", submesh_model_node.GetID())
-            selectByPointsModeler.SetAttribute("SelectionDistance", "40")  
+            selectByPointsModeler.SetAttribute("SelectionDistance", str(surface_selection_distance))
             selectByPointsModeler.SetAttribute("SelectionAlgorithm", "SphereRadius")  
             slicer.modules.dynamicmodeler.logic().RunDynamicModelerTool(selectByPointsModeler)
 
@@ -3183,7 +3193,6 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         
         except Exception as e:
             raise RuntimeError(f"Error extracting facial ROI submesh: {e}")
-            return None
 
     def run_icp_model_registration(
         self,
