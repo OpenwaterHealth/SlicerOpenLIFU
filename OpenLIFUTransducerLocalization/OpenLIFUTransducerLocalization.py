@@ -3144,7 +3144,6 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             for landmark_label in required_landmarks:
                 if fiducial_node.GetControlPointIndexByLabel(landmark_label) == -1:
                     raise ValueError(f"Landmark '{landmark_label}' not found in fiducial node.")
-                    return None
 
             # Interpolate between the  right ear/nasion and nasion/left ear fiducial pairs to generate a dense sampling of
             # control points across the face
@@ -3155,7 +3154,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             pointsLocator.SetDataSet(surface_model_node.GetPolyData())
             pointsLocator.BuildLocator()
 
-            def linear_interpolate_3d(p1, p2, num_points):
+            def linear_interpolate_3d(p1, p2, t):
                 x = (1 - t) * p1[0] + t * p2[0]
                 y = (1 - t) * p1[1] + t * p2[1]
                 z = (1 - t) * p1[2] + t * p2[2]
@@ -3183,7 +3182,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             selectByPointsModeler.SetNodeReferenceID("SelectByPoints.InputFiducial", interpolated_facial_landmarks.GetID())
             submesh_model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", 'Result_SP')  # this node will store the submesh
             selectByPointsModeler.SetNodeReferenceID("SelectByPoints.SelectedFacesModel", submesh_model_node.GetID())
-            selectByPointsModeler.SetAttribute("SelectionDistance", "40")  
+            selectByPointsModeler.SetAttribute("SelectionDistance", str(surface_selection_distance))
             selectByPointsModeler.SetAttribute("SelectionAlgorithm", "SphereRadius")  
             slicer.modules.dynamicmodeler.logic().RunDynamicModelerTool(selectByPointsModeler)
 
@@ -3194,7 +3193,6 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         
         except Exception as e:
             raise RuntimeError(f"Error extracting facial ROI submesh: {e}")
-            return None
 
     def run_icp_model_registration(
         self,
