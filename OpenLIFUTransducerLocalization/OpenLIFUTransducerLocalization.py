@@ -530,6 +530,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.photoscan_to_volume_transform_node: vtkMRMLTransformNode = None
         self.scaling_transform_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
         self.scaling_transform_node.SetName("wizard_photoscan_volume-scaling_factor")
+        self.photoscan_roi_submesh: Optional[vtkMRMLModelNode] = None
     
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
@@ -701,8 +702,13 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         photoscan_landmarks_hardened.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
         photoscan_landmarks_hardened.HardenTransform()
 
+        # Remove any existing facial submesh that was being previewed
+        if self.photoscan_roi_submesh is not None:
+            slicer.mrmlScene.RemoveNode(self.photoscan_roi_submesh)
+            self.photoscan_roi_submesh = None
+
         with BusyCursor():
-            photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
+            self.photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
                 fiducial_node = photoscan_landmarks_hardened,
                 surface_model_node = photoscan_hardened
             )
@@ -710,7 +716,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             try:
                 self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
                     input_fixed_model = self.wizard().skin_mesh_node,
-                    input_moving_model = photoscan_roi_submesh)
+                    input_moving_model = self.photoscan_roi_submesh)
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
@@ -729,7 +735,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 # Remove temporary hardened nodes
                 slicer.mrmlScene.RemoveNode(photoscan_hardened)
                 slicer.mrmlScene.RemoveNode(photoscan_landmarks_hardened)
-                slicer.mrmlScene.RemoveNode(photoscan_roi_submesh)
+                if not self.ui.viewRoiSubmeshCheckbox.checked:
+                    slicer.mrmlScene.RemoveNode(self.photoscan_roi_submesh)
+                    self.photoscan_roi_submesh = None
 
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
@@ -1247,6 +1255,9 @@ class TransducerTrackingWizard(qt.QWizard):
         if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
             self.clean_up_observers(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
             slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
+
+        if self.photoscanVolumeTrackingPage.photoscan_roi_submesh is not None:
+            slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_roi_submesh)
 
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
         slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
