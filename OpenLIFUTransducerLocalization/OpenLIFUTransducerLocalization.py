@@ -710,7 +710,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         with BusyCursor():
             self.photoscan_roi_submesh = self.wizard()._logic.extract_facial_roi_submesh(
                 fiducial_node = photoscan_landmarks_hardened,
-                surface_model_node = photoscan_hardened
+                surface_model_node = photoscan_hardened,
+                surface_selection_distance = self.ui.icpSelectionDistanceSpinBox.value,
             )
 
             try:
