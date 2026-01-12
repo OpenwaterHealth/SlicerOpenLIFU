@@ -26,7 +26,7 @@ add_subdirectory(OpenLIFUPrePlanning)
 add_subdirectory(OpenLIFUSonicationControl)
 add_subdirectory(OpenLIFUProtocolConfig)
 add_subdirectory(OpenLIFUSonicationPlanner)
-add_subdirectory(OpenLIFUTransducerTracker)
+add_subdirectory(OpenLIFUTransducerLocalization)
 add_subdirectory(OpenLIFULogin)
 ## NEXT_MODULE
 

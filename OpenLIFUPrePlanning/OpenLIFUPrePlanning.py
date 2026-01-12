@@ -230,8 +230,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.addTransformPushButton.clicked.connect(self.onAddVirtualFitResultClicked)
         self.ui.addTransformPushButton.setToolTip("Create new virtual fit result")
         self.updateVirtualFitResultsTable()
-        slicer.util.getModule("OpenLIFUTransducerTracker").widgetRepresentation() 
-        self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking)
+        slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation() 
+        self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerLocalizationWidget.setVirtualFitResultForTracking)
         # ------------------------------------
 
         self.updateWorkflowControls()
@@ -338,7 +338,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
         self.updateWorkflowControls()
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerTracker")._running_wizard:
+        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
@@ -348,7 +348,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateTargetPositionInputs()
 
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerTracker")._running_wizard:
+        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
@@ -462,7 +462,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         in the data module, transducer tracking module and pre-planning module need to be updated."""
         self.updateApprovalStatusLabel()
         slicer.modules.OpenLIFUDataWidget.updateSessionStatus()  
-        slicer.modules.OpenLIFUTransducerTrackerWidget.updateVirtualFitStatus() 
+        slicer.modules.OpenLIFUTransducerLocalizationWidget.updateVirtualFitStatus() 
 
     def updateEditTargetEnabled(self):
         """Update whether the controls that edit targets are enabled"""
@@ -729,7 +729,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         
         self.updateVirtualfitButtons()
 
-        slicer.modules.OpenLIFUTransducerTrackerWidget.setVirtualFitResultForTracking(self.logic.chosen_virtual_fit)
+        slicer.modules.OpenLIFUTransducerLocalizationWidget.setVirtualFitResultForTracking(self.logic.chosen_virtual_fit)
 
     def getCurrentVirtualFitSelection(self):
         """ Returns the virtual fit transform node associated with the current selection."""
@@ -805,7 +805,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if skin_mesh_node is None:
             raise RuntimeError(f"There is no skin mesh node associated to the volume {volume_node.GetID()}")
         skin_mesh_node.SetDisplayVisibility(True)
-        slicer.modules.OpenLIFUTransducerTrackerWidget.updateModelRenderingSettings()
+        slicer.modules.OpenLIFUTransducerLocalizationWidget.updateModelRenderingSettings()
 
     def run_virtual_fit_algorithm(
         self,

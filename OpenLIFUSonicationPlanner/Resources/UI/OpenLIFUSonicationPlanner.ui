@@ -47,7 +47,7 @@
    <item>
     <widget class="QLabel" name="trackingApprovalStatusLabel">
      <property name="text">
-      <string>(transducer tracking approval here)</string>
+      <string>(transducer localization approval here)</string>
      </property>
     </widget>
    </item>

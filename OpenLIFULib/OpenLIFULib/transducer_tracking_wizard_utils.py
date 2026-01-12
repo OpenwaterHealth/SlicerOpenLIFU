@@ -9,7 +9,7 @@ def initialize_wizard_ui(wizard: qt.QWizard):
 
     vBoxLayout = qt.QVBoxLayout()
     wizard.setLayout(vBoxLayout)
-    ui_path = slicer.modules.OpenLIFUTransducerTrackerWidget.resourcePath("UI/TransducerTrackingWizard.ui")
+    ui_path = slicer.modules.OpenLIFUTransducerLocalizationWidget.resourcePath("UI/TransducerLocalizationWizard.ui")
     uiWidget = slicer.util.loadUI(ui_path)
     vBoxLayout.addWidget(uiWidget)
     
@@ -38,7 +38,7 @@ def set_threeD_view_node(view_widget, threeD_view_node: vtkMRMLViewNode):
     view_widget.setMRMLViewNode(threeD_view_node)
 
 def create_threeD_photoscan_view_node(photoscan_id: str):
-    """Creates view node for displaying the photoscan model. Before transducer tracking registration,
+    """Creates view node for displaying the photoscan model. Before transducer localization registration,
      a subject's photoscan lives in a different coordinate space than their volume. Therefore we need to create
     a separate view node for visualizing the photoscan before registration
     

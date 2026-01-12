@@ -56,7 +56,7 @@ class OpenLIFULogin(ScriptedLoadableModule):
             "OpenLIFUProtocolConfig",
             "OpenLIFUSonicationControl",
             "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerTracker",
+            "OpenLIFUTransducerLocalization",
         ]  # add here list of module names that this module requires
         self.parent.contributors = ["Andrew Howe (Kitware), Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
         # short description of the module and a link to online module documentation
@@ -680,7 +680,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             "OpenLIFUProtocolConfig",
             "OpenLIFUSonicationControl",
             "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerTracker",
+            "OpenLIFUTransducerLocalization",
             ]
         for moduleName in all_openlifu_modules:
             module = slicer.util.getModule(moduleName)

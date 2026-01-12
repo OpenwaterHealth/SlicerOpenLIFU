@@ -89,7 +89,7 @@
          <item>
           <widget class="QPushButton" name="transducerTrackingPushButton">
            <property name="text">
-            <string>OpenLIFU Transducer Tracking</string>
+            <string>OpenLIFU Transducer Localization</string>
            </property>
           </widget>
          </item>

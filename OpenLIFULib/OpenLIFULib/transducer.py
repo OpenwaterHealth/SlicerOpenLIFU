@@ -52,7 +52,7 @@ class SlicerOpenLIFUTransducer:
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
                 This includes 'transducer_body_abspath' and 'registration_surface_abspath'. The registration surface model is required for
-                running the transducer tracking algorithm. If left as empty, the registration surface and transducer body models affiliated 
+                running the transducer localization algorithm. If left as empty, the registration surface and transducer body models affiliated 
                 with the transducer will not be loaded.
             transducer_matrix_units: The units in which to interpret the transform matrix.
                 The transform matrix operates on a version of the coordinate space of the transducer that has been scaled to

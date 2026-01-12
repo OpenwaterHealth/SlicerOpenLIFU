@@ -43,9 +43,9 @@ modules.
 
 Enables initial patient setup, including image loading, target selection, and
 virtual fitting of an OpenLIFU transducer. Prepares the system for transducer
-tracking and sonication planning.
+localization and sonication planning.
 
-### 🛰️ OpenLIFUTransducerTracker
+### 🛰️ OpenLIFUTransducerLocalization
 
 Imports photos from the Openwater Android app to generate photogrammetric
 meshes. These meshes are used to align the transducer with imaging for

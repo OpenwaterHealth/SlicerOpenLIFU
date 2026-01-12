@@ -263,7 +263,7 @@
       <item>
        <widget class="QPushButton" name="runTrackingButton">
         <property name="text">
-         <string>Run transducer tracking</string>
+         <string>Run transducer localization</string>
         </property>
        </widget>
       </item>

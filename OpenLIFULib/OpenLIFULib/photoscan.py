@@ -143,7 +143,7 @@ class SlicerOpenLIFUPhotoscan:
     def initialize_facial_landmarks_from_node(self, fiducial_node: vtkMRMLMarkupsFiducialNode):
         """ Clones the provided vtkMRMLMarkupsFiducialNode and assigns the clone to the photoscan attribute. The input fiducial node
         is expected to contain 3 control points, marking the Right Ear, Left Ear and Nasion on the photoscan mesh. This node
-        can be created using the Transducer Tracking Wizard."""
+        can be created using the Transducer Localization Wizard."""
 
         shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
         itemIDToClone = shNode.GetItemByDataNode(fiducial_node)

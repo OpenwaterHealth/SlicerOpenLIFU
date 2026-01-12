@@ -126,7 +126,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # For certain modules, the module name in the GUI doesn't match the programmatic module name
         # This is due to max path character limits on longer module names
-        if (moduleButtonText == "OpenLIFUTransducerTracking" or moduleButtonText == "OpenLIFUSonicationPlanning"):
+        if (moduleButtonText == "OpenLIFUSonicationPlanning"):
             moduleButtonText = moduleButtonText[:-3] + "er"
 
         if (moduleButtonText == "OpenLIFUProtocolConfiguration"):
@@ -222,8 +222,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self._parameterNode is not None:
             self.logic.workflow.enforceGuidedModeVisibility(self._parameterNode.guided_mode)
 
-        # Update whether transducer tracking is enabled/disabled based on guided_mode state
-        transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerTracker').widgetRepresentation()
+        # Update whether transducer localization is enabled/disabled based on guided_mode state
+        transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerLocalization').widgetRepresentation()
         transducer_tracking_widget.self().checkCanRunTracking()
 
 
