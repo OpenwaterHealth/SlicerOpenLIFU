@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME OpenLIFUTransducerTracker)
+set(MODULE_NAME OpenLIFUTransducerLocalization)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
@@ -9,7 +9,7 @@ set(MODULE_PYTHON_SCRIPTS
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
   Resources/UI/${MODULE_NAME}.ui
-  Resources/UI/TransducerTrackingWizard.ui
+  Resources/UI/TransducerLocalizationWizard.ui
   )
 
 #-----------------------------------------------------------------------------

@@ -231,7 +231,7 @@ class Workflow:
         "OpenLIFULogin",
         "OpenLIFUData",
         "OpenLIFUPrePlanning",
-        "OpenLIFUTransducerTracker",
+        "OpenLIFUTransducerLocalization",
         "OpenLIFUSonicationPlanner",
         "OpenLIFUSonicationControl",
     ]

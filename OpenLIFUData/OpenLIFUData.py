@@ -1393,7 +1393,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 num_tt_approved = len(approved_tt_photoscans)
                 if num_tt_approved > 0:
                     additional_info_messages.append(
-                        "Transducer tracking approved for "
+                        "Transducer localization approved for "
                         + (f"{num_tt_approved} photoscans" if num_tt_approved > 1 else f"photoscan \"{approved_tt_photoscans[0]}\"")
                     )
             self.ui.sessionStatusAdditionalInfoLabel.setText('\n'.join(additional_info_messages))
@@ -1840,7 +1840,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # This is because those module widgets set up observers on certain kinds of nodes as those nodes are added to the scene.
         # If the widgets don't exist when a session is loaded, they will not get a chance to add their observers.
         slicer.util.getModule("OpenLIFUPrePlanning").widgetRepresentation()
-        slicer.util.getModule("OpenLIFUTransducerTracker").widgetRepresentation()
+        slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation()
         slicer.util.getModule("OpenLIFUSonicationPlanner").widgetRepresentation()
 
         # === Ensure it's okay to load a session ===
@@ -1969,17 +1969,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 newly_loaded_transducer.set_visibility(True)
                 slicer.util.getModuleLogic("OpenLIFUPrePlanning").chosen_virtual_fit = vf_node
 
-        # === Load transducer tracking results ===
+        # === Load transducer localization results ===
 
         newly_added_tt_result_nodes = add_transducer_tracking_results_from_openlifu_session_format(
             tt_results_openlifu = session_openlifu.transducer_tracking_results,
             session_id = session_openlifu.id,
             transducer = newly_loaded_transducer.transducer.transducer,
-            replace=True, # If there happen to already be some transducer tracking result nodes that clash, loading a session will silently overwrite them.
+            replace=True, # If there happen to already be some transducer localization result nodes that clash, loading a session will silently overwrite them.
         )
 
         for (transducer_to_volume_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
-            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
             transducer_tracking_widget.watchTransducerTrackingNode(transducer_to_volume_node)
             transducer_tracking_widget.watchTransducerTrackingNode(photoscan_to_volume_node)
 
@@ -2015,13 +2015,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
         self.getParameterNode().session_photocollections = session_affiliated_photocollections
 
-        # If there are any *approved* transducer tracking results that we have just loaded in newly_added_tt_result_nodes,
+        # If there are any *approved* transducer localization results that we have just loaded in newly_added_tt_result_nodes,
         # then we check to see if any of them match the current transducer transform in terms of matrix values.
         # If there is a match in matrix values, then the first such matching TT result that we encounter in the loop is 
         # "officially" linked to the current transform by setting the "matching_transform" attribute, thereby ensuring that
         # TT approval is revoked if the transducer is moved.
-        # Additionally, any other transducer tracking results whose matrix does not match current transducer get their approval revoked.
-        transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+        # Additionally, any other transducer localization results whose matrix does not match current transducer get their approval revoked.
+        transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
         approved_photoscan_ids = self.getParameterNode().loaded_session.get_transducer_tracking_approvals()
         # approved_photoscan_ids is a list of photoscan IDs for which there is an approved TT result in the openlifu session
         for approved_photoscan_id in approved_photoscan_ids:
@@ -2035,7 +2035,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     else:
                         transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
                             photoscan_id=approved_photoscan_id,
-                            reason="The transducer transform does not match the approved tracking result."
+                            reason="The transducer transform does not match the approved localization result."
                         )
 
         self.session_loading_unloading_in_progress = False  
@@ -2044,15 +2044,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
         slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
-        slicer.util.getModuleWidget('OpenLIFUTransducerTracker').checkCanDisplayVirtualFitResult()
+        slicer.util.getModuleWidget('OpenLIFUTransducerLocalization').checkCanDisplayVirtualFitResult()
 
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:
-            # If its a transducer tracking node, revoke approval if approved
+            # If its a transducer localization node, revoke approval if approved
             transform_node = slicer.mrmlScene.GetNodeByID(matching_transform_id)
             if transform_node and is_transducer_tracking_result_node(transform_node):
                 photoscan_id = get_photoscan_id_from_transducer_tracking_result(transform_node)
-                transducer_tracking_widget = slicer.modules.OpenLIFUTransducerTrackerWidget
+                transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
                 transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
                     photoscan_id = photoscan_id,
                     reason = "The transducer transform was modified"
@@ -2142,7 +2142,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             transducer: The openlifu Transducer object
             transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
                 This includes 'transducer_body_abspath' and 'registration_surface_abspath'. The registration surface model is required for
-                running the transducer tracking algorithm. If left as empty, the registration surface and transducer body models affiliated 
+                running the transducer localization algorithm. If left as empty, the registration surface and transducer body models affiliated 
                 with the transducer will not be loaded.
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_matrix_units: The units in which to interpret the transform matrix.
@@ -2367,8 +2367,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         return approved_vf_targets
     
     def get_transducer_tracking_approvals_in_session(self) -> List[str]:
-        """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
-        transducer tracking is approved.
+        """Get the transducer localization approval state in the current session object, a list of photoscan IDs for which
+        transducer localization is approved.
         """
         session = self.getParameterNode().loaded_session
         if session is None:

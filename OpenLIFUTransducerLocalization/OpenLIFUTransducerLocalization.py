@@ -384,7 +384,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
 
         if self.facial_landmarks_fiducial_node is None:
             if self.wizard()._valid_tt_result_exists:
-                self.ui.landmarkPlacementStatus.text = "A previous transducer tracking result is available. Unlock the page to place "\
+                self.ui.landmarkPlacementStatus.text = "A previous transducer localization result is available. Unlock the page to place "\
                     "new facial landmarks on this photoscan, or click Next to proceed."
         elif self.page_locked:
             self.ui.landmarkPlacementStatus.text = "Unlock the page to edit the facial landmarks on this photoscan"
@@ -476,7 +476,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
     def updateLandmarkPlacementStatus(self):
         if self.facial_landmarks_fiducial_node is None:
             if self.wizard()._valid_tt_result_exists:
-                self.ui.landmarkPlacementStatus_2.text = "A previous transducer tracking result is available. Unlock the page to place "\
+                self.ui.landmarkPlacementStatus_2.text = "A previous transducer localization result is available. Unlock the page to place "\
                     "new facial landmarks on this skin surface, or click Next to proceed."
             else:
                 self.ui.landmarkPlacementStatus_2.text = "Unlock the page to place facial landmarks on this skin surface."
@@ -973,7 +973,7 @@ class TransducerTrackingWizard(qt.QWizard):
                  virtual_fit_result_node: Optional[vtkMRMLTransformNode]):
         super().__init__()
 
-        self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerTracker')
+        self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerLocalization')
         
         pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
         pluginLogic = pluginHandler.pluginLogic()
@@ -1037,7 +1037,7 @@ class TransducerTrackingWizard(qt.QWizard):
         # Mapping from mrml node ID to a list of vtkCommand tags that can later be used to remove the observation
         self.node_observations : Dict[str,List[int]] = defaultdict(list)
         
-        self.setWindowTitle("Transducer Tracking Wizard")
+        self.setWindowTitle("Transducer Localization Wizard")
         self.photoscanMarkupPage = PhotoscanMarkupPage(self)
         self.skinSegmentationMarkupPage = SkinSegmentationMarkupPage(self)
         self.photoscanVolumeTrackingPage = PhotoscanVolumeTrackingPage(self)
@@ -1156,7 +1156,7 @@ class TransducerTrackingWizard(qt.QWizard):
 
         if locked:
             lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerLock.png"))
-            lockButton.setToolTip("Page locked. Click to unlock and modify the transducer tracking result.")
+            lockButton.setToolTip("Page locked. Click to unlock and modify the transducer localization result.")
         else:
             lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerUnlock.png"))
             lockButton.setToolTip("Page unlocked. Click to approve tracking result.")
@@ -1174,7 +1174,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self._logic.update_volume_facial_landmarks_from_node(volume_or_skin_mesh = self.skin_mesh_node,
                 fiducial_node =  self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         
-        # Add the transducer tracking result nodes to the slicer scene
+        # Add the transducer localization result nodes to the slicer scene
         # Shouldn't be able to get to this final stage without both transform nodes
         if self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node and self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node:
         
@@ -1197,7 +1197,7 @@ class TransducerTrackingWizard(qt.QWizard):
                 approval_state = True)
 
         else:
-            raise RuntimeError("Something went wrong. You should not be able to complete the wizard without creating transducer tracking transforms.")
+            raise RuntimeError("Something went wrong. You should not be able to complete the wizard without creating transducer localization transforms.")
         
         self.clean_up()
         self.accept()  # Closes the wizard
@@ -1690,24 +1690,24 @@ class AddNewPhotoscanDialog(qt.QDialog):
         return (returncode, photoscan_dict)
 
 #
-# OpenLIFUTransducerTracker
+# OpenLIFUTransducerLocalization
 #
 
-class OpenLIFUTransducerTracker(ScriptedLoadableModule):
+class OpenLIFUTransducerLocalization(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Transducer Tracking")
+        self.parent.title = _("OpenLIFU Transducer Localization")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU.OpenLIFU Modules")]
         self.parent.dependencies = ['OpenLIFUData',"OpenLIFUHome"]  # add here list of module names that this module requires
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware)"]
         # short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _(
-            "This is the transducer tracking module of the OpenLIFU extension for focused ultrasound. "
+            "This is the transducer localization module of the OpenLIFU extension for focused ultrasound. "
             "More information at <a href=\"https://github.com/OpenwaterHealth/SlicerOpenLIFU\">github.com/OpenwaterHealth/SlicerOpenLIFU</a>."
         )
         # organization, grant, and thanks
@@ -1719,16 +1719,16 @@ class OpenLIFUTransducerTracker(ScriptedLoadableModule):
 
 
 #
-# OpenLIFUTransducerTrackerParameterNode
+# OpenLIFUTransducerLocalizationParameterNode
 #
 
 
 @parameterNodeWrapper
-class OpenLIFUTransducerTrackerParameterNode:
+class OpenLIFUTransducerLocalizationParameterNode:
     pass
 
 #
-# OpenLIFUTransducerTrackerDialogs
+# OpenLIFUTransducerLocalizationDialogs
 #
 
 class PhotoscanFromPhotocollectionDialog(qt.QDialog):
@@ -1791,10 +1791,10 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
         return self.selected_reference_number
 
 #
-# OpenLIFUTransducerTrackerWidget
+# OpenLIFUTransducerLocalizationWidget
 #
     
-class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
+class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -1821,7 +1821,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
-        uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUTransducerTracker.ui"))
+        uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUTransducerLocalization.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
@@ -1832,7 +1832,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUTransducerTrackerLogic()
+        self.logic = OpenLIFUTransducerLocalizationLogic()
 
         # Prevents possible creation of two OpenLIFUData widgets
         # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
@@ -1939,7 +1939,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.setParameterNode(self.logic.getParameterNode())
 
-    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUTransducerTrackerParameterNode]) -> None:
+    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUTransducerLocalizationParameterNode]) -> None:
         """
         Set and observe parameter node.
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
@@ -2022,7 +2022,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """ Enables or disable certain widgets
         based on the currently selected inputs"""
 
-        self.checkCanRunTracking() # Determine whether transducer tracking can be run
+        self.checkCanRunTracking() # Determine whether transducer localization can be run
         self.checkCanPreviewPhotoscan()
         self.checkCanDisplayVirtualFitResult() # virtual fit rendering checkbox
         self.updateModelRenderingSettings() #model rendering options
@@ -2345,7 +2345,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
             else:
                 self.ui.runTrackingButton.enabled = True
-                self.ui.runTrackingButton.setToolTip("Run transducer tracking to align the selected photoscan and transducer registration surface to the MRI volume")
+                self.ui.runTrackingButton.setToolTip("Run transducer localization to align the selected photoscan and transducer registration surface to the MRI volume")
         else:
             self.ui.runTrackingButton.enabled = False
             self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
@@ -2377,7 +2377,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
             if not photoscan_to_volume_transform_node:
                 self.ui.photoscanVisibilitySettings.enabled = False
-                self.ui.photoscanVisibilitySettings.setToolTip("Run transducer tracking to view photoscan in the same space as the volume.")
+                self.ui.photoscanVisibilitySettings.setToolTip("Run transducer localization to view photoscan in the same space as the volume.")
             else:
                 self.ui.photoscanVisibilitySettings.enabled = True
                 self.ui.photoscanVisibilitySettings.setToolTip("")
@@ -2463,16 +2463,16 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if returncode:
             # This shouldn't be possible
             if photoscan_to_volume_transform_node is None or transducer_to_volume_transform_node is None:
-                raise RuntimeError("Transducer tracking wizard was completed without generating valid transducer tracking transforms")
+                raise RuntimeError("Transducer localization wizard was completed without generating valid transducer localization transforms")
             
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
             slicer.modules.OpenLIFUPrePlanningWidget.showSkin(activeData["Volume"])
 
-            # Watch the transducer tracking results for any deletions/modifications
+            # Watch the transducer localization results for any deletions/modifications
             self.watchTransducerTrackingNode(photoscan_to_volume_transform_node)
             self.watchTransducerTrackingNode(transducer_to_volume_transform_node)
             
-            # Set the current transducer transform node to the transducer tracking result.
+            # Set the current transducer transform node to the transducer localization result.
             selected_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_transform_node)
             selected_transducer.set_visibility(True)
             self.updateWorkflowControls()
@@ -2482,7 +2482,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateApprovalStatusLabel()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
-        """Watch the transducer tracking transform node to revoke approval in case the transform node is approved and then modified."""
+        """Watch the transducer localization transform node to revoke approval in case the transform node is approved and then modified."""
 
         photoscan_id = get_photoscan_id_from_transducer_tracking_result(transducer_tracking_transform_node)
         transform_type = get_transform_type_from_transducer_tracking_result_node(transducer_tracking_transform_node)
@@ -2491,11 +2491,11 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             slicer.vtkMRMLTransformNode.TransformModifiedEvent,
             lambda caller, event: self.revokeTransducerTrackingApprovalIfAny(
                 photoscan_id = photoscan_id,
-                reason=f"The {transform_type.name} transducer tracking transform was modified."),
+                reason=f"The {transform_type.name} transducer localization transform was modified."),
         )
 
     def revokeTransducerTrackingApprovalIfAny(self, photoscan_id: str, reason:str):
-        """Revoke transducer tracking approval for the transform node if there was an approval,
+        """Revoke transducer localization approval for the transform node if there was an approval,
         and show a message dialog to that effect.
         """
         if self.logic.get_transducer_tracking_approval(photoscan_id):
@@ -2562,14 +2562,14 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def updateApprovalStatusLabel(self):
         """ Updates the status message that displays which photoscans have been approved or have
-        transducer tracking results that have been approved."""
+        transducer localization results that have been approved."""
 
         photoscan_ids_with_approved_tt_results = self.logic.get_photoscan_ids_with_approved_tt_results()
         if len(photoscan_ids_with_approved_tt_results ) == 0:
-            tt_approval_status = "There are currently no transducer tracking approvals."
+            tt_approval_status = "There are currently no transducer localization approvals."
         else:
             tt_approval_status = (
-                "Transducer tracking is approved for the following photoscans:\n- "
+                "transducer localization is approved for the following photoscans:\n- "
                 + "\n- ".join(photoscan_ids_with_approved_tt_results)
             )
         self.ui.approvalStatusLabel.text = tt_approval_status
@@ -2577,7 +2577,7 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateVirtualFitStatus(self):
         """ Updates the status message that warns the user if virtual fit is not 
         approved for the selected target or if the selected photoscan is not
-        approved for transducer tracking"""
+        approved for transducer localization"""
         
         vf_result_for_tracking = self._virtual_fit_transform_for_tracking
         self.ui.approvalWarningLabel.styleSheet = "color:black;"
@@ -2687,17 +2687,17 @@ class OpenLIFUTransducerTrackerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.workflow_controls.status_text = "Select a photoscan to proceed."
         elif not photoscans_with_approved_tt:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Run transducer tracking to proceed."
+            self.workflow_controls.status_text = "Run transducer localization to proceed."
         else:
             self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Approved transducer tracking result detected, proceed to the next step."
+            self.workflow_controls.status_text = "Approved transducer localization result detected, proceed to the next step."
 
 #
-# OpenLIFUTransducerTrackerLogic
+# OpenLIFUTransducerLocalizationLogic
 #
 
 
-class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
+class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
     computation done by your module.  The interface
     should be such that other python code can import
@@ -2712,7 +2712,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
-        return OpenLIFUTransducerTrackerParameterNode(super().getParameterNode())
+        return OpenLIFUTransducerLocalizationParameterNode(super().getParameterNode())
 
     def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """
@@ -2931,7 +2931,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
                     break
 
     def revoke_transducer_tracking_approval(self, photoscan_id: str) -> bool:
-        """Revoke transducer tracking approval for the given  photoscan if there was an approval"""
+        """Revoke transducer localization approval for the given  photoscan if there was an approval"""
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
         set_transducer_tracking_approval_for_photoscan(approval_state = False, photoscan_id = photoscan_id, session_id = session_id)
@@ -2941,7 +2941,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             data_logic.update_underlying_openlifu_session()
 
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
-        """Return whether there is a transducer tracking approval for the photoscan. In case there is not even a transducer
+        """Return whether there is a transducer localization approval for the photoscan. In case there is not even a transducer
         tracking result for the photoscan, this returns False."""
         
         approved_photoscan_ids = self.get_photoscan_ids_with_approved_tt_results()
@@ -2962,7 +2962,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         return list(photoscans_with_approved_tt)
     
     def get_photoscan_ids_with_approval(self) -> List[str]:
-        """Return a list of photoscan IDs that are approved for transducer tracking"""
+        """Return a list of photoscan IDs that are approved for transducer localization"""
         session = get_openlifu_data_parameter_node().loaded_session
         approved_photoscans = []
         if not session and not get_openlifu_data_parameter_node().loaded_photoscans:
@@ -3026,7 +3026,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
             if node.GetAttribute('OpenLIFUData.volume_id') == volume_tracking_fiducial_id
             ]
         if len(volume_facial_landmarks_node) > 1:
-            raise RuntimeError(f"Found multiple transducer tracking fiducial nodes affiliated with volume {volume_tracking_fiducial_id}")
+            raise RuntimeError(f"Found multiple transducer localization fiducial nodes affiliated with volume {volume_tracking_fiducial_id}")
         
         if not volume_facial_landmarks_node:
             return None
@@ -3036,7 +3036,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
     def update_volume_facial_landmarks_from_node(self, volume_or_skin_mesh : Union[vtkMRMLScalarVolumeNode, vtkMRMLModelNode], fiducial_node: vtkMRMLMarkupsFiducialNode) -> vtkMRMLMarkupsFiducialNode:
         """Clones the provided vtkMRMLMarkupsFiducialNode and returns a new markup node with the required volume metadata as attributes.
         The input fiducial node is expected to contain 3 control points, marking the Right Ear, Left Ear and Nasion on the skin surface mesh. This node
-        can be created using the Transducer Tracking Wizard.
+        can be created using the transducer localization Wizard.
         Args:
             volume_or_skin_mesh: The volume or skin mesh node to associate with the landmarks.
             fiducial_node: Fiducial node to clone, containing right ear, nasion and left ear control points.
@@ -3245,7 +3245,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
         transducer_to_volume_approval_state: bool,
         photoscan_id: str,
         transducer: SlicerOpenLIFUTransducer) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
-        """Adds transducer tracking result transform nodes to the scene.
+        """Adds transducer localization result transform nodes to the scene.
         Creates and configures 'PHOTOSCAN_TO_VOLUME' and 'TRANSDUCER_TO_VOLUME'
         transform nodes by cloning the given transform nodes, and associates them
         with the given photoscan and transducer.
@@ -3259,7 +3259,7 @@ class OpenLIFUTransducerTrackerLogic(ScriptedLoadableModuleLogic):
 
         if session is not None:
             session_id : Optional[str] = session.get_session_id()
-            # Check if there is already a transducer tracking result associated with the session. If there is, revoke approval first
+            # Check if there is already a transducer localization result associated with the session. If there is, revoke approval first
             approved_photoscan_id = session.get_transducer_tracking_approvals()
         else:
             session_id = None

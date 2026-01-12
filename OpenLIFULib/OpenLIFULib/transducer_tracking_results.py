@@ -30,32 +30,32 @@ def add_transducer_tracking_result(
         replace = False,
         clone_node = False,
         ) -> vtkMRMLTransformNode:
-    """Add a  transducer tracking result node by giving it the appropriate attributes.
+    """Add a  transducer localization result node by giving it the appropriate attributes.
     This means the transform node will be named appropriately
     and will have a bunch of attributes set on it so that we can identify it
-    later as a transducer tracking result node.
+    later as a transducer localization result node.
 
     Args:
-        transform_node: The transform node associated with the transducer tracking result. This node is cloned to
-        create the transducer tracking result node. 
+        transform_node: The transform node associated with the transducer localization result. This node is cloned to
+        create the transducer localization result node. 
         transform_type: The direction of the transform - TRANSDUCER_TO_VOLUME or PHOTOSCAN_TO_VOLUME
-        photoscan_id: The ID of the photoscan for which the transducer tracking transform was computed.
-        session_id: The ID of the openlifu.Session during which transducer tracking took place.
-            If not provided then it is assumed the transducer tracking took place without
+        photoscan_id: The ID of the photoscan for which the transducer localization transform was computed.
+        session_id: The ID of the openlifu.Session during which transducer localization took place.
+            If not provided then it is assumed the transducer localization took place without
             a session -- in such a workflow it is probably up to the user what they
-            want to do with the resulting transform node since the transducer tracking
+            want to do with the resulting transform node since the transducer localization
             result has no openlifu session to be saved into.
-        approval_status: The approval status of the transducer tracking transform node.
-        replace: Whether to replace any existing transducer tracking results that have the
+        approval_status: The approval status of the transducer localization transform node.
+        replace: Whether to replace any existing transducer localization results that have the
             same session ID, photoscan ID, and transform type. If this is off, then an error is raised
-            in the event that there is already a matching transducer tracking result in the scene.
+            in the event that there is already a matching transducer localization result in the scene.
         clone_node: Whether to clone or to take the `transform_node`. If True, then the node is cloned
-            to create the transducer tracking result node, and the passed in `transform_node` is left unharmed.
-            If False then the node is taken and turned into a transducer tracking result node (renamed, given attributes, etc.).
+            to create the transducer localization result node, and the passed in `transform_node` is left unharmed.
+            If False then the node is taken and turned into a transducer localization result node (renamed, given attributes, etc.).
             Set clone_node to False if you no longer need the original `transform_node`; set it to True if you want to
             preserve the integrity of the original `transform_node`
 
-    Returns: The the transducer tracking result transform node with the required attributes
+    Returns: The the transducer localization result transform node with the required attributes
     """
     
     # Should only be one per photoscan/per session/per transform_type
@@ -74,7 +74,7 @@ def add_transducer_tracking_result(
         if replace:
             slicer.mrmlScene.RemoveNode(existing_tt_result_node)  
         else:
-            raise RuntimeError("There is already a transducer tracking result node for this transform_type+photoscan+session and replace is False")
+            raise RuntimeError("There is already a transducer localization result node for this transform_type+photoscan+session and replace is False")
     
     if clone_node:
         transducer_tracking_result_node : vtkMRMLTransformNode = get_cloned_node(transform_node)
@@ -88,7 +88,7 @@ def add_transducer_tracking_result(
         transducer_tracking_result_node.SetName(f"TT photoscan-volume {photoscan_id}")
         transducer_tracking_result_node.SetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}","1")
     else:
-        raise RuntimeError("Invalid transducer tracking transform type specified")
+        raise RuntimeError("Invalid transducer localization transform type specified")
 
     transducer_tracking_result_node.SetAttribute("TT:approvalStatus", "1" if approval_status else "0")
     transducer_tracking_result_node.SetAttribute("TT:photoscanID", photoscan_id)
@@ -101,15 +101,15 @@ def add_transducer_tracking_result(
     return transducer_tracking_result_node
 
 def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, transducer_units:str) -> List["TransducerTrackingResult"]:
-    """Parse through transducer tracking transform nodes in the scene and return the information in Session representation.
+    """Parse through transducer localization transform nodes in the scene and return the information in Session representation.
 
     Args:
-        session_id: The ID of the session whose transducer tracking result transform nodes we are interested in.
-        transducer_units: The units of the transducer that the transducer tracking transform nodes are meant to apply to.
+        session_id: The ID of the session whose transducer localization result transform nodes we are interested in.
+        transducer_units: The units of the transducer that the transducer localization transform nodes are meant to apply to.
             (If the transducer model is not in "mm" then there is a built in unit conversion in the transform
             node matrix and this has to be removed to represent the transform in openlifu format.)
 
-    Returns the transducer tracking results in openlifu Session format. To understand this format, see the documentation of
+    Returns the transducer localization results in openlifu Session format. To understand this format, see the documentation of
     openlifu.db.Session.transducer_tracking_results.
 
     See also the reverse function `add_transducer_tracking_results_from_openlifu_session_format`.
@@ -120,7 +120,7 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
     for photoscan_id in photoscan_ids_for_session:
         tt_result_for_session_photoscan = get_complete_transducer_tracking_results(session_id=session_id, photoscan_id=photoscan_id)
         if len(tt_result_for_session_photoscan) > 1:
-            raise RuntimeError(f"There are {len(tt_result_for_session_photoscan)} transducer tracking results for photoscan {photoscan_id}" 
+            raise RuntimeError(f"There are {len(tt_result_for_session_photoscan)} transducer localization results for photoscan {photoscan_id}" 
                                + (f"and session {session_id}" if session_id is not None else "with no session.")
             )
 
@@ -158,17 +158,17 @@ def add_transducer_tracking_results_from_openlifu_session_format(
         replace = False,
         ) -> List[Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]:
     """Read the openlifu session format and load the data into the slicer scene as 
-    two transducer tracking result nodes representing the tranducer to photoscan and photoscan to volume
+    two transducer localization result nodes representing the tranducer to photoscan and photoscan to volume
      transforms respectively .
 
     Args:
-        tt_results_openlifu: Transducer tracking results in the openlifu session format. 
+        tt_results_openlifu: Transducer localization results in the openlifu session format. 
         session_id: The ID of the session with which to tag these virtual fit result nodes.
         transducer: The openlifu Transducer of the session. It is needed to configure transforms to be
             in the correct units.
-        replace: Whether to replace any existing transducer tracking results that have the
+        replace: Whether to replace any existing transducer localization results that have the
             same session ID and photoscan ID. If this is off, then an error is raised
-            in the event that there is already a matching transducer tracking result in the scene.
+            in the event that there is already a matching transducer localization result in the scene.
 
     Returns a list of tuples, with the pairs of nodes added.
 
@@ -217,14 +217,14 @@ def get_transducer_tracking_result_nodes_in_scene(
         session_id : Optional[str] = None,
         transform_type: Optional[TransducerTrackingTransformType] = None) -> vtkMRMLTransformNode:
     
-    """Retrieve a list of all transducer tracking result nodes, filtered as desired.
+    """Retrieve a list of all transducer localization result nodes, filtered as desired.
 
     Args:
         photoscan_id: filter for only this photoscan ID
         session_id: filter for only this session ID
         transform_type: filter for only this TransducerTrackingTransformType
 
-    Returns the list of matching transducer tracking transform nodes that are currently in the scene.
+    Returns the list of matching transducer localization transform nodes that are currently in the scene.
     """
 
     tt_result_nodes = [
@@ -247,16 +247,16 @@ def get_transducer_tracking_result(
     transform_type: TransducerTrackingTransformType,
     session_id : Optional[str]
     ) -> Optional[vtkMRMLTransformNode]:
-    """Retrieve the transducer tracking result for the given photoscan and transform type/direction, returning None if there isn't one,
+    """Retrieve the transducer localization result for the given photoscan and transform type/direction, returning None if there isn't one,
     and raising an exception if there appears to be a non-unique one.
 
     Args:
-        photoscan_id: photoscan ID for which to retrieve the transducer tracking result
-        transform_type: transform type for which to retrieve the the transducer tracking result
-        session_id: session ID to help identify the correct transducer tracking result node, or None to work with
-            only transducer tracking result nodes that do not have an affiliated session
+        photoscan_id: photoscan ID for which to retrieve the transducer localization result
+        transform_type: transform type for which to retrieve the the transducer localization result
+        session_id: session ID to help identify the correct transducer localization result node, or None to work with
+            only transducer localization result nodes that do not have an affiliated session
 
-    Returns: The retrieved transducer tracking result vtkMRMLTransformNode.
+    Returns: The retrieved transducer localization result vtkMRMLTransformNode.
     """
     tt_result_nodes = list(get_transducer_tracking_result_nodes_in_scene(
         photoscan_id= photoscan_id,
@@ -277,7 +277,7 @@ def get_transducer_tracking_result(
 
     if len(tt_result_nodes) > 1:
         raise RuntimeError(
-            f"There are {len(tt_result_nodes)} transducer tracking result nodes of type {transform_type.name} for photoscan {photoscan_id} "
+            f"There are {len(tt_result_nodes)} transducer localization result nodes of type {transform_type.name} for photoscan {photoscan_id} "
             + (f"and session {session_id}" if session_id is not None else "with no session.")
         )
 
@@ -286,18 +286,18 @@ def get_transducer_tracking_result(
     return tt_result_node
 
 def get_complete_transducer_tracking_results(session_id: Optional[str], photoscan_id: Optional[str]) -> Iterable[Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]:
-    """A transducer tracking result is considered 'complete' when both the transducer_to_volume 
+    """A transducer localization result is considered 'complete' when both the transducer_to_volume 
     and photoscan_to_volume transforms nodes have been computed and added to the scene. Only complete
-    transducer tracking results can be added to a session. Therefore, this function identifies
+    transducer localization results can be added to a session. Therefore, this function identifies
     paired transducer_to_volume and photoscan_to_volume transform nodes and returns each result pair as a
     Tuple. Paired transformed nodes are identified as having the same session ID (unless session-less) and photoscan ID.
 
     Args:
         session_id: optional session ID. If None then **only transducer results with no session ID are included**.
-        photoscan_id: optional photoscan ID. If None then transducer tracking results for any affiliated photoscans are included.
+        photoscan_id: optional photoscan ID. If None then transducer localization results for any affiliated photoscans are included.
 
-    Returns a list of associated transducer tracking results in the scene. Each result is a
-    tuple of transducer tracking nodes: (transducer_to_volume_transform, photoscan_to_volume_transform) 
+    Returns a list of associated transducer localization results in the scene. Each result is a
+    tuple of transducer localization nodes: (transducer_to_volume_transform, photoscan_to_volume_transform) 
     """
 
     tp_nodes = get_transducer_tracking_result_nodes_in_scene(session_id=session_id, photoscan_id=photoscan_id, transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
@@ -326,7 +326,7 @@ def get_complete_transducer_tracking_results(session_id: Optional[str], photosca
     return tt_results
 
 def get_photoscan_ids_with_results(session_id: str, approved_only = False) -> List[str]:
-    """Returns a list of all photoscan IDs for which there is a transducer tracking result in the scene.
+    """Returns a list of all photoscan IDs for which there is a transducer localization result in the scene.
 
     Args:
         session_id: optional session ID. If None then **only transducer results with no session ID are included**.
@@ -341,14 +341,14 @@ def get_photoscan_ids_with_results(session_id: str, approved_only = False) -> Li
         return [t.GetAttribute("TT:photoscanID") for (t,_) in tt_results]
 
 def set_transducer_tracking_approval_for_node(approval_state: bool, transform_node: vtkMRMLTransformNode) -> None:
-    """Set approval state on the given transducer tracking transform node.
+    """Set approval state on the given transducer localization transform node.
 
     Args:
         approval_state: new approval state to apply
         transform_node: vtkMRMLTransformNode
     """
     if not is_transducer_tracking_result_node(transform_node):
-        raise ValueError("The specified transform node is a not a transducer tracking result node")
+        raise ValueError("The specified transform node is a not a transducer localization result node")
     transform_node.SetAttribute("TT:approvalStatus", "1" if approval_state else "0")
 
 def set_transducer_tracking_approval_for_photoscan(approval_state: bool, photoscan_id: str, session_id: str):
@@ -356,9 +356,9 @@ def set_transducer_tracking_approval_for_photoscan(approval_state: bool, photosc
     
     Args:
     approval_state: new approval state to apply
-    photoscan_id: photoscan ID for which to apply new approval state to the transducer tracking result nodes
-    session_id: session ID to help identify the correct transducer tracking result ndoes, or None to work with
-    only transducer tracking result nodes that do not have an affiliated session"""
+    photoscan_id: photoscan ID for which to apply new approval state to the transducer localization result nodes
+    session_id: session ID to help identify the correct transducer localization result ndoes, or None to work with
+    only transducer localization result nodes that do not have an affiliated session"""
 
     pv_node = get_transducer_tracking_result(photoscan_id, TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME, session_id) 
     set_transducer_tracking_approval_for_node(approval_state, pv_node)
@@ -368,7 +368,7 @@ def set_transducer_tracking_approval_for_photoscan(approval_state: bool, photosc
 
 def get_approval_from_transducer_tracking_result_node(node : vtkMRMLTransformNode) -> bool:
     if node.GetAttribute("TT:approvalStatus") is None:
-        raise RuntimeError("Node does not have a transducer tracking approval status.")
+        raise RuntimeError("Node does not have a transducer localization approval status.")
     return node.GetAttribute("TT:approvalStatus") == "1"
 
 def get_transform_type_from_transducer_tracking_result_node(node : vtkMRMLTransformNode) -> TransducerTrackingTransformType:
@@ -377,34 +377,34 @@ def get_transform_type_from_transducer_tracking_result_node(node : vtkMRMLTransf
     elif node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1":
         return TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME
     else:
-        raise RuntimeError("The given node is not a transducer tracking result transform.")
+        raise RuntimeError("The given node is not a transducer localization result transform.")
 
 def get_photoscan_id_from_transducer_tracking_result(result: Union[vtkMRMLTransformNode, Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]]) -> str:
-    """Returns the photoscan ID associated with a transducer tracking transform node. 
-    If a transducer tracking result i.e. tuple of transform nodes is provided, this function
+    """Returns the photoscan ID associated with a transducer localization transform node. 
+    If a transducer localization result i.e. tuple of transform nodes is provided, this function
     includes a check to ensure that the paired transform nodes are associated with the same photoscan ID."""
     
     if isinstance(result, vtkMRMLTransformNode) and result.GetAttribute("TT:photoscanID") is not None:
         transform_node = result
     elif isinstance(result,tuple):
         if result[0].GetAttribute("TT:photoscanID") != result[1].GetAttribute("TT:photoscanID"):
-            raise RuntimeError("Transducer tracking transducer-volume and photoscan-volume transforms have mismatched photoscan IDs.")
+            raise RuntimeError("Transducer localization transducer-volume and photoscan-volume transforms have mismatched photoscan IDs.")
         elif result[0].GetAttribute("TT:photoscanID") is None or result[1].GetAttribute("TT:photoscanID") is None:
-            raise RuntimeError("Transducer tracking result does not have a photoscan ID.")
+            raise RuntimeError("Transducer localization result does not have a photoscan ID.")
         # Following the above checks, we can return the photoscanID attribute using either transform node
         transform_node = result[0]
     else:
-        raise ValueError("Invalid transducer tracking result type.")
+        raise ValueError("Invalid transducer localization result type.")
     
     return transform_node.GetAttribute("TT:photoscanID")
 
 def clear_transducer_tracking_results(
     session_id: Optional[str],
 ) -> None:
-    """Remove all transducer tracking results nodes from the scene that match the given session id.
+    """Remove all transducer localization results nodes from the scene that match the given session id.
 
     Args:
-        session_id: session ID. If None then **only transducer tracking results with no session ID are removed**!
+        session_id: session ID. If None then **only transducer localization results with no session ID are removed**!
     """
 
     nodes_to_remove = get_transducer_tracking_result_nodes_in_scene(session_id=session_id)
@@ -421,7 +421,7 @@ def clear_transducer_tracking_results(
         slicer.mrmlScene.RemoveNode(node)
     
 def is_transducer_tracking_result_node(transform_node) -> bool:
-    """Returns True if the given node is a transducer tracking result node"""
+    """Returns True if the given node is a transducer localization result node"""
     if (
         transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1" 
         or transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"

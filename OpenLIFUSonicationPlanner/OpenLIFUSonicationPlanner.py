@@ -478,11 +478,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if loaded_session is not None:
             photoscan_ids = loaded_session.get_transducer_tracking_approvals()
             if len(photoscan_ids) == 0:
-                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer tracking is not approved for any photoscans!"
+                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer localization is not approved for any photoscans!"
                 self.ui.trackingApprovalStatusLabel.styleSheet = "color:red;"
             else:
                 self.ui.trackingApprovalStatusLabel.text = (
-                    "Transducer tracking is approved for the following photoscans:\n- "
+                    "Transducer localization is approved for the following photoscans:\n- "
                     + "\n- ".join(photoscan_ids)
                 )
                 self.ui.trackingApprovalStatusLabel.styleSheet = ""

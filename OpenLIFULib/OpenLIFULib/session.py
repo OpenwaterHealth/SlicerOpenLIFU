@@ -47,12 +47,12 @@ class SlicerOpenLIFUSession:
 
     affiliated_photocollections : List[str] = []
     """List containing photocollection_reference_numbers for any photocollections associated with the session. We keep track of any
-    photocollections associated with the session here so that they can be loaded into slicer during transducer tracking as required."""
+    photocollections associated with the session here so that they can be loaded into slicer during transducer localization as required."""
 
     affiliated_photoscans : Dict[str,SlicerOpenLIFUPhotoscanWrapper] = {}
     """Dictionary containing photoscan_id: SlicerOpenLIFUPhotoscanWrapper for any photoscans associated with the session. We keep track of 
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
-    transducer tracking as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan."""
+    transducer localization as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan."""
 
     last_generated_solution_id : Optional[str] = None
     """The solution ID of the last solution that was generated for this session, or None if there isn't one.
@@ -155,7 +155,7 @@ class SlicerOpenLIFUSession:
         if (
             (
                 any(len(transform_list)>0 for transform_list in session.virtual_fit_results.values()) # if there is a virtual fit result in the session
-                or len(session.transducer_tracking_results)>0 # or if there is a transducer tracking result
+                or len(session.transducer_tracking_results)>0 # or if there is a transducer localization result
             )
             and get_skin_segmentation(volume_node) is None
         ):
@@ -218,7 +218,7 @@ class SlicerOpenLIFUSession:
             units = transducer_openlifu.units,
         )
 
-        #Update transducer tracking results
+        #Update transducer localization results
         self.session.session.transducer_tracking_results = get_transducer_tracking_results_in_openlifu_session_format(
             session_id=self.get_session_id(),
             transducer_units = transducer_openlifu.units,
@@ -227,8 +227,8 @@ class SlicerOpenLIFUSession:
         return self.session.session
 
     def get_transducer_tracking_approvals(self) -> List[str]:
-        """Get the transducer tracking approval state in the current session object, a list of photoscan IDs for which
-        transducer tracking is approved.
+        """Get the transducer localization approval state in the current session object, a list of photoscan IDs for which
+        transducer localization is approved.
         """
         session_openlifu = self.session.session
         approved_tt_results = [
