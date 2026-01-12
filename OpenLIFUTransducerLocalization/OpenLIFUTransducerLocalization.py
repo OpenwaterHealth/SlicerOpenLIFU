@@ -713,7 +713,8 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 surface_model_node = photoscan_hardened,
                 surface_selection_distance = self.ui.icpSelectionDistanceSpinBox.value,
             )
-
+            self.photoscan_roi_submesh.GetDisplayNode().SetViewNodeIDs([self.wizard().volume_view_node.GetID()])
+            
             try:
                 self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
                     input_fixed_model = self.wizard().skin_mesh_node,
@@ -1091,6 +1092,8 @@ class TransducerTrackingWizard(qt.QWizard):
 
             # Display skin segmentation and hide the photoscan and transducer surface
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
+            if self.photoscanVolumeTrackingPage.photoscan_roi_submesh:
+                self.photoscanVolumeTrackingPage.photoscan_roi_submesh.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             self.transducer_body.GetDisplayNode().SetVisibility(False)
@@ -1109,6 +1112,8 @@ class TransducerTrackingWizard(qt.QWizard):
 
             # Display the photoscan and volume and hide the transducer
             self.skin_mesh_node.GetDisplayNode().SetVisibility(True)
+            if self.photoscanVolumeTrackingPage.photoscan_roi_submesh:
+                self.photoscanVolumeTrackingPage.photoscan_roi_submesh.GetDisplayNode().SetVisibility(True)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_surface.GetDisplayNode().SetVisibility(False)
             self.transducer_body.GetDisplayNode().SetVisibility(False)
@@ -1128,6 +1133,8 @@ class TransducerTrackingWizard(qt.QWizard):
 
             # Display the photoscan and transducer and hide the skin mesh
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
+            if self.photoscanVolumeTrackingPage.photoscan_roi_submesh:
+                self.photoscanVolumeTrackingPage.photoscan_roi_submesh.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_body.GetDisplayNode().SetVisibility(True)
 
