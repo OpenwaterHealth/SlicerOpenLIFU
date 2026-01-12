@@ -2194,11 +2194,15 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if not returncode:
             return False
 
-        data_logic.add_photoscan_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photoscan_dict.copy())  # logic mutates the dict
+        new_photoscan = data_logic.add_photoscan_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photoscan_dict.copy())  # logic mutates the dict
         data_logic.update_photoscans_affiliated_with_loaded_session()
 
         self.updateInputOptions()
         self.updateWorkflowControls()
+
+        slicer.app.processEvents() # Ensure the input options are updated
+        self.algorithm_input_widget.set_photoscan_selection(new_photoscan)
+        self.onPreviewPhotoscanClicked(checked = True)
         
     @display_errors
     def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
@@ -2264,7 +2268,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 slicer.app.processEvents()
 
             try:
-                self.logic.generate_photoscan(
+                photoscan_openlifu = self.logic.generate_photoscan(
                     subject_id = subject_id,
                     session_id = session_id,
                     photocollection_reference_number = selected_reference_number,
@@ -2284,7 +2288,12 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.updateInputOptions()
         self.updateWorkflowControls()
 
-    def onPreviewPhotoscanClicked(self):
+        # Preview the generated photoscan
+        slicer.app.processEvents() # Ensure the input options are updated
+        self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
+        self.onPreviewPhotoscanClicked(checked = True) 
+
+    def onPreviewPhotoscanClicked(self, checked = False):
 
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
@@ -2829,7 +2838,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         window_radius:Optional[int],
         image_selection_settings:Tuple[str,int],
         progress_callback:Callable[[int,str],None],
-    ) -> None:
+    ) -> "openlifu.nav.photoscan.Photoscan":
         """Call mesh reconstruction using openlifu, which should call Meshroom.
 
         Args:
@@ -2879,7 +2888,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             sampling_rate = sampling_rate,
         )
         with BusyCursor():
-            photoscan, data_dir = openlifu_lz().nav.photoscan.run_reconstruction(
+            photoscan_openlifu, data_dir = openlifu_lz().nav.photoscan.run_reconstruction(
                 images = photocollection_filepaths,
                 pipeline_name = meshroom_pipeline,
                 input_resize_width = image_width,
@@ -2889,21 +2898,23 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 progress_callback = progress_callback,
                 download_masking_model = False,
             )
-        photoscan.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
+        photoscan_openlifu.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
         photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
         for i in itertools.count(): # Assumes a finite number of photoscans :)
             photoscan_id = f"{photocollection_reference_number}_{i}"
             if photoscan_id not in photoscan_ids:
                 break
-        photoscan.id = photoscan_id
+        photoscan_openlifu.id = photoscan_id
         get_cur_db().write_photoscan(
             subject_id = subject_id,
             session_id = session_id,
-            photoscan = photoscan,
-            model_data_filepath = data_dir/photoscan.model_filename,
-            texture_data_filepath = data_dir/photoscan.texture_filename,
-            mtl_data_filepath = data_dir/photoscan.mtl_filename,
+            photoscan = photoscan_openlifu,
+            model_data_filepath = data_dir/photoscan_openlifu.model_filename,
+            texture_data_filepath = data_dir/photoscan_openlifu.texture_filename,
+            mtl_data_filepath = data_dir/photoscan_openlifu.mtl_filename,
         )
+
+        return photoscan_openlifu
 
     def update_photoscan_approval(self, photoscan_id: str, approval_state: bool) -> None:
         """Updates the approval status of the given photoscan. """
