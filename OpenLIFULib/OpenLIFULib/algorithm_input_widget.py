@@ -244,3 +244,14 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         valid selections to run algorithms."""
         for input in self.inputs_dict.values():
             input.combo_box.currentIndexChanged.connect(function_call)
+    
+    def set_photoscan_selection(self, photoscan_openlifu: "openlifu.nav.photoscan.Photoscan") -> None:
+        """Set the photoscan combobox selection to the specified photoscan."""
+        if "Photoscan" not in self.inputs_dict:
+            return
+        photoscan_combo_box = self.inputs_dict["Photoscan"].combo_box
+        for i in range(photoscan_combo_box.count):
+            if photoscan_combo_box.itemData(i) == photoscan_openlifu:
+                photoscan_combo_box.setCurrentIndex(i)
+                break
+                

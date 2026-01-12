@@ -2646,7 +2646,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                                       openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
 
-    def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_parameters: Dict) -> None:
+    def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_parameters: Dict) -> "openlifu.nav.photoscan.Photoscan":
         """ Add new photoscan to selected subject/session in the loaded openlifu database
         Args:
             subject_id: ID of subject associated with the photoscan (str)
@@ -2671,6 +2671,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                                 texture_abspath,
                                 mtl_abspath,
                                 on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+    
+        return newOpenLIFUPhotoscan
 
     def toggle_solution_approval(self):
         """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
