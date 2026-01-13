@@ -3659,3 +3659,80 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         return distance
 
 
+#
+# OpenLIFUTransducerLocalizationTest
+#
+
+class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
+    """
+    This is the test case for your scripted module.
+    Uses ScriptedLoadableModuleTest base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+    
+    @staticmethod
+    def make_random_matrix() -> np.ndarray:
+        
+        from scipy.linalg import expm
+
+        rng = np.random.default_rng()
+        affine = np.eye(4)
+        affine[:3,:3] = expm((lambda A: (A - A.T)/2)(rng.normal(size=(3,3)))) # generate a random orthogonal matrix
+        affine[:3,3] = rng.random(3) # generate a random origin
+        return affine
+
+    def make_random_transform_node(self, node_name:str) -> vtkMRMLTransformNode:
+        affine = self.make_random_matrix()
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+        node.SetName(node_name)
+        node.SetMatrixTransformToParent(numpy_to_vtk_4x4(affine))
+        return node
+
+    def _workflow_localization(self):
+        """Test running virtual fit and approving results."""
+
+        slicer.util.selectModule("OpenLIFUTransducerLocalization")
+        tl_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
+        tl_logic = tl_widget.logic
+
+        activeData = tl_widget.algorithm_input_widget.get_current_data()
+        selected_photoscan_openlifu = activeData["Photoscan"]
+        selected_transducer = activeData["Transducer"]
+
+        # Check approval status in the scene
+        assert tl_logic.get_photoscan_ids_with_approved_tt_results() == []
+        assert tl_logic.get_transducer_tracking_approval(selected_photoscan_openlifu.id) is False
+
+        pv_node = self.make_random_transform_node("photoscan_to_volume_test_transform")
+        tv_node = self.make_random_transform_node("transducer_to_volume_test_transform")
+
+        added_pv, added_tv = tl_logic.add_transducer_tracking_result(
+            photoscan_to_volume_transform = pv_node,
+            photoscan_to_volume_approval_state = True,
+            transducer_to_volume_transform = tv_node,
+            transducer_to_volume_approval_state = True,
+            photoscan_id = selected_photoscan_openlifu.id,
+            transducer = selected_transducer,
+        )
+        
+        returned_node = tl_logic.get_transducer_tracking_result_node(
+            photoscan_id = selected_photoscan_openlifu.id,
+            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+        )
+        assert added_pv.GetID() == returned_node.GetID()
+
+        returned_node = tl_logic.get_transducer_tracking_result_node(
+            photoscan_id = selected_photoscan_openlifu.id,
+            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+        )
+        assert added_tv.GetID() == returned_node.GetID()
+
+        tl_logic.update_photoscan_approval(
+            photoscan_id = selected_photoscan_openlifu.id,
+            approval_state = True,
+        )
+
+        # Check approval
+        assert tl_logic.get_photoscan_ids_with_approval() == [selected_photoscan_openlifu.id]
+        assert tl_logic.get_photoscan_ids_with_approved_tt_results() == [selected_photoscan_openlifu.id]
+        assert tl_logic.get_transducer_tracking_approval(selected_photoscan_openlifu.id) is True
