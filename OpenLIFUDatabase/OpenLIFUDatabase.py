@@ -420,3 +420,31 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         else:
             for path in copied_paths:
                 os.chmod(path, 0o644 if path.is_file() else 0o755)
+
+
+#
+# OpenLIFUDatabaseTest
+#
+
+
+class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
+    """
+    This is the test case for your scripted module.
+    Uses ScriptedLoadableModuleTest base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+
+    def connect_database(self):
+
+        from OpenLIFULib import get_cur_db
+
+        dvc_dir = r"C:\Users\sadhana.ravikumar\Documents\1_KitwareProjects\OpenWater\slicer_openlifu_testing_dvc"
+        slicer.util.selectModule("OpenLIFUDatabase")
+        dbw = slicer.modules.OpenLIFUDatabaseWidget
+        dbw.ui.databaseDirectoryLineEdit.currentPath = dvc_dir
+        dbw.onLoadDatabaseClicked(True) 
+        
+        slicer.app.processEvents()
+
+        curr_db = get_cur_db()
+        assert curr_db is not None, "Database failed to load"

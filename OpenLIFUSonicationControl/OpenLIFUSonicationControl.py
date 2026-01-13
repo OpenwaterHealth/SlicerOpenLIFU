@@ -962,3 +962,30 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         hv_connected = self.cur_lifu_interface.hvcontroller.is_connected()
         return tx_connected and hv_connected
     
+
+#
+# OpenLIFUSonicationControlTest
+#
+
+class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
+    """
+    This is the test case for your scripted module.
+    Uses ScriptedLoadableModuleTest base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+
+    def _workflow_sonication_control(self):
+        
+        slicer.util.selectModule("OpenLIFUSonicationControl")
+        sc_widget = slicer.modules.OpenLIFUSonicationControlWidget
+        sc_logic = sc_widget.logic 
+
+        test_run_parameters = {
+            'success_flag': False,
+            'note': 'example notes for testing',
+        }
+
+        # Fails since there is no loaded solution
+        # sc_logic.create_openlifu_run(test_run_parameters)
+
+        # assert get_openlifu_data_parameter_node().loaded_run is not None
