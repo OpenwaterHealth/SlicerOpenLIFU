@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 import vtk
 from pathlib import Path
 import slicer
@@ -30,7 +30,7 @@ class SlicerOpenLIFUPhotoscan:
     model_node : vtkMRMLModelNode
     """Photoscan model node"""
 
-    texture_node : vtkMRMLVectorVolumeNode
+    texture_node : Optional[vtkMRMLVectorVolumeNode]
     """Texture volume node"""
 
     facial_landmarks_fiducial_node : vtkMRMLMarkupsFiducialNode = None
@@ -42,24 +42,26 @@ class SlicerOpenLIFUPhotoscan:
     so we can restore the same camera position when the photoscan is previewed."""
 
     @staticmethod
-    def _create_nodes(model_data, texture_data, node_name_prefix: str):
+    def _create_nodes(model_data: vtk.vtkPolyData, texture_data: vtk.vtkImageData | None, node_name_prefix: str):
         """Helper method to create model and texture nodes."""
         model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
         model_node.SetAndObservePolyData(model_data)
         model_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
         model_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{node_name_prefix}-model"))
 
-        texture_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVectorVolumeNode")
-        texture_node.SetAndObserveImageData(texture_data)
-        texture_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
-        texture_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{node_name_prefix}-texture"))
+        texture_node = None
+        if texture_data:
+            texture_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVectorVolumeNode")
+            texture_node.SetAndObserveImageData(texture_data)
+            texture_node.SetAttribute('isOpenLIFUPhotoscan', 'True')
+            texture_node.SetName(slicer.mrmlScene.GenerateUniqueName(f"{node_name_prefix}-texture"))
 
         return model_node, texture_node
     
     @staticmethod
     def initialize_from_openlifu_photoscan(photoscan_openlifu : "openlifu.nav.photoscan.Photoscan",
                                            model_data: vtk.vtkPolyData,
-                                           texture_data: vtk.vtkImageData
+                                           texture_data: vtk.vtkImageData | None
                                            ) -> "SlicerOpenLIFUPhotoscan":
         """Create a SlicerOpenLIFUPhotoscan from an openlifu Photoscan.
         Args:
@@ -71,16 +73,16 @@ class SlicerOpenLIFUPhotoscan:
         
         model_node, texture_node = SlicerOpenLIFUPhotoscan._create_nodes(model_data, texture_data, photoscan_openlifu.id)
         photoscan = SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu),model_node,texture_node)
-        photoscan.apply_texture_to_model()
+        photoscan.set_model_display_settings()
         
         return photoscan
 
     @staticmethod
-    def initialize_from_data_filepaths(model_abspath, texture_abspath) -> "SlicerOpenLIFUPhotoscan":
+    def initialize_from_data_filepaths(model_abspath: str , texture_abspath: Optional[str]) -> "SlicerOpenLIFUPhotoscan":
         """Create a SlicerOpenLIFUPhotoscan based on absolute paths to the data filenames.
         Args:
             model_abspath: Absolute path to the model data file
-            texture_abspath: Absolute path to the texture data file
+            texture_abspath: Optional absolute path to the texture data file
         Returns: the newly constructed SlicerOpenLIFUPhotoscan object
         """
 
@@ -95,38 +97,40 @@ class SlicerOpenLIFUPhotoscan:
                                                                   name = node_name_prefix,
                                                                   )
         photoscan = SlicerOpenLIFUPhotoscan(SlicerOpenLIFUPhotoscanWrapper(photoscan_openlifu), model_node,texture_node)
-        photoscan.apply_texture_to_model()
+        photoscan.set_model_display_settings()
         return photoscan
     
     def clear_nodes(self) -> None:
         """Clear associated mrml nodes from the scene."""
         slicer.mrmlScene.RemoveNode(self.model_node)
-        slicer.mrmlScene.RemoveNode(self.texture_node)
+        if self.texture_node:
+            slicer.mrmlScene.RemoveNode(self.texture_node)
         if self.facial_landmarks_fiducial_node:
             slicer.mrmlScene.RemoveNode(self.facial_landmarks_fiducial_node)
         if self.view_node:
             slicer.mrmlScene.RemoveNode(self.view_node)
 
-    def apply_texture_to_model(self):
+    def set_model_display_settings(self):
         """Apply the texture image to the model node"""
         
-        # Shift/Scale texture map to uchar
-        filter = vtk.vtkImageShiftScale()
-        typeString = self.texture_node.GetImageData().GetScalarTypeAsString()
-        # default
-        scale = 1
-        if typeString =='unsigned short':
-            scale = 1 / 255.0
-        filter.SetScale(scale)
-        filter.SetOutputScalarTypeToUnsignedChar()
-        filter.SetInputData(self.texture_node.GetImageData())
-        filter.SetClampOverflow(True)
-        filter.Update()
-
         self.model_node.CreateDefaultDisplayNodes() # By default, this turns model visibility on
         modelDisplayNode = self.model_node.GetDisplayNode()
         modelDisplayNode.SetBackfaceCulling(0)
-        modelDisplayNode.SetTextureImageDataConnection(filter.GetOutputPort())
+
+        if self.texture_node:
+            # Shift/Scale texture map to uchar
+            filter = vtk.vtkImageShiftScale()
+            typeString = self.texture_node.GetImageData().GetScalarTypeAsString()
+            # default
+            scale = 1
+            if typeString =='unsigned short':
+                scale = 1 / 255.0
+            filter.SetScale(scale)
+            filter.SetOutputScalarTypeToUnsignedChar()
+            filter.SetInputData(self.texture_node.GetImageData())
+            filter.SetClampOverflow(True)
+            filter.Update()
+            modelDisplayNode.SetTextureImageDataConnection(filter.GetOutputPort())
 
         # Turn model visibility off
         modelDisplayNode.SetVisibility(False)
