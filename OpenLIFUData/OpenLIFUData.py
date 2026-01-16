@@ -838,20 +838,21 @@ class LoadPhotoscanDialog(qt.QDialog):
             self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
             "All Files" + " (*)")
             self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
-            self.formLayout.insertRow(1,_("Texture Filepath:"), self.photoscanTextureFilePath)
+            self.formLayout.insertRow(1,_("Texture Filepath (Optional):"), self.photoscanTextureFilePath)
         elif current_filepath.suffix == '.json' and self.formLayout.rowCount() == 3:
             self.formLayout.removeRow(1) 
 
     def validateInputs(self):
         photoscan_model_filepath = Path(self.photoscanModelFilePath.currentPath)
         if photoscan_model_filepath.suffix != '.json':
-            photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath  
-            if not len(photoscan_texture_filepath):
-                slicer.util.errorDisplay("Model and texture files both need to be specified", parent = self)
-                return
-            elif not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
+            if not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
                 slicer.util.errorDisplay("Invalid photoscan filetype specified", parent = self)
                 return
+            if len(self.photoscanTextureFilePath.currentPath):
+                photoscan_texture_filepath = Path(self.photoscanTextureFilePath.currentPath)
+                if photoscan_texture_filepath.suffix not in ['.exr','.jpg','.png','.tiff']:
+                    slicer.util.errorDisplay("Invalid photoscan texture filetype specified", parent = self)
+                    return
         self.accept()
 
     def customexec_(self):

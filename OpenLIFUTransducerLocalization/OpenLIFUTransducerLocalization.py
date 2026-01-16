@@ -1640,7 +1640,7 @@ class AddNewPhotoscanDialog(qt.QDialog):
         self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
         "All Files" + " (*)")
         self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
-        formLayout.addRow(_("Texture Filepath:"), self.photoscanTextureFilePath)
+        formLayout.addRow(_("Texture Filepath (Optional):"), self.photoscanTextureFilePath)
 
         # MTL filepath
         self.photoscanMTLFilePath = ctk.ctkPathLineEdit()
@@ -1678,14 +1678,13 @@ class AddNewPhotoscanDialog(qt.QDialog):
 
     def validateInputs(self):
         """
-        The MTL filepath is an optional input for writing a photoscan to the database.
+        The texture and MTL filepaths are optional inputs for writing a photoscan to the database.
         """
         photoscan_name = self.photoscanName.text
         photoscan_id = self.photoscanID.text
         photoscan_model_filepath = self.photoscanModelFilePath.currentPath
-        photoscan_texture_filepath = self.photoscanTextureFilePath.currentPath  
 
-        if not len(photoscan_name) or not len(photoscan_id) or not len(photoscan_model_filepath) or not len(photoscan_texture_filepath):
+        if not len(photoscan_name) or not len(photoscan_id) or not len(photoscan_model_filepath):
             slicer.util.errorDisplay("Required fields are missing", parent = self)
         elif not slicer.app.coreIOManager().fileType(photoscan_model_filepath) == 'ModelFile':
             slicer.util.errorDisplay("Invalid photoscan filetype specified", parent = self)
@@ -1695,13 +1694,17 @@ class AddNewPhotoscanDialog(qt.QDialog):
     def customexec_(self):
 
         returncode = self.exec_()
+        if not len(self.photoscanTextureFilePath.currentPath):
+            texture_filepath = None
+        else:
+            texture_filepath = self.photoscanTextureFilePath.currentPath
         if not len(self.photoscanMTLFilePath.currentPath):
             mtl_filepath = None
         else:
             mtl_filepath = self.photoscanMTLFilePath.currentPath
         photoscan_dict = {
             "model_abspath" : self.photoscanModelFilePath.currentPath,
-            "texture_abspath" : self.photoscanTextureFilePath.currentPath,
+            "texture_abspath" : texture_filepath,
             "mtl_abspath" : mtl_filepath,
             "name": self.photoscanName.text,
             "id": self.photoscanID.text
