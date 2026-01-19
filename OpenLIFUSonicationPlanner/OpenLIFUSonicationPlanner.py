@@ -909,34 +909,20 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
         slicer.util.selectModule("OpenLIFUSonicationPlanner")
         sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
         sp_logic = sp_widget.logic 
+ 
 
-        with mock.patch("OpenLIFUPrePlanning.compute_solution_openlifu") as mocked_compute:
+        activeData = sp_widget.algorithm_input_widget.get_current_data()
+        selected_target = activeData["Target"]
+        selected_transducer = activeData["Transducer"]
 
-            # solution_openlifu = 
-            # pnp_aggregated = 
-            # intensity_aggregated
-            # analysis_openlifu
-            # mocked_compute.return_value = (
-            #     solution_openlifu,
-            #     pnp_aggregated,
-            #     intensity_aggregated,
-            #     analysis_openlifu
-            #     )
-            
-            sp_widget.OnComputeSolutionClicked(True)
-
-            assert mock_compute.called is True
-            assert get_openlifu_data_parameter_node().loaded_solution is not None
+        sp_widget.onComputeSolutionClicked(True)
+        assert get_openlifu_data_parameter_node().loaded_solution is not None
     
-        # # Test that moving the target clears the solution
-        # # Get the example target loaded in the scene
-        # example_target = get_target_candidates()[0]
-        # target_id = fiducial_to_openlifu_point_id(example_target)
-        # curr_pos = example_target.GetNthControlPointPositionWorld(0)
+        # Test that moving the target clears the solution
+        curr_pos =  selected_target.GetNthControlPointPositionWorld(0)
 
-        # example_target.SetNthControlPointPositionWorld(0, (curr_pos[0], curr_pos[1], curr_pos[2]+0.1)) # this should clear the results
-       
-        # slicer.app.processEvents()
-        # assert get_openlifu_data_parameter_node().loaded_solution is None
+        selected_target.SetNthControlPointPositionWorld(0, (curr_pos[0], curr_pos[1], curr_pos[2]+0.1)) # this should clear the results
+        slicer.app.processEvents()
+        assert get_openlifu_data_parameter_node().loaded_solution is None
 
-        # # Can add test that Moving transducer clears solution
+        # Can add test that Moving transducer clears solution
