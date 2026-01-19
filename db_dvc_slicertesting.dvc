@@ -1,6 +1,6 @@
 outs:
-- md5: ea9a24b116f90eec9d46258ee22aba0b.dir
-  size: 39743497
-  nfiles: 35
+- md5: d9a03ec8cca133dcf194ea4299753713.dir
+  size: 5997855
+  nfiles: 27
   hash: md5
   path: db_dvc_slicertesting
