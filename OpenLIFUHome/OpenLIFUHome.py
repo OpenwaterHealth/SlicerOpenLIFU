@@ -311,9 +311,9 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         tlt = OpenLIFUTransducerLocalizationTest()
         tlt._workflow_localization()
 
-        # from OpenLIFUSonicationPlanner import OpenLIFUSonicationPlannerTest
-        # spt = OpenLIFUSonicationPlannerTest()
-        # spt._workflow_planning()
+        from OpenLIFUSonicationPlanner import OpenLIFUSonicationPlannerTest
+        spt = OpenLIFUSonicationPlannerTest()
+        spt._workflow_planning()
 
         from OpenLIFUSonicationControl import OpenLIFUSonicationControlTest
         sct = OpenLIFUSonicationControlTest()
