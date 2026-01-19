@@ -2798,7 +2798,7 @@ class OpenLIFUDataTest(ScriptedLoadableModuleTest):
 
         # Verify that the subject was loaded
         assert result is True
-        assert dw.logic.subject.id == "ow_ex001"
+        assert dw.logic.subject.id == "example_subject"
 
         # Simulate session selection
         load_session_dlg = LoadSessionDialog(cur_db, dw.logic.subject.id)
