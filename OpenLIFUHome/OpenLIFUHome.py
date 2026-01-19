@@ -284,20 +284,23 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         """Do whatever is needed to reset the state - typically a scene clear will be enough."""
         slicer.mrmlScene.Clear()
 
-    def downloadTestData(self):
-        """Download test data from dvc."""
-        pass  # TODO: Implement data download from dvc  
+    def get_test_database(self):
+        return os.getenv("SLICER_DVC_DATA_DIR")
     
     def runTest(self):
         """Run as few or as many tests as needed here."""
         
         self.setUp()
-
-        # self.downloadTestData()
+        
+        # install python requirements
+        # Check that the python requirements match the requirements file
+        self.test_OpenLIFU_FullTest1()
+            
+    def test_OpenLIFU_FullTest1(self):
 
         from OpenLIFUDatabase import OpenLIFUDatabaseTest
         dbt = OpenLIFUDatabaseTest()
-        curr_db = dbt.connect_database()
+        dbt.connect_database(database_dir = self.get_test_database())
 
         from OpenLIFUData import OpenLIFUDataTest
         dt = OpenLIFUDataTest()
