@@ -434,14 +434,14 @@ class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    def connect_database(self):
+    def connect_database(self, database_dir: str):
 
         from OpenLIFULib import get_cur_db
 
-        dvc_dir = r"C:\Users\sadhana.ravikumar\Documents\1_KitwareProjects\OpenWater\slicer_openlifu_testing_dvc"
+        # dvc_dir = r"C:\Users\sadhana.ravikumar\Documents\1_KitwareProjects\OpenWater\db_dvc_slicertesting"
         slicer.util.selectModule("OpenLIFUDatabase")
         dbw = slicer.modules.OpenLIFUDatabaseWidget
-        dbw.ui.databaseDirectoryLineEdit.currentPath = dvc_dir
+        dbw.ui.databaseDirectoryLineEdit.currentPath = database_dir
         dbw.onLoadDatabaseClicked(True) 
         
         slicer.app.processEvents()
