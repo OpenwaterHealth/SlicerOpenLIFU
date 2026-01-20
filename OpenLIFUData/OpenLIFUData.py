@@ -835,7 +835,7 @@ class LoadPhotoscanDialog(qt.QDialog):
             self.photoscanTextureFilePath = ctk.ctkPathLineEdit()
             self.photoscanTextureFilePath.filters = ctk.ctkPathLineEdit.Files
             # Allowable photoscan filetypes
-            self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *. *.png *.tiff *.exr);;" +
+            self.photoscan_texture_extensions = ("Photoscan Texture" + " (*.jpg *.jpeg *.png *.tiff *.exr);;" +
             "All Files" + " (*)")
             self.photoscanTextureFilePath.nameFilters = [self.photoscan_texture_extensions]
             self.formLayout.insertRow(1,_("Texture Filepath (Optional):"), self.photoscanTextureFilePath)
