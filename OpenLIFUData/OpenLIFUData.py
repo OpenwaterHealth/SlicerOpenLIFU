@@ -1097,8 +1097,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionCollapsibleButton.setEnabled(subject_has_volumes)
 
     @display_errors
-    def on_load_subject_clicked(self, checked: bool) -> bool:
-        load_subject_dlg = LoadSubjectDialog(get_cur_db())
+    def on_load_subject_clicked(self, checked: bool, load_subject_dlg = None) -> bool:
+        if load_subject_dlg is None:
+            load_subject_dlg = LoadSubjectDialog(get_cur_db())
         new_subject = load_subject_dlg.exec_and_get_subject()
 
         if not new_subject:
@@ -1124,8 +1125,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         return True
 
     @display_errors
-    def on_load_session_clicked(self, checked:bool) -> bool:
-        load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
+    def on_load_session_clicked(self, checked:bool, load_session_dlg = None) -> bool:
+        if load_session_dlg is None:
+            load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
         new_session = load_session_dlg.exec_and_get_session()
 
         if not new_session:
@@ -2707,3 +2709,51 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     windowTitle="Not saving approval state"
                 )
         self.getParameterNode().loaded_solution = solution # remember to write the updated solution object into the parameter node
+
+
+#
+# OpenLIFUDataTest
+#
+
+
+class OpenLIFUDataTest(ScriptedLoadableModuleTest):
+    """
+    This is the test case for your scripted module.
+    Uses ScriptedLoadableModuleTest base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+
+    def load_subject_session(self):
+
+        slicer.util.selectModule("OpenLIFUData")
+        dw = slicer.modules.OpenLIFUDataWidget
+
+        cur_db = get_cur_db()
+        # Load subject
+        load_subject_dlg = LoadSubjectDialog(cur_db)
+
+        def simulate_user():
+            load_subject_dlg.tableWidget.selectRow(0) # Manually choose first subject
+            load_subject_dlg.onLoadSubjectClicked() 
+
+        qt.QTimer.singleShot(0, simulate_user) # Needed since the dialog is modal
+
+        result  = dw.on_load_subject_clicked(True, load_subject_dlg)
+
+        # Verify that the subject was loaded
+        assert result is True
+        assert dw.logic.subject.id == "ow_ex001"
+
+        # Simulate session selection
+        load_session_dlg = LoadSessionDialog(cur_db, dw.logic.subject.id)
+        def simulate_user_session():
+            load_session_dlg.table_widget.selectRow(0) # Manually choose first session
+            load_session_dlg.on_load_session_clicked()
+
+        qt.QTimer.singleShot(0, simulate_user_session) # Needed since the dialog is modal   
+        
+        result = dw.on_load_session_clicked(True, load_session_dlg)
+        # Verify that the session was loaded
+
+        assert result is True
+        assert dw.logic.getParameterNode().loaded_session.get_session_id() == "test_session"

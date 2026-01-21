@@ -1,6 +1,7 @@
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
 
+import os
 # Third-party imports
 import vtk
 
@@ -283,6 +284,42 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         """Do whatever is needed to reset the state - typically a scene clear will be enough."""
         slicer.mrmlScene.Clear()
 
+    def downloadTestData(self):
+        """Download test data from dvc."""
+        pass  # TODO: Implement data download from dvc  
+    
     def runTest(self):
         """Run as few or as many tests as needed here."""
+        
         self.setUp()
+
+        # self.downloadTestData()
+
+        from OpenLIFUDatabase import OpenLIFUDatabaseTest
+        dbt = OpenLIFUDatabaseTest()
+        curr_db = dbt.connect_database()
+
+        from OpenLIFUData import OpenLIFUDataTest
+        dt = OpenLIFUDataTest()
+        dt.load_subject_session()
+
+        from OpenLIFUPrePlanning import OpenLIFUPrePlanningTest
+        pt = OpenLIFUPrePlanningTest()
+        pt._workflow_virtual_fit()
+
+        from OpenLIFUTransducerLocalization import OpenLIFUTransducerLocalizationTest
+        tlt = OpenLIFUTransducerLocalizationTest()
+        tlt._workflow_localization()
+
+        # from OpenLIFUSonicationPlanner import OpenLIFUSonicationPlannerTest
+        # spt = OpenLIFUSonicationPlannerTest()
+        # spt._workflow_planning()
+
+        from OpenLIFUSonicationControl import OpenLIFUSonicationControlTest
+        sct = OpenLIFUSonicationControlTest()
+        sct._workflow_sonication_control()
+
+
+
+        
+
