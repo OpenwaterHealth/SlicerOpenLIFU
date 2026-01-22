@@ -2745,6 +2745,70 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerLocalizationParameterNode(super().getParameterNode())
 
+    def _pull_photos_from_legacy_location(self, reference_number: str, temp_path: str) -> tuple[str, List[str]]:
+        """
+        Pulls photo files from the legacy Android app (v3.0) location.
+
+        The legacy app stores photos in /sdcard/DCIM/Camera with filenames
+        matching the pattern {reference_number}_*.
+
+        Args:
+            reference_number: A string identifying the photo collection.
+            temp_path: The local temporary directory to store pulled files.
+
+        Returns:
+            A tuple of ('photos', file_paths) where file_paths is a list of
+            full file paths to the pulled photos stored in the temp dir.
+
+        Raises:
+            RuntimeError: If adb fails to connect.
+            FileNotFoundError: If no matching photos are found.
+        """
+        legacy_android_dir = "/sdcard/DCIM/Camera"
+
+        result = subprocess.run(
+            ["adb", "shell", "ls", f"{legacy_android_dir}/{reference_number}_*"],
+            capture_output=True, text=True
+        )
+
+        if result.returncode != 0:
+            # Check if directory exists at all (to distinguish connection error from missing files)
+            dir_check = subprocess.run(
+                ["adb", "shell", "ls", legacy_android_dir],
+                capture_output=True, text=True
+            )
+            if dir_check.returncode != 0:
+                raise RuntimeError(
+                    "Error connecting to Android device. Please "
+                    "make sure the device is connected, you have "
+                    "installed android platform tools on this machine, "
+                    "you have enabled developer mode on the device, "
+                    "and you have enabled USB debugging on the "
+                    "device."
+                )
+            else:
+                raise FileNotFoundError(
+                    f"No photos found with reference number '{reference_number}' "
+                    f"on the android device. Please make sure you typed the correct "
+                    f"reference number into the 3D Open Water app."
+                )
+
+        files = [f for f in result.stdout.strip().split('\n') if f]
+        if not files:
+            raise FileNotFoundError(
+                f"No photos found with reference number '{reference_number}' "
+                f"on the android device."
+            )
+
+        pulled_files = []
+        for file in files:
+            filename = os.path.basename(file)
+            dest_path = os.path.join(temp_path, filename)
+            subprocess.run(["adb", "pull", f"{legacy_android_dir}/{filename}", dest_path])
+            pulled_files.append(dest_path)
+
+        return ('photos', pulled_files)
+
     def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """
         Pulls photo files or photoscan files from an Android device matching the
@@ -2757,6 +2821,10 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
 
         If a 'scan' subdirectory exists, the photoscan files will be pulled instead
         of the raw photos.
+
+        For backward compatibility with the legacy app (v3.0), if the new location
+        is not found, this function falls back to searching /sdcard/DCIM/Camera
+        for files matching {reference_number}_*.
 
         Args:
             reference_number: A string identifying the photo collection or photoscan
@@ -2774,34 +2842,26 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         temp_path = os.path.join(tempfile.gettempdir(), reference_number)
         os.makedirs(temp_path, exist_ok=True)
 
-        # Check if the base directory exists
+        # Check if the new app's directory exists
         result = subprocess.run(
             ["adb", "shell", "ls", android_dir],
             capture_output=True, text=True
         )
 
         if result.returncode != 0:
-            # Check if *at least* the base directory exists
+            # New location not found; check if it's a connection issue or just missing directory
             dir_check = subprocess.run(
                 ["adb", "shell", "ls", "/sdcard/OpenLIFU-3DScanner"],
                 capture_output=True, text=True
             )
 
             if dir_check.returncode != 0:
-                raise RuntimeError(
-                    "Error connecting to Android device. Please "
-                    "make sure the device is connected, you have "
-                    "installed android platform tools on this machine, "
-                    "you have enabled developer mode on the device, "
-                    "and you have enabled USB debugging on the "
-                    "device."
-                )
+                # Base directory doesn't exist; try legacy location before giving up
+                return self._pull_photos_from_legacy_location(reference_number, temp_path)
             else:
-                raise FileNotFoundError(
-                    f"No photos found with reference number '{reference_number}' "
-                    f"on the android device. Please make sure you typed the correct "
-                    f"reference number into the 3D Open Water app."
-                    )
+                # New app's base directory exists but this reference number wasn't found;
+                # fall back to legacy location
+                return self._pull_photos_from_legacy_location(reference_number, temp_path)
 
         files = [f for f in result.stdout.strip().split('\n') if f]
         if not files:
