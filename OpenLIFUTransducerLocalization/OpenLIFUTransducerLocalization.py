@@ -353,7 +353,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
-        self.ui.controlsWidget.enabled = not self.page_locked
+        self.ui.dialogControls.enabled = not self.page_locked
 
     def onPageUnlocked(self):
         if self.facial_landmarks_fiducial_node is None:
@@ -435,7 +435,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
-        self.ui.controlsWidget.enabled = not self.page_locked
+        self.ui.dialogControls.enabled = not self.page_locked
 
     def onPageUnlocked(self):
         if self.facial_landmarks_fiducial_node is None:
@@ -586,7 +586,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
-        self.ui.controlsWidget.enabled = not self.page_locked
+        self.ui.dialogControls.enabled = not self.page_locked
 
         if self.runningRegistration:
             self.disable_manual_registration()
@@ -869,7 +869,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def updatePageLock(self):
 
         self.wizard().updateCurrentPageLockButton(locked = self.page_locked)
-        self.ui.controlsWidget.enabled = not self.page_locked
+        self.ui.dialogControls.enabled = not self.page_locked
 
         if self.runningRegistration:
             self.disable_manual_registration()
@@ -1088,6 +1088,20 @@ class TransducerTrackingWizard(qt.QWizard):
     
     def setPageSpecificNodeDisplaySettings(self, page_id: int):
         current_page = self.page(page_id)
+
+        if current_page is None:
+            return
+
+        # Hide all pages except the current one to force the 
+        # layout to ignore the size of the hidden pages
+        for i in range(current_page.ui.dialogControls.count):
+            dialog_page = current_page.ui.dialogControls.widget(i)
+            if i == page_id:
+                dialog_page.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Preferred)
+            else:
+                dialog_page.setSizePolicy(qt.QSizePolicy.Ignored, qt.QSizePolicy.Ignored)
+                
+        current_page.ui.dialogControls.updateGeometry()
 
         if isinstance(current_page, PhotoscanMarkupPage):
 

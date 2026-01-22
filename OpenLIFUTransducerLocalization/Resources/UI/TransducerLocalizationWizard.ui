@@ -32,676 +32,664 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="controlsWidget" native="true">
+    <widget class="QStackedWidget" name="dialogControls">
      <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+      <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
        <horstretch>0</horstretch>
-       <verstretch>4</verstretch>
+       <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>16777215</height>
-      </size>
+     <property name="currentIndex">
+      <number>2</number>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_13">
-      <item>
-       <widget class="QStackedWidget" name="dialogControls">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="currentIndex">
-         <number>2</number>
-        </property>
-        <widget class="QWidget" name="photoscanMarkup">
-         <layout class="QVBoxLayout" name="verticalLayout_4">
-          <item>
-           <widget class="QLabel" name="landmarkPlacementStatus">
-            <property name="text">
-             <string/>
-            </property>
-            <property name="wordWrap">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="qSlicerSimpleMarkupsWidget" name="photoscanMarkupsWidget">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="contextMenuPolicy">
-             <enum>Qt::NoContextMenu</enum>
-            </property>
-            <property name="nodeSelectorVisible">
-             <bool>false</bool>
-            </property>
-            <property name="optionsVisible">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-         </layout>
+     <widget class="QWidget" name="photoscanMarkup">
+      <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item>
+        <widget class="QLabel" name="landmarkPlacementStatus">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
         </widget>
-        <widget class="QWidget" name="skinSegmentationMarkup">
-         <layout class="QVBoxLayout" name="verticalLayout_2">
-          <item>
-           <widget class="QLabel" name="landmarkPlacementStatus_2">
-            <property name="text">
-             <string/>
-            </property>
-            <property name="wordWrap">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="qSlicerSimpleMarkupsWidget" name="skinSegMarkupsWidget">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="contextMenuPolicy">
-             <enum>Qt::NoContextMenu</enum>
-            </property>
-            <property name="nodeSelectorVisible">
-             <bool>false</bool>
-            </property>
-            <property name="optionsVisible">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-         </layout>
+       </item>
+       <item>
+        <widget class="qSlicerSimpleMarkupsWidget" name="photoscanMarkupsWidget">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="contextMenuPolicy">
+          <enum>Qt::NoContextMenu</enum>
+         </property>
+         <property name="nodeSelectorVisible">
+          <bool>false</bool>
+         </property>
+         <property name="optionsVisible">
+          <bool>false</bool>
+         </property>
         </widget>
-        <widget class="QWidget" name="PhotoscanVolumeTracking">
-         <layout class="QVBoxLayout" name="verticalLayout_5">
-          <item>
-           <widget class="QPushButton" name="initializePVRegistration">
-            <property name="text">
-             <string>Initialize photoscan-volume transform</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="ctkCollapsibleGroupBox" name="ICPAdvancedOptionsCollapsibleGroupBox">
-            <property name="title">
-             <string>Advanced options</string>
-            </property>
-            <layout class="QGridLayout" name="gridLayout_4">
-             <item row="0" column="0">
-              <layout class="QGridLayout" name="gridLayout_3">
-               <item row="0" column="0">
-                <widget class="QCheckBox" name="viewRoiSubmeshCheckbox">
-                 <property name="toolTip">
-                  <string>For debugging puproses, display the facial ROI submesh that is extracted from the photoscan and used for ICP. This submesh should contain skin only, with no elements of hair or the device.</string>
-                 </property>
-                 <property name="text">
-                  <string>Show ROI</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="2">
-                <widget class="QSpinBox" name="icpSelectionDistanceSpinBox">
-                 <property name="toolTip">
-                  <string>Distance from landmarks, in mm, for points of the photoscan to be included in the ROI submesh that is used for ICP registration. Increase/decrease this to grow/shrink the ROI.</string>
-                 </property>
-                 <property name="value">
-                  <number>40</number>
-                 </property>
-                </widget>
-               </item>
-               <item row="2" column="1">
-                <widget class="QLabel" name="SamplingDensity_label">
-                 <property name="text">
-                  <string>Sampling density (% of vertices)</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="2" column="2">
-                <widget class="QSpinBox" name="samplingDensitySpinBox">
-                 <property name="toolTip">
-                  <string>Percentage of ROI vertices sampled for alignment. Higher values increase accuracy but slow down registration.</string>
-                 </property>
-                 <property name="maximum">
-                  <number>100</number>
-                 </property>
-                 <property name="value">
-                  <number>10</number>
-                 </property>
-                 <property name="displayIntegerBase">
-                  <number>10</number>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="1">
-                <widget class="QLabel" name="distanceFromLandmarksLabel">
-                 <property name="text">
-                  <string>Distance from landmarks (ROI extraction)</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="4" column="2">
-                <widget class="QSpinBox" name="maxNumOfIterationsSpinBox">
-                 <property name="toolTip">
-                  <string>Number of iterations. Used as the stop condition when this mode is selected.</string>
-                 </property>
-                 <property name="maximum">
-                  <number>2000</number>
-                 </property>
-                 <property name="value">
-                  <number>100</number>
-                 </property>
-                </widget>
-               </item>
-               <item row="2" column="0">
-                <widget class="QLabel" name="label_5">
-                 <property name="text">
-                  <string>ICP registration parameters:</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="3" column="2">
-                <widget class="QDoubleSpinBox" name="maxMeanDistanceDoubleSpinBox">
-                 <property name="toolTip">
-                  <string>Target convergence threshold. In this mode, registration stops once the RMS (root mean square) distance between meshes is below this value.</string>
-                 </property>
-                 <property name="decimals">
-                  <number>4</number>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.000100000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>0.010000000000000</double>
-                 </property>
-                </widget>
-               </item>
-               <item row="4" column="1">
-                <widget class="QRadioButton" name="SetNumIterationsModeRadioButton">
-                 <property name="text">
-                  <string>Number of iterations mode</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="3" column="1">
-                <widget class="QRadioButton" name="SetDistanceModeRadioButton">
-                 <property name="text">
-                  <string>Maximum mean distance mode</string>
-                 </property>
-                 <property name="checked">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_3">
-            <item>
-             <widget class="QPushButton" name="runICPRegistrationPV">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="skinSegmentationMarkup">
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QLabel" name="landmarkPlacementStatus_2">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="qSlicerSimpleMarkupsWidget" name="skinSegMarkupsWidget">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="contextMenuPolicy">
+          <enum>Qt::NoContextMenu</enum>
+         </property>
+         <property name="nodeSelectorVisible">
+          <bool>false</bool>
+         </property>
+         <property name="optionsVisible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="PhotoscanVolumeTracking">
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item>
+        <widget class="QPushButton" name="initializePVRegistration">
+         <property name="text">
+          <string>Initialize photoscan-volume transform</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="ctkCollapsibleGroupBox" name="ICPAdvancedOptionsCollapsibleGroupBox">
+         <property name="title">
+          <string>Advanced options</string>
+         </property>
+         <property name="collapsed">
+          <bool>false</bool>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_4">
+          <item row="0" column="0">
+           <layout class="QGridLayout" name="gridLayout_3">
+            <item row="0" column="0">
+             <widget class="QCheckBox" name="viewRoiSubmeshCheckbox">
+              <property name="toolTip">
+               <string>For debugging puproses, display the facial ROI submesh that is extracted from the photoscan and used for ICP. This submesh should contain skin only, with no elements of hair or the device.</string>
               </property>
               <property name="text">
-               <string>Run ICP-based registration fine-tuning</string>
+               <string>Show ROI</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QSpinBox" name="icpSelectionDistanceSpinBox">
+              <property name="toolTip">
+               <string>Distance from landmarks, in mm, for points of the photoscan to be included in the ROI submesh that is used for ICP registration. Increase/decrease this to grow/shrink the ROI.</string>
+              </property>
+              <property name="value">
+               <number>40</number>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLabel" name="SamplingDensity_label">
+              <property name="text">
+               <string>Sampling density (% of vertices)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="2">
+             <widget class="QSpinBox" name="samplingDensitySpinBox">
+              <property name="toolTip">
+               <string>Percentage of ROI vertices sampled for alignment. Higher values increase accuracy but slow down registration.</string>
+              </property>
+              <property name="maximum">
+               <number>100</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+              <property name="displayIntegerBase">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="distanceFromLandmarksLabel">
+              <property name="text">
+               <string>Distance from landmarks (ROI extraction)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="2">
+             <widget class="QSpinBox" name="maxNumOfIterationsSpinBox">
+              <property name="toolTip">
+               <string>Number of iterations. Used as the stop condition when this mode is selected.</string>
+              </property>
+              <property name="maximum">
+               <number>2000</number>
+              </property>
+              <property name="value">
+               <number>100</number>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_5">
+              <property name="text">
+               <string>ICP registration parameters:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="2">
+             <widget class="QDoubleSpinBox" name="maxMeanDistanceDoubleSpinBox">
+              <property name="toolTip">
+               <string>Target convergence threshold. In this mode, registration stops once the RMS (root mean square) distance between meshes is below this value.</string>
+              </property>
+              <property name="decimals">
+               <number>4</number>
+              </property>
+              <property name="singleStep">
+               <double>0.000100000000000</double>
+              </property>
+              <property name="value">
+               <double>0.010000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QRadioButton" name="SetNumIterationsModeRadioButton">
+              <property name="text">
+               <string>Number of iterations mode</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QRadioButton" name="SetDistanceModeRadioButton">
+              <property name="text">
+               <string>Maximum mean distance mode</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
               </property>
              </widget>
             </item>
            </layout>
           </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <item>
+          <widget class="QPushButton" name="runICPRegistrationPV">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Run ICP-based registration fine-tuning</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="PVICPRegistrationMetricLabel">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="ctkCollapsibleButton" name="ManualRegistrationGroupBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string>Manual registration refinement</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_11">
           <item>
-           <widget class="QLabel" name="PVICPRegistrationMetricLabel">
+           <widget class="QPushButton" name="enableManualPVRegistration">
             <property name="text">
-             <string/>
+             <string>Enable interaction handles</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleButton" name="ManualRegistrationGroupBox">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="text">
-             <string>Manual registration refinement</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_11">
-             <item>
-              <widget class="QPushButton" name="enableManualPVRegistration">
+           <widget class="QWidget" name="scalingTransformWidget" native="true">
+            <layout class="QFormLayout" name="formLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="scalingLabel">
                <property name="text">
-                <string>Enable interaction handles</string>
+                <string>Scale:</string>
                </property>
               </widget>
              </item>
-             <item>
-              <widget class="QWidget" name="scalingTransformWidget" native="true">
-               <layout class="QFormLayout" name="formLayout">
-                <item row="0" column="0">
-                 <widget class="QLabel" name="scalingLabel">
-                  <property name="text">
-                   <string>Scale:</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="0" column="1">
-                 <widget class="qMRMLSliderWidget" name="scalingTransformMRMLSliderWidget">
-                  <property name="singleStep">
-                   <double>0.010000000000000</double>
-                  </property>
-                  <property name="minimum">
-                   <double>-0.800000000000000</double>
-                  </property>
-                  <property name="maximum">
-                   <double>1.200000000000000</double>
-                  </property>
-                  <property name="value">
-                   <double>1.000000000000000</double>
-                  </property>
-                  <property name="quantity">
-                   <string notr="true"/>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="ctkCollapsibleButton" name="visibilitySettings">
-            <property name="text">
-             <string>Visibility</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_9">
-             <item>
-              <layout class="QHBoxLayout" name="photoscanSettings">
-               <item>
-                <widget class="QLabel" name="photoscanVisibilityLabel">
-                 <property name="text">
-                  <string>Photoscan visibility:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox">
-                 <property name="checked">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="photoscanOpacityLabel">
-                 <property name="text">
-                  <string>Opacity: </string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider">
-                 <property name="singleStep">
-                  <double>0.050000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="quantity">
-                  <string notr="true"/>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="skinMeshSettings">
-               <item>
-                <widget class="QLabel" name="skinMeshVisibilityLabel">
-                 <property name="text">
-                  <string>Skin mesh visibility:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="ctkCheckBox" name="skinMeshVisibilityCheckBox">
-                 <property name="checked">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="skinMeshOpacityLabel">
-                 <property name="text">
-                  <string>Opacity:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="qMRMLSliderWidget" name="skinMeshOpacitySlider">
-                 <property name="singleStep">
-                  <double>0.050000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="quantity">
-                  <string notr="true"/>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="TransducerPhotoscanTracking">
-         <layout class="QVBoxLayout" name="verticalLayout_3">
-          <item>
-           <layout class="QHBoxLayout" name="initialization">
-            <item>
-             <widget class="QPushButton" name="initializeTPRegistration">
-              <property name="text">
-               <string>Initialize transducer-photoscan transform</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <widget class="ctkCollapsibleGroupBox" name="ICPAdvancedOptionsCollapsibleGroupBox_2">
-            <property name="title">
-             <string>Advanced options</string>
-            </property>
-            <layout class="QGridLayout" name="gridLayout_5">
-             <item row="0" column="0">
-              <layout class="QGridLayout" name="gridLayout_6">
-               <item row="1" column="2">
-                <widget class="QSpinBox" name="samplingDensitySpinBoxTP">
-                 <property name="toolTip">
-                  <string>Percentage of transducer surface vertices sampled for alignment. Higher values increase accuracy but slow down registration.</string>
-                 </property>
-                 <property name="maximum">
-                  <number>100</number>
-                 </property>
-                 <property name="value">
-                  <number>10</number>
-                 </property>
-                 <property name="displayIntegerBase">
-                  <number>10</number>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="0">
-                <widget class="QLabel" name="label_6">
-                 <property name="text">
-                  <string>ICP registration parameters:</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="2" column="2">
-                <widget class="QDoubleSpinBox" name="maxMeanDistanceDoubleSpinBoxTP">
-                 <property name="toolTip">
-                  <string>Target convergence threshold. In this mode, registration stops once the RMS (root mean square) distance between meshes is below this value.</string>
-                 </property>
-                 <property name="decimals">
-                  <number>4</number>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.000100000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>0.010000000000000</double>
-                 </property>
-                </widget>
-               </item>
-               <item row="3" column="1">
-                <widget class="QRadioButton" name="SetNumIterationsModeRadioButtonTP">
-                 <property name="text">
-                  <string>Number of iterations mode</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="2" column="1">
-                <widget class="QRadioButton" name="SetDistanceModeRadioButtonTP">
-                 <property name="text">
-                  <string>Maximum mean distance mode</string>
-                 </property>
-                 <property name="checked">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="1">
-                <widget class="QLabel" name="SamplingDensity_label_2">
-                 <property name="text">
-                  <string>Sampling density (% of vertices)</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="3" column="2">
-                <widget class="QSpinBox" name="maxNumOfIterationsSpinBoxTP">
-                 <property name="toolTip">
-                  <string>Number of iterations. Used as the stop condition when this mode is selected.</string>
-                 </property>
-                 <property name="maximum">
-                  <number>2000</number>
-                 </property>
-                 <property name="value">
-                  <number>100</number>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QPushButton" name="runICPRegistrationTP">
-            <property name="text">
-             <string>Run ICP-based registration fine-tuning</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="TPICPRegistrationMetricLabel">
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="ctkCollapsibleButton" name="manualRegistrationCollapsible">
-            <property name="text">
-             <string>Manual registration refinement</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_10">
-             <item>
-              <widget class="QPushButton" name="enableManualTPRegistration">
-               <property name="text">
-                <string>Enable interaction handles</string>
+             <item row="0" column="1">
+              <widget class="qMRMLSliderWidget" name="scalingTransformMRMLSliderWidget">
+               <property name="singleStep">
+                <double>0.010000000000000</double>
+               </property>
+               <property name="minimum">
+                <double>-0.800000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>1.200000000000000</double>
+               </property>
+               <property name="value">
+                <double>1.000000000000000</double>
+               </property>
+               <property name="quantity">
+                <string notr="true"/>
                </property>
               </widget>
              </item>
             </layout>
            </widget>
           </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="ctkCollapsibleButton" name="visibilitySettings">
+         <property name="text">
+          <string>Visibility</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_9">
           <item>
-           <widget class="ctkCollapsibleButton" name="visibilitySettings_2">
+           <layout class="QHBoxLayout" name="photoscanSettings">
+            <item>
+             <widget class="QLabel" name="photoscanVisibilityLabel">
+              <property name="text">
+               <string>Photoscan visibility:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox">
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="photoscanOpacityLabel">
+              <property name="text">
+               <string>Opacity: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider">
+              <property name="singleStep">
+               <double>0.050000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="quantity">
+               <string notr="true"/>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="skinMeshSettings">
+            <item>
+             <widget class="QLabel" name="skinMeshVisibilityLabel">
+              <property name="text">
+               <string>Skin mesh visibility:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="ctkCheckBox" name="skinMeshVisibilityCheckBox">
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="skinMeshOpacityLabel">
+              <property name="text">
+               <string>Opacity:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="qMRMLSliderWidget" name="skinMeshOpacitySlider">
+              <property name="singleStep">
+               <double>0.050000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="quantity">
+               <string notr="true"/>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="TransducerPhotoscanTracking">
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <layout class="QHBoxLayout" name="initialization">
+         <item>
+          <widget class="QPushButton" name="initializeTPRegistration">
+           <property name="text">
+            <string>Initialize transducer-photoscan transform</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="ctkCollapsibleGroupBox" name="ICPAdvancedOptionsCollapsibleGroupBox_2">
+         <property name="title">
+          <string>Advanced options</string>
+         </property>
+         <property name="collapsed">
+          <bool>false</bool>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="0" column="0">
+           <layout class="QGridLayout" name="gridLayout_6">
+            <item row="1" column="2">
+             <widget class="QSpinBox" name="samplingDensitySpinBoxTP">
+              <property name="toolTip">
+               <string>Percentage of transducer surface vertices sampled for alignment. Higher values increase accuracy but slow down registration.</string>
+              </property>
+              <property name="maximum">
+               <number>100</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+              <property name="displayIntegerBase">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_6">
+              <property name="text">
+               <string>ICP registration parameters:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="2">
+             <widget class="QDoubleSpinBox" name="maxMeanDistanceDoubleSpinBoxTP">
+              <property name="toolTip">
+               <string>Target convergence threshold. In this mode, registration stops once the RMS (root mean square) distance between meshes is below this value.</string>
+              </property>
+              <property name="decimals">
+               <number>4</number>
+              </property>
+              <property name="singleStep">
+               <double>0.000100000000000</double>
+              </property>
+              <property name="value">
+               <double>0.010000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QRadioButton" name="SetNumIterationsModeRadioButtonTP">
+              <property name="text">
+               <string>Number of iterations mode</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QRadioButton" name="SetDistanceModeRadioButtonTP">
+              <property name="text">
+               <string>Maximum mean distance mode</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="SamplingDensity_label_2">
+              <property name="text">
+               <string>Sampling density (% of vertices)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="2">
+             <widget class="QSpinBox" name="maxNumOfIterationsSpinBoxTP">
+              <property name="toolTip">
+               <string>Number of iterations. Used as the stop condition when this mode is selected.</string>
+              </property>
+              <property name="maximum">
+               <number>2000</number>
+              </property>
+              <property name="value">
+               <number>100</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="runICPRegistrationTP">
+         <property name="text">
+          <string>Run ICP-based registration fine-tuning</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="TPICPRegistrationMetricLabel">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="ctkCollapsibleButton" name="manualRegistrationCollapsible">
+         <property name="text">
+          <string>Manual registration refinement</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_10">
+          <item>
+           <widget class="QPushButton" name="enableManualTPRegistration">
             <property name="text">
-             <string>Visibility</string>
+             <string>Enable interaction handles</string>
             </property>
-            <layout class="QGridLayout" name="gridLayout">
-             <item row="1" column="0">
-              <layout class="QHBoxLayout" name="horizontalLayout_2">
-               <item>
-                <widget class="QCheckBox" name="registrationSurfaceVisibilityCheckBox">
-                 <property name="layoutDirection">
-                  <enum>Qt::LeftToRight</enum>
-                 </property>
-                 <property name="text">
-                  <string>View transducer registration surface</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="horizontalSpacer_2">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>40</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="viewVirtualFitCheckBox">
-                 <property name="layoutDirection">
-                  <enum>Qt::LeftToRight</enum>
-                 </property>
-                 <property name="text">
-                  <string>View virtual fit transducer postion</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="horizontalSpacer_3">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>40</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-             <item row="0" column="0">
-              <layout class="QGridLayout" name="gridLayout_2">
-               <item row="0" column="3">
-                <widget class="qMRMLSliderWidget" name="transducerOpacitySlider">
-                 <property name="singleStep">
-                  <double>0.050000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="quantity">
-                  <string notr="true"/>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="1" alignment="Qt::AlignLeft">
-                <widget class="ctkCheckBox" name="transducerVisibilityCheckBox">
-                 <property name="layoutDirection">
-                  <enum>Qt::LeftToRight</enum>
-                 </property>
-                 <property name="text">
-                  <string/>
-                 </property>
-                 <property name="checked">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="1">
-                <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox_2">
-                 <property name="layoutDirection">
-                  <enum>Qt::LeftToRight</enum>
-                 </property>
-                 <property name="text">
-                  <string/>
-                 </property>
-                 <property name="checked">
-                  <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="2">
-                <widget class="QLabel" name="transducerOpacityLabel">
-                 <property name="text">
-                  <string>Opacity:</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="2">
-                <widget class="QLabel" name="photoscanOpacityLabel_2">
-                 <property name="text">
-                  <string>Opacity: </string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="3">
-                <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider_2">
-                 <property name="singleStep">
-                  <double>0.050000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>1.000000000000000</double>
-                 </property>
-                 <property name="quantity">
-                  <string notr="true"/>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="0">
-                <widget class="QLabel" name="label">
-                 <property name="text">
-                  <string>Transducer visibility:</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="0">
-                <widget class="QLabel" name="label_2">
-                 <property name="text">
-                  <string>Photoscan visibility:</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
            </widget>
           </item>
          </layout>
         </widget>
-       </widget>
-      </item>
-     </layout>
+       </item>
+       <item>
+        <widget class="ctkCollapsibleButton" name="visibilitySettings_2">
+         <property name="text">
+          <string>Visibility</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout">
+          <item row="1" column="0">
+           <layout class="QHBoxLayout" name="horizontalLayout_2">
+            <item>
+             <widget class="QCheckBox" name="registrationSurfaceVisibilityCheckBox">
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="text">
+               <string>View transducer registration surface</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_2">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="viewVirtualFitCheckBox">
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="text">
+               <string>View virtual fit transducer postion</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_3">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item row="0" column="0">
+           <layout class="QGridLayout" name="gridLayout_2">
+            <item row="0" column="3">
+             <widget class="qMRMLSliderWidget" name="transducerOpacitySlider">
+              <property name="singleStep">
+               <double>0.050000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="quantity">
+               <string notr="true"/>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1" alignment="Qt::AlignLeft">
+             <widget class="ctkCheckBox" name="transducerVisibilityCheckBox">
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="ctkCheckBox" name="photoscanVisibilityCheckBox_2">
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QLabel" name="transducerOpacityLabel">
+              <property name="text">
+               <string>Opacity:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="2">
+             <widget class="QLabel" name="photoscanOpacityLabel_2">
+              <property name="text">
+               <string>Opacity: </string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="3">
+             <widget class="qMRMLSliderWidget" name="photoscanOpacitySlider_2">
+              <property name="singleStep">
+               <double>0.050000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="quantity">
+               <string notr="true"/>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QLabel" name="label">
+              <property name="text">
+               <string>Transducer visibility:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_2">
+              <property name="text">
+               <string>Photoscan visibility:</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>
