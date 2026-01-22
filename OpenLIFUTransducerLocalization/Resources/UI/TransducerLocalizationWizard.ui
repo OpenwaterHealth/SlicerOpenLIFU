@@ -55,7 +55,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>2</number>
+         <number>3</number>
         </property>
         <widget class="QWidget" name="photoscanMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -133,7 +133,7 @@
            </widget>
           </item>
           <item>
-           <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
+           <widget class="ctkCollapsibleGroupBox" name="ICPAdvancedOptionsCollapsibleGroupBox">
             <property name="title">
              <string>Advanced options</string>
             </property>
@@ -266,7 +266,7 @@
            </layout>
           </item>
           <item>
-           <widget class="QLabel" name="ICPRegistrationMetricLabel">
+           <widget class="QLabel" name="PVICPRegistrationMetricLabel">
             <property name="text">
              <string/>
             </property>
@@ -417,7 +417,7 @@
          </layout>
         </widget>
         <widget class="QWidget" name="TransducerPhotoscanTracking">
-         <layout class="QVBoxLayout" name="verticalLayout_7">
+         <layout class="QVBoxLayout" name="verticalLayout_3">
           <item>
            <layout class="QHBoxLayout" name="initialization">
             <item>
@@ -430,9 +430,105 @@
            </layout>
           </item>
           <item>
+           <widget class="ctkCollapsibleGroupBox" name="ICPAdvancedOptionsCollapsibleGroupBox_2">
+            <property name="title">
+             <string>Advanced options</string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_5">
+             <item row="0" column="0">
+              <layout class="QGridLayout" name="gridLayout_6">
+               <item row="1" column="2">
+                <widget class="QSpinBox" name="numOfLandmarksSpinBoxTP">
+                 <property name="toolTip">
+                  <string>Percentage of transducer surface vertices sampled for alignment. Higher values increase accuracy but slow down registration.</string>
+                 </property>
+                 <property name="maximum">
+                  <number>100</number>
+                 </property>
+                 <property name="value">
+                  <number>10</number>
+                 </property>
+                 <property name="displayIntegerBase">
+                  <number>10</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_6">
+                 <property name="text">
+                  <string>ICP registration parameters:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="2">
+                <widget class="QDoubleSpinBox" name="maxMeanDistanceDoubleSpinBoxTP">
+                 <property name="toolTip">
+                  <string>Target convergence threshold. In this mode, registration stops once the average distance between meshes is below this value.</string>
+                 </property>
+                 <property name="decimals">
+                  <number>4</number>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.000100000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.010000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QRadioButton" name="SetNumIterationsModeRadioButtonTP">
+                 <property name="text">
+                  <string>Maximum number of iterations mode</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QRadioButton" name="SetDistanceModeRadioButtonTP">
+                 <property name="text">
+                  <string>Maximum mean distance mode</string>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLabel" name="numberOfLandmarks_label_2">
+                 <property name="text">
+                  <string>Number of landmarks (% of vertices)</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="2">
+                <widget class="QSpinBox" name="maxNumOfIterationsSpinBoxTP">
+                 <property name="toolTip">
+                  <string>Maximum number of iterations allowed. Used as the stop condition when this mode is selected.</string>
+                 </property>
+                 <property name="maximum">
+                  <number>2000</number>
+                 </property>
+                 <property name="value">
+                  <number>100</number>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
            <widget class="QPushButton" name="runICPRegistrationTP">
             <property name="text">
              <string>Run ICP-based registration fine-tuning</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="TPICPRegistrationMetricLabel">
+            <property name="text">
+             <string/>
             </property>
            </widget>
           </item>
