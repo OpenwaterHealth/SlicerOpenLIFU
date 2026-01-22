@@ -2790,7 +2790,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 raise FileNotFoundError(
                     f"No photos found with reference number '{reference_number}' "
                     f"on the android device. Please make sure you typed the correct "
-                    f"reference number into the 3D Open Water app."
+                    f"reference number into the OpenLIFU Android app."
                 )
 
         files = [f for f in result.stdout.strip().split('\n') if f]
@@ -2849,19 +2849,8 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         )
 
         if result.returncode != 0:
-            # New location not found; check if it's a connection issue or just missing directory
-            dir_check = subprocess.run(
-                ["adb", "shell", "ls", "/sdcard/OpenLIFU-3DScanner"],
-                capture_output=True, text=True
-            )
-
-            if dir_check.returncode != 0:
-                # Base directory doesn't exist; try legacy location before giving up
-                return self._pull_photos_from_legacy_location(reference_number, temp_path)
-            else:
-                # New app's base directory exists but this reference number wasn't found;
-                # fall back to legacy location
-                return self._pull_photos_from_legacy_location(reference_number, temp_path)
+            # New location not found; fall back to legacy location
+            return self._pull_photos_from_legacy_location(reference_number, temp_path)
 
         files = [f for f in result.stdout.strip().split('\n') if f]
         if not files:
