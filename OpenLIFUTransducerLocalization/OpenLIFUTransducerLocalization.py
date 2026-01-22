@@ -643,7 +643,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         self.setupTransformNode()
         self.resetScalingTransform()
-        self.ui.ICPRegistrationMetricLabel.text = ""
+        self.ui.PVICPRegistrationMetricLabel.text = ""
 
         # self.updateTransformApprovalStatusLabel()
         self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
@@ -717,8 +717,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.photoscan_roi_submesh.GetDisplayNode().SetViewNodeIDs([self.wizard().volume_view_node.GetID()])
             
             try:
-                num_landmarks = self.ui.numOfLandmarksSpinBox.value*self.photoscan_roi_submesh.GetPolyData().GetNumberOfPoints()
-                num_landmarks = int(num_landmarks/100)
+                max_landmarks = self.photoscan_roi_submesh.GetPolyData().GetNumberOfPoints()
+                num_landmarks = int(self.ui.numOfLandmarksSpinBox.value*max_landmarks/100)
+
 
                 self.photoscan_to_volume_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
                     input_fixed_model = self.wizard().skin_mesh_node,
@@ -729,7 +730,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                     mean_distance_mode = self.ui.SetDistanceModeRadioButton.isChecked(),
                     )
                 
-                self.ui.ICPRegistrationMetricLabel.text = f"Mean Distance: {dist_metric:.5f}, Number of iterations: {num_iter}"
+                self.ui.PVICPRegistrationMetricLabel.text = f"Mean Distance: {dist_metric:.5f} mm, Number of iterations: {num_iter}"
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
@@ -904,6 +905,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node.CreateDefaultDisplayNodes()
         self.setupTransformNode()
         self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
+        self.ui.TPICPRegistrationMetricLabel.text = ""
 
         # Enable approval and registration fine-tuning buttons
         self.ui.runICPRegistrationTP.enabled = True
@@ -962,11 +964,20 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         transducer_hardened.HardenTransform()
  
         try:
-            self.transducer_to_photoscan_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+            max_landmarks = transducer_hardened.GetPolyData().GetNumberOfPoints()
+            num_landmarks = int(self.ui.numOfLandmarksSpinBox.value*max_landmarks/100)
+
+            self.transducer_to_photoscan_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
                 input_fixed_model = photoscan_hardened,
                 input_moving_model = transducer_hardened,
                 transformType = 0,
+                numLandmarks =  num_landmarks,
+                numIterations = self.ui.maxNumOfIterationsSpinBoxTP.value,
+                maxMeanDistance = self.ui.maxMeanDistanceDoubleSpinBoxTP.value,
+                mean_distance_mode = self.ui.SetDistanceModeRadioButtonTP.isChecked(),
             )
+            self.ui.TPICPRegistrationMetricLabel.text = f"Mean Distance: {dist_metric:.5f} mm, Number of iterations: {num_iter}"
+
 
             self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
             self.transducer_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
