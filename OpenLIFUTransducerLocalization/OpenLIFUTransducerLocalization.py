@@ -965,7 +965,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
  
         try:
             max_landmarks = transducer_hardened.GetPolyData().GetNumberOfPoints()
-            num_landmarks = int(self.ui.samplingDensitySpinBox.value*max_landmarks/100)
+            num_landmarks = int(self.ui.samplingDensitySpinBoxTP.value*max_landmarks/100)
 
             self.transducer_to_photoscan_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
                 input_fixed_model = photoscan_hardened,
