@@ -718,7 +718,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             
             try:
                 max_landmarks = self.photoscan_roi_submesh.GetPolyData().GetNumberOfPoints()
-                num_landmarks = int(self.ui.numOfLandmarksSpinBox.value*max_landmarks/100)
+                num_landmarks = int(self.ui.samplingDensitySpinBox.value*max_landmarks/100)
 
 
                 self.photoscan_to_volume_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
@@ -965,7 +965,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
  
         try:
             max_landmarks = transducer_hardened.GetPolyData().GetNumberOfPoints()
-            num_landmarks = int(self.ui.numOfLandmarksSpinBox.value*max_landmarks/100)
+            num_landmarks = int(self.ui.samplingDensitySpinBox.value*max_landmarks/100)
 
             self.transducer_to_photoscan_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
                 input_fixed_model = photoscan_hardened,
@@ -3247,7 +3247,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         numIterations: int = 100,
         maxMeanDistance: float = 0.01,
         mean_distance_mode: bool = False,
-    ):
+    ) -> Tuple[vtkMRMLTransformNode, float, int]:
         """Registers a moving model to a fixed model using the Iterative Closest Point (ICP) algorithm.
         Note: This function operates directly on the point sets of the
         input models and does not consider any parent transforms. Therefore,
@@ -3267,10 +3267,12 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             mean_distance_mode: If True, prioritizes convergence to maxMeanDistance over numIterations.
 
         Returns:
-            vtkMRMLTransformNode or None: A new vtkMRMLTransformNode containing the computed
-            transformation that aligns the moving model with the fixed model. Returns None
-            if the registration fails. The transform node will be automatically added to the
-            scene.
+            A tuple (vtkMRMLTransformNode, float, int) or None
+            If registration is successful, returns a tuple containing:
+             - A new vtkMRMLTransformNode containing the computed transformation that aligns the moving model with the fixed model. 
+                The transform node will be automatically added to the scene.
+             - float: The Root Mean Square (RMS) distance between the sampled points on the transformed moving model and their closest points on the fixed model surface.
+             - int: The number of iterations performed during the registration process.
         """
 
         icp_result_node =  slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "icp_transform_result")
