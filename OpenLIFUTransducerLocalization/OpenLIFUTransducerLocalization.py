@@ -1083,6 +1083,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.adjustSize()
         
     def customexec_(self):
+        self.setWindowFlags(self.windowFlags() | qt.Qt.WindowFlags.CustomizeWindowHint | qt.Qt.WindowFlags.WindowMaximizeButtonHint)
         returncode = self.exec_()
         return (returncode, self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node)
     
