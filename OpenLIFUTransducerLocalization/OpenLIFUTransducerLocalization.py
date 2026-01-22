@@ -643,6 +643,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         self.setupTransformNode()
         self.resetScalingTransform()
+        self.ui.ICPRegistrationMetricLabel.text = ""
 
         # self.updateTransformApprovalStatusLabel()
         self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
@@ -716,9 +717,19 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.photoscan_roi_submesh.GetDisplayNode().SetViewNodeIDs([self.wizard().volume_view_node.GetID()])
             
             try:
-                self.photoscan_to_volume_icp_transform_node = self.wizard()._logic.run_icp_model_registration(
+                num_landmarks = self.ui.numOfLandmarksSpinBox.value*self.photoscan_roi_submesh.GetPolyData().GetNumberOfPoints()
+                num_landmarks = int(num_landmarks/100)
+
+                self.photoscan_to_volume_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
                     input_fixed_model = self.wizard().skin_mesh_node,
-                    input_moving_model = self.photoscan_roi_submesh)
+                    input_moving_model = self.photoscan_roi_submesh,
+                    numLandmarks =  num_landmarks,
+                    numIterations = self.ui.maxNumOfIterationsSpinBox.value,
+                    maxMeanDistance = self.ui.maxMeanDistanceDoubleSpinBox.value,
+                    mean_distance_mode = self.ui.SetDistanceModeRadioButton.isChecked(),
+                    )
+                
+                self.ui.ICPRegistrationMetricLabel.text = f"Mean Distance: {dist_metric:.5f}, Number of iterations: {num_iter}"
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
@@ -3222,7 +3233,9 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         input_moving_model: vtkMRMLModelNode,
         transformType: int = 1,
         numLandmarks: int = 200,
-        numIterations: int = 100
+        numIterations: int = 100,
+        maxMeanDistance: float = 0.01,
+        mean_distance_mode: bool = False,
     ):
         """Registers a moving model to a fixed model using the Iterative Closest Point (ICP) algorithm.
         Note: This function operates directly on the point sets of the
@@ -3238,7 +3251,9 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 - 2: Affine transformation 
                 Defaults to 1 (Similarity).
             numLandmarks: Maximum number of landmarks sampled from the moving model. The default is 200.
-            numIterations: Maximum number of iterations. The default is 100.
+            numIterations: Maximum iterations allowed if mean_distance_mode is False. Defaults to 100.
+            maxMeanDistance: Convergence threshold if mean_distance_mode is True; algorithm stops if mean distance falls below this value. Defaults to 0.01.
+            mean_distance_mode: If True, prioritizes convergence to maxMeanDistance over numIterations.
 
         Returns:
             vtkMRMLTransformNode or None: A new vtkMRMLTransformNode containing the computed
@@ -3257,16 +3272,26 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             icpTransform.GetLandmarkTransform().SetModeToSimilarity()
         if transformType == 2:
             icpTransform.GetLandmarkTransform().SetModeToAffine()
-        icpTransform.SetMaximumNumberOfIterations( numIterations )
+        icpTransform.SetCheckMeanDistance(True)
+        if mean_distance_mode:
+            icpTransform.SetMaximumMeanDistance( maxMeanDistance )
+            icpTransform.SetMaximumNumberOfIterations( 1000 ) # Set a high iteration limit so it doesn't stop at 50
+        else:
+            icpTransform.SetMaximumNumberOfIterations( numIterations )
+            icpTransform.SetMaximumMeanDistance( 0.0 ) # Algorithm should stop based on iterations
         icpTransform.SetMaximumNumberOfLandmarks( numLandmarks )
         icpTransform.Modified()
         icpTransform.Update()
+
+        # Metrics to report
+        icp_dist_metric = icpTransform.GetMeanDistance()
+        icp_num_iterations = icpTransform.GetNumberOfIterations()
 
         icp_result_node.SetMatrixTransformToParent( icpTransform.GetMatrix() )
         icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), input_moving_model.GetID())
         icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), input_fixed_model.GetID())
         
-        return icp_result_node
+        return icp_result_node, icp_dist_metric, icp_num_iterations
 
     def add_transducer_tracking_result(
         self,

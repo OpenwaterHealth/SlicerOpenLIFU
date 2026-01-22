@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>553</width>
-    <height>804</height>
+    <width>551</width>
+    <height>793</height>
    </rect>
   </property>
   <property name="maximumSize">
@@ -55,7 +55,7 @@
          </sizepolicy>
         </property>
         <property name="currentIndex">
-         <number>3</number>
+         <number>2</number>
         </property>
         <widget class="QWidget" name="photoscanMarkup">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -133,8 +133,123 @@
            </widget>
           </item>
           <item>
-
-            <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <widget class="ctkCollapsibleGroupBox" name="CollapsibleGroupBox">
+            <property name="title">
+             <string>Advanced options</string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_4">
+             <item row="0" column="0">
+              <layout class="QGridLayout" name="gridLayout_3">
+               <item row="0" column="0">
+                <widget class="QCheckBox" name="viewRoiSubmeshCheckbox">
+                 <property name="toolTip">
+                  <string>For debugging puproses, display the facial ROI submesh that is extracted from the photoscan and used for ICP. This submesh should contain skin only, with no elements of hair or the device.</string>
+                 </property>
+                 <property name="text">
+                  <string>Show ROI</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QSpinBox" name="icpSelectionDistanceSpinBox">
+                 <property name="toolTip">
+                  <string>Distance from landmarks, in mm, for points of the photoscan to be included in the ROI submesh that is used for ICP registration. Increase/decrease this to grow/shrink the ROI.</string>
+                 </property>
+                 <property name="value">
+                  <number>40</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QLabel" name="numberOfLandmarks_label">
+                 <property name="text">
+                  <string>Number of landmarks (% of vertices)</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="2">
+                <widget class="QSpinBox" name="numOfLandmarksSpinBox">
+                 <property name="toolTip">
+                  <string>Percentage of ROI vertices sampled for alignment. Higher values increase accuracy but slow down registration.</string>
+                 </property>
+                 <property name="maximum">
+                  <number>100</number>
+                 </property>
+                 <property name="value">
+                  <number>10</number>
+                 </property>
+                 <property name="displayIntegerBase">
+                  <number>10</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="distanceFromLandmarksLabel">
+                 <property name="text">
+                  <string>Distance from landmarks (ROI extraction)</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="2">
+                <widget class="QSpinBox" name="maxNumOfIterationsSpinBox">
+                 <property name="toolTip">
+                  <string>Maximum number of iterations allowed. Used as the stop condition when this mode is selected.</string>
+                 </property>
+                 <property name="maximum">
+                  <number>2000</number>
+                 </property>
+                 <property name="value">
+                  <number>100</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="label_5">
+                 <property name="text">
+                  <string>ICP registration parameters:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="2">
+                <widget class="QDoubleSpinBox" name="maxMeanDistanceDoubleSpinBox">
+                 <property name="toolTip">
+                  <string>Target convergence threshold. In this mode, registration stops once the average distance between meshes is below this value.</string>
+                 </property>
+                 <property name="decimals">
+                  <number>4</number>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.000100000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.010000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QRadioButton" name="SetNumIterationsModeRadioButton">
+                 <property name="text">
+                  <string>Maximum number of iterations mode</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QRadioButton" name="SetDistanceModeRadioButton">
+                 <property name="text">
+                  <string>Maximum mean distance mode</string>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
             <item>
              <widget class="QPushButton" name="runICPRegistrationPV">
               <property name="sizePolicy">
@@ -148,28 +263,14 @@
               </property>
              </widget>
             </item>
-            <item>
-             <widget class="QCheckBox" name="viewRoiSubmeshCheckbox">
-              <property name="toolTip">
-               <string>For debugging puproses, display the facial ROI submesh that is extracted from the photoscan and used for ICP. This submesh should contain skin only, with no elements of hair or the device.</string>
-              </property>
-              <property name="text">
-               <string>Show ROI</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSpinBox" name="icpSelectionDistanceSpinBox">
-              <property name="toolTip">
-               <string>Distance from landmarks, in mm, for points of the photoscan to be included in the ROI submesh that is used for ICP registration. Increase/decrease this to grow/shrink the ROI.</string>
-              </property>
-              <property name="value">
-               <number>40</number>
-              </property>
-             </widget>
-            </item>
            </layout>
-
+          </item>
+          <item>
+           <widget class="QLabel" name="ICPRegistrationMetricLabel">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
           </item>
           <item>
            <widget class="ctkCollapsibleButton" name="ManualRegistrationGroupBox">
@@ -567,6 +668,12 @@
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleGroupBox</class>
+   <extends>QGroupBox</extends>
+   <header>ctkCollapsibleGroupBox.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
