@@ -2387,37 +2387,41 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             meshroom_pipeline_names = openlifu_lz().nav.photoscan.get_meshroom_pipeline_names(),
             total_number_of_photos = total_number_of_photos,
         )
-        if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
+        
+        if photoscan_generation_options_dialog.exec_() != qt.QDialog.Accepted:
+            return
 
-            def progress_callback(progress_percent:int, step_description:str) -> None:
-                self.setPhotoscanGeneratorProgressDisplay(value = progress_percent, status_text = step_description)
-                slicer.app.processEvents()
+        def progress_callback(progress_percent:int, step_description:str) -> None:
+            self.setPhotoscanGeneratorProgressDisplay(value = progress_percent, status_text = step_description)
+            slicer.app.processEvents()
 
-            try:
-                photoscan_openlifu = self.logic.generate_photoscan(
-                    subject_id = subject_id,
-                    session_id = session_id,
-                    photocollection_reference_number = selected_reference_number,
-                    meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
-                    image_width = photoscan_generation_options_dialog.get_entered_image_width(),
-                    window_radius = 5 if photoscan_generation_options_dialog.get_sequential_checked() else None,
-                    image_selection_settings = photoscan_generation_options_dialog.get_image_selection_settings(),
-                    progress_callback = progress_callback,
-                )
-            except CalledProcessError as e:
-                slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
-                raise e
-            finally:
-                self.resetPhotoscanGeneratorProgressDisplay()
+        try:
+            photoscan_openlifu = self.logic.generate_photoscan(
+                subject_id = subject_id,
+                session_id = session_id,
+                photocollection_reference_number = selected_reference_number,
+                meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
+                image_width = photoscan_generation_options_dialog.get_entered_image_width(),
+                window_radius = 5 if photoscan_generation_options_dialog.get_sequential_checked() else None,
+                image_selection_settings = photoscan_generation_options_dialog.get_image_selection_settings(),
+                progress_callback = progress_callback,
+            )
+        except CalledProcessError as e:
+            slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
+            raise e
+        finally:
+            self.resetPhotoscanGeneratorProgressDisplay()
+
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
         self.updateWorkflowControls()
 
         # Preview the generated photoscan
-        slicer.app.processEvents() # Ensure the input options are updated
-        self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
-        self.onPreviewPhotoscanClicked(checked = True) 
+        if  photoscan_openlifu:
+            slicer.app.processEvents() # Ensure the input options are updated
+            self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
+            self.onPreviewPhotoscanClicked(checked = True) 
 
     def onPreviewPhotoscanClicked(self, checked = False):
 
