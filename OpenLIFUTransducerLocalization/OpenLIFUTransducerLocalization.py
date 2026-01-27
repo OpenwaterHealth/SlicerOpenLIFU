@@ -643,7 +643,12 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             fixed_landmarks = self.wizard().skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
         self.setupTransformNode()
         self.resetScalingTransform()
+        
+        # Reset ICP results and display
         self.ui.PVICPRegistrationMetricLabel.text = ""
+        if self.photoscan_roi_submesh is not None:
+            slicer.mrmlScene.RemoveNode(self.photoscan_roi_submesh)
+            self.photoscan_roi_submesh = None
 
         # self.updateTransformApprovalStatusLabel()
         self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
@@ -721,7 +726,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 num_landmarks = int(self.ui.samplingDensitySpinBox.value*max_landmarks/100)
 
 
-                self.photoscan_to_volume_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
+                self.photoscan_to_volume_icp_transform_node, icp_metric , num_iter = self.wizard()._logic.run_icp_model_registration(
                     input_fixed_model = self.wizard().skin_mesh_node,
                     input_moving_model = self.photoscan_roi_submesh,
                     numLandmarks =  num_landmarks,
@@ -730,7 +735,18 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                     mean_distance_mode = self.ui.SetDistanceModeRadioButton.isChecked(),
                     )
                 
-                self.ui.PVICPRegistrationMetricLabel.text = f"Mean Distance: {dist_metric:.5f} mm, Number of iterations: {num_iter}"
+                # Harden the photoscan_roi_submesh after ICP
+                self.photoscan_roi_submesh.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
+                self.photoscan_roi_submesh.HardenTransform()
+               
+                distance_map = self.wizard()._logic.compute_surface_distance(
+                    input_fixed_model = self.wizard().skin_mesh_node,
+                    input_moving_model = self.photoscan_roi_submesh) 
+                distance_array = distance_map.GetPointData().GetArray('Distance')
+                mean_distance = np.mean(distance_array) # can compute any statistic needed
+                # rms_distance = np.sqrt((np.square(distance_array).mean()))
+
+                self.ui.PVICPRegistrationMetricLabel.text = f"ICP  metric: {icp_metric:.5f} mm, Number of iterations: {num_iter}, Mean surface distance: {mean_distance:.5f} mm"
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
@@ -752,6 +768,31 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 if not self.ui.viewRoiSubmeshCheckbox.checked:
                     slicer.mrmlScene.RemoveNode(self.photoscan_roi_submesh)
                     self.photoscan_roi_submesh = None
+                else:
+
+                    self._display_distance_map(
+                        model = self.photoscan_roi_submesh,
+                        distance_map = distance_map
+                    )
+
+    def _display_distance_map(self, model: vtkMRMLModelNode, distance_map: vtk.vtkPolyData):
+        """ Displays the distance map on the given model node with a color legend. """
+
+        model.SetAndObservePolyData(distance_map)
+        display_node = model.GetDisplayNode()
+        display_node.SetScalarVisibility(True)
+        display_node.SetActiveScalarName('Distance')
+        display_node.SetAutoScalarRange(True) #Automatically adjust color range to the data
+        
+        # Color map and legend
+        color_node = slicer.util.getNode('Viridis')
+        display_node.SetAndObserveColorNodeID(color_node.GetID())
+        color_logic = slicer.modules.colors.logic()
+        colorLegendDisplayNode = color_logic.GetColorLegendDisplayNode(model)
+        if not colorLegendDisplayNode:
+            colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(model)
+        colorLegendDisplayNode.SetTitleText("Distance (mm)")
+        colorLegendDisplayNode.SetLabelFormat("%4.1f mm")
 
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
@@ -905,7 +946,13 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.transducer_to_volume_transform_node.CreateDefaultDisplayNodes()
         self.setupTransformNode()
         self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
+        
+        # Reset ICP results and display
         self.ui.TPICPRegistrationMetricLabel.text = ""
+        self._update_distance_map_visibility(
+                visible=False,
+                model = self.wizard().transducer_surface,
+            )
 
         # Enable approval and registration fine-tuning buttons
         self.ui.runICPRegistrationTP.enabled = True
@@ -964,24 +1011,42 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         transducer_hardened.HardenTransform()
  
         try:
-            max_landmarks = transducer_hardened.GetPolyData().GetNumberOfPoints()
-            num_landmarks = int(self.ui.samplingDensitySpinBoxTP.value*max_landmarks/100)
+            with BusyCursor():
+                max_landmarks = transducer_hardened.GetPolyData().GetNumberOfPoints()
+                num_landmarks = int(self.ui.samplingDensitySpinBoxTP.value*max_landmarks/100)
 
-            self.transducer_to_photoscan_icp_transform_node, dist_metric, num_iter = self.wizard()._logic.run_icp_model_registration(
-                input_fixed_model = photoscan_hardened,
-                input_moving_model = transducer_hardened,
-                transformType = 0,
-                numLandmarks =  num_landmarks,
-                numIterations = self.ui.maxNumOfIterationsSpinBoxTP.value,
-                maxMeanDistance = self.ui.maxMeanDistanceDoubleSpinBoxTP.value,
-                mean_distance_mode = self.ui.SetDistanceModeRadioButtonTP.isChecked(),
-            )
-            self.ui.TPICPRegistrationMetricLabel.text = f"Mean Distance: {dist_metric:.5f} mm, Number of iterations: {num_iter}"
+                self.transducer_to_photoscan_icp_transform_node, icp_metric , num_iter = self.wizard()._logic.run_icp_model_registration(
+                    input_fixed_model = photoscan_hardened,
+                    input_moving_model = transducer_hardened,
+                    transformType = 0,
+                    numLandmarks =  num_landmarks,
+                    numIterations = self.ui.maxNumOfIterationsSpinBoxTP.value,
+                    maxMeanDistance = self.ui.maxMeanDistanceDoubleSpinBoxTP.value,
+                    mean_distance_mode = self.ui.SetDistanceModeRadioButtonTP.isChecked(),
+                )
 
+                # Harden the photoscan_roi_submesh after ICP
+                transducer_hardened.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
+                transducer_hardened.HardenTransform()
+                
+                distance_map = self.wizard()._logic.compute_surface_distance(
+                    input_fixed_model = photoscan_hardened,
+                    input_moving_model = transducer_hardened) 
+                distance_array = distance_map.GetPointData().GetArray('Distance')
+                mean_distance = np.mean(distance_array) # Can return any other statistics as needed
+                # rms_distance = np.sqrt((np.square(distance_array).mean()))
+                
+                self._update_distance_map_visibility(
+                    visible=True,
+                    model = self.wizard().transducer_surface,
+                    distance_map = distance_map
+                )
 
-            self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
-            self.transducer_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
-            slicer.mrmlScene.RemoveNode(self.transducer_to_photoscan_icp_transform_node)
+                self.ui.TPICPRegistrationMetricLabel.text = f"ICP metric:{icp_metric:.5f} mm, Number of iterations: {num_iter}, Mean surface distance: {mean_distance:.5f} mm"
+
+                self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
+                self.transducer_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
+                slicer.mrmlScene.RemoveNode(self.transducer_to_photoscan_icp_transform_node)
 
         except Exception as e:
             slicer.util.errorDisplay('ICP failed. Check logs for details.')
@@ -991,6 +1056,38 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             # Remove hardened photoscan and transducer node 
             slicer.mrmlScene.RemoveNode(photoscan_hardened)
             slicer.mrmlScene.RemoveNode(transducer_hardened)
+    
+    def _update_distance_map_visibility(self, visible: bool, model: vtkMRMLModelNode, distance_map: Optional[vtk.vtkPolyData] = None):
+        """ Displays the distance map on the given model node with a color legend. """
+
+        if visible:
+            if distance_map is None:
+                raise ValueError("Distance map must be provided when setting visibility to True.")
+            # Display the distance map on the transducer surface
+            distance_array = distance_map.GetPointData().GetArray('Distance')
+            model.GetPolyData().GetPointData().AddArray(distance_array)
+            display_node = self.wizard().transducer_surface.GetDisplayNode()
+            display_node.SetScalarVisibility(True)
+            display_node.SetActiveScalarName('Distance')
+            display_node.SetAutoScalarRange(True) #Automatically adjust color range to the data
+            display_node.UpdateScalarRange()
+            display_node.Modified()
+            
+            color_node = slicer.util.getNode('Viridis')
+            display_node.SetAndObserveColorNodeID(color_node.GetID())
+            color_logic = slicer.modules.colors.logic()
+            colorLegendDisplayNode = color_logic.GetColorLegendDisplayNode(model)
+            if not colorLegendDisplayNode:
+                colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(model)
+            colorLegendDisplayNode.SetTitleText("Distance (mm)")
+            colorLegendDisplayNode.SetLabelFormat("%4.1f mm")
+        else:
+            display_node = model.GetDisplayNode()
+            display_node.SetScalarVisibility(False)
+            color_legend = slicer.modules.colors.logic().GetColorLegendDisplayNode(model)
+            if color_legend:
+                slicer.mrmlScene.RemoveNode(color_legend)
+
 
     def isComplete(self):
         """" Determines if the 'Next' button should be enabled"""
@@ -1271,6 +1368,12 @@ class TransducerTrackingWizard(qt.QWizard):
         self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
         self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
+        # Restore transducer surface display settings
+        self.transducerPhotoscanTrackingPage._update_distance_map_visibility(
+            visible = False,
+            model = self.transducer_surface
+        )
+
         self.clearWizardNodes()
         # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
         # This forced set of the interaction node is needed to solve that. 
@@ -1302,6 +1405,9 @@ class TransducerTrackingWizard(qt.QWizard):
             slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
 
         if self.photoscanVolumeTrackingPage.photoscan_roi_submesh is not None:
+            color_legend = slicer.modules.colors.logic().GetColorLegendDisplayNode(self.photoscanVolumeTrackingPage.photoscan_roi_submesh)
+            if color_legend:
+                slicer.mrmlScene.RemoveNode(color_legend)
             slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_roi_submesh)
 
         slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
@@ -2320,37 +2426,41 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             meshroom_pipeline_names = openlifu_lz().nav.photoscan.get_meshroom_pipeline_names(),
             total_number_of_photos = total_number_of_photos,
         )
-        if photoscan_generation_options_dialog.exec_() == qt.QDialog.Accepted:
+        
+        if photoscan_generation_options_dialog.exec_() != qt.QDialog.Accepted:
+            return
 
-            def progress_callback(progress_percent:int, step_description:str) -> None:
-                self.setPhotoscanGeneratorProgressDisplay(value = progress_percent, status_text = step_description)
-                slicer.app.processEvents()
+        def progress_callback(progress_percent:int, step_description:str) -> None:
+            self.setPhotoscanGeneratorProgressDisplay(value = progress_percent, status_text = step_description)
+            slicer.app.processEvents()
 
-            try:
-                photoscan_openlifu = self.logic.generate_photoscan(
-                    subject_id = subject_id,
-                    session_id = session_id,
-                    photocollection_reference_number = selected_reference_number,
-                    meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
-                    image_width = photoscan_generation_options_dialog.get_entered_image_width(),
-                    window_radius = 5 if photoscan_generation_options_dialog.get_sequential_checked() else None,
-                    image_selection_settings = photoscan_generation_options_dialog.get_image_selection_settings(),
-                    progress_callback = progress_callback,
-                )
-            except CalledProcessError as e:
-                slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
-                raise e
-            finally:
-                self.resetPhotoscanGeneratorProgressDisplay()
+        try:
+            photoscan_openlifu = self.logic.generate_photoscan(
+                subject_id = subject_id,
+                session_id = session_id,
+                photocollection_reference_number = selected_reference_number,
+                meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
+                image_width = photoscan_generation_options_dialog.get_entered_image_width(),
+                window_radius = 5 if photoscan_generation_options_dialog.get_sequential_checked() else None,
+                image_selection_settings = photoscan_generation_options_dialog.get_image_selection_settings(),
+                progress_callback = progress_callback,
+            )
+        except CalledProcessError as e:
+            slicer.util.errorDisplay("The underlying Meshroom process encountered an error.", "Meshroom error")
+            raise e
+        finally:
+            self.resetPhotoscanGeneratorProgressDisplay()
+
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
         self.updateWorkflowControls()
 
         # Preview the generated photoscan
-        slicer.app.processEvents() # Ensure the input options are updated
-        self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
-        self.onPreviewPhotoscanClicked(checked = True) 
+        if  photoscan_openlifu:
+            slicer.app.processEvents() # Ensure the input options are updated
+            self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
+            self.onPreviewPhotoscanClicked(checked = True) 
 
     def onPreviewPhotoscanClicked(self, checked = False):
 
@@ -3369,6 +3479,26 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         icp_result_node.SetNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), input_fixed_model.GetID())
         
         return icp_result_node, icp_dist_metric, icp_num_iterations
+
+    def compute_surface_distance(self,
+            input_fixed_model: vtkMRMLModelNode,
+            input_moving_model: vtkMRMLModelNode) -> vtk.vtkPolyData:
+        """
+        Calculates the unsigned distance from every point on the moving mesh (submesh) to a fixed reference mesh.
+        Args:
+            input_fixed_model (vtkMRMLModelNode): The fixed model to which the distance will be computed.
+            input_moving_model (vtkMRMLModelNode): The moving model from which distance will be comuted at every point.
+        Returns:
+            vtkPolyData: A copy of the moving mesh containing the 'Distance' scalar array.
+        """
+        distance_filter = vtk.vtkDistancePolyDataFilter()
+        distance_filter.SetInputData(0, input_moving_model.GetPolyData()) # smaller submesh
+        distance_filter.SetInputData(1, input_fixed_model.GetPolyData()) 
+        distance_filter.ComputeSecondDistanceOff() # don't want to compute distance from fixed to moving
+        distance_filter.SetSignedDistance(False) # don't need signed distance
+        distance_filter.Update()
+
+        return distance_filter.GetOutput()
 
     def add_transducer_tracking_result(
         self,
