@@ -496,12 +496,12 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             top_level_layout = qt.QVBoxLayout(self)
 
             # Create collapsible button and add it to the top level layout
-            collapsible = ctk.ctkCollapsibleButton()
-            collapsible.text = f"Parameters for {cls.__name__}" if collapsible_title is None else collapsible_title
-            top_level_layout.addWidget(collapsible)
+            self.collapsible = ctk.ctkCollapsibleButton()
+            self.collapsible.text = f"Parameters for {cls.__name__}" if collapsible_title is None else collapsible_title
+            top_level_layout.addWidget(self.collapsible)
 
             # collapsible (ctkCollapsibleButton) has a QVBoxLayout layout
-            collapsible_layout = qt.QVBoxLayout(collapsible)
+            collapsible_layout = qt.QVBoxLayout(self.collapsible)
 
             # Create the inner form widget and add it to the collapsible layout
             form_widget = qt.QWidget()
