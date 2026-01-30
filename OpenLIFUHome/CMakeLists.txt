@@ -26,6 +26,10 @@ if(BUILD_TESTING)
   # Note that the test will also be available at runtime.
   slicer_add_python_unittest(SCRIPT ${MODULE_NAME}.py)
 
+  set_tests_properties(py_${MODULE_NAME} PROPERTIES ENVIRONMENT 
+    "GDRIVE_CREDENTIALS_DATA=${DVC_GDRIVE_JSON_CONTENT};DVC_REPO_DIR=${DVC_REPO_DIR}"
+  )
+
   # Additional build-time testing
   add_subdirectory(Testing)
 endif()
