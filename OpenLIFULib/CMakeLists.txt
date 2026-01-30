@@ -29,8 +29,8 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/install_asset_dialog.py
 )
 
-set(MODULE_PYTHON_RESOURCES 
-  OpenLIFULib/Resources/python-requirements.txt
+set(MODULE_PYTHON_RESOURCES
+ OpenLIFULib/Resources/python-requirements.txt
   )
 
 #-----------------------------------------------------------------------------
