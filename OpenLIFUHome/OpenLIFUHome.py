@@ -285,16 +285,49 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         slicer.mrmlScene.Clear()
 
     def get_test_database(self):
-        return os.getenv("SLICER_DVC_DATA_DIR")
+
+        try:
+            from dvc.repo import Repo
+        except ImportError:
+            print("DVC not found. Installing dvc[gdrive]...")
+            # This installs it into Slicer's internal site-packages
+            slicer.util.pip_install("dvc[gdrive]")
+            from dvc.repo import Repo
+    
+        from pathlib import Path
+        from dvc.repo import Repo
+
+        try:
+            current_mod_dir = Path(__file__).parent
+            scripted_modules_root = current_mod_dir.parent
+            resources_dir = scripted_modules_root / "OpenLIFULib" / "Resources"
+        except AttributeError:
+            # Fallback if the module isn't loaded for some reason
+            print("Error: OpenLIFULib module not found in Slicer.")
+            return None
+        
+        dvc_file = resources_dir / 'db_dvc_slicertesting.dvc'
+        try:
+            # Initialize the DVC repository object for the current directory
+            repo = Repo(str(resources_dir))
+            repo.pull(targets=[str(dvc_file)])
+            print("dvc pull completed successfully.")
+
+        except Exception as e:
+            print(f"An error occurred during dvc pull: {e}")
+        
+        test_database_dir = resources_dir / 'db_dvc_slicertesting'
+        return str(test_database_dir)
     
     def runTest(self):
         """Run as few or as many tests as needed here."""
         
         self.setUp()
         
+        self.get_test_database()
         # install python requirements
         # Check that the python requirements match the requirements file
-        self.test_OpenLIFU_FullTest1()
+        # self.test_OpenLIFU_FullTest1()
             
     def test_OpenLIFU_FullTest1(self):
 

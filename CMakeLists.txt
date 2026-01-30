@@ -33,27 +33,3 @@ add_subdirectory(OpenLIFULogin)
 #-----------------------------------------------------------------------------
 include(${Slicer_EXTENSION_GENERATE_CONFIG})
 include(${Slicer_EXTENSION_CPACK})
-
-#-----------------------------------------------------------------------------
-# Download test data from dvc
-if(BUILD_TESTING)
-    set(DATA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/")
-    set(DATA_BIN "${CMAKE_CURRENT_BINARY_DIR}/")
-
-    # Create a custom target to pull dvc data during the build phase
-    add_custom_target(dvc_pull_data ALL
-        COMMAND ${DVC_EXE} pull
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "DVC: Pulling test data from Google Drive..."
-        VERBATIM
-    )
-
-    # This uses 'cmake -E copy_directory' which is platform-independent
-    add_custom_target(dvc_copy_data ALL
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${DATA_SRC}/db_dvc_slicertesting ${DATA_BIN}/db_dvc_slicertesting
-        DEPENDS dvc_pull_data
-        COMMENT "Syncing test data from source to build directory..."
-        VERBATIM
-    )
-
-endif()
