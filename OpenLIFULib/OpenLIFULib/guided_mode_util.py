@@ -100,14 +100,9 @@ class WorkflowControls(qt.QWidget):
         self.next_button = qt.QPushButton("Next")
         button_row1_layout.addWidget(self.next_button)
         self.next_button.clicked.connect(self.on_next)
-        self.jump_ahead_button = qt.QPushButton(">>")
-        button_row1_layout.addWidget(self.jump_ahead_button)
-        self.jump_ahead_button.clicked.connect(self.on_jump_ahead)
-        self.jump_ahead_button.setToolTip("Jump ahead to the nearest unfinished step of the workflow")
 
         if self.next_module_name is None:
             self.next_button.enabled = False
-            self.jump_ahead_button.enabled = False
 
         # Add session controls
 
@@ -135,10 +130,6 @@ class WorkflowControls(qt.QWidget):
 
     def on_back(self):
         slicer.util.selectModule(self.previous_module_name)
-    
-    def on_jump_ahead(self, clicked:bool):
-        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
-        home_module_logic.workflow_jump_ahead()
 
     @display_errors
     def on_save(self, clicked:bool):
