@@ -272,6 +272,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
         replace_widget(self.ui.virtualFitOptionsDefinitionWidgetPlaceholder, self.virtual_fit_options_definition_widget, self.ui)
+        self.virtual_fit_options_definition_widget.collapsible.collapsed = True  # start collapsed
 
         # === Connections and UI setup =======
 
