@@ -902,10 +902,27 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
+    def _workflow_planning(self):
 
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
+        from unittest import mock
+        
+        slicer.util.selectModule("OpenLIFUSonicationPlanner")
+        sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
+        sp_logic = sp_widget.logic 
+ 
+
+        activeData = sp_widget.algorithm_input_widget.get_current_data()
+        selected_target = activeData["Target"]
+        selected_transducer = activeData["Transducer"]
+
+        sp_widget.onComputeSolutionClicked(True)
+        assert get_openlifu_data_parameter_node().loaded_solution is not None
+    
+        # Test that moving the target clears the solution
+        curr_pos =  selected_target.GetNthControlPointPositionWorld(0)
+
+        selected_target.SetNthControlPointPositionWorld(0, (curr_pos[0], curr_pos[1], curr_pos[2]+0.1)) # this should clear the results
+        slicer.app.processEvents()
+        assert get_openlifu_data_parameter_node().loaded_solution is None
+
+        # Can add test that Moving transducer clears solution

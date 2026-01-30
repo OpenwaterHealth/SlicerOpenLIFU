@@ -1244,10 +1244,41 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
+    def _workflow_virtual_fit(self):
+        """Test running virtual fit and approving results."""
 
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
+        slicer.util.selectModule("OpenLIFUPrePlanning")
+        preplanning_widget = slicer.modules.OpenLIFUPrePlanningWidget
+        preplanning_logic = preplanning_widget.logic
+
+        # Get the example target loaded in the scene
+        example_target = get_target_candidates()[0]
+        target_id = fiducial_to_openlifu_point_id(example_target)
+        curr_pos = example_target.GetNthControlPointPositionWorld(0)
+
+        # Validate session and run virtual fit
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        assert session_id is not None
+        preplanning_widget.create_virtual_fit_result(auto_fit = True)
+
+        # Confirm that virtual fit result exists
+        vf_nodes = list(get_virtual_fit_result_nodes(target_id, session_id))
+        assert len(vf_nodes) == 10
+
+        assert get_approval_from_virtual_fit_result_node(vf_nodes[0]) is False
+        preplanning_logic.toggle_virtual_fit_approval(vf_nodes[0])
+        assert get_approval_from_virtual_fit_result_node(vf_nodes[0]) is True
+
+        approved_targets = preplanning_logic.get_approved_target_ids() 
+        assert len(approved_targets) == 1
+        assert approved_targets[0] == target_id
+
+        # Change target position
+        example_target.SetNthControlPointPositionWorld(0, (curr_pos[0], curr_pos[1], curr_pos[2]+0.1)) # this should clear the results
+        slicer.app.processEvents()
+        assert list(get_virtual_fit_result_nodes(target_id, session_id)) == []
+
+        preplanning_widget.create_virtual_fit_result(auto_fit = False)
+        vf_nodes = list(get_virtual_fit_result_nodes(target_id, session_id))
+        assert len(vf_nodes) == 1

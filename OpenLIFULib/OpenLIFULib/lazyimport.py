@@ -92,7 +92,11 @@ def check_and_install_kwave_binaries() -> bool:
 def openlifu_lz() -> "openlifu":
     """Import openlifu and return the module, checking that it is installed along the way."""
     if "openlifu" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
+        # In testing mode, automatically install missing requirements without prompting
+        if slicer.app.testingEnabled() and not python_requirements_exist():
+            install_python_requirements()
+        else:
+            check_and_install_python_requirements(prompt_if_found=False)
 
         with BusyCursor():
             import openlifu

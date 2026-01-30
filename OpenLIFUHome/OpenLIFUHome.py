@@ -1,6 +1,7 @@
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
 
+import os
 # Third-party imports
 import vtk
 
@@ -283,6 +284,104 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         """Do whatever is needed to reset the state - typically a scene clear will be enough."""
         slicer.mrmlScene.Clear()
 
+    def _ensure_dvc_gdrive_support(self):
+        
+        import importlib.util
+
+        # Check if dvc is installed with gdrive support
+        dvc_installed = importlib.util.find_spec("dvc") is not None
+        gdrive_installed = importlib.util.find_spec("pydrive2") is not None
+
+        if not dvc_installed or not gdrive_installed:
+            slicer.util.pip_install("dvc[gdrive]")
+
+    def get_test_database(self):
+        """
+        Downloads the test database from Google Drive via DVC.
+    
+        Setup Requirements:
+            - DVC with Google Drive support must be installed in the Slicer environment.
+            - The path to a Service Account JSON key must be provided via the 
+            DVC_GDRIVE_KEY_PATH CMake variable during configuration.
+        
+        Authentication Flow:
+            At configuration time, CMake reads the key file's content into the 
+            GDRIVE_CREDENTIALS_DATA environment variable. This allows DVC to 
+            authenticate headlessly during runtime without requiring a manual browser login.
+        """
+
+        self._ensure_dvc_gdrive_support()
+        import os
+        from pathlib import Path
+        from dvc.repo import Repo
+
+        dvc_repo_path = os.environ.get('DVC_REPO_DIR')
+        if not dvc_repo_path:
+            raise EnvironmentError("DVC_REPO_DIR environment variable is not set." )
+    
+        dvc_repo_path = Path(dvc_repo_path)
+        dvc_file = dvc_repo_path / 'db_dvc_slicertesting.dvc'
+        dvc_config_file = dvc_repo_path / '.dvc' / 'config'
+        
+        assert dvc_config_file.exists() and dvc_file.exists(), f"DVC file not found at expected location: {dvc_file}"
+
+        try: 
+            import os
+            creds = os.environ.get('GDRIVE_CREDENTIALS_DATA')
+            if not creds:
+                raise EnvironmentError("GDRIVE_CREDENTIALS_DATA environment variable is not set." \
+                " DVC cannot authenticate with Google Drive.")
+            # Point to directory containing .dvc files
+            # unitialized=True allows working in a directory that is not a git repo
+            repo = Repo(str(dvc_repo_path), uninitialized=True)
+            repo.pull(targets=[str(dvc_file)])
+        except Exception as e:
+            print(f"An error occurred during dvc pull: {e}")
+        
+        return str(dvc_repo_path / 'db_dvc_slicertesting')
+    
     def runTest(self):
         """Run as few or as many tests as needed here."""
+        
+        from OpenLIFULib.lazyimport import python_requirements_exist, install_python_requirements
+        
+        if not python_requirements_exist():
+            install_python_requirements()
+
         self.setUp()
+        
+        # Download test database using dvc
+        db_path = self.get_test_database()
+
+        self._OpenLIFU_FullTest1(db_path = db_path)
+            
+    def _OpenLIFU_FullTest1(self, db_path:str) -> None:
+
+        from OpenLIFUDatabase import OpenLIFUDatabaseTest
+        dbt = OpenLIFUDatabaseTest()
+        dbt.connect_database(database_dir = db_path)
+
+        from OpenLIFUData import OpenLIFUDataTest
+        dt = OpenLIFUDataTest()
+        dt.load_subject_session()
+
+        from OpenLIFUPrePlanning import OpenLIFUPrePlanningTest
+        pt = OpenLIFUPrePlanningTest()
+        pt._workflow_virtual_fit()
+
+        from OpenLIFUTransducerLocalization import OpenLIFUTransducerLocalizationTest
+        tlt = OpenLIFUTransducerLocalizationTest()
+        tlt._workflow_localization()
+
+        from OpenLIFUSonicationPlanner import OpenLIFUSonicationPlannerTest
+        spt = OpenLIFUSonicationPlannerTest()
+        spt._workflow_planning()
+
+        from OpenLIFUSonicationControl import OpenLIFUSonicationControlTest
+        sct = OpenLIFUSonicationControlTest()
+        sct._workflow_sonication_control()
+
+
+
+        
+
