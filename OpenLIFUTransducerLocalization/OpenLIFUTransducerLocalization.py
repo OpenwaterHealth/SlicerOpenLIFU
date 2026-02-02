@@ -743,10 +743,16 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                     input_fixed_model = self.wizard().skin_mesh_node,
                     input_moving_model = self.photoscan_roi_submesh) 
                 distance_array = distance_map.GetPointData().GetArray('Distance')
-                mean_distance = np.mean(distance_array) # can compute any statistic needed
+                mean_distance = np.mean(distance_array) 
+                max_distance = np.max(distance_array)
                 # rms_distance = np.sqrt((np.square(distance_array).mean()))
 
-                self.ui.PVICPRegistrationMetricLabel.text = f"ICP  metric: {icp_metric:.5f} mm, Number of iterations: {num_iter}, Mean surface distance: {mean_distance:.5f} mm"
+                self.ui.PVICPRegistrationMetricLabel.text = (
+                    f"ICP  metric: {icp_metric:.5f} mm, "
+                    f"Iterations: {num_iter}, "
+                    f"Mean distance: {mean_distance:.5f} mm, "
+                    f"Max distance: {max_distance:.5f} mm  "
+                )
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
                 self.photoscan_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
@@ -1033,7 +1039,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                     input_fixed_model = photoscan_hardened,
                     input_moving_model = transducer_hardened) 
                 distance_array = distance_map.GetPointData().GetArray('Distance')
-                mean_distance = np.mean(distance_array) # Can return any other statistics as needed
+                mean_distance = np.mean(distance_array)
+                max_distance = np.max(distance_array)
                 # rms_distance = np.sqrt((np.square(distance_array).mean()))
                 
                 self._update_distance_map_visibility(
@@ -1042,7 +1049,12 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                     distance_map = distance_map
                 )
 
-                self.ui.TPICPRegistrationMetricLabel.text = f"ICP metric:{icp_metric:.5f} mm, Number of iterations: {num_iter}, Mean surface distance: {mean_distance:.5f} mm"
+                self.ui.TPICPRegistrationMetricLabel.text = (
+                    f"ICP  metric: {icp_metric:.5f} mm, "
+                    f"Iterations: {num_iter}, "
+                    f"Mean distance: {mean_distance:.5f} mm, "
+                    f"Max distance: {max_distance:.5f} mm  "
+                )
 
                 self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
                 self.transducer_to_volume_transform_node.HardenTransform() # Combine ICP and initialization transform
