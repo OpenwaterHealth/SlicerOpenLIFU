@@ -324,6 +324,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             return
 
         pnp_volume_node: "vtkMRMLScalarVolumeNode" = self.logic.get_pnp()
+        if not pnp_volume_node:
+            return
+        
         max_pnp_in_array = pnp_volume_node.GetImageData().GetPointData().GetScalars().GetRange()[1]
     
         # If all checks passed, enable the UI elements.
@@ -904,13 +907,13 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
 
     def _workflow_planning(self):
 
-        from unittest import mock
+        import numpy as np
+        from scipy.linalg import expm
         
         slicer.util.selectModule("OpenLIFUSonicationPlanner")
         sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
         sp_logic = sp_widget.logic 
  
-
         activeData = sp_widget.algorithm_input_widget.get_current_data()
         selected_target = activeData["Target"]
         selected_transducer = activeData["Transducer"]
@@ -925,4 +928,27 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
         slicer.app.processEvents()
         assert get_openlifu_data_parameter_node().loaded_solution is None
 
-        # Can add test that Moving transducer clears solution
+        # Test that moving the transducer clears the solution
+        solution, analysis = sp_logic.computeSolution(
+            activeData["Volume"], activeData["Target"],
+            activeData["Transducer"], activeData["Protocol"]
+            )
+        assert get_openlifu_data_parameter_node().loaded_solution is not None
+
+        def make_random_matrix() -> np.ndarray:
+            rng = np.random.default_rng()
+            affine = np.eye(4)
+            affine[:3,:3] = expm((lambda A: (A - A.T)/2)(rng.normal(size=(3,3)))) # generate a random orthogonal matrix
+            affine[:3,3] = rng.random(3) # generate a random origin
+            return affine
+
+        selected_transducer.update_transform(make_random_matrix())
+        slicer.app.processEvents()
+        assert get_openlifu_data_parameter_node().loaded_solution is None
+
+        # Sonication control requires a loaded solution. Instead of
+        # re-computing the solution, we store and re-set the loaded solution here
+        # Create new solution ID to avoid database conflict
+        solution.solution.solution.id = "TestSolutionID"
+        slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
+        sp_logic.getParameterNode().solution_analysis = analysis
