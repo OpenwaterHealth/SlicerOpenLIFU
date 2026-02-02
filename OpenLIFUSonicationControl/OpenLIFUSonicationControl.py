@@ -985,7 +985,6 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
             'note': 'example notes for testing',
         }
 
-        # Fails since there is no loaded solution
-        # sc_logic.create_openlifu_run(test_run_parameters)
-
-        # assert get_openlifu_data_parameter_node().loaded_run is not None
+        # Create a run
+        sc_logic.create_openlifu_run(test_run_parameters)
+        assert get_openlifu_data_parameter_node().loaded_run is not None
