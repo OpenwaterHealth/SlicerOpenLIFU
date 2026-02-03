@@ -438,7 +438,6 @@ class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
 
         from OpenLIFULib import get_cur_db
 
-        # dvc_dir = r"C:\Users\sadhana.ravikumar\Documents\1_KitwareProjects\OpenWater\db_dvc_slicertesting"
         slicer.util.selectModule("OpenLIFUDatabase")
         dbw = slicer.modules.OpenLIFUDatabaseWidget
         dbw.ui.databaseDirectoryLineEdit.currentPath = database_dir

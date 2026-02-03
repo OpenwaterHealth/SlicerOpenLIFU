@@ -1,7 +1,6 @@
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
 
-import os
 # Third-party imports
 import vtk
 
@@ -326,7 +325,6 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         assert dvc_config_file.exists() and dvc_file.exists(), f"DVC file not found at expected location: {dvc_file}"
 
         try: 
-            import os
             creds = os.environ.get('GDRIVE_CREDENTIALS_DATA')
             if not creds:
                 raise EnvironmentError("GDRIVE_CREDENTIALS_DATA environment variable is not set." \
@@ -380,8 +378,3 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         from OpenLIFUSonicationControl import OpenLIFUSonicationControlTest
         sct = OpenLIFUSonicationControlTest()
         sct._workflow_sonication_control()
-
-
-
-        
-
