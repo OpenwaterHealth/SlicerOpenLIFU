@@ -133,7 +133,7 @@ class SlicerOpenLIFUTransducer:
         current_transform = slicer.util.arrayFromVTKMatrix(current_transform_vtk)
 
         # Get the converstions back and forth between LPS-with-transducer-units and RAS-with-mm
-        openlifu2slicer_matrix = create_openlifu2slicer_matrix(self.transducer.transducer)
+        openlifu2slicer_matrix = create_openlifu2slicer_matrix(transform_matrix_units)
         slicer2openlifu_matrix = np.linalg.inv(openlifu2slicer_matrix)
 
         # Compute the new transform by postcomposing the new transform with the current transform
