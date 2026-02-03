@@ -526,7 +526,7 @@ class LoadSubjectDialog(qt.QDialog):
 class LoadSessionDialog(qt.QDialog):
     """ Interface for managing and selecting a session for a given subject """
 
-    def __init__(self, db: "openlifu.db.Database", subject_id: str, parent="mainWindow"):
+    def __init__(self, db: "openlifu.db.Database", subject_id: str, loaded_session_id: Optional[str] = None, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         subject = db.load_subject(subject_id)
 
@@ -537,6 +537,7 @@ class LoadSessionDialog(qt.QDialog):
         self.subject_id = subject_id
         self.subject = subject
         self.selected_session = None
+        self.loaded_session_id = loaded_session_id
 
         self.setup()
 
@@ -584,8 +585,10 @@ class LoadSessionDialog(qt.QDialog):
         self.new_session_button.setToolTip("Create a new session for this subject")
         self.load_session_button = qt.QPushButton("Load Session")
         self.load_session_button.setToolTip("Load the currently selected session")
+        self.delete_session_button = qt.QPushButton("Delete Session")
+        self.delete_session_button.setToolTip("Delete the currently selected session")
 
-        for button in [self.new_session_button, self.load_session_button]:
+        for button in [self.new_session_button, self.load_session_button, self.delete_session_button]:
             button.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
             subject_buttons_layout.addWidget(button)
 
@@ -595,6 +598,7 @@ class LoadSessionDialog(qt.QDialog):
         self.load_session_button.clicked.connect(self.on_load_session_clicked)
         self.table_widget.doubleClicked.connect(self.on_load_session_clicked)
         self.table_widget.clicked.connect(lambda: self.load_session_button.setFocus())
+        self.delete_session_button.clicked.connect(self.on_delete_session_clicked)
 
         # ---- Cancel Button ----
         self.button_box = qt.QDialogButtonBox()
@@ -755,6 +759,56 @@ class LoadSessionDialog(qt.QDialog):
 
         self.selected_session = session
         self.accept()
+
+    @display_errors
+    def on_delete_session_clicked(self, *args) -> None:
+        """
+        Delete the selected session into the OpenLIFUData module if the user has permission.
+        """
+        selected_items = self.table_widget.selectedItems()
+        if not selected_items:
+            slicer.util.errorDisplay("Please select a session to delete.")
+            return
+
+        row = selected_items[0].row()
+        session_name_item = self.table_widget.item(row, 0)  # Column 1 is Session name
+        session_name = session_name_item.text()
+        session_id_item = self.table_widget.item(row, 1)  # Column 1 is Session ID
+        session_id = session_id_item.text()
+
+        # ---- Prevent deleting sessions if it is the currently loaded session ----
+        if session_id == self.loaded_session_id:
+            slicer.util.errorDisplay(
+                    f"Cannot delete session '{session_name}' ({session_id}) because it is "
+                    "active. Exit the currently loaded session before deleting."
+                    )
+            return
+
+        # ---- Prevent deleting sessions with unallowed protocols ----
+        if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
+            pass  # No enforcement needed
+        else:
+            session = self.db.load_session(self.subject, session_id)
+            protocol = self.db.load_protocol(session.protocol_id)
+
+            if not any(role in protocol.allowed_roles for role in get_current_user().roles):
+                slicer.util.errorDisplay(
+                    f"Could not delete the session '{session.name}' ({session_id}) because it uses a protocol "
+                    f"that does not allow any of the logged-in user's roles."
+                )
+                return
+
+        # -----------------------------------------------------------
+        # Add an additional layer of confirmation
+        if slicer.util.confirmYesNoDisplay(
+                text=f"Are you sure you want to delete this session? This action cannot be undone.",
+                windowTitle="Delete session?",
+            ):
+                self.db.delete_session(self.subject.id, session_id)
+
+                # Update session dialog
+                self.table_widget.removeRow(row)
+                self.table_widget.resizeRowsToContents()
 
     def exec_and_get_session(self) -> Optional["openlifu.db.session.Session"]:
         """
@@ -1125,7 +1179,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     @display_errors
     def on_load_session_clicked(self, checked:bool) -> bool:
-        load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
+
+        loaded_session = self._parameterNode.loaded_session if self._parameterNode else None
+        if loaded_session is None:
+            loaded_session_id = None
+        else:
+            loaded_session_id = loaded_session.get_session_id()
+        
+        load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id, loaded_session_id= loaded_session_id)
         new_session = load_session_dlg.exec_and_get_session()
 
         if not new_session:
