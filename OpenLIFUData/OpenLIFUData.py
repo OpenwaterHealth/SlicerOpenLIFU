@@ -771,7 +771,7 @@ class LoadSessionDialog(qt.QDialog):
             return
 
         row = selected_items[0].row()
-        session_name_item = self.table_widget.item(row, 0)  # Column 1 is Session name
+        session_name_item = self.table_widget.item(row, 0)  # Column 0 is Session name
         session_name = session_name_item.text()
         session_id_item = self.table_widget.item(row, 1)  # Column 1 is Session ID
         session_id = session_id_item.text()
@@ -801,14 +801,14 @@ class LoadSessionDialog(qt.QDialog):
         # -----------------------------------------------------------
         # Add an additional layer of confirmation
         if slicer.util.confirmYesNoDisplay(
-                text=f"Are you sure you want to delete this session? This action cannot be undone.",
-                windowTitle="Delete session?",
-            ):
-                self.db.delete_session(self.subject.id, session_id)
+            text="Are you sure you want to delete this session? This action cannot be undone.",
+            windowTitle="Delete session?",
+        ):
+            self.db.delete_session(self.subject.id, session_id)
 
-                # Update session dialog
-                self.table_widget.removeRow(row)
-                self.table_widget.resizeRowsToContents()
+            # Update session dialog
+            self.table_widget.removeRow(row)
+            self.table_widget.resizeRowsToContents()
 
     def exec_and_get_session(self) -> Optional["openlifu.db.session.Session"]:
         """
