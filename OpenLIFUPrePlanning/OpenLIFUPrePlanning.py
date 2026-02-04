@@ -634,7 +634,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             for target_id in approved_target_ids:
                 # Get the virtual fit results
                 approved_results = self.logic.find_approved_virtual_fit_results_for_target(target_id)
-                approved_results_names = [node.GetName() for node in approved_results]
+                approved_results_names = [node.GetAttribute("DisplayName") for node in approved_results]
 
                 if not approved_results:
                     raise RuntimeError("Target cannot be approved without any approved virtual fit result nodes")
@@ -710,7 +710,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             
             for row_idx, result in enumerate(vf_results):
 
-                result_item = qt.QTableWidgetItem(result.GetName())
+                result_item = qt.QTableWidgetItem(result.GetAttribute("DisplayName"))
                 self.ui.virtualFitResultTable.setItem(row_idx, 0, result_item)
                 result_item.setData(qt.Qt.UserRole, result)
 
@@ -747,7 +747,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """ Selects the row associated with the given transform node in the results table.
         If different to the current selection, this updates the transducer position."""
 
-        selected_item = self.ui.virtualFitResultTable.findItems(node.GetName(), qt.Qt.MatchExactly)
+        selected_item = self.ui.virtualFitResultTable.findItems(node.GetAttribute("DisplayName"), qt.Qt.MatchExactly)
         if not selected_item:
             raise RuntimeError("Cannot find the given node in the virtual fit results table")
         self.ui.virtualFitResultTable.selectRow(selected_item[0].row())
