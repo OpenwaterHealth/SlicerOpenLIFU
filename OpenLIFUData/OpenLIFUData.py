@@ -826,10 +826,12 @@ class LoadSessionDialog(qt.QDialog):
         enforce_user_permissions uniquely. It follows the same pattern as OpenLIFULogin.
         """
         _enforced_buttons = [
-            self.new_session_button
+            self.new_session_button,
+            self.delete_session_button,
         ]
         _tooltips = [
-            "Create a new session for this subject"
+            "Create a new session for this subject",
+            "Delete the currently selected session",
         ]
 
         # Don't enforce if no user account mode
