@@ -2792,7 +2792,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if selected_target:
             status += f"Selected Target: {fiducial_to_openlifu_point_id(selected_target)}"
             if vf_result_for_tracking:
-                status += f"\nVirtual Fit: {vf_result_for_tracking.GetName()}"
+                status += f"\nVirtual Fit: {vf_result_for_tracking.GetAttribute("DisplayName")}"
                 vf_is_approved = get_approval_from_virtual_fit_result_node(vf_result_for_tracking)
                 if vf_is_approved:
                     self.ui.approvalWarningLabel.styleSheet = "color:green;"
