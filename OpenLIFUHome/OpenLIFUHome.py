@@ -1,7 +1,9 @@
 # Standard library imports
 from typing import Optional, TYPE_CHECKING
+import os
 
 # Third-party imports
+import qt
 import vtk
 
 # Slicer imports
@@ -13,9 +15,10 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
-from OpenLIFULib import (
-    get_openlifu_data_parameter_node,
+from OpenLIFULib.util import (
+    get_openlifu_login_parameter_node,
 )
+from OpenLIFULib.user_account_mode_util import get_online_mode_state
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 from OpenLIFULib.lazyimport import (
     check_and_install_python_requirements,
@@ -75,6 +78,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
+        self._parameterNodeLoginNode = None
         self._parameterNodeGuiTag = None
 
     def setup(self) -> None:
@@ -95,7 +99,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUHomeLogic()
-
+        self.setupCloudSyncToolBar()
         # === Connections and UI setup =======
 
         # These connections ensure that we update parameter node when scene is closed
@@ -103,6 +107,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+        
+        self._parameterNodeLoginNode = get_openlifu_login_parameter_node()
+        self.addObserver(self._parameterNodeLoginNode, vtk.vtkCommand.ModifiedEvent, self.onActiveUserChanged)
 
         # Buttons
         self.ui.installPythonReqsButton.connect("clicked()", self.onInstallPythonRequirements)
@@ -119,7 +126,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
         self.ui.protocolConfigPushButton.clicked.connect(lambda : self.switchModule(self.ui.protocolConfigPushButton.text))
-
+    
     def switchModule(self, moduleButtonText: str) -> None:
         moduleButtonText = moduleButtonText.replace(" ", "")
         moduleButtonText = moduleButtonText.replace("-", "")
@@ -147,9 +154,71 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         check_and_install_python_requirements(prompt_if_found=True)
         self.updateInstallButtonText()
 
+    def setupCloudSyncToolBar(self):
+        mw = slicer.util.mainWindow()
+        try:
+            self.openLIFUToolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
+        except:
+            self.openLIFUToolBar = None
+        if not self.openLIFUToolBar:
+            self.openLIFUToolBar = qt.QToolBar("CloudSync Toolbar")
+            self.openLIFUToolBar.setObjectName("CloudSyncToolBar")
+            mw.addToolBar(self.openLIFUToolBar)
+
+        self.syncAction = self.openLIFUToolBar.findChild(qt.QAction, "OpenLIFUToolbarSyncAction")
+
+        if not self.syncAction:
+            self.syncAction = qt.QAction("Sync Cloud", self.openLIFUToolBar)
+            self.syncAction.setObjectName("OpenLIFUToolbarSyncAction")
+
+            moduleDir = os.path.dirname(__file__)
+            iconPath = os.path.join(moduleDir, 'Resources', 'Icons','sync.png')
+            self.syncAction.setIcon(qt.QIcon(iconPath))
+
+            self.openLIFUToolBar.addAction(self.syncAction)
+            #self.syncAction.triggered.connect(self.onSyncClicked)
+
+            self.syncAction.triggered.connect(self.onToolbarSyncTriggered)
+
+        # self.syncAction.setEnabled(False)
+        
+    def onToolbarSyncTriggered(self):
+        print('here')
+        # 1. Save current module for the 'Back' button
+        current_mod = slicer.util.moduleSelector().selectedModule
+        if current_mod != "OpenLIFUCloudSync":
+            slicer.util.mainWindow().setProperty("OpenLIFU_PreviousModule", current_mod)
+
+        # 2. Switch to the new independent module
+        slicer.util.selectModule("OpenLIFUCloudSync")
+    
+    def onActiveUserChanged(self, caller, event) -> None:
+        state = get_online_mode_state()
+        print(f"Setting sync button enabled state to {state}")
+        if self.syncAction:
+            self.syncAction.setEnabled(state)
+            self.openLIFUToolBar.update()
+
+    def onSyncClicked(self):
+        """Handler for when the toolbar button is pressed."""
+        try:            
+            slicer.util.getModuleLogic("OpenLIFUDatabase").performSync()
+            slicer.util.infoDisplay("Synchronization completed successfully.")
+        except Exception as e:
+            slicer.util.errorDisplay(f"Sync failed: {str(e)}")
+        finally:
+            qt.QApplication.restoreOverrideCursor()
+
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
+
+        mw = slicer.util.mainWindow()
+        # Find and remove the entire toolbar
+        toolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
+        if toolBar:
+            mw.removeToolBar(toolBar)
+            toolBar.deleteLater()
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
@@ -195,7 +264,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
-
+        
     def onGuidedModeClicked(self):
         new_guided_mode_state = not self._parameterNode.guided_mode
         if new_guided_mode_state:
@@ -225,6 +294,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Update whether transducer localization is enabled/disabled based on guided_mode state
         transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerLocalization').widgetRepresentation()
         transducer_tracking_widget.self().checkCanRunTracking()
+
+
 
 
 #

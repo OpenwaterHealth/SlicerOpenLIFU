@@ -2,6 +2,8 @@
 import json
 from enum import Enum
 from typing import Optional, List, Dict, Callable, TYPE_CHECKING
+import time
+import requests
 
 # Third-party imports
 import qt
@@ -84,7 +86,7 @@ class LoginState(Enum):
 
 @parameterNodeWrapper
 class OpenLIFULoginParameterNode:
-    user_account_mode : bool
+    user_account_mode : bool = False
     
 #
 # OpenLIFULoginDialogs
@@ -947,6 +949,9 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
+        self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
+        self._cloudTokens = None # Stores {idToken, refreshToken, expiresAt}
+        self._userId = None
 
         self._active_user: "openlifu.db.User" = openlifu_lz().db.User(
                 id = "anonymous", 
@@ -985,6 +990,9 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
 
+    def start_online_mode(self):
+        set_online_mode_state(True)
+
     def add_user_to_database(self, user_parameters: Dict[str, str]) -> None:
         """ Add user to selected subject/session in the loaded openlifu database
         Args:
@@ -1000,3 +1008,60 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
         newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
         get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+
+
+    def cloudLogin(self, email, password):
+        """Authenticates with Google Identity Platform."""
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
+        payload = {"email": email, "password": password, "returnSecureToken": True}
+        
+        try:
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            self._cloudTokens = {
+                "idToken": data['idToken'],
+                "refreshToken": data['refreshToken'],
+                "expiresAt": time.time() + int(data['expiresIn'])
+            }
+            self._userId = data['localId']
+            qt.QSettings().setValue("OpenLIFU/CloudRefreshToken", data['refreshToken'])
+            return True
+        except Exception as e:
+            return False
+
+    def getValidToken(self):
+        """Returns a valid idToken, automatically refreshing if expired."""
+        if not self._cloudTokens:
+            savedRef = qt.QSettings().value("OpenLIFU/CloudRefreshToken")
+            if not savedRef:
+                return None
+            self._cloudTokens = {"refreshToken": savedRef, "expiresAt": 0}
+
+        # Refresh if token expires in less than 5 minutes
+        if time.time() > (self._cloudTokens.get("expiresAt", 0) - 300):
+            self.refreshCloudToken()
+            
+        return self._cloudTokens.get("idToken")
+
+    def getUserId(self):
+        return self._userId
+
+    def refreshCloudToken(self):
+        """Refreshes the ID Token using the stored Refresh Token."""
+        url = f"https://securetoken.googleapis.com/v1/token?key={self.apiKey}"
+        payload = {"grant_type": "refresh_token", "refresh_token": self._cloudTokens['refreshToken']}
+        
+        try:
+            response = requests.post(url, data=payload)
+            response.raise_for_status()
+            data = response.json()
+            self._cloudTokens["idToken"] = data['id_token']
+            self._cloudTokens["expiresAt"] = time.time() + int(data['expires_in'])
+            if 'refresh_token' in data:
+                self._cloudTokens["refreshToken"] = data['refresh_token']
+                qt.QSettings().setValue("OpenLIFU/CloudRefreshToken", data['refresh_token'])
+        except Exception as e:
+            print(f"Token refresh failed: {e}")
+            self._cloudTokens = None
+
