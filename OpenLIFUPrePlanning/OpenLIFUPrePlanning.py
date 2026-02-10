@@ -1144,7 +1144,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
         vf_result_nodes = []
 
-        for i,vf_transform in zip(range(10), vf_transforms): # We only add the top 10 virtual fit nodes, to not put so many transforms into the scene.
+        for i,vf_transform in enumerate(vf_transforms): 
             node = add_virtual_fit_result(
                 transform_node = transducer_transform_node_from_openlifu(vf_transform, transducer.transducer.transducer, "mm"),
                 target_id = target_id,
