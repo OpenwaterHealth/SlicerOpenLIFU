@@ -25,25 +25,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QFrame" name="configureProtocolsPushButtonFrame">
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_11">
-      <item>
-       <widget class="QPushButton" name="configureProtocolsPushButton">
-        <property name="text">
-         <string>Configure Protocols</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="subjectCollapsibleButton">
      <property name="text">
       <string>Subject</string>
@@ -527,6 +508,19 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="configureProtocolsPushButtonGroupBox">
+     <layout class="QVBoxLayout" name="verticalLayout_11">
+      <item>
+       <widget class="QPushButton" name="configureProtocolsPushButton">
+        <property name="text">
+         <string>Configure Protocols</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -550,15 +544,15 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>ctkCollapsibleButton</class>
-   <extends>QWidget</extends>
-   <header>ctkCollapsibleButton.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
