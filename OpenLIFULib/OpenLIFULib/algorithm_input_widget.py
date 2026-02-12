@@ -22,6 +22,7 @@ class AlgorithmInput:
     label : qt.QLabel
     combo_box : qt.QComboBox
     most_recent_selection : Any = None
+    refresh_button : qt.QPushButton = None
 
     def disable_with_tooltip(self, tooltip_message:str) -> None:
         self.combo_box.setDisabled(True)
@@ -48,11 +49,25 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         for input_name in algorithm_input_names:
             if input_name not in ["Protocol", "Transducer", "Volume", "Target", "Photoscan"]:
                 raise ValueError("Invalid algorithm input specified.")
+            elif input_name == "Photoscan":
+                refreshButton = qt.QPushButton("🔄")
+                refreshButton.setToolTip("Refresh")
+                refreshButton.setFixedSize(25, 25) 
+                self.inputs_dict[input_name] = AlgorithmInput(
+                    input_name, qt.QLabel(f"{input_name}", self), 
+                    ctk.ctkComboBox(self), refresh_button= refreshButton
+                    )
             else:
                 self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QLabel(f"{input_name}", self), ctk.ctkComboBox(self))
                 
         for input in self.inputs_dict.values():
-            layout.addRow(input.label, input.combo_box)
+            if input.refresh_button is not None:
+                specialRow = qt.QHBoxLayout()
+                specialRow.addWidget(input.combo_box, 1)
+                specialRow.addWidget(input.refresh_button, 0) # No Stretch
+                layout.addRow(input.label, specialRow)
+            else:
+                layout.addRow(input.label, input.combo_box)
 
     def add_protocol_to_combobox(self, protocol : SlicerOpenLIFUProtocol) -> None:
         self.inputs_dict["Protocol"].combo_box.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
@@ -254,4 +269,3 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             if photoscan_combo_box.itemData(i) == photoscan_openlifu:
                 photoscan_combo_box.setCurrentIndex(i)
                 break
-                

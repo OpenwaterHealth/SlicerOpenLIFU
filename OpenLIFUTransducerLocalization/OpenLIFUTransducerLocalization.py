@@ -2062,6 +2062,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateInputRelatedWidgets)
+        self.algorithm_input_widget.inputs_dict["Photoscan"].refresh_button.clicked.connect(self.refreshPhotoscanList)
 
         # ---- Model rendering options ----
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.showVirtualFitResult)
@@ -2204,6 +2205,19 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.checkCanDisplayVirtualFitResult() # virtual fit rendering checkbox
         self.updateModelRenderingSettings() #model rendering options
         self.updateDistanceFromVFLabel()
+    
+    def refreshPhotoscanList(self):
+        """ Refreshes the list of photoscans affiliated with the loaded session"""
+
+        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_parameter_node = get_openlifu_data_parameter_node()
+
+        loaded_session = data_parameter_node.loaded_session
+        if loaded_session is None:
+            return
+
+        data_logic.update_photoscans_affiliated_with_loaded_session()
+        self.updateInputOptions()
 
     def resetPhotoscanGeneratorProgressDisplay(self):
         self.ui.photoscanGeneratorProgressBar.hide()
