@@ -1710,9 +1710,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 self.clear_solution(clean_up_scene=True)
             clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
-            for photocollection_reference_number in loaded_session.get_affiliated_photocollection_reference_numbers():
-                if photocollection_reference_number in self.getParameterNode().session_photocollections:
-                    self.remove_photocollection(photocollection_reference_number)
+            for photocollection_id in loaded_session.get_affiliated_photocollection_ids():
+                if photocollection_id in self.getParameterNode().session_photocollections:
+                    self.remove_photocollection(photocollection_id)
             
             for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
                 if photoscan_id in self.getParameterNode().loaded_photoscans:
@@ -1883,7 +1883,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_id = loaded_session.get_session_id()
         
         # Keep track of any photocollections associated with the session
-        affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
+        affiliated_photocollections = get_cur_db().get_photocollection_ids(subject_id, session_id)
         if affiliated_photocollections:
             loaded_session.set_affiliated_photocollections(affiliated_photocollections)
 
@@ -2075,8 +2075,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Keep track of affiliated photoscans and unload any conflicting photoscans that have been previously loaded ===
         self.update_photoscans_affiliated_with_loaded_session()
 
-        # === Load photocollections as all reference_numbers ===
-        session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
+        # === Load photocollections as all scan_ids ===
+        session_affiliated_photocollections = get_cur_db().get_photocollection_ids(subject_id, session_id)
         self.getParameterNode().session_photocollections = session_affiliated_photocollections
 
         # If there are any *approved* transducer localization results that we have just loaded in newly_added_tt_result_nodes,
@@ -2596,17 +2596,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ).customexec_()
             self.remove_photoscan(photoscan_openlifu_id, clean_up_scene=clean_up_scene)
 
-    def remove_photocollection(self, photocollection_reference_number:str) -> None:
+    def remove_photocollection(self, photocollection_id:str) -> None:
         """Remove a photocollection from the list of loaded photocollections.
 
         Args:
-            photocollection_reference_number: The openlifu reference_number of the photocollection to remove
+            photocollection_id: The openlifu scan_id of the photocollection to remove
         """
         session_photocollections = self.getParameterNode().session_photocollections
-        if not photocollection_reference_number in session_photocollections:
-            raise IndexError(f"No photocollection with reference_number {photocollection_reference_number} appears to be loaded; cannot remove it.")
+        if not photocollection_id in session_photocollections:
+            raise IndexError(f"No photocollection with scan_id {photocollection_id} appears to be loaded; cannot remove it.")
 
-        session_photocollections.remove(photocollection_reference_number)
+        session_photocollections.remove(photocollection_id)
 
     def remove_photoscan(self, photoscan_id:str, clean_up_scene:bool = True) -> None:
         """Remove a photoscan from the list of loaded photoscans, clearing away its data from the scene.
@@ -2687,25 +2687,25 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                   False if the operation was canceled by the user when prompted to overwrite.
     
         Raises:
-            ValueError: If 'reference_number' or 'photo_paths' is missing from photocollection_parameters.
+            ValueError: If 'scan_id' or 'photo_paths' is missing from photocollection_parameters.
         """
-        photocollection_reference_numbers = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        if photocollection_parameters['reference_number'] in photocollection_reference_numbers:
+        photocollection_ids = get_cur_db().get_photocollection_ids(subject_id, session_id)
+        if photocollection_parameters['scan_id'] in photocollection_ids:
             if not slicer.util.confirmYesNoDisplay(
-                f"Photocollection reference_number {photocollection_parameters['reference_number']} already exists in the database for session {session_id}. Overwrite photocollection?",
+                f"Photocollection scan_id {photocollection_parameters['scan_id']} already exists in the database for session {session_id}. Overwrite photocollection?",
                 "Photocollection already exists"
             ):
                 return False
 
-        reference_number = photocollection_parameters.get("reference_number")
+        scan_id = photocollection_parameters.get("scan_id")
         photo_abspaths = photocollection_parameters.get("photo_paths")
 
-        if reference_number is None:
-            raise ValueError("Missing required parameter: 'reference_number'")
+        if scan_id is None:
+            raise ValueError("Missing required parameter: 'scan_id'")
         if photo_abspaths is None:
             raise ValueError("Missing required parameter: 'photo_paths'")
 
-        get_cur_db().write_photocollection(subject_id, session_id, reference_number,
+        get_cur_db().write_photocollection(subject_id, session_id, scan_id,
                                       photo_abspaths, on_conflict =
                                       openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
         return True
