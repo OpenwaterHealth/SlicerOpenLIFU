@@ -1,7 +1,8 @@
-from typing import Dict, Any, List, Callable, TYPE_CHECKING
+from typing import Dict, Any, List, Callable, TYPE_CHECKING, Optional
 from dataclasses import dataclass
 
 import ctk
+from enum import Enum
 import qt
 import slicer
 
@@ -15,6 +16,13 @@ from OpenLIFULib.targets import get_target_candidates
 if TYPE_CHECKING:
     import openlifu
     import openlifu.nav.photoscan
+
+class InputType(Enum):
+    PROTOCOL = "Protocol"
+    TRANSDUCER = "Transducer"
+    VOLUME = "Volume"
+    TARGET = "Target"
+    PHOTOSCAN = "Photoscan"
 
 @dataclass
 class AlgorithmInput:
@@ -47,7 +55,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
 
         self.inputs_dict : Dict[str,AlgorithmInput] = {}
         for input_name in algorithm_input_names:
-            if input_name not in ["Protocol", "Transducer", "Volume", "Target", "Photoscan"]:
+            if input_name not in [item.value for item in InputType]:
                 raise ValueError("Invalid algorithm input specified.")
             elif input_name == "Photoscan":
                 refreshButton = qt.QPushButton("🔄")
@@ -253,12 +261,22 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         }
         return current_data_dict
     
-    def connect_combobox_indexchanged_signal(self, function_call: Callable) -> None:
-        """Connect the `currentIndexChanged` signal on each input combobox to a callable function.
+    def connect_combobox_indexchanged_signal(self, function_call: Callable, input_type: Optional[str] = None) -> None:
+        """Connect the `currentIndexChanged` signal on the input combobox(es) to a callable function.
         This is helpful for when changes to the input combo boxes need to trigger certain checks for
-        valid selections to run algorithms."""
-        for input in self.inputs_dict.values():
-            input.combo_box.currentIndexChanged.connect(function_call)
+        valid selections to run algorithms.
+        If input_type is specified, connects only that input's combo box. 
+        Otherwise, connects all combo boxes."""
+
+        if input_type is not None:
+            if input_type not in [item.value for item in InputType]:
+                raise ValueError("Invalid algorithm input specified.")
+            combo_box = self.inputs_dict[input_type].combo_box
+            combo_box.currentIndexChanged.connect(function_call)
+        else:
+            # Connect all combo boxes
+            for input in self.inputs_dict.values():
+                input.combo_box.currentIndexChanged.connect(function_call)
     
     def set_photoscan_selection(self, photoscan_openlifu: "openlifu.nav.photoscan.Photoscan") -> None:
         """Set the photoscan combobox selection to the specified photoscan."""
@@ -269,3 +287,21 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             if photoscan_combo_box.itemData(i) == photoscan_openlifu:
                 photoscan_combo_box.setCurrentIndex(i)
                 break
+
+    def connect_refresh_button_signal(self, function_call: Callable, input_type: Optional[str] = None) -> None:
+        """Connect refresh button(s) clicked signal to a callable function.
+        If input_type is specified, connects only that input's button. 
+        Otherwise, connects all refresh buttons."""
+        
+        if input_type is not None:
+            if input_type not in [item.value for item in InputType]:
+                raise ValueError("Invalid algorithm input specified.")
+            refresh_button = self.inputs_dict[input_type].refresh_button
+            if refresh_button is None: # Optional attribute
+                raise ValueError(f"No refresh button associated with input '{input_type}'.")
+            refresh_button.clicked.connect(function_call)
+        else:
+            # Connect all refresh buttons
+            for input in self.inputs_dict.values():
+                if input.refresh_button is not None:
+                    input.refresh_button.clicked.connect(function_call)
