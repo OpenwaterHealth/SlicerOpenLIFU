@@ -67,10 +67,10 @@
          <item>
           <widget class="QPushButton" name="chooseSubjectButton">
            <property name="toolTip">
-            <string>Load a subjectZ</string>
+            <string>Load a subject</string>
            </property>
            <property name="text">
-            <string>Choose SubjectZ</string>
+            <string>Choose Subject</string>
            </property>
           </widget>
          </item>

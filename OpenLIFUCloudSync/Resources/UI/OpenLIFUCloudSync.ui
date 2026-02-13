@@ -88,17 +88,6 @@
      </property>
     </widget>
    </item>
-   
-   <item>
-    <widget class="QPushButton" name="syncButton">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
-     <property name="text">
-      <string>Sync Now</string>
-     </property>
-    </widget>
-   </item>
 
    <item>
     <spacer name="verticalSpacer">

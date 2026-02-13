@@ -3,38 +3,46 @@ import slicer
 import time
 import os
 import requests
+import signal
+import logging
+from pathlib import Path
 from OpenLIFULib.util import display_errors
-
-# Slicer imports
 from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
 
+logger = logging.getLogger('OpenLIFU.CloudSync')
+
+# Global logic singleton
+_sharedLogicInstance = None
+
+def getCloudSyncLogic():
+    global _sharedLogicInstance
+    if _sharedLogicInstance is None:
+        _sharedLogicInstance = OpenLIFUCloudSyncLogic()
+    return _sharedLogicInstance
+
+# --- Signal Bridge for Thread-Safe UI Updates ---
+class CloudStatusHelper(qt.QObject):
+    # Signal carries: (statusMessage, timestamp)
+    statusChanged = qt.Signal(str, str)
+
+    def __init__(self):
+        super().__init__()
 
 class OpenLIFUCloudSync(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = "OpenLIFU Cloud Sync"
-        self.parent.categories = [
-            translate("qSlicerAbstractCoreModule", "OpenLIFU")]
+        self.parent.title = _("OpenLIFU Cloud Sync")
+        self.parent.categories = [translate("qSlicerAbstractCoreModule", "OpenLIFU")]
         self.parent.dependencies = ["OpenLIFUHome"]
-        self.parent.contributors = [
-            "Andrew Howe (Kitware), Ebrahim Ebrahim (Kitware), Sadhana Ravikumar (Kitware), Peter Hollender (Openwater), Sam Horvath (Kitware), Brad Moore (Kitware)"]
-        self.parent.helpText = _(
-            "Cloud login and synchronization for the OpenLIFU extension.")
-        self.parent.acknowledgementText = _(
-            "Part of Openwater's OpenLIFU platform.")
-        # self.parent.hidden = True  # Removed: Setting this to True breaks registration
-
 
 class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
     def setup(self):
         ScriptedLoadableModuleWidget.setup(self)
-        self.logic = OpenLIFUCloudSyncLogic()
+        self.logic = getCloudSyncLogic()
 
-        # Robust UI path loading
-        uiPath = os.path.join(os.path.dirname(__file__),
-                              'Resources', 'UI', 'OpenLIFUCloudSync.ui')
+        uiPath = os.path.join(os.path.dirname(__file__), 'Resources', 'UI', 'OpenLIFUCloudSync.ui')
         if not os.path.exists(uiPath):
             uiPath = self.resourcePath('UI/OpenLIFUCloudSync.ui')
 
@@ -42,115 +50,174 @@ class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
         self.layout.addWidget(self.uiWidget)
         self.ui = slicer.util.childWidgetVariables(self.uiWidget)
 
-        # Connections
+        # Connect UI signals
         self.ui.backButton.clicked.connect(self.onBack)
         self.ui.loginButton.clicked.connect(self.onLoginToggle)
-        self.ui.syncButton.clicked.connect(self.onSync)
+
+        if hasattr(self.ui, 'syncButton'):
+            self.ui.syncButton.hide()
+
+        self.logic.statusHelper.statusChanged.connect(self.onCloudStatusChanged)
 
         self.updateGUI()
+
+    def onCloudStatusChanged(self, message, timestamp):
+        """Thread-safe update of UI labels from background cloud events."""
+        slicer.util.showStatusMessage(f"Cloud: {message}", 3000)
+        if hasattr(self.ui, 'lastSyncLabel'):
+            self.ui.lastSyncLabel.text = timestamp
 
     def updateGUI(self):
         token = self.logic.getValidToken()
         isLoggedIn = token is not None
-        self.ui.statusLabel.text = _(
-            "Logged In") if isLoggedIn else _("Not Logged In")
-        self.ui.loginButton.text = _(
-            "Logout") if isLoggedIn else _("Login to Cloud")
-        self.ui.syncButton.enabled = isLoggedIn
+        self.ui.statusLabel.text = _("Logged In") if isLoggedIn else _("Not Logged In")
+        self.ui.loginButton.text = _("Logout") if isLoggedIn else _("Login to Cloud")
 
-    def onBack(self):
-        # Retrieve previous module from mainWindow property
+    def onBack(self, checked=False):
         prev_module = slicer.util.mainWindow().property("OpenLIFU_PreviousModule")
-        slicer.util.selectModule(
-            prev_module if prev_module else "OpenLIFUHome")
+        slicer.util.selectModule(prev_module if prev_module else "OpenLIFUHome")
 
     def onLoginToggle(self, checked=False):
-        """Added 'checked' argument to prevent TypeError from Qt signal."""
         if self.logic.getValidToken():
             self.logic.logout()
-            self.updateGUI()
         else:
             from OpenLIFULogin import UsernamePasswordDialog
             dlg = UsernamePasswordDialog()
-            # Standard return format for OpenLIFULogin
             res, user, pw = dlg.customexec_()
             if res == qt.QDialog.Accepted:
                 success, msg = self.logic.login(user, pw)
                 if not success:
                     slicer.util.errorDisplay(f"Login failed: {msg}")
-                self.updateGUI()
-
-    @display_errors
-    def onSync(self, checked=False):
-        """Added 'checked' argument to fix the TypeError."""
-        slicer.util.showStatusMessage(_("Syncing with cloud..."))
-        # Placeholder for actual sync logic
-        self.ui.lastSyncLabel.text = time.strftime("%Y-%m-%d %H:%M:%S")
-        slicer.util.infoDisplay(_("Cloud sync completed successfully."))
-
+        self.updateGUI()       
 
 class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
         self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
         self._cloudTokens = None
-        self._userId = None
+        self._cloudManager = None
+        self._isServiceRunning = False
 
-    def login(self, email, password):
-        """Authenticates with Google Identity Platform/Firebase."""
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
-        payload = {"email": email, "password": password,
-                   "returnSecureToken": True}
-        try:
-            response = requests.post(url, json=payload, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            self._cloudTokens = {
-                "idToken": data['idToken'],
-                "refreshToken": data['refreshToken'],
-                "expiresAt": time.time() + int(data['expiresIn'])
-            }
-            self._userId = data.get('localId')
-            qt.QSettings().setValue(
-                "OpenLIFU/CloudRefreshToken", data['refreshToken'])
-            return True, "Success"
-        except Exception as e:
-            return False, str(e)
+        # Instantiate signal bridge
+        self.statusHelper = CloudStatusHelper()
 
-    def logout(self):
-        """Clears local tokens and stored settings."""
-        self._cloudTokens = None
-        self._userId = None
-        qt.QSettings().remove("OpenLIFU/CloudRefreshToken")
+        # Cleanup connections for both graceful and terminal exits
+        slicer.app.connect("aboutToQuit()", self.cleanup)
+        signal.signal(signal.SIGINT, self._handleTerminalInterrupt)
+
+        # Defer heartbeat startup
+        qt.QTimer.singleShot(2000, self.startHeartbeat)
+
+    def _handleTerminalInterrupt(self, signum, frame):
+        """Ensures cleanup runs even if Ctrl+C is pressed in terminal."""
+        logger.info("Terminal interrupt detected (Ctrl+C). Cleaning up...")
+        self.cleanup()
+        slicer.app.quit()
+
+    def startHeartbeat(self):
+        self.monitorTimer = qt.QTimer()
+        self.monitorTimer.timeout.connect(self.heartbeat)
+        self.monitorTimer.start(5000)
+        self.heartbeat()
+
+    def heartbeat(self):
+        token = self.getValidToken()
+        if not self._isServiceRunning and token:
+            self.attemptAutoStartSync()
+
+    def _safeStatusUpdate(self, status):
+        """Thread-safe bridge to emit UI updates from background threads."""
+        timestamp = time.strftime("%H:%M:%S")
+        self.statusHelper.statusChanged.emit(status, timestamp)
+
+    def attemptAutoStartSync(self):
+        db_dir = qt.QSettings().value("OpenLIFU/databaseDirectory")
+        token = self.getValidToken()
+
+        if token and db_dir and os.path.exists(db_dir):
+            try:
+                # Use absolute path to prevent FileNotFoundError
+                db_path = Path(db_dir).resolve()
+                
+                from openlifu.cloud.cloud import Cloud
+                if not self._cloudManager:
+                    self._cloudManager = Cloud()
+                
+                self._cloudManager.set_access_token(token)
+                self._cloudManager.set_status_callback(self._safeStatusUpdate)
+
+                logger.info(f"Connecting to Cloud service on {db_path}")
+                self._cloudManager.start(db_path)
+                
+                # Start background sync immediately
+                self._cloudManager.start_background_sync()
+                self._isServiceRunning = True
+            except Exception as e:
+                logger.error(f"Cloud Initialization Error: {e}")
 
     def getValidToken(self):
-        """Returns a valid idToken, automatically refreshing if expired."""
         if not self._cloudTokens:
             savedRef = qt.QSettings().value("OpenLIFU/CloudRefreshToken")
-            if not savedRef:
-                return None
+            if not savedRef: return None
             self._cloudTokens = {"refreshToken": savedRef, "expiresAt": 0}
-
+        
         if time.time() > (self._cloudTokens.get("expiresAt", 0) - 300):
             self.refreshCloudToken()
+            
         return self._cloudTokens.get("idToken") if self._cloudTokens else None
 
     def refreshCloudToken(self):
-        """Refreshes the ID Token using the stored Refresh Token."""
         url = f"https://securetoken.googleapis.com/v1/token?key={self.apiKey}"
-        payload = {"grant_type": "refresh_token",
-                   "refresh_token": self._cloudTokens['refreshToken']}
         try:
-            response = requests.post(url, data=payload, timeout=5)
-            response.raise_for_status()
-            data = response.json()
+            r = requests.post(url, data={
+                "grant_type": "refresh_token", 
+                "refresh_token": self._cloudTokens['refreshToken']
+            }, timeout=5)
+            r.raise_for_status()
+            data = r.json()
+            
             self._cloudTokens["idToken"] = data['id_token']
-            self._cloudTokens["expiresAt"] = time.time() + \
-                int(data['expires_in'])
-            if 'refresh_token' in data:
-                self._cloudTokens["refreshToken"] = data['refresh_token']
-                qt.QSettings().setValue(
-                    "OpenLIFU/CloudRefreshToken", data['refresh_token'])
+            self._cloudTokens["expiresAt"] = time.time() + int(data['expires_in'])
+            
+            if self._cloudManager:
+                self._cloudManager.set_access_token(data['id_token'])
+                self._safeStatusUpdate("Session Refreshed")
         except Exception as e:
-            print(f"Cloud Token Refresh Failed: {e}")
+            logger.error(f"Token refresh failed: {e}")
             self._cloudTokens = None
+
+    def login(self, email, password):
+        """Authenticates user and saves refresh token."""
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
+        try:
+            r = requests.post(url, json={"email": email, "password": password, "returnSecureToken": True}, timeout=5)
+            r.raise_for_status()
+            data = r.json()
+            self._cloudTokens = {
+                "idToken": data['idToken'], 
+                "refreshToken": data['refreshToken'],
+                "expiresAt": time.time() + int(data['expiresIn'])
+            }
+            qt.QSettings().setValue("OpenLIFU/CloudRefreshToken", data['refreshToken'])
+            qt.QTimer.singleShot(100, self.heartbeat)
+            return True, "Success"
+        except Exception as e:
+            logger.error(f"Login error: {e}")
+            return False, str(e)
+
+    def cleanup(self):
+        """Orderly shutdown of background cloud threads."""
+        if self._cloudManager:
+            logger.info("Cleaning up cloud threads...")
+            try:
+                self._cloudManager.stop_background_sync()
+                self._cloudManager.stop()
+            except Exception as e:
+                logger.error(f"Error stopping Cloud Manager: {e}")
+        self._isServiceRunning = False
+        self._cloudManager = None
+
+    def logout(self):
+        self.cleanup()
+        self._cloudTokens = None
+        qt.QSettings().remove("OpenLIFU/CloudRefreshToken")

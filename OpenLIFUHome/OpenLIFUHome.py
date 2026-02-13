@@ -18,13 +18,14 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib.util import (
     get_openlifu_login_parameter_node,
 )
-from OpenLIFULib.user_account_mode_util import get_online_mode_state
+
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 from OpenLIFULib.lazyimport import (
     check_and_install_python_requirements,
     python_requirements_exist,
 )
 
+from OpenLIFUCloudSync import getCloudSyncLogic
 #
 # OpenLIFUHome
 #
@@ -78,12 +79,13 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
-        self._parameterNodeLoginNode = None
         self._parameterNodeGuiTag = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
+
+        getCloudSyncLogic()
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
@@ -108,9 +110,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
         
-        self._parameterNodeLoginNode = get_openlifu_login_parameter_node()
-        self.addObserver(self._parameterNodeLoginNode, vtk.vtkCommand.ModifiedEvent, self.onActiveUserChanged)
-
         # Buttons
         self.ui.installPythonReqsButton.connect("clicked()", self.onInstallPythonRequirements)
         self.ui.guidedModePushButton.connect("clicked()", self.onGuidedModeClicked)
@@ -126,7 +125,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
         self.ui.protocolConfigPushButton.clicked.connect(lambda : self.switchModule(self.ui.protocolConfigPushButton.text))
-    
+
     def switchModule(self, moduleButtonText: str) -> None:
         moduleButtonText = moduleButtonText.replace(" ", "")
         moduleButtonText = moduleButtonText.replace("-", "")
@@ -176,11 +175,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.syncAction.setIcon(qt.QIcon(iconPath))
 
             self.openLIFUToolBar.addAction(self.syncAction)
-            #self.syncAction.triggered.connect(self.onSyncClicked)
 
             self.syncAction.triggered.connect(self.onToolbarSyncTriggered)
-
-        # self.syncAction.setEnabled(False)
         
     def onToolbarSyncTriggered(self):
         print('here')
@@ -188,17 +184,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         current_mod = slicer.util.moduleSelector().selectedModule
         if current_mod != "OpenLIFUCloudSync":
             slicer.util.mainWindow().setProperty("OpenLIFU_PreviousModule", current_mod)
-
         # 2. Switch to the new independent module
         slicer.util.selectModule("OpenLIFUCloudSync")
     
-    def onActiveUserChanged(self, caller, event) -> None:
-        state = get_online_mode_state()
-        print(f"Setting sync button enabled state to {state}")
-        if self.syncAction:
-            self.syncAction.setEnabled(state)
-            self.openLIFUToolBar.update()
-
     def onSyncClicked(self):
         """Handler for when the toolbar button is pressed."""
         try:            

@@ -990,9 +990,6 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     def start_user_account_mode(self):
         set_user_account_mode_state(True)
 
-    def start_online_mode(self):
-        set_online_mode_state(True)
-
     def add_user_to_database(self, user_parameters: Dict[str, str]) -> None:
         """ Add user to selected subject/session in the loaded openlifu database
         Args:
