@@ -7,29 +7,31 @@ from OpenLIFULib import SlicerOpenLIFUPhotoscan
 
 def initialize_wizard_ui(wizard: qt.QWizard):
 
-    vBoxLayout = qt.QVBoxLayout()
-    wizard.setLayout(vBoxLayout)
+    layout = qt.QVBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    wizard.setLayout(layout)
     ui_path = slicer.modules.OpenLIFUTransducerLocalizationWidget.resourcePath("UI/TransducerLocalizationWizard.ui")
     uiWidget = slicer.util.loadUI(ui_path)
-    vBoxLayout.addWidget(uiWidget)
-    
-    return slicer.util.childWidgetVariables(uiWidget)
+    ui = slicer.util.childWidgetVariables(uiWidget)
+
+    # Reparent the key widgets directly into the page layout, bypassing the
+    # intermediate uiWidget container whose designer geometry (553x793) constrains sizing.
+    layout.addWidget(ui.viewWidgetPlaceholder, 1)  # stretch=1 so it fills remaining space
+    layout.addWidget(ui.dialogControls)
+    layout.addWidget(ui.lockPanel)
+
+    return ui
 
 def set_threeD_view_widget(ui):
 
     viewWidget = slicer.qMRMLThreeDWidget()
     viewWidget.setMRMLScene(slicer.mrmlScene)
     viewWidget.setMinimumHeight(200)
-    viewWidget.setSizePolicy(viewWidget.sizePolicy.horizontalPolicy(), qt.QWidget().sizePolicy.Expanding)
+    viewWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
 
-    parent = ui.viewWidgetPlaceholder.parentWidget()
-    layout = parent.layout()
-    index = layout.indexOf(ui.viewWidgetPlaceholder)
-
-    # Add the threeD view widget to specified ui
-    # In the layout, the UI should have the same name
+    # Replace the placeholder with the 3D view widget in the page layout.
+    # The stretch factor is already set in initialize_wizard_ui.
     replace_widget(ui.viewWidgetPlaceholder, viewWidget, ui)
-    layout.setStretch(index, 14) # Sets the stretch factor to 14/70% 
 
     return viewWidget
 

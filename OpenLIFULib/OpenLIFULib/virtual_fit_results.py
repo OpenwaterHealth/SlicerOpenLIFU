@@ -72,6 +72,7 @@ def add_virtual_fit_result(
         virtual_fit_result = transform_node
 
     virtual_fit_result.SetName(f"VF {target_id} {rank}")
+    virtual_fit_result.SetAttribute("DisplayName", f"Virtual Fit {rank}")
     virtual_fit_result.SetAttribute("isVirtualFitResult", "1")
     virtual_fit_result.SetAttribute("VF:targetID", target_id)
     virtual_fit_result.SetAttribute("VF:rank", str(rank))

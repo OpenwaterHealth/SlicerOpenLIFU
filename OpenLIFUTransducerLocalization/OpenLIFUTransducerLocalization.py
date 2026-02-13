@@ -1189,9 +1189,8 @@ class TransducerTrackingWizard(qt.QWizard):
         self.addPage(self.photoscanVolumeTrackingPage)
         self.addPage(self.transducerPhotoscanTrackingPage)
 
-        self.adjustSize()
-        
     def customexec_(self):
+        self._needs_initial_maximize = True
         self.setWindowFlags(self.windowFlags() | qt.Qt.WindowFlags.CustomizeWindowHint | qt.Qt.WindowFlags.WindowMaximizeButtonHint)
         returncode = self.exec_()
         return (returncode, self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node)
@@ -1202,7 +1201,15 @@ class TransducerTrackingWizard(qt.QWizard):
         if current_page is None:
             return
 
-        # Hide all pages except the current one to force the 
+        # On initial show, force a layout recalculation by cycling the window state.
+        # QWizard computes its internal page area from stale sizeHints on first show;
+        # minimizing invalidates all layouts, and re-maximizing recomputes them correctly.
+        if self._needs_initial_maximize:
+            self._needs_initial_maximize = False
+            self.showMinimized()
+            self.showMaximized()
+
+        # Hide all pages except the current one to force the
         # layout to ignore the size of the hidden pages
         for i in range(current_page.ui.dialogControls.count):
             dialog_page = current_page.ui.dialogControls.widget(i)
@@ -2792,7 +2799,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if selected_target:
             status += f"Selected Target: {fiducial_to_openlifu_point_id(selected_target)}"
             if vf_result_for_tracking:
-                status += f"\nVirtual Fit: {vf_result_for_tracking.GetName()}"
+                status += f"\nVirtual Fit: {vf_result_for_tracking.GetAttribute("DisplayName")}"
                 vf_is_approved = get_approval_from_virtual_fit_result_node(vf_result_for_tracking)
                 if vf_is_approved:
                     self.ui.approvalWarningLabel.styleSheet = "color:green;"
