@@ -2042,6 +2042,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
         # ---- Photoscan generation connections ----
+        self.ui.referenceNumberRefreshButton.setIcon(slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload))
         self.ui.referenceNumberRefreshButton.clicked.connect(self.on_reference_number_refresh_clicked)
         self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
         self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
