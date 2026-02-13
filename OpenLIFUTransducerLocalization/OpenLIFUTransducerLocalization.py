@@ -2062,7 +2062,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
         self.updateInputOptions()
         self.algorithm_input_widget.connect_combobox_indexchanged_signal(self.updateInputRelatedWidgets)
-        self.algorithm_input_widget.inputs_dict["Photoscan"].refresh_button.clicked.connect(self.refreshPhotoscanList)
+        self.algorithm_input_widget.connect_refresh_button_signal(self.refreshPhotoscanList, input_type = "Photoscan")
 
         # ---- Model rendering options ----
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(self.showVirtualFitResult)

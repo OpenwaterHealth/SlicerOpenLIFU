@@ -89,12 +89,12 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="referenceNumberRefreshButton">
+               <widget class="QToolButton" name="referenceNumberRefreshButton">
                 <property name="toolTip">
                  <string>Generate a new photocollection reference number</string>
                 </property>
                 <property name="text">
-                 <string>🔄</string>
+                 <string/>
                 </property>
                </widget>
               </item>
