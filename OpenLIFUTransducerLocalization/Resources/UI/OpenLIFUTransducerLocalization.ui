@@ -72,7 +72,7 @@
               <item>
                <widget class="QLabel" name="referenceNumberLabel">
                 <property name="text">
-                 <string>Photocollection Scan ID:</string>
+                 <string>Scan ID:</string>
                 </property>
                </widget>
               </item>
