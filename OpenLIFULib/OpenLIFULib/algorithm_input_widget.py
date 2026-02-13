@@ -30,7 +30,7 @@ class AlgorithmInput:
     label : qt.QLabel
     combo_box : qt.QComboBox
     most_recent_selection : Any = None
-    refresh_button : qt.QPushButton = None
+    refresh_button : qt.QToolButton = None
 
     def disable_with_tooltip(self, tooltip_message:str) -> None:
         self.combo_box.setDisabled(True)
@@ -58,9 +58,9 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             if input_name not in [item.value for item in InputType]:
                 raise ValueError("Invalid algorithm input specified.")
             elif input_name == "Photoscan":
-                refreshButton = qt.QPushButton("🔄")
+                refreshButton = qt.QToolButton()
+                refreshButton.setIcon(slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload))
                 refreshButton.setToolTip("Refresh")
-                refreshButton.setFixedSize(25, 25) 
                 self.inputs_dict[input_name] = AlgorithmInput(
                     input_name, qt.QLabel(f"{input_name}", self), 
                     ctk.ctkComboBox(self), refresh_button= refreshButton
