@@ -95,9 +95,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
         self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
         self._cloudTokens = None
-        self._cloudManager = None
         self._isServiceRunning = False
-
+        self._active_runner = None
         # Instantiate signal bridge
         self.statusHelper = CloudStatusHelper()
 
@@ -106,7 +105,11 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         signal.signal(signal.SIGINT, self._handleTerminalInterrupt)
 
         # Defer heartbeat startup
-        qt.QTimer.singleShot(2000, self.startHeartbeat)
+        qt.QTimer.singleShot(1000, self.startHeartbeat)
+
+        self.dummyTimer = qt.QTimer()
+        self.dummyTimer.timeout.connect(lambda: None) # Do nothing
+        self.dummyTimer.start(100) # Fire every 100ms to "nudge" the GIL
 
     def _handleTerminalInterrupt(self, signum, frame):
         """Ensures cleanup runs even if Ctrl+C is pressed in terminal."""
@@ -117,10 +120,11 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def startHeartbeat(self):
         self.monitorTimer = qt.QTimer()
         self.monitorTimer.timeout.connect(self.heartbeat)
-        self.monitorTimer.start(5000)
+        self.monitorTimer.start(10000)
         self.heartbeat()
 
     def heartbeat(self):
+        logger.info("Heartbeat: Checking Cloud Sync status...")
         token = self.getValidToken()
         if not self._isServiceRunning and token:
             self.attemptAutoStartSync()
@@ -136,22 +140,19 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
         if token and db_dir and os.path.exists(db_dir):
             try:
-                # Use absolute path to prevent FileNotFoundError
-                db_path = Path(db_dir).resolve()
-                
                 from openlifu.cloud.cloud import Cloud
-                if not self._cloudManager:
-                    self._cloudManager = Cloud()
+                from OpenLIFULib.slicer_sync_runner import SlicerSyncRunner
                 
-                self._cloudManager.set_access_token(token)
-                self._cloudManager.set_status_callback(self._safeStatusUpdate)
-
-                logger.info(f"Connecting to Cloud service on {db_path}")
-                self._cloudManager.start(db_path)
+                db_path = Path(db_dir).resolve()
+                if not self._active_runner:
+                    # Pass self as parent to anchor it to Slicer's memory
+                    self._active_runner = SlicerSyncRunner(db_path, token)
                 
-                # Start background sync immediately
-                self._cloudManager.start_background_sync()
+                if self._active_runner:
+                    self._active_runner.start()
                 self._isServiceRunning = True
+                logger.info(f"Connecting to Cloud service on {db_path}")                
+
             except Exception as e:
                 logger.error(f"Cloud Initialization Error: {e}")
 
@@ -178,10 +179,6 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             
             self._cloudTokens["idToken"] = data['id_token']
             self._cloudTokens["expiresAt"] = time.time() + int(data['expires_in'])
-            
-            if self._cloudManager:
-                self._cloudManager.set_access_token(data['id_token'])
-                self._safeStatusUpdate("Session Refreshed")
         except Exception as e:
             logger.error(f"Token refresh failed: {e}")
             self._cloudTokens = None
@@ -207,11 +204,11 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def cleanup(self):
         """Orderly shutdown of background cloud threads."""
-        if self._cloudManager:
+        if self._active_runner:
             logger.info("Cleaning up cloud threads...")
             try:
-                self._cloudManager.stop_background_sync()
-                self._cloudManager.stop()
+                self._active_runner.stop()
+                self._active_runner = None
             except Exception as e:
                 logger.error(f"Error stopping Cloud Manager: {e}")
         self._isServiceRunning = False

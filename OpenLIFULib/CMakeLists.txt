@@ -27,6 +27,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/notifications.py
   OpenLIFULib/volume_thresholding.py
   OpenLIFULib/install_asset_dialog.py
+  OpenLIFULib/slicer_sync_runner.py
 )
 
 set(MODULE_PYTHON_RESOURCES

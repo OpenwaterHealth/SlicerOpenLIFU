@@ -179,7 +179,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.syncAction.triggered.connect(self.onToolbarSyncTriggered)
         
     def onToolbarSyncTriggered(self):
-        print('here')
         # 1. Save current module for the 'Back' button
         current_mod = slicer.util.moduleSelector().selectedModule
         if current_mod != "OpenLIFUCloudSync":
