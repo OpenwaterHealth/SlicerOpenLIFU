@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 from pathlib import Path
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
+from openlifu.util.assets import download_and_install_kwave_assets
 import slicer
 import importlib
 import sys
@@ -95,6 +96,7 @@ def openlifu_lz() -> "openlifu":
         # In testing mode, automatically install missing requirements without prompting
         if slicer.app.testingEnabled() and not python_requirements_exist():
             install_python_requirements()
+            download_and_install_kwave_assets()
         else:
             check_and_install_python_requirements(prompt_if_found=False)
 
