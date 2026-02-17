@@ -334,7 +334,7 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
             repo = Repo(str(dvc_repo_path), uninitialized=True)
             repo.pull(targets=[str(dvc_file)])
         except Exception as e:
-            print(f"An error occurred during dvc pull: {e}")
+            raise RuntimeError(f"An error occurred during dvc pull: {e}") from e
         
         return str(dvc_repo_path / 'db_dvc_slicertesting')
     
