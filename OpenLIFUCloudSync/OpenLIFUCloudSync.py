@@ -120,7 +120,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def startHeartbeat(self):
         self.monitorTimer = qt.QTimer()
         self.monitorTimer.timeout.connect(self.heartbeat)
-        self.monitorTimer.start(10000)
+        self.monitorTimer.start(100000)
         self.heartbeat()
 
     def heartbeat(self):
