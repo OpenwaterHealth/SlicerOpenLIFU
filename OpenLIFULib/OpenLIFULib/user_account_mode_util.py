@@ -25,6 +25,7 @@ def set_user_account_mode_state(new_user_account_mode_state: bool):
     """Set user account mode state in OpenLIFU Login module's parameter node"""
     get_openlifu_login_parameter_node().user_account_mode = new_user_account_mode_state
 
+
 class UserAccountBanner(qt.QWidget):
     """ This is a lightweight widget that shows the current user account and
     allows jumping to the login module widget. """

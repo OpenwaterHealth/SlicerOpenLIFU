@@ -2,6 +2,8 @@
 import json
 from enum import Enum
 from typing import Optional, List, Dict, Callable, TYPE_CHECKING
+import time
+import requests
 
 # Third-party imports
 import qt
@@ -84,7 +86,7 @@ class LoginState(Enum):
 
 @parameterNodeWrapper
 class OpenLIFULoginParameterNode:
-    user_account_mode : bool
+    user_account_mode : bool = False
     
 #
 # OpenLIFULoginDialogs
@@ -947,6 +949,9 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
+        self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
+        self._cloudTokens = None # Stores {idToken, refreshToken, expiresAt}
+        self._userId = None
 
         self._active_user: "openlifu.db.User" = openlifu_lz().db.User(
                 id = "anonymous", 
@@ -1000,3 +1005,4 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
         newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
         get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+

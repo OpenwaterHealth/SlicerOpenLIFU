@@ -2,6 +2,7 @@
 import os
 import shutil
 import sys
+import requests
 from pathlib import Path
 from typing import Optional, List, Sequence, Tuple, Callable, TYPE_CHECKING
 
@@ -420,3 +421,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         else:
             for path in copied_paths:
                 os.chmod(path, 0o644 if path.is_file() else 0o755)
+
+    def performSync(self):
+        x= requests.get(f'https://api.nvpsoftware.com/users/{slicer.util.getModuleLogic("OpenLIFULogin").getUserId()}', headers={'Authorization': f'Bearer {slicer.util.getModuleLogic("OpenLIFULogin").getValidToken()}'})
+        print(x.json())
