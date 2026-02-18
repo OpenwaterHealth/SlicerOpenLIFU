@@ -332,7 +332,7 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
             # Point to directory containing .dvc files
             # unitialized=True allows working in a directory that is not a git repo
             repo = Repo(str(dvc_repo_path), uninitialized=True)
-            repo.pull(targets=[str(dvc_file)])
+            repo.pull(targets=[str(dvc_file)], force=True)
         except Exception as e:
             raise RuntimeError(f"An error occurred during dvc pull: {e}") from e
         
