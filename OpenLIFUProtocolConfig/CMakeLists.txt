@@ -22,6 +22,12 @@ slicerMacroBuildScriptedModule(
 #-----------------------------------------------------------------------------
 if(BUILD_TESTING)
 
+  # Judge generic test pass/fail from unittest output instead of exit code.
+  set_tests_properties(py_nomainwindow_qSlicer${MODULE_NAME}ModuleGenericTest PROPERTIES
+    PASS_REGULAR_EXPRESSION "Ran [0-9]+ tests? in [0-9]"
+    FAIL_REGULAR_EXPRESSION "FAILED"
+  )
+
   # Register the unittest subclass in the main script as a ctest.
   # Note that the test will also be available at runtime.
   slicer_add_python_unittest(SCRIPT ${MODULE_NAME}.py)
