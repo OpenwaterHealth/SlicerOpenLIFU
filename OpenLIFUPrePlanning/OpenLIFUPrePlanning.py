@@ -1264,7 +1264,8 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
 
         # Confirm that virtual fit result exists
         vf_nodes = list(get_virtual_fit_result_nodes(target_id, session_id))
-        assert len(vf_nodes) == 10
+        num_vf_results = session.get_protocol().protocol.virtual_fit_options.top_n_candidates
+        assert len(vf_nodes) == num_vf_results
 
         assert get_approval_from_virtual_fit_result_node(vf_nodes[0]) is False
         preplanning_logic.toggle_virtual_fit_approval(vf_nodes[0])
