@@ -2,4 +2,4 @@
 bcrypt
 threadpoolctl
 requests
--e /home/erik/Documents/Work/OpenwaterHealth/OpenLIFU-python
+git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@cloud
