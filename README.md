@@ -117,3 +117,54 @@ add it to your `PATH`.
 This application is designed to work with the [OpenLIFU 3D Scanner Android app](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner). With credits in the app, computationally intensive tasks such as photogrammetric mesh reconstruction are performed in the cloud, eliminating the need for local Meshroom installation.
 
 If you prefer to perform mesh reconstruction locally instead of using cloud processing, you will need to install Meshroom and add it to your system PATH. Follow the instructions [here](https://github.com/OpenwaterHealth/OpenLIFU-python?tab=readme-ov-file#installing-meshroom) to download and configure Meshroom for local photoscan generation.
+
+## Running Integration Tests with DVC (Optional)
+
+SlicerOpenLIFU uses [DVC](https://dvc.org/) to manage test data stored in Google Drive. **Note:** Remote database access is currently restricted to authorized contributors.
+
+### Running Tests
+
+To run integration tests, you need a JSON service account key file for Google Drive access. Contact the developers to obtain `keyfile.json`.
+
+Configure CMake with testing enabled and provide the key file path:
+```bash
+cmake -DBUILD_TESTING=ON -DDVC_GDRIVE_KEY_PATH=/path/to/keyfile.json ..
+```
+
+**Note:** The `DVC_GDRIVE_KEY_PATH` variable is only required when `BUILD_TESTING` is enabled.
+
+Run tests from the build directory:
+```bash
+ctest -V -C Release
+```
+The test database (`db_dvc_slicertesting`) will be automatically downloaded to the repository directory when tests run.
+
+### Updating Test Data
+
+To commit changes to the test database, you need additional OAuth credentials. Contact developers for the `gdrive_client_secret`.
+
+Download the latest test database:
+```bash
+git pull
+dvc pull  # Requires service account key or OAuth authentication
+```
+
+Commit updates to the test database:
+
+```bash
+# Configure DVC for user authentication 
+dvc remote modify --local gdrive gdrive_client_secret 
+dvc remote modify --local gdrive gdrive_use_service_account false
+
+# Update and push changes
+dvc add db_dvc_slicertesting
+git add db_dvc_slicertesting.dvc 
+git commit -m "Describe updates to test database"
+git push
+dvc push  # Requires user authentication; does not work with service account
+```
+
+To switch back to running tests:
+```bash
+dvc remote modify --local gdrive gdrive_use_service_account true
+```
