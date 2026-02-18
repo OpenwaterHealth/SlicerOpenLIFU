@@ -24,7 +24,7 @@ if(BUILD_TESTING)
 
     if(NOT EXISTS "${DVC_GDRIVE_KEY_PATH}")
         message(FATAL_ERROR 
-            "DVC_GDRIVE_KEY_PATH is not set. Testing is enabled,"
+            "DVC_GDRIVE_KEY_PATH is not set. Testing is enabled, "
             "the path to the Google Drive Service Account JSON key must be provided."
             )
     endif()
@@ -35,14 +35,8 @@ if(BUILD_TESTING)
         set(DVC_GDRIVE_JSON_CONTENT "${STRIPPED_CONTENT}" CACHE INTERNAL "DVC JSON Key Content")
     endif()
     
-    # Copy DVC files
-    set(DVC_REPO_DIR "${CMAKE_BINARY_DIR}/dvc_data_repo" CACHE INTERNAL "DVC data folder")
-    # We only neeed the config file, NOT any cache or tmp folders
-    file(COPY "${CMAKE_SOURCE_DIR}/.dvc/config" 
-        DESTINATION "${DVC_REPO_DIR}/.dvc")
-
-    file(COPY "${CMAKE_SOURCE_DIR}/db_dvc_slicertesting.dvc" 
-        DESTINATION "${DVC_REPO_DIR}")
+    # Specify directory containing .dvc files
+    set(DVC_REPO_DIR "${CMAKE_SOURCE_DIR}" CACHE INTERNAL "DVC data folder")
 endif()
 
 #-----------------------------------------------------------------------------
