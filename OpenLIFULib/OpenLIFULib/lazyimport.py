@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING
 from pathlib import Path
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
-from openlifu.util.assets import download_and_install_kwave_assets
 import slicer
 import importlib
 import sys
@@ -94,16 +93,20 @@ def openlifu_lz() -> "openlifu":
     """Import openlifu and return the module, checking that it is installed along the way."""
     if "openlifu" not in sys.modules:
         # In testing mode, automatically install missing requirements without prompting
-        if slicer.app.testingEnabled() and not python_requirements_exist():
-            install_python_requirements()
-            download_and_install_kwave_assets()
+        if slicer.app.testingEnabled():
+            if not python_requirements_exist():
+                install_python_requirements()
         else:
             check_and_install_python_requirements(prompt_if_found=False)
 
         with BusyCursor():
             import openlifu
 
-        if not check_and_install_kwave_binaries():
+        if slicer.app.testingEnabled():
+            # Ensure kwave assets are present (no-op if already installed)
+            from openlifu.util.assets import download_and_install_kwave_assets
+            download_and_install_kwave_assets()
+        elif not check_and_install_kwave_binaries():
             raise RuntimeError("The openlifu library requires kwave binaries to be installed. There may be issues trying to run simulations.")
 
     return sys.modules["openlifu"]
