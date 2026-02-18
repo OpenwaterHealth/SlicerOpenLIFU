@@ -11,6 +11,9 @@ set(EXTENSION_ICONURL "https://github.com/OpenwaterHealth/SlicerOpenLIFU/raw/mai
 set(EXTENSION_SCREENSHOTURLS "https://github.com/OpenwaterHealth/SlicerOpenLIFU/raw/main/screenshots/1.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
 
+# Must be set before find_package(Slicer), which otherwise defaults BUILD_TESTING to ON.
+option(BUILD_TESTING "Build integration tests" OFF)
+
 #-----------------------------------------------------------------------------
 # Extension dependencies
 find_package(Slicer REQUIRED)
