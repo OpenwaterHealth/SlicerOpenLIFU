@@ -44,15 +44,25 @@ class UserAccountBanner(qt.QWidget):
 
         # ---- top_level_layout contains a group box with the label and icon ----
 
+        # group_box contains the user label and login button; hidden in guided mode
         group_box = qt.QGroupBox()
+        group_box.setProperty("slicer.openlifu.hide-in-guided-mode", True)
         group_layout = qt.QHBoxLayout(group_box)
-        label_layout = qt.QVBoxLayout()
 
         self.active_user_label = qt.QLabel("Not signed in")
         self.active_user_label.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
         self.active_user_label.setFont(qt.QFont("", 14))
-        label_layout.addWidget(self.active_user_label)
+        group_layout.addWidget(self.active_user_label, 1)  # stretch=1 as positional argument
 
+        self.go_to_login_button = qt.QPushButton("👤")
+        self.go_to_login_button.setToolTip("Switch user")
+        self.go_to_login_button.setFixedSize(28, 28)
+        self.go_to_login_button.clicked.connect(lambda: slicer.util.selectModule("OpenLIFULogin"))
+        group_layout.addWidget(self.go_to_login_button)
+
+        top_level_layout.addWidget(group_box)
+
+        # warning_widget is not hidden in guided mode
         self.warning_widget = qt.QWidget()
         warning_layout = qt.QHBoxLayout(self.warning_widget)
         warning_layout.setContentsMargins(0, 0, 0, 0)
@@ -71,19 +81,7 @@ class UserAccountBanner(qt.QWidget):
         warning_layout.addWidget(self.warning_label, 1)
 
         self.warning_widget.visible = False
-        label_layout.addWidget(self.warning_widget)
-
-        group_layout.addLayout(label_layout, 1)  # stretch=1 as positional argument
-
-        self.go_to_login_button = qt.QPushButton("👤")
-        self.go_to_login_button.setToolTip("Switch user")
-        self.go_to_login_button.setFixedSize(28, 28)
-        self.go_to_login_button.clicked.connect(lambda: slicer.util.selectModule("OpenLIFULogin"))
-        group_layout.addWidget(self.go_to_login_button)
-
-        top_level_layout.addWidget(group_box)  # Add the group box to the top_level_layout
-
-        self.setProperty("slicer.openlifu.hide-in-guided-mode", True)  # dynamic property to hide in guided mode
+        top_level_layout.addWidget(self.warning_widget)
     
     def change_active_user(self, new_active_user: Optional["openlifu.db.User"]):
         if new_active_user is None or new_active_user.id == "anonymous":
