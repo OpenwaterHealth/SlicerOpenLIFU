@@ -39,7 +39,7 @@ if(BUILD_TESTING)
     endif()
     
     # Specify directory containing .dvc files
-    set(DVC_REPO_DIR "${CMAKE_SOURCE_DIR}" CACHE INTERNAL "DVC data folder")
+    set(DVC_REPO_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "DVC data folder")
 endif()
 
 #-----------------------------------------------------------------------------
