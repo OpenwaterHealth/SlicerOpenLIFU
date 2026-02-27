@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME OpenLIFUData)
+set(MODULE_NAME OpenLIFUCloudSync)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
@@ -8,7 +8,6 @@ set(MODULE_PYTHON_SCRIPTS
 
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
-  Resources/Icons/sync.png
   Resources/UI/${MODULE_NAME}.ui
   )
 
@@ -20,6 +19,9 @@ slicerMacroBuildScriptedModule(
   WITH_GENERIC_TESTS
   )
 
+#-----------------------------------------------------------------------------
+#set(MODULE_CLI_NAME OpenLIFUCloudSyncCLI)
+add_subdirectory(OpenLIFUCloudSyncEngine)
 
 #-----------------------------------------------------------------------------
 if(BUILD_TESTING)
@@ -27,12 +29,6 @@ if(BUILD_TESTING)
   # Register the unittest subclass in the main script as a ctest.
   # Note that the test will also be available at runtime.
   slicer_add_python_unittest(SCRIPT ${MODULE_NAME}.py)
-
-  # Judge generic test pass/fail from unittest output instead of exit code.
-  set_tests_properties(py_nomainwindow_qSlicer${MODULE_NAME}ModuleGenericTest PROPERTIES
-    PASS_REGULAR_EXPRESSION "Ran [0-9]+ tests? in [0-9]"
-    FAIL_REGULAR_EXPRESSION "FAILED"
-  )
 
   # Additional build-time testing
   add_subdirectory(Testing)

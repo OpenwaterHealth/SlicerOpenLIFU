@@ -1,3 +1,6 @@
-openlifu==v0.17.0
+#openlifu==v0.17.0
 bcrypt
 threadpoolctl
+requests
+git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@cloud
+#-e /home/erik/Documents/Work/OpenwaterHealth/OpenLIFU-python
