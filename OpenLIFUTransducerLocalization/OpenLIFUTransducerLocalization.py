@@ -3049,6 +3049,19 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
 
         return ('photos', pulled_files)
 
+    @staticmethod
+    def _send_adb_broadcast(action: str, scan_id: str) -> None:
+        """Send a broadcast intent to the OpenLIFU 3D Scanner Android app via adb."""
+        subprocess.run(
+            [
+                "adb", "shell", "am", "broadcast",
+                "-a", action,
+                "-p", "health.openwater.openlifu3dscanner",
+                "--es", "SCAN_ID", scan_id,
+            ],
+            capture_output=True, text=True,
+        )
+
     def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """
         Pulls photo files or photoscan files from an Android device matching the
@@ -3096,6 +3109,8 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         if not files:
             raise RuntimeError("No files found for the given reference number.")
 
+        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
+
         # Check if 'scan' subdirectory exists (indicates photoscan is available)
         has_scan_dir = 'scan' in files
 
@@ -3122,6 +3137,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 subprocess.run(["adb", "pull", f"{scan_dir}/{filename}", dest_path])
                 pulled_files.append(dest_path)
 
+            self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
             return ('photoscan', pulled_files)
         else:
             # Pull photo files from base directory (offline mode)
@@ -3138,6 +3154,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                     subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
                     pulled_files.append(dest_path)
 
+            self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
             return ('photos', pulled_files)
 
     def generate_photoscan(self,
