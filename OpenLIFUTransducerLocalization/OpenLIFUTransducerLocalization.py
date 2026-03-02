@@ -3052,7 +3052,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     @staticmethod
     def _send_adb_broadcast(action: str, scan_id: str) -> None:
         """Send a broadcast intent to the OpenLIFU 3D Scanner Android app via adb."""
-        subprocess.run(
+        result = subprocess.run(
             [
                 "adb", "shell", "am", "broadcast",
                 "-a", action,
@@ -3061,6 +3061,10 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             ],
             capture_output=True, text=True,
         )
+        if result.returncode != 0:
+            logging.warning(
+                f"adb broadcast {action} failed (rc={result.returncode}): {result.stderr.strip()}"
+            )
 
     def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """
