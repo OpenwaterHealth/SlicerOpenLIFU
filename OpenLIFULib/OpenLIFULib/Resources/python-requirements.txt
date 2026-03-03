@@ -2,3 +2,4 @@ openlifu==v0.18.0
 bcrypt
 threadpoolctl
 requests
+segno

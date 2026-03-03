@@ -1,5 +1,6 @@
 # Standard library imports
 from collections import defaultdict
+import io
 import itertools
 import os
 from pathlib import Path
@@ -42,6 +43,7 @@ from OpenLIFULib import (
     get_cur_db,
     get_openlifu_data_parameter_node,
     openlifu_lz,
+    segno_lz,
 )
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.events import SlicerOpenLIFUEvents
@@ -1974,6 +1976,41 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
 
         return self.selected_reference_number
 
+class SessionQRCodeDialog(qt.QDialog):
+    """Display a QR code encoding the openlifu:// URI for the current session."""
+
+    def __init__(self, subject_id: str, session_id: str, parent=None):
+        super().__init__(parent or slicer.util.mainWindow())
+        self.setWindowTitle("Session QR Code")
+        self.setWindowModality(qt.Qt.WindowModal)
+
+        uri = f"openlifu://{subject_id}|{session_id}"
+
+        segno = segno_lz()
+        qr = segno.make(uri)
+        buf = io.BytesIO()
+        qr.save(buf, kind="png", scale=8, border=2, dark="#000", light="#fff")
+
+        pixmap = qt.QPixmap()
+        pixmap.loadFromData(buf.getvalue())
+
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        uri_label = qt.QLabel(uri)
+        uri_label.setAlignment(qt.Qt.AlignCenter)
+        layout.addWidget(uri_label)
+
+        qr_label = qt.QLabel()
+        qr_label.setPixmap(pixmap)
+        qr_label.setAlignment(qt.Qt.AlignCenter)
+        layout.addWidget(qr_label)
+
+        button_box = qt.QDialogButtonBox()
+        button_box.setStandardButtons(qt.QDialogButtonBox.Ok)
+        button_box.accepted.connect(self.accept)
+        layout.addWidget(button_box)
+
 #
 # OpenLIFUTransducerLocalizationWidget
 #
@@ -2051,6 +2088,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # ---- Photoscan generation connections ----
         self.ui.referenceNumberRefreshButton.setIcon(slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload))
         self.ui.referenceNumberRefreshButton.clicked.connect(self.on_reference_number_refresh_clicked)
+        self.ui.showQRCodeButton.setIcon(qt.QIcon(self.resourcePath("Icons/qrcode.png")))
+        self.ui.showQRCodeButton.clicked.connect(self.onShowQRCodeButtonClicked)
         self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
         self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
         self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
@@ -2248,6 +2287,17 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     @display_errors
     def on_reference_number_refresh_clicked(self, checked:bool):
         self.randomize_photocollection_reference_number()
+
+    @display_errors
+    def onShowQRCodeButtonClicked(self, checked:bool):
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            return
+        dialog = SessionQRCodeDialog(
+            subject_id=loaded_session.get_subject_id(),
+            session_id=loaded_session.get_session_id(),
+        )
+        dialog.exec_()
 
     @display_errors
     def on_transfer_photocollection_from_android_device_clicked(self, checked:bool):
@@ -2768,9 +2818,18 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.ui.addPhotoscanButton.setEnabled(True)
             self.ui.addPhotoscanButton.setToolTip("Browse for a photoscan on disk.")
 
+    def updateShowQRCodeButton(self):
+        if get_openlifu_data_parameter_node().loaded_session is None:
+            self.ui.showQRCodeButton.setEnabled(False)
+            self.ui.showQRCodeButton.setToolTip("Showing a session QR code requires an active session.")
+        else:
+            self.ui.showQRCodeButton.setEnabled(True)
+            self.ui.showQRCodeButton.setToolTip("Show QR code to pass session info to the OpenLIFU Android app.")
+
     def updatePhotoscanGenerationButtons(self):
         self.updateStartPhotoscanGenerationButton()
         self.updateAddPhotoscanButton()
+        self.updateShowQRCodeButton()
 
     def updateApprovalStatusLabel(self):
         """ Updates the status message that displays which photoscans have been approved or have
