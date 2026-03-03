@@ -3135,13 +3135,18 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
 
             # Pull all files from scan directory
             pulled_files = []
+            all_pulls_succeeded = True
             for file in scan_files:
                 filename = os.path.basename(file)
                 dest_path = os.path.join(temp_path, filename)
-                subprocess.run(["adb", "pull", f"{scan_dir}/{filename}", dest_path])
-                pulled_files.append(dest_path)
+                pull_result = subprocess.run(["adb", "pull", f"{scan_dir}/{filename}", dest_path])
+                if pull_result.returncode != 0:
+                    all_pulls_succeeded = False
+                else:
+                    pulled_files.append(dest_path)
 
-            self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+            if all_pulls_succeeded:
+                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
             return ('photoscan', pulled_files)
         else:
             # Pull photo files from base directory (offline mode)
@@ -3150,15 +3155,20 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                               '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}
 
             pulled_files = []
+            all_pulls_succeeded = True
             for file in files:
                 filename = os.path.basename(file)
                 # Only pull files with image extensions
                 if any(filename.lower().endswith(ext) for ext in image_extensions):
                     dest_path = os.path.join(temp_path, filename)
-                    subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
-                    pulled_files.append(dest_path)
+                    pull_result = subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
+                    if pull_result.returncode != 0:
+                        all_pulls_succeeded = False
+                    else:
+                        pulled_files.append(dest_path)
 
-            self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+            if all_pulls_succeeded:
+                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
             return ('photos', pulled_files)
 
     def generate_photoscan(self,
