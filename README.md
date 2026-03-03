@@ -74,9 +74,9 @@ transformations, and simulation tools.
 
 ## Slicer OpenLIFU Installation Instructions:
 
-## Step 1: Photogrammetry Application Pairing
+## Step 1: Photogrammetry Application Setup
 
-### Install Android Platform Tools
+### Install Android Platform Tools for Windows
 
 Download [Google's
 platform-tools](https://developer.android.com/tools/releases/platform-tools) for your system.
@@ -101,8 +101,21 @@ platform-tools](https://developer.android.com/tools/releases/platform-tools) for
 
 10. To confirm this has been added correctly, open up a command window and type adb --version into the window. The version number should follow your entry.
 
-
 This process will allow for the android application build to connect with the desktop application.
+
+#### Other platforms
+
+Linux:
+
+```bash
+sudo apt update &&  sudo apt install android-tools-adb
+```
+
+macOS:
+
+```bash
+brew install android-platform-tools
+```
 
 ### Download the Android Application.
 
@@ -139,7 +152,7 @@ Please locate the most recent photogrammetry application and download it directl
 
 ## Meshroom Setup (Optional)
 
-This application is designed to work with different photogrammetry application builds, including [OpenLIFU 3D Scanner Android app](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner). With credits in the app, computationally intensive tasks such as photogrammetric mesh reconstruction are performed in the cloud, eliminating the need for local Meshroom installation.
+This application is designed to work with different photogrammetry frameworks, such as the one included with [OpenLIFU 3D Scanner Android app](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner). With credits in the app, computationally intensive tasks such as photogrammetric mesh reconstruction are performed in the cloud, eliminating the need for local Meshroom installation.
 
 If you prefer to perform local mesh reconstruction locally instead of using cloud processing, you will need to install Meshroom and add it to your system PATH. Follow the instructions [here](https://github.com/OpenwaterHealth/OpenLIFU-python?tab=readme-ov-file#installing-meshroom) to download and configure Meshroom for local photoscan generation. Please ensure that you are downloading Meshroom 2023.3.0, as this is the most compatible version with most systems.
 
@@ -147,14 +160,14 @@ If you prefer to perform local mesh reconstruction locally instead of using clou
 
 Please note that there are two main options for download:
 
-## Option 1:
-The most recent SlicerOpenLIFU Extension exists in the "Releases" section of this repository. Please navigate to this section and download the most recent release. The version of Slicer that must be downloaded for the release is located in the Release notes. Please ensure to download the correct Slicer version for the extension.
+## Option 1 (Manual installation):
+The most recent SlicerOpenLIFU Extension can be found in the [repository Releases](https://github.com/OpenwaterHealth/SlicerOpenLIFU/releases/latest). The version of Slicer that must be downloaded for the release is located in the Release notes. Please ensure to download the correct Slicer version for the extension.
 
-1. Download your preferred version of the Slicer Extension in the "Releases" section.
+1. Download your preferred version of the Slicer Extension from [Releases](https://github.com/OpenwaterHealth/SlicerOpenLIFU/releases).
 
-2. Download the correct version of Slicer according to the release notes for the designated extension.
+2. [Download](https://download.slicer.org/) the correct version of Slicer according to the release notes for the designated extension.
 
-3. Open Slicer.
+3. Launch Slicer.
 
 4. Navigate to "View" in the top left corner.
 
@@ -162,14 +175,14 @@ The most recent SlicerOpenLIFU Extension exists in the "Releases" section of thi
 
 6. Click "Install from file."
 
-7. Locate the UNZIPPED file of the Slicer extension that was downloaded from the Release section. Please note that the file MUST be unzipped before using it for installation.
+7. Browse for and select the installation package that you downloaded in step 2.
 
 8. Wait for install to be complete, then restart the Slicer app.
 
-## Option 2:
+## Option 2 (Extension manager):
 The SlicerOpenLIFU extension also exists as an extension within Slicer itself.
 
-1. Open Slicer
+1. Launch Slicer
 
 2. Navigate to "View" in the top left corner.
 
