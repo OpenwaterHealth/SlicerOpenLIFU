@@ -1,4 +1,4 @@
-from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz, threadpoolctl_lz, check_and_install_kwave_binaries
+from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz, threadpoolctl_lz, segno_lz, check_and_install_kwave_binaries
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPoint,
     SlicerOpenLIFUXADataset,
@@ -33,7 +33,8 @@ __all__ = [
     "openlifu_lz",
     "xarray_lz",
     "bcrypt_lz",
-    "threadpoolctl_lz"
+    "threadpoolctl_lz",
+    "segno_lz",
     "SlicerOpenLIFUSolution",
     "SlicerOpenLIFUProtocol",
     "SlicerOpenLIFUTransducer",

@@ -23,6 +23,7 @@ def python_requirements_exist() -> bool:
     try:
         import threadpoolctl
         import bcrypt
+        import segno
     except ModuleNotFoundError:
         return False
     return importlib.util.find_spec('openlifu') is not None # openlifu import causes a delay so we check for it without actually importing yet
@@ -132,3 +133,10 @@ def threadpoolctl_lz() -> "threadpoolctl":
         check_and_install_python_requirements(prompt_if_found=False)
         import threadpoolctl
     return sys.modules["threadpoolctl"]
+
+def segno_lz() -> "segno":
+    """Import segno and return the module, checking that it is installed along the way."""
+    if "segno" not in sys.modules:
+        check_and_install_python_requirements(prompt_if_found=False)
+        import segno
+    return sys.modules["segno"]
