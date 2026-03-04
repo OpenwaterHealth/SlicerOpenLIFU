@@ -19,13 +19,16 @@ def main():
     parser.add_argument(
         "--api_key", help="Cloud Access Token", required=True)
     parser.add_argument("--refresh_token", required=True)
+    parser.add_argument("--env", default="prod", help="Sync environment")
     args = parser.parse_args()
-
+    
     logging.basicConfig(
         level=logging.INFO,
         format='[ENGINE] %(asctime)s - %(levelname)s - %(message)s',
         stream=sys.stdout
     )
+
+    logging.info(f"Starting OpenLIFU Cloud Sync Engine in '{args.env}' environment")
 
     # Force unbuffered output so parent process sees logs immediately
     sys.stdout.reconfigure(line_buffering=True)
