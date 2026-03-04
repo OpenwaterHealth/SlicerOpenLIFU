@@ -36,6 +36,7 @@ from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_wid
 # but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
+    import openlifu.io
 
 #
 # OpenLIFUSonicationControl
