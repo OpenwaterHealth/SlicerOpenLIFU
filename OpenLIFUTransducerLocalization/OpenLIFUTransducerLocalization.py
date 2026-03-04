@@ -1979,12 +1979,12 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
 class SessionQRCodeDialog(qt.QDialog):
     """Display a QR code encoding the openlifu:// URI for the current session."""
 
-    def __init__(self, subject_id: str, session_id: str, parent=None):
+    def __init__(self, subject_id: str, session_id: str, photocollection_reference_number: str, parent=None):
         super().__init__(parent or slicer.util.mainWindow())
         self.setWindowTitle("Session QR Code")
         self.setWindowModality(qt.Qt.WindowModal)
 
-        uri = f"openlifu://{subject_id}|{session_id}"
+        uri = f"openlifu://{subject_id}|{session_id}|{photocollection_reference_number}"
 
         segno = segno_lz()
         qr = segno.make(uri)
@@ -2296,6 +2296,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         dialog = SessionQRCodeDialog(
             subject_id=loaded_session.get_subject_id(),
             session_id=loaded_session.get_session_id(),
+            photocollection_reference_number=self.ui.referenceNumberLineEdit.text,
         )
         dialog.exec_()
 
