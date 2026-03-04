@@ -1,5 +1,6 @@
 # Standard library imports
 import json
+import subprocess
 from enum import Enum
 from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import time
@@ -620,6 +621,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
         self.inject_workflow_controls_into_placeholder()
+
+        # Install dependencies
+        try:
+            adb_result = subprocess.run(["adb", "--version"], capture_output=True, check=True, text=True)
+            adb_version = adb_result.stdout.splitlines()[0] if adb_result.stdout else "unknown version"
+            adb_installed = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            adb_installed = False
+        adb_icon_name = qt.QStyle.SP_DialogYesButton if adb_installed else qt.QStyle.SP_DialogNoButton
+        adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.adbStatusIcon.setPixmap(adb_pixmap)
+        self.ui.adbStatusIcon.setText("")
+        if adb_installed:
+            self.ui.installADBPushButton.setEnabled(False)
+            self.ui.installADBPushButton.setText(f"Android Platform Tools installed ({adb_version})")
 
         # ====================================
 
