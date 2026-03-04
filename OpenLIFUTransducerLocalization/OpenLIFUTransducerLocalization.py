@@ -3119,9 +3119,10 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                     f"{base}/scan/file",
                     temp_path,
                 )
-                if all_ok:
-                    self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
-                return ('photoscan', pulled_files)
+                if pulled_files:
+                    if all_ok:
+                        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+                    return ('photoscan', pulled_files)
 
         # Fall through: pull photo files only
         image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif',
@@ -3129,9 +3130,11 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         photo_names = [name for name, typ in entries
                        if typ == "file" and any(name.lower().endswith(ext) for ext in image_extensions)]
         pulled_files, all_ok = self._read_content_files(photo_names, f"{base}/file", temp_path)
-        if all_ok:
-            self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
-        return ('photos', pulled_files)
+        if pulled_files:
+            if all_ok:
+                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+            return ('photos', pulled_files)
+        return None
 
     @staticmethod
     def _read_content_files(filenames: list[str], uri_base: str, dest_dir: str) -> tuple[list[str], bool]:
@@ -3223,7 +3226,8 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
         """Pull photo or photoscan files from an Android device.
 
-        Tries three sources in order: content provider, fallback 1, fallback 2.
+        Tries three sources in order: content provider, filesystem fallback (v2),
+        then legacy filesystem fallback (v1).
         """
         temp_path = os.path.join(tempfile.gettempdir(), reference_number)
         os.makedirs(temp_path, exist_ok=True)
@@ -3233,10 +3237,14 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         if result is not None:
             return result
 
+        logging.info(f"Content provider unavailable for '{reference_number}', trying filesystem fallback.")
+
         # Fallback v2: filesystem at /sdcard/OpenLIFU-3DScanner/
         result = self._pull_from_fallback_location_v2(reference_number, temp_path)
         if result is not None:
             return result
+
+        logging.info(f"Filesystem fallback unavailable for '{reference_number}', trying legacy fallback.")
 
         # Fallback v1: legacy filesystem at /sdcard/DCIM/Camera/
         return self._pull_from_fallback_location_v1(reference_number, temp_path)
