@@ -2986,7 +2986,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerLocalizationParameterNode(super().getParameterNode())
 
-    def _pull_photos_from_legacy_location(self, reference_number: str, temp_path: str) -> tuple[str, List[str]]:
+    def _pull_from_fallback_location_v1(self, reference_number: str, temp_path: str) -> tuple[str, List[str]]:
         """
         Pulls photo files from the legacy Android app (v3.0) location.
 
@@ -3067,52 +3067,102 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 f"adb broadcast {action} failed (rc={result.returncode}): {result.stderr.strip()}"
             )
 
-    def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
+    @staticmethod
+    def _parse_content_query_rows(output: str) -> list[tuple[str, str]]:
+        """Parse ``adb shell content query`` output into (name, type) tuples."""
+        rows = []
+        for line in output.strip().splitlines():
+            if not line.startswith("Row:"):
+                continue
+            fields = {}
+            for part in line.split(", "):
+                if "=" in part:
+                    key, _, value = part.partition("=")
+                    fields[key.split()[-1]] = value
+            if "name" in fields:
+                rows.append((fields["name"], fields.get("type", "file")))
+        return rows
+
+    def _pull_from_content_provider(self, reference_number: str, temp_path: str) -> tuple[str, list[str]] | None:
+        """Pull files via the Android content provider. Returns None if unavailable.
+
+        If the collection has a 'scan' subdirectory (3D model already generated on device),
+        pulls the scan files and returns ('photoscan', ...). Otherwise pulls just the photos
+        and returns ('photos', ...) for local photocollection processing.
         """
-        Pulls photo files or photoscan files from an Android device matching the
-        given reference number. The reference number is used to identify a collection
-        of photos on the Android device in accordance with the output format of a
-        specifically-tailored app. See [3D Open
-        Water](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner) for
-        details. Files are stored in a temporary directory named after the
-        reference number.
+        base = f"content://health.openwater.openlifu3dscanner.photoscans/collections/{reference_number}"
 
-        If a 'scan' subdirectory exists, the photoscan files will be pulled instead
-        of the raw photos.
+        # Check if collection exists
+        result = subprocess.run(
+            ["adb", "shell", "content", "query", "--uri", base],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return None
+        entries = self._parse_content_query_rows(result.stdout)
+        if not entries:
+            return None
 
-        For backward compatibility with the legacy app (v3.0), if the new location
-        is not found, this function falls back to searching /sdcard/DCIM/Camera
-        for files matching {reference_number}_*.
+        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
 
-        Args:
-            reference_number: A string identifying the photo collection or photoscan
-            stored on the Android device.
+        # Check for scan (3D model) subfolder
+        has_scan = any(name == "scan" and typ == "directory" for name, typ in entries)
+        if has_scan:
+            scan_result = subprocess.run(
+                ["adb", "shell", "content", "query", "--uri", f"{base}/scan"],
+                capture_output=True, text=True,
+            )
+            scan_entries = self._parse_content_query_rows(scan_result.stdout) if scan_result.returncode == 0 else []
+            if scan_entries:
+                pulled_files, all_ok = self._read_content_files(
+                    [name for name, _ in scan_entries],
+                    f"{base}/scan/file",
+                    temp_path,
+                )
+                if all_ok:
+                    self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+                return ('photoscan', pulled_files)
 
-        Returns:
-            A tuple of (data_type, file_paths) where data_type is either 'photos' or
-            'photoscan', and file_paths is a list of full file paths to the pulled
-            files stored in the temp dir.
+        # Fall through: pull photo files only
+        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif',
+                          '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}
+        photo_names = [name for name, typ in entries
+                       if typ == "file" and any(name.lower().endswith(ext) for ext in image_extensions)]
+        pulled_files, all_ok = self._read_content_files(photo_names, f"{base}/file", temp_path)
+        if all_ok:
+            self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+        return ('photos', pulled_files)
 
-        Raises:
-            RuntimeError: If no files are found or adb fails to connect.
-        """
+    @staticmethod
+    def _read_content_files(filenames: list[str], uri_base: str, dest_dir: str) -> tuple[list[str], bool]:
+        """Read files from a content provider URI into dest_dir. Returns (paths, all_succeeded)."""
+        pulled = []
+        all_ok = True
+        for filename in filenames:
+            dest_path = os.path.join(dest_dir, filename)
+            with open(dest_path, 'wb') as f:
+                r = subprocess.run(["adb", "shell", "content", "read", "--uri", f"{uri_base}/{filename}"], stdout=f)
+            if r.returncode != 0:
+                all_ok = False
+            else:
+                pulled.append(dest_path)
+        return pulled, all_ok
+
+    def _pull_from_fallback_location_v2(self, reference_number: str, temp_path: str) -> tuple[str, List[str]] | None:
+        """Pull files via filesystem at /sdcard/OpenLIFU-3DScanner/. Returns None if unavailable."""
         android_dir = f"/sdcard/OpenLIFU-3DScanner/{reference_number}"
-        temp_path = os.path.join(tempfile.gettempdir(), reference_number)
-        os.makedirs(temp_path, exist_ok=True)
 
-        # Check if the new app's directory exists
         result = subprocess.run(
             ["adb", "shell", "ls", android_dir],
             capture_output=True, text=True
         )
 
         if result.returncode != 0:
-            # New location not found; fall back to legacy location
-            return self._pull_photos_from_legacy_location(reference_number, temp_path)
+            return None
 
         files = [f for f in result.stdout.strip().split('\n') if f]
         if not files:
-            raise RuntimeError("No files found for the given reference number.")
+            return None
 
         self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
 
@@ -3151,7 +3201,6 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             return ('photoscan', pulled_files)
         else:
             # Pull photo files from base directory (offline mode)
-            # Common image file extensions
             image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif',
                               '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw', '.dng'}
 
@@ -3159,7 +3208,6 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             all_pulls_succeeded = True
             for file in files:
                 filename = os.path.basename(file)
-                # Only pull files with image extensions
                 if any(filename.lower().endswith(ext) for ext in image_extensions):
                     dest_path = os.path.join(temp_path, filename)
                     pull_result = subprocess.run(["adb", "pull", f"{android_dir}/{filename}", dest_path])
@@ -3171,6 +3219,27 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             if all_pulls_succeeded:
                 self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
             return ('photos', pulled_files)
+
+    def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
+        """Pull photo or photoscan files from an Android device.
+
+        Tries three sources in order: content provider, fallback 1, fallback 2.
+        """
+        temp_path = os.path.join(tempfile.gettempdir(), reference_number)
+        os.makedirs(temp_path, exist_ok=True)
+
+        # Try content provider first (latest app version)
+        result = self._pull_from_content_provider(reference_number, temp_path)
+        if result is not None:
+            return result
+
+        # Fallback v2: filesystem at /sdcard/OpenLIFU-3DScanner/
+        result = self._pull_from_fallback_location_v2(reference_number, temp_path)
+        if result is not None:
+            return result
+
+        # Fallback v1: legacy filesystem at /sdcard/DCIM/Camera/
+        return self._pull_from_fallback_location_v1(reference_number, temp_path)
 
     def generate_photoscan(self,
         subject_id:str,
