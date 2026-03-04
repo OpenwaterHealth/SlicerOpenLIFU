@@ -11,24 +11,13 @@ from slicer.i18n import tr as _
 from slicer.i18n import translate
 logger = logging.getLogger('OpenLIFU.CloudSync')
 
-# Global logic singleton
-_sharedLogicInstance = None
-
-
-def getCloudSyncLogic():
-    global _sharedLogicInstance
-    if _sharedLogicInstance is None:
-        _sharedLogicInstance = OpenLIFUCloudSyncLogic()
-    return _sharedLogicInstance
-
-# --- Signal Bridge for Thread-Safe UI Updates ---
-
 
 class CloudStatusHelper(qt.QObject):
     # Signal carries: (statusMessage, timestamp)
     statusChanged = qt.Signal(str, str)
     # Generic state-changed signal (login / service running / enabled flags)
     stateChanged = qt.Signal()
+    environmentChanged = qt.Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -46,6 +35,19 @@ class OpenLIFUCloudSync(ScriptedLoadableModule):
         # truth for the background sync engine, but this standalone module
         # is hidden from the module selector.
         self.parent.hidden = True
+        self.parent.contributors = ["Andrew Howe (Kitware), Erik (NVP Software"]
+        # short description of the module and a link to online module documentation
+        # _() function marks text as translatable to other languages
+        self.parent.helpText = _(
+            "This is the database module of the OpenLIFU extension for focused ultrasound. "
+            "More information at <a href=\"https://github.com/OpenwaterHealth/SlicerOpenLIFU\">github.com/OpenwaterHealth/SlicerOpenLIFU</a>."
+        )
+        # organization, grant, and thanks
+        self.parent.acknowledgementText = _(
+            "This is part of Openwater's OpenLIFU, an open-source "
+            "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
+            "and development."
+        )
 
 
 class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
@@ -74,6 +76,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     _SETTING_REFRESH_TOKEN = "OpenLIFU/CloudRefreshToken"
     _SETTING_SERVICE_ENABLED = "OpenLIFU/CloudSyncEnabled"
     _SETTING_LAST_SYNC = "OpenLIFU/CloudLastSync"
+    _SETTING_CLOUD_EMAIL = "OpenLIFU/CloudAccountEmail"
 
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
@@ -83,6 +86,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self._last_sync_timestamp = qt.QSettings().value(self._SETTING_LAST_SYNC, "") or ""
         self._last_status_message = ""
         self._service_failed = False
+        self.environment = self.getEnvironment()
         # Instantiate signal bridge
         self.statusHelper = CloudStatusHelper()
 
@@ -99,6 +103,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
         # Defer heartbeat startup
         qt.QTimer.singleShot(1000, self.startHeartbeat)
+        self.statusHelper.environmentChanged.emit(self.environment)
 
     # ---------------- Service-enabled flag ----------------
 
@@ -171,6 +176,13 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self.cleanup()
         slicer.app.quit()
 
+    def getEnvironment(self):
+        self.environment = os.getenv("OPENLIFU_CLOUD_ENV", "prod").lower()
+        if self.environment not in ["prod", "qa", "staging"]:
+            self.environment = "prod"
+        
+        return self.environment
+
     def startHeartbeat(self):
         self.monitorTimer = qt.QTimer()
         self.monitorTimer.timeout.connect(self.heartbeat)
@@ -233,7 +245,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self.syncProcess.finished.connect(self.onProcessFinished)
 
         args = [scriptPath, "--db_path", db_dir, "--api_key",
-                self.apiKey, "--refresh_token", refresh_token]
+                self.apiKey, "--refresh_token", refresh_token, "--env", self.environment]
         self.syncProcess.start(sys.executable, args)
         logger.info("Cloud Sync Engine started via QProcess.")
         self._service_failed = False
@@ -394,6 +406,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             }
             qt.QSettings().setValue(
                 self._SETTING_REFRESH_TOKEN, data['refreshToken'])
+            qt.QSettings().setValue(
+                self._SETTING_CLOUD_EMAIL, email)
             self._service_failed = False
             qt.QTimer.singleShot(100, self.heartbeat)
             self._notifyStateChanged()
@@ -410,6 +424,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self._stopSyncProcess()
         self._cloudTokens = None
         qt.QSettings().remove(self._SETTING_REFRESH_TOKEN)
+        qt.QSettings().remove(self._SETTING_CLOUD_EMAIL)
         self._notifyStateChanged()
 
     def logout(self):

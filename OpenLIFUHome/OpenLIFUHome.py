@@ -25,7 +25,6 @@ from OpenLIFULib.util import (
 
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 
-from OpenLIFUCloudSync import getCloudSyncLogic
 #
 # OpenLIFUHome
 #
@@ -85,8 +84,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
 
-        getCloudSyncLogic()
-
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUHome.ui"))
@@ -131,6 +128,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
         self.ui.protocolConfigPushButton.clicked.connect(lambda : self.switchModule(self.ui.protocolConfigPushButton.text))
 
+        qt.QTimer.singleShot(1000, slicer.util.getModuleLogic("OpenLIFUCloudSync").startHeartbeat)
+
+
     def switchModule(self, moduleButtonText: str) -> None:
         moduleButtonText = moduleButtonText.replace(" ", "")
         moduleButtonText = moduleButtonText.replace("-", "")
@@ -144,6 +144,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             moduleButtonText = moduleButtonText[:-7]  # strip to -Config
 
         slicer.util.selectModule(moduleButtonText)
+        
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
