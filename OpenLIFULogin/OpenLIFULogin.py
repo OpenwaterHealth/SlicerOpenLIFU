@@ -630,7 +630,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.inject_workflow_controls_into_placeholder()
 
         # Install dependencies
-        self._updateADBStatus()
+        self._checkADBStatus()
 
         # ====================================
 
@@ -944,7 +944,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self._last_active_user = new_active_user
 
-    def _updateADBStatus(self) -> None:
+    def _checkADBStatus(self) -> None:
         try:
             adb_result = subprocess.run(["adb", "--version"], capture_output=True, check=True, text=True)
             adb_version = adb_result.stdout.splitlines()[0] if adb_result.stdout else "unknown version"
@@ -953,7 +953,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             adb_installed = False
             adb_version = None
 
-        adb_icon_name = qt.QStyle.SP_DialogYesButton if adb_installed else qt.QStyle.SP_DialogNoButton
+        adb_icon_name = qt.QStyle.SP_DialogApplyButton if adb_installed else qt.QStyle.SP_DialogCancelButton
         adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
         self.ui.adbStatusIcon.setPixmap(adb_pixmap)
         self.ui.adbStatusIcon.setText("")
@@ -968,10 +968,16 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     @display_errors
     def onInstallADBClicked(self, checked: bool = False) -> None:
-        if not sys.platform.startswith("win"):
-            slicer.util.infoDisplay("ADB installation is currently only supported on Windows.")
-            return
+        if sys.platform.startswith("win"):
+            self._installADBWindows()
+        elif sys.platform == "darwin":
+            self._installADBMac()
+        elif sys.platform.startswith("linux"):
+            self._installADBLinux()
+        else:
+            slicer.util.infoDisplay("ADB installation is not supported on this platform.")
 
+    def _installADBWindows(self) -> None:
         if not slicer.util.confirmYesNoDisplay(
             "This will download Android Platform Tools (~7 MB) from Google "
             "and add the installation directory to your Windows user PATH. Continue?"
@@ -994,28 +1000,19 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         try:
             ADB_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
 
-            def reporthook(block_count, block_size, total_size):
-                if total_size > 0:
-                    pct = int(min(block_count * block_size, total_size) * 100 / total_size)
-                    self.ui.installADBPushButton.setText(f"Downloading... {pct}%")
-                    slicer.app.processEvents()
-
             with BusyCursor():
                 tmp_dir = tempfile.mkdtemp(prefix="adb_install_")
                 zip_path = Path(tmp_dir) / "platform-tools-latest-windows.zip"
 
-                self.ui.installADBPushButton.setText("Downloading... 0%")
-                slicer.app.processEvents()
-                urllib.request.urlretrieve(ADB_URL, str(zip_path), reporthook)
+                urllib.request.urlretrieve(ADB_URL, str(zip_path))
 
-                self.ui.installADBPushButton.setText("Extracting...")
-                slicer.app.processEvents()
                 with zipfile.ZipFile(str(zip_path), 'r') as zf:
                     zf.extractall(str(selected_dir))
 
                 platform_tools_path = str(selected_dir / "platform-tools")
 
-                # Write to Windows user PATH registry key (no elevation needed)
+                # Write to Windows user PATH registry key
+                # User PATH does not require admin permissions
                 import winreg
                 reg_key = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER, "Environment", 0,
@@ -1039,7 +1036,39 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             if tmp_dir is not None:
                 import shutil
                 shutil.rmtree(tmp_dir, ignore_errors=True)
-            self._updateADBStatus()
+            self._checkADBStatus()
+
+    def _installADBMac(self) -> None:
+        if not slicer.util.confirmYesNoDisplay(
+            "This will run 'brew install android-platform-tools' to install ADB. "
+            "Homebrew must already be installed. Continue?"
+        ):
+            return
+
+        self.ui.installADBPushButton.setEnabled(False)
+        self.ui.installADBPushButton.setText("Installing via Homebrew...")
+        slicer.app.processEvents()
+
+        try:
+            with BusyCursor():
+                result = subprocess.run(
+                    ["brew", "install", "android-platform-tools"],
+                    capture_output=True, text=True,
+                )
+            if result.returncode != 0:
+                slicer.util.errorDisplay(
+                    f"Homebrew installation failed:\n{result.stderr or result.stdout}"
+                )
+        finally:
+            self._checkADBStatus()
+
+    def _installADBLinux(self) -> None:
+        slicer.util.infoDisplay(
+            "To install ADB on Linux, run the following commands in a terminal:\n\n"
+            "    sudo apt update\n"
+            "    sudo apt install android-tools-adb\n\n"
+            "After installing, reopen the application to verify."
+        )
 
 # OpenLIFULoginLogic
 #
