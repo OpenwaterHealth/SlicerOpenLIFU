@@ -1,7 +1,13 @@
 # Standard library imports
 import json
+import os
 import subprocess
+import sys
+import tempfile
+import urllib.request
+import zipfile
 from enum import Enum
+from pathlib import Path
 from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import time
 import requests
@@ -22,6 +28,7 @@ from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
 from OpenLIFULib import (
+    BusyCursor,
     bcrypt_lz,
     get_cur_db,
     get_current_user,
@@ -623,19 +630,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.inject_workflow_controls_into_placeholder()
 
         # Install dependencies
-        try:
-            adb_result = subprocess.run(["adb", "--version"], capture_output=True, check=True, text=True)
-            adb_version = adb_result.stdout.splitlines()[0] if adb_result.stdout else "unknown version"
-            adb_installed = True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            adb_installed = False
-        adb_icon_name = qt.QStyle.SP_DialogYesButton if adb_installed else qt.QStyle.SP_DialogNoButton
-        adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
-        self.ui.adbStatusIcon.setPixmap(adb_pixmap)
-        self.ui.adbStatusIcon.setText("")
-        if adb_installed:
-            self.ui.installADBPushButton.setEnabled(False)
-            self.ui.installADBPushButton.setText(f"Android Platform Tools installed ({adb_version})")
+        self._updateADBStatus()
 
         # ====================================
 
@@ -948,7 +943,104 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
 
         self._last_active_user = new_active_user
-            
+
+    def _updateADBStatus(self) -> None:
+        try:
+            adb_result = subprocess.run(["adb", "--version"], capture_output=True, check=True, text=True)
+            adb_version = adb_result.stdout.splitlines()[0] if adb_result.stdout else "unknown version"
+            adb_installed = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            adb_installed = False
+            adb_version = None
+
+        adb_icon_name = qt.QStyle.SP_DialogYesButton if adb_installed else qt.QStyle.SP_DialogNoButton
+        adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.adbStatusIcon.setPixmap(adb_pixmap)
+        self.ui.adbStatusIcon.setText("")
+
+        if adb_installed:
+            self.ui.installADBPushButton.setEnabled(False)
+            self.ui.installADBPushButton.setText(f"Android Platform Tools installed ({adb_version})")
+        else:
+            self.ui.installADBPushButton.setEnabled(True)
+            self.ui.installADBPushButton.setText("Install Android Platform Tools")
+            self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
+
+    @display_errors
+    def onInstallADBClicked(self, checked: bool = False) -> None:
+        if not sys.platform.startswith("win"):
+            slicer.util.infoDisplay("ADB installation is currently only supported on Windows.")
+            return
+
+        if not slicer.util.confirmYesNoDisplay(
+            "This will download Android Platform Tools (~7 MB) from Google "
+            "and add the installation directory to your Windows user PATH. Continue?"
+        ):
+            return
+
+        selected_dir = qt.QFileDialog.getExistingDirectory(
+            slicer.util.mainWindow(),
+            "Choose installation directory for Android Platform Tools",
+            str(Path.home()),
+            qt.QFileDialog.ShowDirsOnly,
+        )
+        if not selected_dir:
+            return
+
+        selected_dir = Path(selected_dir)
+        self.ui.installADBPushButton.setEnabled(False)
+        tmp_dir = None
+
+        try:
+            ADB_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+
+            def reporthook(block_count, block_size, total_size):
+                if total_size > 0:
+                    pct = int(min(block_count * block_size, total_size) * 100 / total_size)
+                    self.ui.installADBPushButton.setText(f"Downloading... {pct}%")
+                    slicer.app.processEvents()
+
+            with BusyCursor():
+                tmp_dir = tempfile.mkdtemp(prefix="adb_install_")
+                zip_path = Path(tmp_dir) / "platform-tools-latest-windows.zip"
+
+                self.ui.installADBPushButton.setText("Downloading... 0%")
+                slicer.app.processEvents()
+                urllib.request.urlretrieve(ADB_URL, str(zip_path), reporthook)
+
+                self.ui.installADBPushButton.setText("Extracting...")
+                slicer.app.processEvents()
+                with zipfile.ZipFile(str(zip_path), 'r') as zf:
+                    zf.extractall(str(selected_dir))
+
+                platform_tools_path = str(selected_dir / "platform-tools")
+
+                # Write to Windows user PATH registry key (no elevation needed)
+                import winreg
+                reg_key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER, "Environment", 0,
+                    winreg.KEY_READ | winreg.KEY_WRITE,
+                )
+                try:
+                    current_path, _ = winreg.QueryValueEx(reg_key, "Path")
+                except FileNotFoundError:
+                    current_path = ""
+                entries = [p for p in current_path.split(os.pathsep) if p]
+                if platform_tools_path not in entries:
+                    entries.append(platform_tools_path)
+                    winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
+                                      os.pathsep.join(entries))
+                winreg.CloseKey(reg_key)
+
+                # Patch the current process's PATH so the re-check below works immediately
+                os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + platform_tools_path
+
+        finally:
+            if tmp_dir is not None:
+                import shutil
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            self._updateADBStatus()
+
 # OpenLIFULoginLogic
 #
 
