@@ -3103,8 +3103,6 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         if not entries:
             return None
 
-        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
-
         # Check for scan (3D model) subfolder
         has_scan = any(name == "scan" and typ == "directory" for name, typ in entries)
         if has_scan:
@@ -3166,8 +3164,6 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         files = [f for f in result.stdout.strip().split('\n') if f]
         if not files:
             return None
-
-        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
 
         # Check if 'scan' subdirectory exists (indicates photoscan is available)
         has_scan_dir = 'scan' in files
@@ -3231,6 +3227,8 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         """
         temp_path = os.path.join(tempfile.gettempdir(), reference_number)
         os.makedirs(temp_path, exist_ok=True)
+
+        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
 
         # Try content provider first (latest app version)
         result = self._pull_from_content_provider(reference_number, temp_path)
