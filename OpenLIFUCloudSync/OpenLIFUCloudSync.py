@@ -290,7 +290,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             return True, "Success"
         except Exception as e:
             logger.error(f"Login error: {e}")
-            return False, str(e)
+            return False, "Login failed. Please try again."
 
     def logout(self):
         self.cleanup()
