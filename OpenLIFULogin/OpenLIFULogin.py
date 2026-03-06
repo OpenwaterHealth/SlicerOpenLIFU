@@ -1,6 +1,13 @@
 # Standard library imports
 import json
+import os
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import zipfile
 from enum import Enum
+from pathlib import Path
 from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import time
 import requests
@@ -21,6 +28,7 @@ from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
 from OpenLIFULib import (
+    BusyCursor,
     bcrypt_lz,
     get_cur_db,
     get_current_user,
@@ -621,6 +629,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.inject_workflow_controls_into_placeholder()
 
+        # Install dependencies
+        self._checkADBStatus()
+
         # ====================================
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -932,7 +943,133 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
 
         self._last_active_user = new_active_user
-            
+
+    def _checkADBStatus(self) -> None:
+        try:
+            adb_result = subprocess.run(["adb", "--version"], capture_output=True, check=True, text=True)
+            adb_version = adb_result.stdout.splitlines()[0] if adb_result.stdout else "unknown version"
+            adb_installed = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            adb_installed = False
+            adb_version = None
+
+        adb_icon_name = qt.QStyle.SP_DialogApplyButton if adb_installed else qt.QStyle.SP_DialogCancelButton
+        adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.adbStatusIcon.setPixmap(adb_pixmap)
+        self.ui.adbStatusIcon.setText("")
+
+        if adb_installed:
+            self.ui.installADBPushButton.setEnabled(False)
+            self.ui.installADBPushButton.setText(f"Android Platform Tools installed ({adb_version})")
+        else:
+            self.ui.installADBPushButton.setEnabled(True)
+            self.ui.installADBPushButton.setText("Install Android Platform Tools")
+            self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
+
+    @display_errors
+    def onInstallADBClicked(self, checked: bool = False) -> None:
+        if sys.platform.startswith("win"):
+            self._installADBWindows()
+        elif sys.platform == "darwin":
+            self._installADBMac()
+        elif sys.platform.startswith("linux"):
+            self._installADBLinux()
+        else:
+            slicer.util.infoDisplay("ADB installation is not supported on this platform.")
+
+    def _installADBWindows(self) -> None:
+        if not slicer.util.confirmYesNoDisplay(
+            "This will download Android Platform Tools (~7 MB) from Google "
+            "and add the installation directory to your Windows user PATH. Continue?"
+        ):
+            return
+
+        selected_dir = qt.QFileDialog.getExistingDirectory(
+            slicer.util.mainWindow(),
+            "Choose installation directory for Android Platform Tools",
+            str(Path.home()),
+            qt.QFileDialog.ShowDirsOnly,
+        )
+        if not selected_dir:
+            return
+
+        selected_dir = Path(selected_dir)
+        self.ui.installADBPushButton.setEnabled(False)
+        tmp_dir = None
+
+        try:
+            ADB_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+
+            with BusyCursor():
+                tmp_dir = tempfile.mkdtemp(prefix="adb_install_")
+                zip_path = Path(tmp_dir) / "platform-tools-latest-windows.zip"
+
+                urllib.request.urlretrieve(ADB_URL, str(zip_path))
+
+                with zipfile.ZipFile(str(zip_path), 'r') as zf:
+                    zf.extractall(str(selected_dir))
+
+                platform_tools_path = str(selected_dir / "platform-tools")
+
+                # Write to Windows user PATH registry key
+                # User PATH does not require admin permissions
+                import winreg
+                reg_key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER, "Environment", 0,
+                    winreg.KEY_READ | winreg.KEY_WRITE,
+                )
+                try:
+                    current_path, _ = winreg.QueryValueEx(reg_key, "Path")
+                except FileNotFoundError:
+                    current_path = ""
+                entries = [p for p in current_path.split(os.pathsep) if p]
+                if platform_tools_path not in entries:
+                    entries.append(platform_tools_path)
+                    winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
+                                      os.pathsep.join(entries))
+                winreg.CloseKey(reg_key)
+
+                # Patch the current process's PATH so the re-check below works immediately
+                os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + platform_tools_path
+
+        finally:
+            if tmp_dir is not None:
+                import shutil
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            self._checkADBStatus()
+
+    def _installADBMac(self) -> None:
+        if not slicer.util.confirmYesNoDisplay(
+            "This will run 'brew install android-platform-tools' to install ADB. "
+            "Homebrew must already be installed. Continue?"
+        ):
+            return
+
+        self.ui.installADBPushButton.setEnabled(False)
+        self.ui.installADBPushButton.setText("Installing via Homebrew...")
+        slicer.app.processEvents()
+
+        try:
+            with BusyCursor():
+                result = subprocess.run(
+                    ["brew", "install", "android-platform-tools"],
+                    capture_output=True, text=True,
+                )
+            if result.returncode != 0:
+                slicer.util.errorDisplay(
+                    f"Homebrew installation failed:\n{result.stderr or result.stdout}"
+                )
+        finally:
+            self._checkADBStatus()
+
+    def _installADBLinux(self) -> None:
+        slicer.util.infoDisplay(
+            "To install ADB on Linux, run the following commands in a terminal:\n\n"
+            "    sudo apt update\n"
+            "    sudo apt install android-tools-adb\n\n"
+            "After installing, reopen the application to verify."
+        )
+
 # OpenLIFULoginLogic
 #
 
