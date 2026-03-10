@@ -3,3 +3,4 @@ bcrypt
 threadpoolctl
 requests
 segno
+git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@add-cloud-dev-prod-environment-support

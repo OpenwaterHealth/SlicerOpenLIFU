@@ -81,12 +81,24 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
         self.syncProcess = None
-        self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
         self._cloudTokens = None
+<<<<<<< HEAD
         self._last_sync_timestamp = qt.QSettings().value(self._SETTING_LAST_SYNC, "") or ""
         self._last_status_message = ""
         self._service_failed = False
+=======
+        self._isServiceRunning = False
+        self._active_runner = None
+        self.previousEnvironment = qt.QSettings().value("OpenLIFU/CloudEnvironment", "prod")
+>>>>>>> 8530e1a (Add support for prod and dev envs)
         self.environment = self.getEnvironment()
+        self.apiKey = "AIzaSyA45zDuDfjpkgmnszo5SRsoLdL4mJqgA8E" if self.environment == 'dev' else "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
+
+        if self.environment != self.previousEnvironment:
+            qt.QSettings().setValue("OpenLIFU/CloudEnvironment", self.environment)
+            logger.info(f"Cloud environment set to '{self.environment}' and saved to settings.")
+            self.logout()
+
         # Instantiate signal bridge
         self.statusHelper = CloudStatusHelper()
 
@@ -178,7 +190,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def getEnvironment(self):
         self.environment = os.getenv("OPENLIFU_CLOUD_ENV", "prod").lower()
-        if self.environment not in ["prod", "qa", "staging"]:
+        if self.environment not in ["prod", "dev"]:
             self.environment = "prod"
         
         return self.environment
@@ -196,7 +208,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         token = self.getValidToken()
         if not self.syncProcess and token:
             self.attemptAutoStartSync()
-
+    
     def _safeStatusUpdate(self, status):
         """Thread-safe bridge to emit UI updates from background threads."""
         timestamp = time.strftime("%H:%M:%S")
