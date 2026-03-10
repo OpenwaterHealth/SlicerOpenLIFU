@@ -67,7 +67,7 @@ def main():
     cloud = None
     try:
         logging.info(f"Initializing Sync Engine for: {args.db_path}")
-        cloud = Cloud()
+        cloud = Cloud(args.env)
 
         def on_cloud_status(status_obj):
             """
