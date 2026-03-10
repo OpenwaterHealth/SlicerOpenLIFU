@@ -1129,9 +1129,6 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
-        self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
-        self._cloudTokens = None # Stores {idToken, refreshToken, expiresAt}
-        self._userId = None
 
         self._active_user: "Optional[openlifu.db.User]" = None
         """The currently active user. Do not set this directly -- use the `active_user` property.
