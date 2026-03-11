@@ -3140,13 +3140,14 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         pulled = []
         all_ok = True
         for filename in filenames:
-            dest_path = os.path.join(dest_dir, filename)
-            with open(dest_path, 'wb') as f:
-                r = subprocess.run(["adb", "shell", "content", "read", "--uri", f"{uri_base}/{filename}"], stdout=f)
+            logging.info(f'Reading {filename} from {uri_base}')
+            dest_path = Path(os.path.join(dest_dir, filename))
+            r = subprocess.run(["adb", "exec-out", "content", "read", "--uri", f"{uri_base}/{filename}"], stdout=subprocess.PIPE)
             if r.returncode != 0:
                 all_ok = False
             else:
-                pulled.append(dest_path)
+                dest_path.write_bytes(r.stdout)
+                pulled.append(str(dest_path))
         return pulled, all_ok
 
     def _pull_from_fallback_location_v2(self, reference_number: str, temp_path: str) -> tuple[str, List[str]] | None:
