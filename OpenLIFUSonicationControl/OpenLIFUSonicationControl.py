@@ -36,6 +36,7 @@ from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_wid
 # but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
+    import openlifu.io
 
 #
 # OpenLIFUSonicationControl
@@ -561,6 +562,32 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.connectedStateLabel.setProperty("text", "🔴 LIFU Device (not connected)")
         self.updateAllButtonsEnabled()
 
+    def updateVersionsLabel(self):
+        version_text = f"openlifu version: {openlifu_lz().__version__}"
+        if not self.logic.get_lifu_device_connected():
+            self.ui.versionsLabel.text = version_text + "\nLIFU Device not connected."
+            return
+        li : "openlifu.io.LIFUInterface" = self.logic.cur_lifu_interface
+
+        try:
+            num_modules = li.txdevice.get_tx_module_count()
+            version_text += f"\nNumber of transmit modules: {num_modules}"
+            for i in range(num_modules):
+                module = i+1
+                module_version_string = li.txdevice.get_tx_module_version(module)
+                version_text += f"\nModule {module} firmware version: {module_version_string}"
+        except ValueError:
+            version_text += "\nError getting transmit module firmware versions."        
+        try:
+            if li.hvcontroller and li.hvcontroller.is_connected():
+                hvcontroller_version_string = li.hvcontroller.get_version()
+                version_text += f"\nHV Controller firmware version: {hvcontroller_version_string}"
+            else:
+                version_text += "\nHV Controller not connected."
+        except ValueError:
+            version_text += "\nError getting HV Controller firmware version."
+        self.ui.versionsLabel.text =  version_text            
+    
     def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu.io.LIFUInterfaceStatus | None" = None):
         self._cur_solution_on_hardware_state = solution_state
         if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
