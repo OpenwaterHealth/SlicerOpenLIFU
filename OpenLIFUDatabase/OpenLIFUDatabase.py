@@ -381,8 +381,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
             "protocols/protocols.json",
             "subjects/subjects.json",
             "transducers/transducers.json",
-            "users/users.json",
-            "systems"
+            "users/users.json"
         }
 
         for relative_path in required_structure:

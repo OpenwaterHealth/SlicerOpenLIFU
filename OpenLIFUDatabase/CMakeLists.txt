@@ -9,7 +9,6 @@ set(MODULE_PYTHON_SCRIPTS
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
   Resources/UI/${MODULE_NAME}.ui
-  Resources/openlifu-database/empty_db/systems/.keep
   Resources/openlifu-database/empty_db/subjects/subjects.json
   Resources/openlifu-database/empty_db/users/users.json
   Resources/openlifu-database/empty_db/protocols/protocols.json
