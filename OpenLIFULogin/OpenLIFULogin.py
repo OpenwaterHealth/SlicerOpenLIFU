@@ -630,6 +630,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.inject_workflow_controls_into_placeholder()
 
         # Install dependencies
+        self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
         self._checkADBStatus()
 
         # ====================================
@@ -964,7 +965,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         else:
             self.ui.installADBPushButton.setEnabled(True)
             self.ui.installADBPushButton.setText("Install Android Platform Tools")
-            self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
 
     @display_errors
     def onInstallADBClicked(self, checked: bool = False) -> None:
@@ -1014,20 +1014,19 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 # Write to Windows user PATH registry key
                 # User PATH does not require admin permissions
                 import winreg
-                reg_key = winreg.OpenKey(
+                with winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER, "Environment", 0,
                     winreg.KEY_READ | winreg.KEY_WRITE,
-                )
-                try:
-                    current_path, _ = winreg.QueryValueEx(reg_key, "Path")
-                except FileNotFoundError:
-                    current_path = ""
-                entries = [p for p in current_path.split(os.pathsep) if p]
-                if platform_tools_path not in entries:
-                    entries.append(platform_tools_path)
-                    winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
-                                      os.pathsep.join(entries))
-                winreg.CloseKey(reg_key)
+                ) as reg_key:
+                    try:
+                        current_path, _ = winreg.QueryValueEx(reg_key, "Path")
+                    except FileNotFoundError:
+                        current_path = ""
+                    entries = [p for p in current_path.split(os.pathsep) if p]
+                    if platform_tools_path not in entries:
+                        entries.append(platform_tools_path)
+                        winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
+                                          os.pathsep.join(entries))
 
                 # Patch the current process's PATH so the re-check below works immediately
                 os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + platform_tools_path
@@ -1064,7 +1063,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def _installADBLinux(self) -> None:
         slicer.util.infoDisplay(
-            "To install ADB on Linux, run the following commands in a terminal:\n\n"
+            "To install ADB on Debian-based Linux, run the following commands in a terminal:\n\n"
             "    sudo apt update\n"
             "    sudo apt install android-tools-adb\n\n"
             "After installing, reopen the application to verify."
