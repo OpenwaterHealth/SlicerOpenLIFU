@@ -20,10 +20,6 @@ from OpenLIFULib.util import (
 )
 
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
-from OpenLIFULib.lazyimport import (
-    check_and_install_python_requirements,
-    python_requirements_exist,
-)
 
 from OpenLIFUCloudSync import getCloudSyncLogic
 #
@@ -111,9 +107,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
         
         # Buttons
-        self.ui.installPythonReqsButton.connect("clicked()", self.onInstallPythonRequirements)
         self.ui.guidedModePushButton.connect("clicked()", self.onGuidedModeClicked)
-        self.updateInstallButtonText()
         self.updateGuidedModeButton()
 
         # Switch modules
@@ -139,19 +133,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             moduleButtonText = moduleButtonText[:-7]  # strip to -Config
 
         slicer.util.selectModule(moduleButtonText)
-
-
-    def updateInstallButtonText(self) -> None:
-        """Update the text of the install button based on whether it's 'install' or 'reinstall'"""
-        if python_requirements_exist():
-            self.ui.installPythonReqsButton.text = 'Reinstall Python Requirements'
-        else:
-            self.ui.installPythonReqsButton.text = 'Install Python Requirements'
-
-    def onInstallPythonRequirements(self) -> None:
-        """Install python requirements button action"""
-        check_and_install_python_requirements(prompt_if_found=True)
-        self.updateInstallButtonText()
 
     def setupCloudSyncToolBar(self):
         mw = slicer.util.mainWindow()
