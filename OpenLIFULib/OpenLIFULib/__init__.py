@@ -1,4 +1,16 @@
-from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz, bcrypt_lz, threadpoolctl_lz, segno_lz, check_and_install_kwave_binaries
+from OpenLIFULib.lazyimport import (
+    openlifu_lz,
+    xarray_lz,
+    bcrypt_lz,
+    threadpoolctl_lz,
+    segno_lz,
+    check_and_install_kwave_binaries,
+    check_and_install_python_requirements,
+    install_python_requirements,
+    python_requirements_exist,
+    get_required_openlifu_version,
+    openlifu_version_matches,
+)
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUPoint,
     SlicerOpenLIFUXADataset,
@@ -57,4 +69,9 @@ __all__ = [
     "openlifu_point_to_fiducial",
     "assign_openlifu_metadata_to_volume_node",
     "check_and_install_kwave_binaries",
+    "check_and_install_python_requirements",
+    "install_python_requirements",
+    "python_requirements_exist",
+    "get_required_openlifu_version",
+    "openlifu_version_matches",
 ]
