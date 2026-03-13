@@ -44,7 +44,7 @@
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_2">
          <property name="spacing">
-          <number>-1</number>
+          <number>6</number>
          </property>
          <property name="leftMargin">
           <number>0</number>
@@ -108,25 +108,6 @@
           </widget>
          </item>
         </layout>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item alignment="Qt::AlignTop">
-    <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton">
-     <property name="text">
-      <string>Advanced</string>
-     </property>
-     <property name="collapsed">
-      <bool>true</bool>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-       <widget class="QPushButton" name="installPythonReqsButton">
-        <property name="text">
-         <string>Install Python Requirements</string>
-        </property>
        </widget>
       </item>
      </layout>
