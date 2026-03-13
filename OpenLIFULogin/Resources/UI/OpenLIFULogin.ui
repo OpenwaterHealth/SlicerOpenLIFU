@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>428</width>
-    <height>347</height>
+    <width>479</width>
+    <height>552</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -45,29 +45,56 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleGroupBox" name="installDependenciesCollapsibleGroupBox">
+    <widget class="QGroupBox" name="groupBox">
      <property name="title">
-      <string>Install dependencies (optional)</string>
+      <string>Install dependencies</string>
      </property>
-     <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="0">
-       <widget class="QLabel" name="adbStatusIcon">
-        <property name="text">
-         <string>adbStatus</string>
-        </property>
-       </widget>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <layout class="QFormLayout" name="formLayout">
+        <item row="0" column="1">
+         <widget class="QPushButton" name="installPythonRequirementsPushButton">
+          <property name="text">
+           <string>Install Python Requirements</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="openlifuStatusIcon">
+          <property name="text">
+           <string>pythonStatus</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
-      <item row="0" column="1">
-       <widget class="QPushButton" name="installADBPushButton">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-          <horstretch>2</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
+      <item>
+       <widget class="ctkCollapsibleGroupBox" name="installDependenciesCollapsibleGroupBox">
+        <property name="title">
+         <string>Optional</string>
         </property>
-        <property name="text">
-         <string>Install Android Platform Tools</string>
-        </property>
+        <layout class="QFormLayout" name="formLayout_2">
+         <item row="0" column="0">
+          <widget class="QLabel" name="adbStatusIcon">
+           <property name="text">
+            <string>adbStatus</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QPushButton" name="installADBPushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+             <horstretch>2</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Install Android Platform Tools</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
