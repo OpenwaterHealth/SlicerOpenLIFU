@@ -32,7 +32,11 @@ from OpenLIFULib import (
     bcrypt_lz,
     get_cur_db,
     get_current_user,
+    check_and_install_python_requirements,
+    get_required_openlifu_version,
     openlifu_lz,
+    openlifu_version_matches,
+    python_requirements_exist,
 )
 from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
@@ -577,20 +581,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._user_account_banners : List[UserAccountBanner] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self._default_anonymous_user = openlifu_lz().db.User(
-                id = "anonymous", 
-                password_hash = "",
-                roles = [],
-                name = "Anonymous",
-                description = "This is the default role set when the app opens, without anyone logged in, with user account mode activated. It has no roles and is therefore the most restricted."
-        )
-        self._default_admin_user = openlifu_lz().db.User(
-                id = "default_admin", 
-                password_hash = "default_admin",
-                roles = ['admin'],
-                name = "default_admin",
-                description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database or if there is no database loaded at all."
-                )
+        self._default_anonymous_user = None  # initialized in setup() 
+        self._default_admin_user = None # initialized in setup()
         self._last_active_user = self._default_anonymous_user
 
     def setup(self) -> None:
@@ -629,11 +621,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.inject_workflow_controls_into_placeholder()
 
+        # ====================================
+        self._initDefaultUsers() # This will install openlifu if not installed
+
         # Install dependencies
+        self.ui.installPythonRequirementsPushButton.clicked.connect(self.onUpdateOpenLIFUClicked)
+        self._checkOpenLIFUVersionStatus()
         self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
         self._checkADBStatus()
-
-        # ====================================
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -643,6 +638,25 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.onDatabaseChanged() # Call the routine to update from data parameter node
         self.updateWorkflowControls()
+
+    def _initDefaultUsers(self) -> None:
+        """Create default User objects. This will prompt the user
+        to install openlifu if it is not installed. """
+        self._default_anonymous_user = openlifu_lz().db.User(
+            id = "anonymous",
+            password_hash = "",
+            roles = [],
+            name = "Anonymous",
+            description = "This is the default role set when the app opens, without anyone logged in, with user account mode activated. It has no roles and is therefore the most restricted."
+        )
+        self._default_admin_user = openlifu_lz().db.User(
+            id = "default_admin",
+            password_hash = "default_admin",
+            roles = ['admin'],
+            name = "default_admin",
+            description = "This is the default admin role automatically assigned if an admin user does not exist in the loaded database or if there is no database loaded at all."
+        )
+        self._last_active_user = self._default_anonymous_user
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -942,8 +956,38 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         for protocol_id in list(slicer.util.getModuleLogic('OpenLIFUProtocolConfig').cached_protocols.keys()):
             slicer.util.getModuleLogic('OpenLIFUProtocolConfig').delete_protocol_from_cache(protocol_id)
         slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
-
         self._last_active_user = new_active_user
+
+    def _checkOpenLIFUVersionStatus(self) -> None:
+        import importlib.metadata
+        has_openlifu = python_requirements_exist()
+        version_ok = openlifu_version_matches() if has_openlifu else False
+
+        icon_name = qt.QStyle.SP_DialogApplyButton if (has_openlifu and version_ok) else qt.QStyle.SP_DialogCancelButton
+        pixmap = slicer.app.style().standardIcon(icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.openlifuStatusIcon.setPixmap(pixmap)
+        self.ui.openlifuStatusIcon.setText("")
+
+        if not has_openlifu:
+            self.ui.installPythonRequirementsPushButton.setText("Install Python Requirements")
+        elif not version_ok:
+            try:
+                installed = importlib.metadata.version('openlifu')
+            except importlib.metadata.PackageNotFoundError:
+                installed = "unknown"
+            required = get_required_openlifu_version() or "unknown"
+            self.ui.installPythonRequirementsPushButton.setText(f"Update Python Requirements (openlifu: {installed} → {required})")
+        else:
+            try:
+                installed = importlib.metadata.version('openlifu')
+            except importlib.metadata.PackageNotFoundError:
+                installed = "unknown"
+            self.ui.installPythonRequirementsPushButton.setText(f"Reinstall Python Requirements (openlifu: {installed})")
+
+    @display_errors
+    def onUpdateOpenLIFUClicked(self, checked: bool = False) -> None:
+        check_and_install_python_requirements(prompt_if_found=True)
+        self._checkOpenLIFUVersionStatus()
 
     def _checkADBStatus(self) -> None:
         try:
@@ -1089,14 +1133,9 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
         self._cloudTokens = None # Stores {idToken, refreshToken, expiresAt}
         self._userId = None
 
-        self._active_user: "openlifu.db.User" = openlifu_lz().db.User(
-                id = "anonymous", 
-                password_hash = "",
-                roles = [],
-                name = "Anonymous",
-                description = "This is the default role set when the app opens, without anyone logged in, and when user account mode is deactivated. It has no roles, and therefore is the most restricted."
-        )
-        """The currently active user. Do not set this directly -- use the `active_user` property."""
+        self._active_user: "Optional[openlifu.db.User]" = None
+        """The currently active user. Do not set this directly -- use the `active_user` property.
+        Initialized to None and set from the widget after openlifu is confirmed available."""
 
         self._on_active_user_changed_callbacks: List[Callable[[Optional["openlifu.db.User"]], None]] = []
         """List of functions to call when the `active_user` property is changed."""
