@@ -29,17 +29,22 @@ def python_requirements_exist() -> bool:
     return importlib.util.find_spec('openlifu') is not None # openlifu import causes a delay so we check for it without actually importing yet
 
 def check_and_install_python_requirements(prompt_if_found = False) -> None:
-    """Check whether python requirements are installed and prompt to install them if not.
+    """Check whether python requirements are installed and at the required version, and prompt to install/update if not.
 
     Args:
-        prompt_if_found: If this is enabled then in the event that python requirements are found,
-            there is a further prompt asking whether to run the install anyway.
+        prompt_if_found: If this is enabled then in the event that python requirements are found
+            and at the correct version, there is a further prompt asking whether to run the install anyway.
     """
     want_install = False
     if not python_requirements_exist():
         want_install = slicer.util.confirmYesNoDisplay(
             text = "Some OpenLIFU python dependencies were not found. Install them now?",
             windowTitle = "Install python dependencies?",
+        )
+    elif not openlifu_version_matches() and prompt_if_found:
+        want_install = slicer.util.confirmYesNoDisplay(
+            text = f"The installed openlifu version does not match the required version ({get_required_openlifu_version()}). Update now?",
+            windowTitle = "Update openlifu?",
         )
     elif prompt_if_found:
         want_install = slicer.util.confirmYesNoDisplay(
@@ -58,6 +63,30 @@ def check_and_install_python_requirements(prompt_if_found = False) -> None:
                 text="OpenLIFU python dependencies are still not found. The install may have failed.",
                 windowTitle="Python dependencies still not found"
             )
+
+def get_required_openlifu_version() -> "Optional[str]":
+    """Return the required openlifu version pinned in 
+    python-requirements.txt, or None."""
+    requirements_path = Path(__file__).parent / 'Resources/python-requirements.txt'
+    for line in requirements_path.read_text().splitlines():    
+        if line.startswith('openlifu=='):
+            return line.split('==', 1)[1].strip()
+    return None
+
+def openlifu_version_matches() -> bool:
+    """Return True if the installed openlifu version matches
+     the required version. Returns False if openlifu is not 
+     installed or versions don't match."""
+    import importlib.metadata
+    try:
+        installed = importlib.metadata.version('openlifu')     
+        required = get_required_openlifu_version()
+        if required is None:
+            return True  # No version constraint
+        # Handle optional 'v' prefix (e.g. 'v0.18.0' vs '0.18.0')
+        return installed == required or installed == required.lstrip('v')
+    except importlib.metadata.PackageNotFoundError:
+        return False
 
 def check_and_install_kwave_binaries() -> bool:
     """Check if the kwave binaries are present, and if not then ask the user how they want to install them.
