@@ -453,6 +453,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateVersionsLabel()
         self.updateAllButtonsEnabled()
 
     @display_errors
@@ -462,6 +463,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateVersionsLabel()
         self.updateAllButtonsEnabled()
 
     @display_errors
@@ -574,7 +576,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             version_text += f"\nNumber of transmit modules: {num_modules}"
             for i in range(num_modules):
                 module = i+1
-                module_version_string = li.txdevice.get_tx_module_version(module)
+                module_version_string = li.txdevice.get_module_version(module)
                 version_text += f"\nModule {module} firmware version: {module_version_string}"
         except ValueError:
             version_text += "\nError getting transmit module firmware versions."        
