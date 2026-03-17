@@ -453,6 +453,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateVersionsLabel()
         self.updateAllButtonsEnabled()
 
     @display_errors
@@ -462,6 +463,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateVersionsLabel()
         self.updateAllButtonsEnabled()
 
     @display_errors
