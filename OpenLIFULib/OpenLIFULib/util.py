@@ -73,6 +73,12 @@ class SlicerLogHandler(logging.Handler):
         self.use_dialogs = use_dialogs
 
     def emit(self, record):
+        # Qt UI calls are only safe on the main thread. If this log record was emitted
+        # from a background thread (e.g. UART monitor/read threads), skip Qt interactions
+        # entirely to avoid QObject::setParent and processEvents cross-thread crashes.
+        if qt.QThread.currentThread() is not slicer.app.thread():
+            return
+
         if record.levelno == logging.ERROR:
             method_to_use = self.handle_error_with_dialog if self.use_dialogs else self.handle_error_without_dialog
         elif record.levelno == logging.WARNING:

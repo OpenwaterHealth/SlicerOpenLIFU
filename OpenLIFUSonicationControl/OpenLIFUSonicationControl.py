@@ -2,8 +2,6 @@
 import asyncio
 import logging
 import re
-import asyncio
-import sys
 import threading
 from datetime import datetime
 from enum import Enum
@@ -203,6 +201,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
+        print("[DEBUG] OpenLIFUSonicationControlWidget.setup() called")
         ScriptedLoadableModuleWidget.setup(self)
 
         # Load widget from .ui file (created by Qt Designer).
@@ -285,16 +284,19 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        print("[DEBUG] OpenLIFUSonicationControlWidget.cleanup() called")
         self.removeObservers()
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        print("[DEBUG] OpenLIFUSonicationControlWidget.enter() called")
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        print("[DEBUG] OpenLIFUSonicationControlWidget.exit() called")
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
@@ -302,11 +304,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
+        print("[DEBUG] onSceneStartClose() called")
         # Parameter node will be reset, do not use it anymore
         self.setParameterNode(None)
 
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
+        print("[DEBUG] onSceneEndClose() called")
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
@@ -335,6 +339,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
+        print("[DEBUG] onDataParameterNodeModified() called")
         self.updateAllButtonsEnabled()
         if (solution_parameter_pack := get_openlifu_data_parameter_node().loaded_solution) is None:
             self._cur_solution_id = None
@@ -359,7 +364,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
-        if not self.logic.get_lifu_device_connected():
+        if self._cur_device_connected_state != DeviceConnectedState.CONNECTED:
             enabled = False
             tooltip = "The LIFU device must be connected to get its status."
         else:
@@ -375,7 +380,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         if solution is None:
             enabled = False
             tooltip = "To run a sonication, first generate and approve a solution in the sonication planning module."
-        elif not self.logic.get_lifu_device_connected():
+        elif self._cur_device_connected_state != DeviceConnectedState.CONNECTED:
             enabled = False
             tooltip = "To send a sonication solution to the device, the LIFU device must be connected."
         elif not solution.is_approved():
@@ -430,11 +435,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
+        print(f"[DEBUG] onRunCompleted() called with run_complete={new_sonication_run_complete_state}")
         """If the soniction_run_complete variable changes from False to True, then open the RunComplete 
         dialog to determine whether the run should be saved. Saving the run creates a SlicerOpenLIFURun object and 
         writes the run to the database (only if there is an active session)."""
-        self.logic.cur_lifu_interface.stop_sonication()
-        
         self.ui.runHardwareStatusLabel.setProperty("text", "Run Completed.")
         
         if new_sonication_run_complete_state:
@@ -446,25 +450,30 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateAllButtonsEnabled()
 
     @display_errors
-    def onDeviceConnected(self):        
+    def onDeviceConnected(self):
+        print("[DEBUG] onDeviceConnected() called")
         # Even though this call explicitly tells us whether "Connected" or
         # "Disconnected", we still update from the actual hardware for the best
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtonsEnabled()
+        self.updateVersionLabels()
 
     @display_errors
     def onDeviceDisconnected(self):
+        print("[DEBUG] onDeviceDisconnected() called")
         # Even though this call explicitly tells us whether "Connected" or
         # "Disconnected", we still update from the actual hardware for the best
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtonsEnabled()
+        self.updateVersionLabels()
 
     @display_errors
     def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
+        print("[DEBUG] onReinitializeLIFUInterfacePushButtonClicked() called")
 
         slicer.util.warningDisplay(
             text = f"Reinitializing the LIFUInterface in test mode is not fully supported and may result in unexpected application behavior. If this was a mistake, restart the app and use the real transducer hardware.",
@@ -472,7 +481,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         )
 
         new_test_mode_state = not self.logic.cur_lifu_interface._test_mode
-        logging.info("Reinitializing LIFUInterface with test_mode =", new_test_mode_state)
+        logging.info("Reinitializing LIFUInterface with test_mode = %s", new_test_mode_state)
         
         self.logic.reinitialize_lifu_interface(test_mode=new_test_mode_state)
         self.updateDeviceConnectedStateFromDevice()
@@ -482,18 +491,21 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
+        print("[DEBUG] onSendSonicationSolutionToDevicePushButtonClicked() called")
 
         try:
             self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
             if self.logic.cur_lifu_interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
             self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
+            print("[DEBUG] Solution successfully sent to device")
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
                 
         except Exception as e:
-            logging.error("Exception thrown:", e)
+            logging.error("Exception thrown: %s", e)
             import traceback
             traceback.print_exc()
+            print(f"[DEBUG] Failed to send solution to device: {e}")
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND, self.logic.cur_lifu_interface.get_status())
 
         self.updateWorkflowControls()
@@ -502,6 +514,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
 
     def onRunningChanged(self, new_running_state:bool):
+        print(f"[DEBUG] onRunningChanged() called with running={new_running_state}")
         self.updateReinitializeLIFUInterfacePushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
@@ -509,6 +522,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunHardwareStatusLabel()
 
     def onRunClicked(self):
+        print("[DEBUG] onRunClicked() called")
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
         self.ui.runProgressBar.value = 0
@@ -517,6 +531,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateWorkflowControls()
         
     def onAbortClicked(self):
+        print("[DEBUG] onAbortClicked() called")
         self.logic.abort()
         runCompleteDialog = OnRunCompletedDialog(False)
         returncode, run_parameters = runCompleteDialog.customexec_()
@@ -547,6 +562,28 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         else: # not running
             self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
 
+    def updateVersionLabels(self):
+        """Populate SDK / console / TX firmware version labels when both devices are connected."""
+        if self._cur_device_connected_state == DeviceConnectedState.CONNECTED:
+            sdk_ver = openlifu_lz().io.LIFUInterface.get_sdk_version()
+            self.ui.sdkVersionLabel.setText(f"SDK: {sdk_ver}")
+            try:
+                con_ver = self.logic.cur_lifu_interface.hvcontroller.get_version()
+            except Exception as e:
+                logging.warning("Could not read console firmware version: %s", e)
+                con_ver = "unknown"
+            self.ui.consoleVersionLabel.setText(f"Console FW: {con_ver}")
+            try:
+                tx_ver = self.logic.cur_lifu_interface.txdevice.get_version(module=0)
+            except Exception as e:
+                logging.warning("Could not read TX firmware version: %s", e)
+                tx_ver = "unknown"
+            self.ui.txVersionLabel.setText(f"TX FW: {tx_ver}")
+        else:
+            self.ui.sdkVersionLabel.setText("")
+            self.ui.consoleVersionLabel.setText("")
+            self.ui.txVersionLabel.setText("")
+
     def updateDeviceConnectedStateFromDevice(self):
         if self.logic.get_lifu_device_connected():
             self.updateDeviceConnectedState(DeviceConnectedState.CONNECTED)
@@ -554,7 +591,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateDeviceConnectedState(DeviceConnectedState.NOT_CONNECTED)
 
     def updateDeviceConnectedState(self, connected_state: DeviceConnectedState):
-        self._cur_solution_on_hardware_state = connected_state
+        self._cur_device_connected_state = connected_state
         if connected_state == DeviceConnectedState.CONNECTED:
             self.ui.connectedStateLabel.setProperty("text", "🟢 LIFU Device (connected)")
         elif connected_state == DeviceConnectedState.NOT_CONNECTED:
@@ -597,6 +634,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 class LIFUQtSignals(qt.QObject):
     runProgressUpdated = qt.Signal(float)  # Expecting pulse_train_percent as float
     finishScanning = qt.Signal(bool)  # Signal to indicate that scanning is finished
+    deviceConnected = qt.Signal()  # Emitted from monitor thread; Qt queues to main thread
+    deviceDisconnected = qt.Signal()  # Emitted from monitor thread; Qt queues to main thread
+    dataReceived = qt.Signal(str, str)  # (descriptor, message)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -622,6 +662,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
+        print("[DEBUG] OpenLIFUSonicationControlLogic.__init__() called")
         ScriptedLoadableModuleLogic.__init__(self)
 
         self._running : bool = False
@@ -662,7 +703,18 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         
         self.qt_signals = LIFUQtSignals()
 
+        # These connections cross the monitor-thread → main-thread boundary.
+        # Qt auto-detects the thread mismatch and queues the calls safely.
+        self.qt_signals.deviceConnected.connect(self._dispatch_device_connected)
+        self.qt_signals.deviceDisconnected.connect(self._dispatch_device_disconnected)
+        self.qt_signals.dataReceived.connect(self._dispatch_data_received)
+
         self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+
+        # Connect signals before starting the monitor thread to avoid missing early events
+        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
+        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
+        self.cur_lifu_interface.signal_data_received.connect(self.on_lifu_data_received)
 
         # Set up asyncio event loop and monitoring thread
         self._monitor_loop = asyncio.new_event_loop()
@@ -676,11 +728,6 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.monitoring_timer.setInterval(100)
         self.monitoring_timer.timeout.connect(self._pumpMonitoringLoop)
         self.monitoring_timer.start()
-
-        # Connect signals
-        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
-        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-        self.cur_lifu_interface.signal_data_received.connect(self.on_lifu_data_received)
 
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
         """The active Solution object last sent to the ultrasound hardware."""
@@ -699,7 +746,24 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
     def reinitialize_lifu_interface(self, test_mode: bool = False):
         """Cleanly shut down and reinitialize the LIFUInterface."""
-        pass
+        print(f"[DEBUG] reinitialize_lifu_interface() called with test_mode={test_mode}")
+        try:
+            self.monitoring_timer.stop()
+            self.stop_monitoring()
+            self.cur_lifu_interface.close()
+        except Exception as e:
+            logging.warning("[LIFU] Error during interface cleanup: %s", e)
+
+        self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=test_mode, HV_test_mode=test_mode)
+
+        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
+        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
+        self.cur_lifu_interface.signal_data_received.connect(self.on_lifu_data_received)
+
+        self._monitor_loop = asyncio.new_event_loop()
+        self._monitor_thread = threading.Thread(target=self._run_monitor_loop, daemon=True)
+        self._monitor_thread.start()
+        self.monitoring_timer.start()
 
     def __del__(self):
         print("OpenLIFUSonicationControlLogic.__del__ called")
@@ -800,8 +864,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         }
 
         try:
-            # Match top-level fields
-            pattern = re.compile(
+            # Try pattern WITH PULSE field
+            pattern_with_pulse = re.compile(
                 r"STATUS:(\w+),"
                 r"MODE:(\w+),"
                 r"PULSE_TRAIN:\[(\d+)/(\d+)\],"
@@ -809,32 +873,61 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 r"TEMP_TX:([0-9.]+),"
                 r"TEMP_AMBIENT:([0-9.]+)"
             )
-            match = pattern.match(status_str.strip())
+            match = pattern_with_pulse.match(status_str.strip())
 
-            if not match:
-                raise ValueError("Input string format is invalid.")
+            if match:
+                (
+                    status,
+                    mode,
+                    pt_current, pt_total,
+                    p_current, p_total,
+                    temp_tx,
+                    temp_ambient
+                ) = match.groups()
 
-            (
-                status,
-                mode,
-                pt_current, pt_total,
-                p_current, p_total,
-                temp_tx,
-                temp_ambient
-            ) = match.groups()
+                pt_current = int(pt_current)
+                pt_total = int(pt_total)
+                p_current = int(p_current)
+                p_total = int(p_total)
 
-            # Convert and compute percentages
-            pt_current = int(pt_current)
-            pt_total = int(pt_total)
-            p_current = int(p_current)
-            p_total = int(p_total)
+                result["status"] = status
+                result["mode"] = mode
+                result["pulse_train_percent"] = (pt_current / pt_total * 100) if pt_total > 0 else 0
+                result["pulse_percent"] = (p_current / p_total * 100) if p_total > 0 else 0
+                result["temp_tx"] = float(temp_tx)
+                result["temp_ambient"] = float(temp_ambient)
 
-            result["status"] = status
-            result["mode"] = mode
-            result["pulse_train_percent"] = (pt_current / pt_total * 100) if pt_total > 0 else 0
-            result["pulse_percent"] = (p_current / p_total * 100) if p_total > 0 else 0
-            result["temp_tx"] = float(temp_tx)
-            result["temp_ambient"] = float(temp_ambient)
+            else:
+                # Try pattern WITHOUT PULSE field
+                pattern_without_pulse = re.compile(
+                    r"STATUS:(\w+),"
+                    r"MODE:(\w+),"
+                    r"PULSE_TRAIN:\[(\d+)/(\d+)\],"
+                    r"TEMP_TX:([0-9.]+),"
+                    r"TEMP_AMBIENT:([0-9.]+)"
+                )
+                match = pattern_without_pulse.match(status_str.strip())
+
+                if not match:
+                    raise ValueError("Input string format is invalid.")
+
+                (
+                    status,
+                    mode,
+                    pt_current, pt_total,
+                    temp_tx,
+                    temp_ambient
+                ) = match.groups()
+
+                pt_current = int(pt_current)
+                pt_total = int(pt_total)
+
+                result["status"] = status
+                result["mode"] = mode
+                result["pulse_train_percent"] = (pt_current / pt_total * 100) if pt_total > 0 else 0
+                result["pulse_percent"] = None
+                result["temp_tx"] = float(temp_tx)
+                result["temp_ambient"] = float(temp_ambient)
 
             return result
 
@@ -842,28 +935,33 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             logging.error(f"Failed to parse status string: {e}")
             return result
         
-    def on_lifu_device_connected(self, descriptor, port):
-        # This would be useful to uncomment if debugging hardware/software integration
-        logging.info(f"🔌 CONNECTED: {descriptor} on port {port}")
-        
+    def _dispatch_device_connected(self):
         for f in self._on_lifu_device_connected_callbacks:
             f()
 
-        slicer.app.processEvents()
-
-    def on_lifu_device_disconnected(self, descriptor, port):
-        # This would be useful to uncomment if debugging hardware/software integration
-        logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
-        
+    def _dispatch_device_disconnected(self):
         for f in self._on_lifu_device_disconnected_callbacks:
             f()
 
-        slicer.app.processEvents()
+    def _dispatch_data_received(self, descriptor, message):
+        for f in self._on_lifu_device_data_received_callbacks:
+            f(descriptor, message)
+
+    def on_lifu_device_connected(self, descriptor, port):
+        print(f"[DEBUG] on_lifu_device_connected(): descriptor={descriptor}, port={port}")
+        logging.info(f"🔌 CONNECTED: {descriptor} on port {port}")
+        self.qt_signals.deviceConnected.emit()
+
+    def on_lifu_device_disconnected(self, descriptor, port):
+        print(f"[DEBUG] on_lifu_device_disconnected(): descriptor={descriptor}, port={port}")
+        logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
+        self.qt_signals.deviceDisconnected.emit()
     
     def on_lifu_data_received(self, descriptor, message):
         """Called when the LIFUInterface receives data from the hardware.
         This is used to update the run progress and hardware status.
         """
+        print(f"[DEBUG] on_lifu_data_received(): descriptor={descriptor}, message={message}")
         logging.info(f"📦 DATA [{descriptor}]: {message}")
 
         if descriptor == "TX":
@@ -885,13 +983,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 logging.error(f"Failed to parse and update trigger state: {e}")
         
 
-        for f in self._on_lifu_device_data_received_callbacks:
-            f(descriptor, message)
-
-        slicer.app.processEvents()
+        self.qt_signals.dataReceived.emit(descriptor, message)
     
     def run(self):
         " Returns True when the sonication control algorithm is done"
+        print("[DEBUG] Logic.run() called")
 
         if get_openlifu_data_parameter_node().loaded_solution is None:
             raise RuntimeError("No solution loaded; cannot run sonication.")
@@ -906,6 +1002,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.cur_lifu_interface.start_sonication()        
 
     def stop(self):
+        print("[DEBUG] Logic.stop() called")
         # ---- Start the run ----
         self.running = False
         
@@ -913,6 +1010,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.cur_lifu_interface.stop_sonication()    
 
     def abort(self) -> None:
+        print("[DEBUG] Logic.abort() called")
         # Assumes that the sonication control algorithm will have a callback function to abort run, 
         # that callback can be called here. 
         
@@ -925,6 +1023,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.running = False
 
     def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
+        print(f"[DEBUG] create_openlifu_run() called with success_flag={run_parameters.get('success_flag')}")
 
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         loaded_solution = get_openlifu_data_parameter_node().loaded_solution
@@ -953,6 +1052,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # Add SlicerOpenLIFURun to data parameter node
         run = SlicerOpenLIFURun(run_openlifu)
+        print(f"[DEBUG] create_openlifu_run() created run with id={run_id}")
         slicer.util.getModuleLogic('OpenLIFUData').set_run(run)
         
         return run
@@ -960,6 +1060,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
     def get_lifu_device_connected(self) -> bool:
         tx_connected = self.cur_lifu_interface.txdevice.is_connected()
         hv_connected = self.cur_lifu_interface.hvcontroller.is_connected()
+        print(f"[DEBUG] get_lifu_device_connected(): tx={tx_connected}, hv={hv_connected}")
         return tx_connected and hv_connected
     
 
