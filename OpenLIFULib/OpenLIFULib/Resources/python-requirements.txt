@@ -1,4 +1,4 @@
-openlifu==v0.18.0
+C:\Users\gvigelet\CURRENT_WORK\openwater\OpenLIFU-python
 bcrypt
 threadpoolctl
 requests
