@@ -733,10 +733,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """The active Solution object last sent to the ultrasound hardware."""
 
         # Set logging
-        logging.getLogger("LIFUInterface").setLevel(logging.WARNING)
-        logging.getLogger("UART").setLevel(logging.WARNING)
-        logging.getLogger("LIFUHVController").setLevel(logging.WARNING)
-        logging.getLogger("LIFUTXDevice").setLevel(logging.WARNING)
+        logging.getLogger("LIFUInterface").setLevel(logging.ERROR)
+        logging.getLogger("UART").setLevel(logging.ERROR)
+        logging.getLogger("LIFUHVController").setLevel(logging.ERROR)
+        logging.getLogger("LIFUTXDevice").setLevel(logging.ERROR)
 
     def stop_monitoring(self):
         if self.cur_lifu_interface:
