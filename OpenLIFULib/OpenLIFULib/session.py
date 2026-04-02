@@ -46,7 +46,7 @@ class SlicerOpenLIFUSession:
     fiducial markups in the scene are potential targets, not necessarily just the ones listed here."""
 
     affiliated_photocollections : List[str] = []
-    """List containing photocollection_reference_numbers for any photocollections associated with the session. We keep track of any
+    """List containing photocollection_ids for any photocollections associated with the session. We keep track of any
     photocollections associated with the session here so that they can be loaded into slicer during transducer localization as required."""
 
     affiliated_photoscans : Dict[str,SlicerOpenLIFUPhotoscanWrapper] = {}
@@ -110,7 +110,7 @@ class SlicerOpenLIFUSession:
         """
         return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
 
-    def get_affiliated_photocollection_reference_numbers(self):
+    def get_affiliated_photocollection_ids(self):
         return self.affiliated_photocollections
 
     def get_affiliated_photoscan_ids(self):
