@@ -262,6 +262,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Initialize UI
         self.updateRunProgressBar()
         self.updateDeviceConnectedStateFromDevice()
+        self.updateVersionLabels()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
         # Add an observer on the Data module's parameter node
@@ -292,6 +293,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         logging.debug("OpenLIFUSonicationControlWidget.enter() called")
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self.updateVersionLabels()
         self.updateWorkflowControls()
 
     def exit(self) -> None:
