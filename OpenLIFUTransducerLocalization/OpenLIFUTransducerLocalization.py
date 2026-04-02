@@ -1710,7 +1710,7 @@ class ImportPhotocollectionFromDiskDialog(qt.QDialog):
 
     def __init__(self, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-        self.reference_number = ""
+        self.scan_id = ""
         self.setWindowTitle("Import Photocollection")
         self.setWindowModality(qt.Qt.WindowModal)
         self.photo_files = []
@@ -1722,10 +1722,10 @@ class ImportPhotocollectionFromDiskDialog(qt.QDialog):
         self.formLayout = qt.QFormLayout()
         self.setLayout(self.formLayout)
 
-        # Reference number input
+        # Scan ID input
         self.referenceNumberLineEdit = qt.QLineEdit()
-        self.referenceNumberLineEdit.setPlaceholderText("Enter reference number (alphanumeric)")
-        self.formLayout.addRow(_("Reference Number:"), self.referenceNumberLineEdit)
+        self.referenceNumberLineEdit.setPlaceholderText("Enter Scan ID (alphanumeric)")
+        self.formLayout.addRow(_("Scan ID:"), self.referenceNumberLineEdit)
 
         # Directory path selector
         self.photocollectionDirectoryPath = ctk.ctkPathLineEdit()
@@ -1740,10 +1740,10 @@ class ImportPhotocollectionFromDiskDialog(qt.QDialog):
         self.buttonBox.accepted.connect(self.validateInputs)
 
     def validateInputs(self):
-        """Validate the reference number and selected directory."""
+        """Validate the Scan ID and selected directory."""
         ref_number = self.referenceNumberLineEdit.text.strip()
         if not ref_number.isalnum():
-            slicer.util.errorDisplay("Reference number must be alphanumeric.", parent=self)
+            slicer.util.errorDisplay("Scan ID must be alphanumeric.", parent=self)
             return
 
         directory = self.photocollectionDirectoryPath.currentPath
@@ -1761,14 +1761,14 @@ class ImportPhotocollectionFromDiskDialog(qt.QDialog):
             slicer.util.errorDisplay(f"Not enough photos were found in the directory (found {len(photo_files)}).", parent=self)
             return
 
-        self.reference_number = ref_number
+        self.scan_id = ref_number
         self.photo_files = photo_files
         self.accept()
 
     def customexec_(self):
         returncode = self.exec_()
         photocollection_dict = {
-            "reference_number": self.reference_number,
+            "scan_id": self.scan_id,
             "photo_paths": self.photo_files,
         }
         return returncode, photocollection_dict
@@ -1921,10 +1921,10 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
     """ Create new photoscan from photocollection dialog. Only displayed if
     there are multiple photocollections. """
 
-    def __init__(self, reference_numbers : List[str], parent="mainWindow"):
+    def __init__(self, scan_ids : List[str], parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         """ Args:
-                reference_numbers: list of reference numbers for
+                scan_ids: list of Scan IDs for
                 photocollections from which to choose to generate a photoscan
         """
 
@@ -1932,8 +1932,8 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
         self.setWindowModality(qt.Qt.WindowModal)
         self.resize(600, 400)
 
-        self.reference_numbers : List[str] = reference_numbers
-        self.selected_reference_number : str = None
+        self.scan_ids : List[str] = scan_ids
+        self.selected_scan_id : str = None
 
         self.setup()
 
@@ -1955,10 +1955,10 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
         self.buttonBox.accepted.connect(self.validateInputs)
         self.buttonBox.rejected.connect(self.reject)
 
-        # display the reference_numbers
+        # display the scan_ids
 
-        for num in self.reference_numbers:
-            display_text = f"Photocollection (Reference Number: {num})"
+        for num in self.scan_ids:
+            display_text = f"Photocollection (Scan ID: {num})"
             self.listWidget.addItem(display_text)
 
 
@@ -1969,22 +1969,22 @@ class PhotoscanFromPhotocollectionDialog(qt.QDialog):
 
         selected_idx = self.listWidget.currentRow
         if selected_idx >= 0:
-            self.selected_reference_number = self.reference_numbers[selected_idx]
+            self.selected_scan_id = self.scan_ids[selected_idx]
         self.accept()
 
-    def get_selected_reference_number(self) -> str:
+    def get_selected_scan_id(self) -> str:
 
-        return self.selected_reference_number
+        return self.selected_scan_id
 
 class SessionQRCodeDialog(qt.QDialog):
     """Display a QR code encoding the openlifu:// URI for the current session."""
 
-    def __init__(self, subject_id: str, session_id: str, photocollection_reference_number: str, parent=None):
+    def __init__(self, subject_id: str, session_id: str, photocollection_id: str, parent=None):
         super().__init__(parent or slicer.util.mainWindow())
         self.setWindowTitle("Session QR Code")
         self.setWindowModality(qt.Qt.WindowModal)
 
-        uri = f"openlifu://{subject_id}|{session_id}|{photocollection_reference_number}"
+        uri = f"openlifu://{subject_id}|{session_id}|{photocollection_id}"
 
         segno = segno_lz()
         qr = segno.make(uri)
@@ -2087,7 +2087,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         # ---- Photoscan generation connections ----
         self.ui.referenceNumberRefreshButton.setIcon(slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload))
-        self.ui.referenceNumberRefreshButton.clicked.connect(self.on_reference_number_refresh_clicked)
+        self.ui.referenceNumberRefreshButton.clicked.connect(self.on_scan_id_refresh_clicked)
         self.ui.showQRCodeButton.setIcon(qt.QIcon(self.resourcePath("Icons/qrcode.png")))
         self.ui.showQRCodeButton.clicked.connect(self.onShowQRCodeButtonClicked)
         self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
@@ -2096,7 +2096,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.ui.addPhotoscanButton.clicked.connect(self.onAddPhotoscanPressed)
         self.resetPhotoscanGeneratorProgressDisplay()
 
-        # Restrict reference number line edit to alphanumeric. Useful tip:
+        # Restrict Scan ID line edit to alphanumeric. Useful tip:
         # The validator should be set in 'self' or else it is removed by the
         # gc and the validator doesn't work
         self.alphanumericValidator = qt.QRegExpValidator(qt.QRegExp(r"[A-Za-z0-9]+"))
@@ -2126,8 +2126,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
 
-        # Start with randomized photocollection reference number
-        self.randomize_photocollection_reference_number()
+        # Start with randomized photocollection Scan ID
+        self.randomize_photocollection_id()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -2277,16 +2277,16 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.ui.photoscanGeneratorProgressBar.show()
         self.ui.photoscanGenerationStatusMessage.show()
 
-    def randomize_photocollection_reference_number(self):
-        """Randomize the number displayed in the photocollection reference
-        number line edit"""
+    def randomize_photocollection_id(self):
+        """Randomize the Scan ID displayed in the photocollection Scan ID
+        line edit"""
         # alphanumeric
-        new_reference_number = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
-        self.ui.referenceNumberLineEdit.text = new_reference_number
+        new_scan_id = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        self.ui.referenceNumberLineEdit.text = new_scan_id
 
     @display_errors
-    def on_reference_number_refresh_clicked(self, checked:bool):
-        self.randomize_photocollection_reference_number()
+    def on_scan_id_refresh_clicked(self, checked:bool):
+        self.randomize_photocollection_id()
 
     @display_errors
     def onShowQRCodeButtonClicked(self, checked:bool):
@@ -2296,22 +2296,22 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         dialog = SessionQRCodeDialog(
             subject_id=loaded_session.get_subject_id(),
             session_id=loaded_session.get_session_id(),
-            photocollection_reference_number=self.ui.referenceNumberLineEdit.text,
+            photocollection_id=self.ui.referenceNumberLineEdit.text,
         )
         dialog.exec_()
 
     @display_errors
     def on_transfer_photocollection_from_android_device_clicked(self, checked:bool):
-        cur_reference_number = self.ui.referenceNumberLineEdit.text
-        if len(cur_reference_number) < 1:
+        cur_scan_id = self.ui.referenceNumberLineEdit.text
+        if len(cur_scan_id) < 1:
             slicer.util.errorDisplay(
-                text="Error: Reference number cannot be empty.",
-                windowTitle="Reference Number Error"
+                text="Error: Scan ID cannot be empty.",
+                windowTitle="Scan ID Error"
             )
             return
 
         with BusyCursor():
-            data_type, pulled_files = self.logic.pull_photo_data_from_android(cur_reference_number)
+            data_type, pulled_files = self.logic.pull_photo_data_from_android(cur_scan_id)
 
         data_logic = slicer.util.getModuleLogic("OpenLIFUData")
         data_parameter_node = get_openlifu_data_parameter_node()
@@ -2346,8 +2346,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 "model_abspath": obj_file,
                 "texture_abspath": texture_file,
                 "mtl_abspath": mtl_file,
-                "name": f"Photoscan_{cur_reference_number}",
-                "id": cur_reference_number
+                "name": f"Photoscan_{cur_scan_id}",
+                "id": cur_scan_id
             }
 
             # Add photoscan to database
@@ -2358,14 +2358,14 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.updateWorkflowControls()
 
             slicer.util.infoDisplay(
-                text=f"Photoscan '{cur_reference_number}' has been successfully imported from the Android device. You do not need to generate a photoscan locally.",
+                text=f"Photoscan '{cur_scan_id}' has been successfully imported from the Android device. You do not need to generate a photoscan locally.",
                 windowTitle="Photoscan Imported"
             )
 
         elif data_type == 'photos':
             # Handle photocollection (photos) import
             photocollection_dict = {
-                "reference_number": cur_reference_number,
+                "scan_id": cur_scan_id,
                 "photo_paths": pulled_files,
             }
 
@@ -2376,7 +2376,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             imported_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
                 subject_id=subject_id,
                 session_id=session_id,
-                reference_number=cur_reference_number,
+                reference_number=cur_scan_id,
             )
 
             if not imported_filepaths:
@@ -2389,8 +2389,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             # Below is done twice because session_photocollections stored in the
             # data parameter node is not the same as those stored in
             # SlicerOpenLIFUSession and both must be updated
-            if photocollection_dict["reference_number"] not in data_parameter_node.session_photocollections:
-                data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+            if photocollection_dict["scan_id"] not in data_parameter_node.session_photocollections:
+                data_parameter_node.session_photocollections.append(photocollection_dict["scan_id"]) # automatically load as well
             data_logic.update_photocollections_affiliated_with_loaded_session()
 
             slicer.util.infoDisplay(
@@ -2420,8 +2420,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # Below is done twice because session_photocollections stored in the
         # data parameter node is not the same as those stored in
         # SlicerOpenLIFUSession and both must be updated
-        if photocollection_dict["reference_number"] not in data_parameter_node.session_photocollections:
-            data_parameter_node.session_photocollections.append(photocollection_dict["reference_number"]) # automatically load as well
+        if photocollection_dict["scan_id"] not in data_parameter_node.session_photocollections:
+            data_parameter_node.session_photocollections.append(photocollection_dict["scan_id"]) # automatically load as well
         data_logic.update_photocollections_affiliated_with_loaded_session()
 
     @display_errors
@@ -2458,17 +2458,17 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
         add_slicer_log_handler("MeshRecon", "Mesh reconstruction")
         add_slicer_log_handler("Meshroom", "Meshroom process", use_dialogs=False)
-        reference_numbers = get_openlifu_data_parameter_node().session_photocollections
-        if len(reference_numbers) > 1:
-            dialog = PhotoscanFromPhotocollectionDialog(reference_numbers)
+        scan_ids = get_openlifu_data_parameter_node().session_photocollections
+        if len(scan_ids) > 1:
+            dialog = PhotoscanFromPhotocollectionDialog(scan_ids)
             if dialog.exec_() == qt.QDialog.Accepted:
-                selected_reference_number = dialog.get_selected_reference_number()
-                if not selected_reference_number:
+                selected_scan_id = dialog.get_selected_scan_id()
+                if not selected_scan_id:
                     return
             else:
                 return
         else:
-            selected_reference_number = reference_numbers[0]
+            selected_scan_id = scan_ids[0]
 
         data_parameter_node = get_openlifu_data_parameter_node()
         if data_parameter_node.loaded_session is None:
@@ -2482,7 +2482,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             get_cur_db().get_photocollection_absolute_filepaths(
                 subject_id=subject_id,
                 session_id=session_id,
-                reference_number=selected_reference_number,
+                reference_number=selected_scan_id,
             )
         )
 
@@ -2523,7 +2523,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             photoscan_openlifu = self.logic.generate_photoscan(
                 subject_id = subject_id,
                 session_id = session_id,
-                photocollection_reference_number = selected_reference_number,
+                photocollection_id = selected_scan_id,
                 meshroom_pipeline = photoscan_generation_options_dialog.get_selected_meshroom_pipeline(),
                 image_width = photoscan_generation_options_dialog.get_entered_image_width(),
                 window_radius = 5 if photoscan_generation_options_dialog.get_sequential_checked() else None,
@@ -2986,15 +2986,15 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return OpenLIFUTransducerLocalizationParameterNode(super().getParameterNode())
 
-    def _pull_from_fallback_location_v1(self, reference_number: str, temp_path: str) -> tuple[str, List[str]]:
+    def _pull_from_fallback_location_v1(self, scan_id: str, temp_path: str) -> tuple[str, List[str]]:
         """
         Pulls photo files from the legacy Android app (v3.0) location.
 
         The legacy app stores photos in /sdcard/DCIM/Camera with filenames
-        matching the pattern {reference_number}_*.
+        matching the pattern {scan_id}_*.
 
         Args:
-            reference_number: A string identifying the photo collection.
+            scan_id: A string identifying the photo collection.
             temp_path: The local temporary directory to store pulled files.
 
         Returns:
@@ -3008,7 +3008,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         legacy_android_dir = "/sdcard/DCIM/Camera"
 
         result = subprocess.run(
-            ["adb", "shell", "ls", f"{legacy_android_dir}/{reference_number}_*"],
+            ["adb", "shell", "ls", f"{legacy_android_dir}/{scan_id}_*"],
             capture_output=True, text=True
         )
 
@@ -3029,15 +3029,15 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 )
             else:
                 raise FileNotFoundError(
-                    f"No photos found with reference number '{reference_number}' "
+                    f"No photos found with Scan ID '{scan_id}' "
                     f"on the android device. Please make sure you typed the correct "
-                    f"reference number into the OpenLIFU Android app."
+                    f"Scan ID into the OpenLIFU Android app."
                 )
 
         files = [f for f in result.stdout.strip().split('\n') if f]
         if not files:
             raise FileNotFoundError(
-                f"No photos found with reference number '{reference_number}' "
+                f"No photos found with Scan ID '{scan_id}' "
                 f"on the android device."
             )
 
@@ -3083,14 +3083,14 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 rows.append((fields["name"], fields.get("type", "file")))
         return rows
 
-    def _pull_from_content_provider(self, reference_number: str, temp_path: str) -> tuple[str, list[str]] | None:
+    def _pull_from_content_provider(self, scan_id: str, temp_path: str) -> tuple[str, list[str]] | None:
         """Pull files via the Android content provider. Returns None if unavailable.
 
         If the collection has a 'scan' subdirectory (3D model already generated on device),
         pulls the scan files and returns ('photoscan', ...). Otherwise pulls just the photos
         and returns ('photos', ...) for local photocollection processing.
         """
-        base = f"content://health.openwater.openlifu3dscanner.photoscans/collections/{reference_number}"
+        base = f"content://health.openwater.openlifu3dscanner.photoscans/collections/{scan_id}"
 
         # Check if collection exists
         result = subprocess.run(
@@ -3119,7 +3119,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 )
                 if pulled_files:
                     if all_ok:
-                        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+                        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", scan_id)
                     return ('photoscan', pulled_files)
 
         # Fall through: pull photo files only
@@ -3130,7 +3130,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         pulled_files, all_ok = self._read_content_files(photo_names, f"{base}/file", temp_path)
         if pulled_files:
             if all_ok:
-                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", scan_id)
             return ('photos', pulled_files)
         return None
 
@@ -3150,9 +3150,9 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 pulled.append(str(dest_path))
         return pulled, all_ok
 
-    def _pull_from_fallback_location_v2(self, reference_number: str, temp_path: str) -> tuple[str, List[str]] | None:
+    def _pull_from_fallback_location_v2(self, scan_id: str, temp_path: str) -> tuple[str, List[str]] | None:
         """Pull files via filesystem at /sdcard/OpenLIFU-3DScanner/. Returns None if unavailable."""
-        android_dir = f"/sdcard/OpenLIFU-3DScanner/{reference_number}"
+        android_dir = f"/sdcard/OpenLIFU-3DScanner/{scan_id}"
 
         result = subprocess.run(
             ["adb", "shell", "ls", android_dir],
@@ -3197,7 +3197,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                     pulled_files.append(dest_path)
 
             if all_pulls_succeeded:
-                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", scan_id)
             return ('photoscan', pulled_files)
         else:
             # Pull photo files from base directory (offline mode)
@@ -3217,41 +3217,41 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                         pulled_files.append(dest_path)
 
             if all_pulls_succeeded:
-                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", reference_number)
+                self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_COMPLETE", scan_id)
             return ('photos', pulled_files)
 
-    def pull_photo_data_from_android(self, reference_number: str) -> tuple[str, List[str]]:
+    def pull_photo_data_from_android(self, scan_id: str) -> tuple[str, List[str]]:
         """Pull photo or photoscan files from an Android device.
 
         Tries three sources in order: content provider, filesystem fallback (v2),
         then legacy filesystem fallback (v1).
         """
-        temp_path = os.path.join(tempfile.gettempdir(), reference_number)
+        temp_path = os.path.join(tempfile.gettempdir(), scan_id)
         os.makedirs(temp_path, exist_ok=True)
 
-        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", reference_number)
+        self._send_adb_broadcast("health.openwater.openlifu3dscanner.TRANSFER_STARTED", scan_id)
 
         # Try content provider first (latest app version)
-        result = self._pull_from_content_provider(reference_number, temp_path)
+        result = self._pull_from_content_provider(scan_id, temp_path)
         if result is not None:
             return result
 
-        logging.info(f"Content provider unavailable for '{reference_number}', trying filesystem fallback.")
+        logging.info(f"Content provider unavailable for '{scan_id}', trying filesystem fallback.")
 
         # Fallback v2: filesystem at /sdcard/OpenLIFU-3DScanner/
-        result = self._pull_from_fallback_location_v2(reference_number, temp_path)
+        result = self._pull_from_fallback_location_v2(scan_id, temp_path)
         if result is not None:
             return result
 
-        logging.info(f"Filesystem fallback unavailable for '{reference_number}', trying legacy fallback.")
+        logging.info(f"Filesystem fallback unavailable for '{scan_id}', trying legacy fallback.")
 
         # Fallback v1: legacy filesystem at /sdcard/DCIM/Camera/
-        return self._pull_from_fallback_location_v1(reference_number, temp_path)
+        return self._pull_from_fallback_location_v1(scan_id, temp_path)
 
     def generate_photoscan(self,
         subject_id:str,
         session_id:str,
-        photocollection_reference_number:str,
+        photocollection_id:str,
         meshroom_pipeline:str,
         image_width:int,
         window_radius:Optional[int],
@@ -3263,7 +3263,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         Args:
             subject_id: The subject ID
             session_id: The session ID
-            photocollection_reference_number: The photocollection reference number
+            photocollection_id: The photocollection Scan ID
             meshroom_pipeline: The name of the meshroom pipeline to use. See openlifu.nav.photoscan.get_meshroom_pipeline_names.
             image_width: The image width to which to resize input images before sending them into meshroom
             window_radius: The number of images forward and backward in the sequence to try and
@@ -3279,7 +3279,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         photocollection_filepaths = get_cur_db().get_photocollection_absolute_filepaths(
             subject_id=subject_id,
             session_id=session_id,
-            reference_number=photocollection_reference_number,
+            reference_number=photocollection_id,
         )
 
         image_selection_mode, image_selection_value = image_selection_settings
@@ -3317,10 +3317,10 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 progress_callback = progress_callback,
                 download_masking_model = False,
             )
-        photoscan_openlifu.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_reference_number}"
+        photoscan_openlifu.name = f"{subject_id}'s photoscan during session {session_id} for photocollection {photocollection_id}"
         photoscan_ids = get_cur_db().get_photoscan_ids(subject_id=subject_id, session_id=session_id)
         for i in itertools.count(): # Assumes a finite number of photoscans :)
-            photoscan_id = f"{photocollection_reference_number}_{i}"
+            photoscan_id = f"{photocollection_id}_{i}"
             if photoscan_id not in photoscan_ids:
                 break
         photoscan_openlifu.id = photoscan_id

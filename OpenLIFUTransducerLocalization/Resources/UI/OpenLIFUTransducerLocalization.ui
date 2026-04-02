@@ -72,7 +72,7 @@
               <item>
                <widget class="QLabel" name="referenceNumberLabel">
                 <property name="text">
-                 <string>Photocollection Reference Number:</string>
+                 <string>Photocollection Scan ID:</string>
                 </property>
                </widget>
               </item>
@@ -91,7 +91,7 @@
               <item>
                <widget class="QToolButton" name="referenceNumberRefreshButton">
                 <property name="toolTip">
-                 <string>Generate a new photocollection reference number</string>
+                 <string>Generate a new photocollection Scan ID</string>
                 </property>
                 <property name="text">
                  <string/>
