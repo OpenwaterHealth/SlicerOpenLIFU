@@ -65,26 +65,39 @@ def check_and_install_python_requirements(prompt_if_found = False) -> None:
             )
 
 def get_required_openlifu_version() -> "Optional[str]":
-    """Return the required openlifu version pinned in 
+    """Return the required openlifu version pinned in
     python-requirements.txt, or None."""
     requirements_path = Path(__file__).parent / 'Resources/python-requirements.txt'
-    for line in requirements_path.read_text().splitlines():    
+    for line in requirements_path.read_text().splitlines():
+        line = line.strip()
+        if line.startswith('#'):
+            continue
         if line.startswith('openlifu=='):
             return line.split('==', 1)[1].strip()
+        if 'OpenLIFU-python.git@' in line:
+            commit_hash = line.split('@')[-1].strip()
+            return f"dev+g{commit_hash[:9]}"
     return None
 
 def openlifu_version_matches() -> bool:
     """Return True if the installed openlifu version matches
-     the required version. Returns False if openlifu is not 
+     the required version. Returns False if openlifu is not
      installed or versions don't match."""
     import importlib.metadata
     try:
-        installed = importlib.metadata.version('openlifu')     
+        installed = importlib.metadata.version('openlifu')
         required = get_required_openlifu_version()
         if required is None:
             return True  # No version constraint
-        # Handle optional 'v' prefix (e.g. 'v0.18.0' vs '0.18.0')
-        return installed == required or installed == required.lstrip('v')
+        if 'dev' in required:
+            if '+g' not in installed:
+                return False
+            required_hash = required.split('+g')[-1]
+            installed_hash = installed.split('+g')[-1]
+            return required_hash.startswith(installed_hash) or installed_hash.startswith(required_hash)
+        else:
+            # Handle optional 'v' prefix (e.g. 'v0.18.0' vs '0.18.0')
+            return installed == required or installed == required.lstrip('v')
     except importlib.metadata.PackageNotFoundError:
         return False
 
