@@ -107,6 +107,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self.syncProcess = None
         self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
         self._cloudTokens = None
+        self._tokenRefreshRetryIntervalSec = 15 * 60
+        self._nextTokenRefreshAttemptAt = 0
         self._isServiceRunning = False
         self._active_runner = None
         # Instantiate signal bridge
@@ -233,7 +235,10 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
                 return None
             self._cloudTokens = {"refreshToken": savedRef, "expiresAt": 0}
 
-        if time.time() > (self._cloudTokens.get("expiresAt", 0) - 300):
+        now = time.time()
+        if now > (self._cloudTokens.get("expiresAt", 0) - 300):
+            if now < self._nextTokenRefreshAttemptAt:
+                return self._cloudTokens.get("idToken")
             self.refreshCloudToken()
 
         return self._cloudTokens.get("idToken") if self._cloudTokens else None
@@ -251,9 +256,15 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             self._cloudTokens["idToken"] = data['id_token']
             self._cloudTokens["expiresAt"] = time.time() + \
                 int(data['expires_in'])
+            self._nextTokenRefreshAttemptAt = 0
         except Exception as e:
             logger.error(f"Token refresh failed: {e}")
-            self._cloudTokens = None
+            if self._cloudTokens:
+                self._cloudTokens["idToken"] = None
+                self._cloudTokens["expiresAt"] = 0
+            self._nextTokenRefreshAttemptAt = time.time() + self._tokenRefreshRetryIntervalSec
+            logger.info(
+                f"Token refresh will retry in {self._tokenRefreshRetryIntervalSec} seconds.")
 
     def login(self, email, password):
         """Authenticates user and saves refresh token."""
@@ -270,6 +281,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             }
             qt.QSettings().setValue(
                 "OpenLIFU/CloudRefreshToken", data['refreshToken'])
+            self._nextTokenRefreshAttemptAt = 0
             qt.QTimer.singleShot(100, self.heartbeat)
             return True, "Success"
         except Exception as e:
@@ -279,4 +291,5 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def logout(self):
         self.cleanup()
         self._cloudTokens = None
+        self._nextTokenRefreshAttemptAt = 0
         qt.QSettings().remove("OpenLIFU/CloudRefreshToken")
