@@ -437,10 +437,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
-        logging.debug(f" onRunCompleted() called with run_complete={new_sonication_run_complete_state}")
         """If the soniction_run_complete variable changes from False to True, then open the RunComplete 
         dialog to determine whether the run should be saved. Saving the run creates a SlicerOpenLIFURun object and 
         writes the run to the database (only if there is an active session)."""
+
+        logging.debug(f" onRunCompleted() called with run_complete={new_sonication_run_complete_state}")
         self.ui.runHardwareStatusLabel.setProperty("text", "Run Completed.")
         
         if new_sonication_run_complete_state:
