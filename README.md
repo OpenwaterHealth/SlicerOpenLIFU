@@ -154,7 +154,7 @@ Please locate the most recent photogrammetry application and download it directl
 
 This application is designed to work with different photogrammetry frameworks, such as the one included with [OpenLIFU 3D Scanner Android app](https://github.com/OpenwaterHealth/OpenLIFU-3DScanner). With credits in the app, computationally intensive tasks such as photogrammetric mesh reconstruction are performed in the cloud, eliminating the need for local Meshroom installation.
 
-If you prefer to perform local mesh reconstruction locally instead of using cloud processing, you will need to install Meshroom and add it to your system PATH. Follow the instructions [here](https://github.com/OpenwaterHealth/OpenLIFU-python?tab=readme-ov-file#installing-meshroom) to download and configure Meshroom for local photoscan generation. Please ensure that you are downloading Meshroom 2023.3.0, as this is the most compatible version with most systems.
+If you prefer to perform local mesh reconstruction locally instead of using cloud processing, you will need to install Meshroom and add it to your system PATH. Follow the instructions [here](https://github.com/OpenwaterHealth/OpenLIFU-python?tab=readme-ov-file#installing-meshroom) to download and configure Meshroom for local photoscan generation. Please ensure that you are downloading Meshroom 2025.1.0, as this is the most compatible version with most systems.
 
 ### Step 2: Download the SlicerOpenLIFU Extension
 
