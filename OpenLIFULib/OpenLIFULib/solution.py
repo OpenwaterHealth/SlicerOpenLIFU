@@ -15,6 +15,7 @@ from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
 
 if TYPE_CHECKING:
     import openlifu
+    import openlifu.plan
     import xarray
 
 @parameterPack
@@ -32,7 +33,7 @@ class SlicerOpenLIFUSolution:
 
     @staticmethod
     def initialize_from_openlifu_data(
-        solution : "openlifu.Solution",
+        solution : "openlifu.plan.Solution",
         pnp_datarray : "xarray.DataArray",
         intensity_dataarray : "xarray.DataArray",
         transducer : SlicerOpenLIFUTransducer,

@@ -106,8 +106,8 @@ def check_and_install_kwave_binaries() -> bool:
     Returns whether they were successfully installed (or just already present).
     This assumes that openlifu can be imported already, so do not call this function until after that is assured.
     """
-    import openlifu
-    kwave_paths = openlifu.util.assets.get_kwave_paths()
+    from openlifu.util.assets import get_kwave_paths
+    kwave_paths = get_kwave_paths()
     if all(p.exists() for p,_ in kwave_paths):
         return True
     
@@ -144,6 +144,17 @@ def openlifu_lz() -> "openlifu":
 
         with BusyCursor():
             import openlifu
+            import openlifu.bf
+            import openlifu.db
+            import openlifu.geo
+            import openlifu.nav.photoscan
+            import openlifu.plan
+            import openlifu.seg.seg_methods
+            import openlifu.seg.skinseg
+            import openlifu.sim
+            import openlifu.util.assets
+            import openlifu.xdc
+            import openlifu.xdc.util
 
         if slicer.app.testingEnabled():
             # Ensure kwave assets are present (no-op if already installed)
