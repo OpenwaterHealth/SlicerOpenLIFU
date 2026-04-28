@@ -46,6 +46,7 @@ from OpenLIFULib.notifications import notify
 if TYPE_CHECKING:
     import openlifu
     import openlifu.plan
+    import openlifu.xdc
     import xarray
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
@@ -673,11 +674,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 #
 
 def compute_solution_openlifu(
-        protocol: "openlifu.Protocol",
+        protocol: "openlifu.plan.Protocol",
         transducer:SlicerOpenLIFUTransducer,
         target_node:vtkMRMLMarkupsFiducialNode,
         volume_node:vtkMRMLScalarVolumeNode
-    ) -> "Tuple[openlifu.Solution, xarray.DataArray, xarray.DataArray, openlifu.plan.SolutionAnalysis]":
+    ) -> "Tuple[openlifu.plan.Solution, xarray.DataArray, xarray.DataArray, openlifu.plan.SolutionAnalysis]":
     """Run openlifu beamforming and k-wave simulation
 
     Returns:

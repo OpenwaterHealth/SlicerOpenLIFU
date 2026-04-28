@@ -61,7 +61,9 @@ from OpenLIFULib.virtual_fit_results import (
 if TYPE_CHECKING:
     import openlifu
     import openlifu.geo
-    import openlifu.virtual_fit
+    import openlifu.plan
+    import openlifu.seg.virtual_fit
+    import openlifu.xdc
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
@@ -1100,8 +1102,8 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
         add_slicer_log_handler("VirtualFit", "Virtual fitting")
 
-        transducer_openlifu : "openlifu.Transducer" = transducer.transducer.transducer
-        protocol_openlifu : "openlifu.Protocol" = protocol.protocol
+        transducer_openlifu : "openlifu.xdc.Transducer" = transducer.transducer.transducer
+        protocol_openlifu : "openlifu.plan.Protocol" = protocol.protocol
 
         units = "mm" # These are the units of the output space of the transform returned by get_IJK2RAS
 
@@ -1116,7 +1118,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             # tiny svd calls end up having more overhead than is worth it.
             # For some unknown reason, the improvement is only noticable when we do not use the embree
             # option in virtual fitting, which makes things very fast.
-            vf_transforms = openlifu_lz().run_virtual_fit(
+            vf_transforms = openlifu_lz().seg.run_virtual_fit(
                 units = units,
                 target_RAS = target.GetNthControlPointPosition(0),
                 standoff_transform = transducer_openlifu.get_standoff_transform_in_units(units),
@@ -1159,7 +1161,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             return None
         return vf_result_nodes[0]
 
-    def load_vf_debugging_info(self, debug_info : "openlifu.virtual_fit.VirtualFitDebugInfo") -> None:
+    def load_vf_debugging_info(self, debug_info : "openlifu.seg.virtual_fit.VirtualFitDebugInfo") -> None:
         """Load virtual fit debugging info into the Slicer scene."""
         skin_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
         skin_node.SetAndObservePolyData(debug_info.skin_mesh)

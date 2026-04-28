@@ -271,7 +271,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.solution_analysis_options_definition_widget = OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget()
         replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
 
-        self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
+        self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().seg.virtual_fit.VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
         replace_widget(self.ui.virtualFitOptionsDefinitionWidgetPlaceholder, self.virtual_fit_options_definition_widget, self.ui)
         self.virtual_fit_options_definition_widget.collapsible.collapsed = True  # start collapsed
 
@@ -618,7 +618,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if not filepath:
             return
 
-        protocol = openlifu_lz().Protocol.from_file(filepath)
+        protocol = openlifu_lz().plan.Protocol.from_file(filepath)
 
         if not self.load_protocol_from_openlifu(protocol):
             return
@@ -1017,7 +1017,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def get_default_virtual_fit_options(cls):
-        return openlifu_lz().VirtualFitOptions()
+        return openlifu_lz().seg.virtual_fit.VirtualFitOptions()
 
     @classmethod
     def get_default_protocol(cls):

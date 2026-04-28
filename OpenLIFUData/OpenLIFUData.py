@@ -63,6 +63,8 @@ from OpenLIFULib.virtual_fit_results import (
 if TYPE_CHECKING:
     import openlifu
     import openlifu.nav.photoscan
+    import openlifu.plan
+    import openlifu.xdc
     from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
 
@@ -1286,7 +1288,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.loadedObjectsItemModel.appendRow(row)
         for transducer_slicer in parameter_node.loaded_transducers.values():
             transducer_slicer : SlicerOpenLIFUTransducer
-            transducer_openlifu : "openlifu.Transducer" = transducer_slicer.transducer.transducer
+            transducer_openlifu : "openlifu.xdc.Transducer" = transducer_slicer.transducer.transducer
             row = list(map(
                 create_noneditable_QStandardItem,
                 [transducer_openlifu.name, "Transducer", transducer_openlifu.id]
@@ -1415,7 +1417,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             loaded_session = self._parameterNode.loaded_session
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
-            protocol_openlifu : "openlifu.Protocol" = loaded_session.get_protocol().protocol
+            protocol_openlifu : "openlifu.plan.Protocol" = loaded_session.get_protocol().protocol
             
             self.ui.sessionStatusSubjectNameIdValueLabel.setText(
                 f"{subject_openlifu.name} (ID: {session_openlifu.subject_id})"
@@ -1431,7 +1433,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             # Add a validity check here since this function call is triggered after a transducer is removed but 
             # before a session is invalidated. 
             if loaded_session.transducer_is_valid():
-                transducer_openlifu : "openlifu.Transducer" = loaded_session.get_transducer().transducer.transducer
+                transducer_openlifu : "openlifu.xdc.Transducer" = loaded_session.get_transducer().transducer.transducer
                 self.ui.sessionStatusTransducerValueLabel.setText(
                     f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
                 )
@@ -2121,10 +2123,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
 
     def load_protocol_from_file(self, filepath:str) -> None:
-        protocol = openlifu_lz().Protocol.from_file(filepath)
+        protocol = openlifu_lz().plan.Protocol.from_file(filepath)
         self.load_protocol_from_openlifu(protocol)
 
-    def load_protocol_from_openlifu(self, protocol:"openlifu.Protocol", replace_confirmed: bool = False) -> None:
+    def load_protocol_from_openlifu(self, protocol:"openlifu.plan.Protocol", replace_confirmed: bool = False) -> None:
         """Load an openlifu protocol object into the scene as a SlicerOpenLIFUProtocol,
         adding it to the list of loaded openlifu objects. If there are
         changes in the protocol config, also confirms user wants to discard
@@ -2188,7 +2190,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_transducer_from_openlifu(
             self,
-            transducer: "openlifu.Transducer",
+            transducer: "openlifu.xdc.Transducer",
             transducer_abspaths_info: dict = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,

@@ -18,6 +18,7 @@ from OpenLIFULib.virtual_fit_results import is_virtual_fit_result_node
 
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
+    import openlifu.xdc
 
 
 # Define transducer color dictionary
@@ -40,7 +41,7 @@ class SlicerOpenLIFUTransducer:
 
     @staticmethod
     def initialize_from_openlifu_transducer(
-            transducer : "openlifu.Transducer",
+            transducer : "openlifu.xdc.Transducer",
             transducer_abspaths_info: dict = {},
             transducer_matrix: Optional[np.ndarray]=None,
             transducer_matrix_units: Optional[str]=None,
