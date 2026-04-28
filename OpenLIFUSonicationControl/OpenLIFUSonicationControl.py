@@ -661,15 +661,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
 # OpenLIFUSonicationControlLogic
 #
-class LIFUQtSignals(qt.QObject):
-    runProgressUpdated = qt.Signal(float)  # Expecting pulse_train_percent as float
-    finishScanning = qt.Signal(bool)  # Signal to indicate that scanning is finished
-    deviceConnected = qt.Signal()  # Emitted from monitor thread; Qt queues to main thread
-    deviceDisconnected = qt.Signal()  # Emitted from monitor thread; Qt queues to main thread
-    dataReceived = qt.Signal(str, str)  # (descriptor, message)
+class _LIFUBridge(qt.QObject):
+    """Thread-safe bridge from OWSignal to Qt, plus UI notification signals."""
+    # Input bridge signals (OWSignal from hvcontroller/txdevice connects to these)
+    signal_connected = qt.Signal(str, str)       # (descriptor, port)
+    signal_disconnected = qt.Signal(str, str)    # (descriptor, port)
+    signal_data_received = qt.Signal(str, str)   # (descriptor, data)
+    signal_error = qt.Signal(str, int, str)      # (descriptor, code, message)
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    # Output UI signals (Widget connects to these)
+    runProgressUpdated = qt.Signal(float) # Expecting pulse_train_percent as float
+    finishScanning = qt.Signal(bool)  # Signal to indicate that scanning is finished
 
 class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
@@ -730,21 +732,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """List of functions to call when the LIFU interface receives data."""
 
         # ---- LIFU Interface Connection ----
-        
-        self.qt_signals = LIFUQtSignals()
 
-        # These connections cross the monitor-thread → main-thread boundary.
-        # Qt auto-detects the thread mismatch and queues the calls safely.
-        self.qt_signals.deviceConnected.connect(self._dispatch_device_connected)
-        self.qt_signals.deviceDisconnected.connect(self._dispatch_device_disconnected)
-        self.qt_signals.dataReceived.connect(self._dispatch_data_received)
-
+        self._create_lifu_interface_bridge()
         self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
-
         # Connect signals before starting the monitor thread to avoid missing early events
-        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
-        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-        self.cur_lifu_interface.signal_data_received.connect(self.on_lifu_data_received)
+        self._connect_owsignals()
 
         # Set up asyncio event loop and monitoring thread
         self._monitor_loop = asyncio.new_event_loop()
@@ -767,6 +759,21 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         logging.getLogger("UART").setLevel(logging.ERROR)
         logging.getLogger("LIFUHVController").setLevel(logging.ERROR)
         logging.getLogger("LIFUTXDevice").setLevel(logging.ERROR)
+
+    def _create_lifu_interface_bridge(self):
+        """Create the bridge QObject and wire its output signals to handlers. Call once from __init__."""
+        self.qt_signals = _LIFUBridge()
+        self.qt_signals.signal_connected.connect(self.on_lifu_device_connected)
+        self.qt_signals.signal_disconnected.connect(self.on_lifu_device_disconnected)
+        self.qt_signals.signal_data_received.connect(self.on_lifu_data_received)
+
+    def _connect_owsignals(self):
+        """Wire the current interface's OWSignals into the bridge. Call from __init__ and reinitialize_lifu_interface."""
+        for device in (self.cur_lifu_interface.hvcontroller, self.cur_lifu_interface.txdevice):
+            device.signal_connected.connect(self.qt_signals.signal_connected.emit)
+            device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
+            device.signal_data_received.connect(self.qt_signals.signal_data_received.emit)
+            device.signal_error.connect(self.qt_signals.signal_error.emit)
 
     def stop_monitoring(self):
         if self.cur_lifu_interface:
@@ -807,10 +814,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             HV_test_mode=test_mode
         )
 
-        # Reconnect signals
-        self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
-        self.cur_lifu_interface.signal_disconnect.connect(self.on_lifu_device_disconnected)
-        self.cur_lifu_interface.signal_data_received.connect(self.on_lifu_data_received)
+        # Connect the bridge to signals from the new interface
+        self._connect_owsignals()
 
         # Create fresh loop + thread
         self._monitor_loop = asyncio.new_event_loop()
@@ -1006,11 +1011,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
     def on_lifu_device_connected(self, descriptor, port):
         logging.info(f"🔌 CONNECTED: {descriptor} on port {port}")
-        self.qt_signals.deviceConnected.emit()
+        self._dispatch_device_connected()
 
     def on_lifu_device_disconnected(self, descriptor, port):
         logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
-        self.qt_signals.deviceDisconnected.emit()
+        self._dispatch_device_disconnected()
     
     def on_lifu_data_received(self, descriptor, message):
         """Called when the LIFUInterface receives data from the hardware.
@@ -1037,7 +1042,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 logging.error(f"Failed to parse and update trigger state: {e}")
         
 
-        self.qt_signals.dataReceived.emit(descriptor, message)
+        self._dispatch_data_received(descriptor, message)
     
     def run(self):
         " Returns True when the sonication control algorithm is done"
