@@ -353,7 +353,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         Args:
             path: Path to the openlifu database folder on disk.
         """
-        self.db = openlifu_lz().Database(path)
+        self.db = openlifu_lz().db.Database(path)
         add_slicer_log_handler_for_openlifu_object(self.db)
     
     @staticmethod

@@ -11,6 +11,7 @@ from OpenLIFULib.lazyimport import xarray_lz
 if TYPE_CHECKING:
     import openlifu
     import openlifu.db
+    import openlifu.plan
     import xarray
     from OpenLIFULib import SlicerOpenLIFUTransducer
 
@@ -43,7 +44,7 @@ def make_volume_from_xarray_in_transducer_coords(data_array: "xarray.DataArray",
 
     return volumeNode
 
-def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolumeNode, transducer:"SlicerOpenLIFUTransducer", protocol:"openlifu.Protocol") -> "xarray.DataArray":
+def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolumeNode, transducer:"SlicerOpenLIFUTransducer", protocol:"openlifu.plan.Protocol") -> "xarray.DataArray":
     """Convert a volume node into a DataArray in the coordinates of a given transducer.
     See also `make_volume_from_xarray_in_transducer_coords`.
     """

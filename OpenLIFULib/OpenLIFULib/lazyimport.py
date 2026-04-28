@@ -106,8 +106,8 @@ def check_and_install_kwave_binaries() -> bool:
     Returns whether they were successfully installed (or just already present).
     This assumes that openlifu can be imported already, so do not call this function until after that is assured.
     """
-    import openlifu
-    kwave_paths = openlifu.util.assets.get_kwave_paths()
+    from openlifu.util.assets import get_kwave_paths
+    kwave_paths = get_kwave_paths()
     if all(p.exists() for p,_ in kwave_paths):
         return True
     
@@ -144,6 +144,18 @@ def openlifu_lz() -> "openlifu":
 
         with BusyCursor():
             import openlifu
+            import openlifu_sdk
+            import openlifu.bf
+            import openlifu.db
+            import openlifu.geo
+            import openlifu.nav.photoscan
+            import openlifu.plan
+            import openlifu.seg.seg_methods
+            import openlifu.seg.skinseg
+            import openlifu.sim
+            import openlifu.util.assets
+            import openlifu.xdc
+            import openlifu.xdc.util
 
         if slicer.app.testingEnabled():
             # Ensure kwave assets are present (no-op if already installed)
@@ -182,3 +194,10 @@ def segno_lz() -> "segno":
         check_and_install_python_requirements(prompt_if_found=False)
         import segno
     return sys.modules["segno"]
+
+def openlifu_sdk_lz() -> "openlifu_sdk":
+    """Import openlifu_sdk and return the module. openlifu_sdk is installed as a dependency
+    of openlifu, so openlifu_lz() must be called first to ensure it is available."""
+    if "openlifu_sdk" not in sys.modules:
+        openlifu_lz()
+    return sys.modules["openlifu_sdk"]

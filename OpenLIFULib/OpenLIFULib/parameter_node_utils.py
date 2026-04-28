@@ -18,51 +18,53 @@ from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz
 if TYPE_CHECKING:
     import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
     import openlifu.db
+    import openlifu.geo
     import openlifu.plan
     import openlifu.nav.photoscan
+    import openlifu.xdc
     import xarray
 
 
-# This very thin wrapper around openlifu.Protocol is needed to do our lazy importing of openlifu
+# This very thin wrapper around openlifu.plan.Protocol is needed to do our lazy importing of openlifu
 # while still providing type annotations that the parameter node wrapper can use.
-# If we tried to make openlifu.Protocol directly supported as a type by parameter nodes, we would
+# If we tried to make openlifu.plan.Protocol directly supported as a type by parameter nodes, we would
 # get errors from parameterNodeWrapper as it tries to use typing.get_type_hints. This fails because
-# get_type_hints tries to *evaluate* the type annotations like "openlifu.Protocol" possibly before
+# get_type_hints tries to *evaluate* the type annotations like "openlifu.plan.Protocol" possibly before
 # the user has installed openlifu, and possibly before the main window widgets exist that would allow
 # an install prompt to even show up.
 class SlicerOpenLIFUProtocol:
-    """Ultrathin wrapper of openlifu.Protocol. This exists so that protocols can have parameter node
+    """Ultrathin wrapper of openlifu.plan.Protocol. This exists so that protocols can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, protocol: "Optional[openlifu.Protocol]" = None):
+    def __init__(self, protocol: "Optional[openlifu.plan.Protocol]" = None):
         self.protocol = protocol
 
-# For the same reason we have a thin wrapper around openlifu.Transducer. But the name SlicerOpenLIFUTransducer
+# For the same reason we have a thin wrapper around openlifu.xdc.Transducer. But the name SlicerOpenLIFUTransducer
 # is reserved for the upcoming parameter pack.
 class SlicerOpenLIFUTransducerWrapper:
-    """Ultrathin wrapper of openlifu.Transducer. This exists so that transducers can have parameter node
+    """Ultrathin wrapper of openlifu.xdc.Transducer. This exists so that transducers can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, transducer: "Optional[openlifu.Transducer]" = None):
+    def __init__(self, transducer: "Optional[openlifu.xdc.Transducer]" = None):
         self.transducer = transducer
 
-# For the same reason we have a thin wrapper around openlifu.Point
+# For the same reason we have a thin wrapper around openlifu.geo.Point
 class SlicerOpenLIFUPoint:
-    """Ultrathin wrapper of openlifu.Point. This exists so that points can have parameter node
+    """Ultrathin wrapper of openlifu.geo.Point. This exists so that points can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, point: "Optional[openlifu.Point]" = None):
+    def __init__(self, point: "Optional[openlifu.geo.Point]" = None):
         self.point = point
 
-# For the same reason we have a thin wrapper around openlifu.Session
+# For the same reason we have a thin wrapper around openlifu.db.Session
 class SlicerOpenLIFUSessionWrapper:
-    """Ultrathin wrapper of openlifu.Session. This exists so that sessions can have parameter node
+    """Ultrathin wrapper of openlifu.db.Session. This exists so that sessions can have parameter node
     support while we still do lazy-loading of openlifu."""
     def __init__(self, session: "Optional[openlifu.db.Session]" = None):
         self.session = session
 
-# For the same reason we have a thin wrapper around openlifu.Solution
+# For the same reason we have a thin wrapper around openlifu.plan.Solution
 class SlicerOpenLIFUSolutionWrapper:
-    """Ultrathin wrapper of openlifu.Solution. This exists so that solutions can have parameter node
+    """Ultrathin wrapper of openlifu.plan.Solution. This exists so that solutions can have parameter node
     support while we still do lazy-loading of openlifu."""
-    def __init__(self, solution: "Optional[openlifu.Solution]" = None):
+    def __init__(self, solution: "Optional[openlifu.plan.Solution]" = None):
         self.solution = solution
 
 # For the same reason we have a thin wrapper around xarray.Dataset
@@ -173,7 +175,7 @@ class OpenLIFUProtocolSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIF
         Reads and returns the value with the given name from the parameterNode.
         """
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUProtocol(openlifu_lz().Protocol.from_json(json_string))
+        return SlicerOpenLIFUProtocol(openlifu_lz().plan.Protocol.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUTransducerSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUTransducerWrapper)):
@@ -191,7 +193,7 @@ class OpenLIFUTransducerSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenL
         Reads and returns the value with the given name from the parameterNode.
         """
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().Transducer.from_json(json_string))
+        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().xdc.Transducer.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSessionWrapper)):
@@ -215,7 +217,7 @@ class OpenLIFUSolutionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIF
 
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSolutionWrapper:
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUSolutionWrapper(openlifu_lz().Solution.from_json(json_string))
+        return SlicerOpenLIFUSolutionWrapper(openlifu_lz().plan.Solution.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPoint)):
@@ -233,7 +235,7 @@ class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPo
         Reads and returns the value with the given name from the parameterNode.
         """
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUPoint(openlifu_lz().Point.from_json(json_string))
+        return SlicerOpenLIFUPoint(openlifu_lz().geo.Point.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFURunSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFURun)):
