@@ -1,5 +1,6 @@
 from OpenLIFULib.lazyimport import (
     openlifu_lz,
+    openlifu_sdk_lz,
     xarray_lz,
     bcrypt_lz,
     threadpoolctl_lz,
@@ -43,6 +44,7 @@ from OpenLIFULib.solution import SlicerOpenLIFUSolution
 
 __all__ = [
     "openlifu_lz",
+    "openlifu_sdk_lz",
     "xarray_lz",
     "bcrypt_lz",
     "threadpoolctl_lz",

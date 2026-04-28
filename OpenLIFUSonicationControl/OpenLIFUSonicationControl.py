@@ -24,6 +24,7 @@ from OpenLIFULib import (
     SlicerOpenLIFURun,
     get_openlifu_data_parameter_node,
     openlifu_lz,
+    openlifu_sdk_lz,
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
@@ -34,6 +35,7 @@ from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_wid
 # but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
+    import openlifu_sdk
 
 #
 # OpenLIFUSonicationControl
@@ -498,7 +500,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         try:
             self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
-            if self.logic.cur_lifu_interface.get_status() != openlifu_lz().io.LIFUInterfaceStatus.STATUS_READY:
+            if self.logic.cur_lifu_interface.get_status() != openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
             self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
             logging.debug("Solution successfully sent to device")
@@ -569,7 +571,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Populate SDK / console / TX firmware version labels when both devices are connected."""
         if self._cur_device_connected_state == DeviceConnectedState.CONNECTED:
             try:
-                sdk_ver = openlifu_lz().io.LIFUInterface.get_sdk_version()
+                sdk_ver = openlifu_sdk_lz().LIFUInterface.get_sdk_version()
             except Exception as e:
                 logging.warning("Could not read SDK version: %s", e)
                 sdk_ver = "unknown"
@@ -626,7 +628,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.connectedStateLabel.setProperty("text", "🔴 LIFU Device (not connected)")
         self.updateAllButtonsEnabled()
 
-    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu.io.LIFUInterfaceStatus | None" = None):
+    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu_sdk.LIFUInterfaceStatus | None" = None):
         self._cur_solution_on_hardware_state = solution_state
         if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
@@ -737,7 +739,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.qt_signals.deviceDisconnected.connect(self._dispatch_device_disconnected)
         self.qt_signals.dataReceived.connect(self._dispatch_data_received)
 
-        self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
 
         # Connect signals before starting the monitor thread to avoid missing early events
         self.cur_lifu_interface.signal_connect.connect(self.on_lifu_device_connected)
@@ -799,7 +801,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             logging.warning("[LIFU] Error during interface cleanup: %s", e)
 
         # Recreate interface
-        self.cur_lifu_interface = openlifu_lz().io.LIFUInterface(
+        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(
             run_async=True,
             TX_test_mode=test_mode,
             HV_test_mode=test_mode
@@ -1025,11 +1027,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                     # Update internal trigger state and notify QML
                     if parsed["status"] == "STOPPED":
                         logging.info("Trigger is stopped.")
-                        self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_FINISHED)
+                        self.cur_lifu_interface.set_status(openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_FINISHED)
                         self.qt_signals.finishScanning.emit(True)  # Signal that scanning is finished 
                     else:
                         #update status
-                        self.cur_lifu_interface.set_status(openlifu_lz().io.LIFUInterfaceStatus.STATUS_RUNNING)
+                        self.cur_lifu_interface.set_status(openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_RUNNING)
         
             except Exception as e:
                 logging.error(f"Failed to parse and update trigger state: {e}")
