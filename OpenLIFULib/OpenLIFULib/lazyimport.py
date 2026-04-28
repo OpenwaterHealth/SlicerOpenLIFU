@@ -144,6 +144,7 @@ def openlifu_lz() -> "openlifu":
 
         with BusyCursor():
             import openlifu
+            import openlifu_sdk
             import openlifu.bf
             import openlifu.db
             import openlifu.geo
@@ -193,3 +194,10 @@ def segno_lz() -> "segno":
         check_and_install_python_requirements(prompt_if_found=False)
         import segno
     return sys.modules["segno"]
+
+def openlifu_sdk_lz() -> "openlifu_sdk":
+    """Import openlifu_sdk and return the module. openlifu_sdk is installed as a dependency
+    of openlifu, so openlifu_lz() must be called first to ensure it is available."""
+    if "openlifu_sdk" not in sys.modules:
+        openlifu_lz()
+    return sys.modules["openlifu_sdk"]
