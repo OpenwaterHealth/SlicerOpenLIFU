@@ -262,7 +262,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Initialize UI
         self.updateRunProgressBar()
         self.updateDeviceConnectedStateFromDevice()
-        self.updateVersionLabels()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
         # Add an observer on the Data module's parameter node
@@ -293,7 +292,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         logging.debug("OpenLIFUSonicationControlWidget.enter() called")
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-        self.updateVersionLabels()
         self.updateWorkflowControls()
 
     def exit(self) -> None:
@@ -461,7 +459,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtonsEnabled()
-        self.updateVersionLabels()
 
     @display_errors
     def onDeviceDisconnected(self):
@@ -472,7 +469,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtonsEnabled()
-        self.updateVersionLabels()
 
     @display_errors
     def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
@@ -564,53 +560,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.runHardwareStatusLabel.setProperty("text", f"Hardware status: {new_run_hardware_status_value.name}")
         else: # not running
             self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
-
-    def updateVersionLabels(self):
-        """Populate SDK / console / TX firmware version labels when both devices are connected."""
-        if self._cur_device_connected_state == DeviceConnectedState.CONNECTED:
-            try:
-                sdk_ver = openlifu_lz().io.LIFUInterface.get_sdk_version()
-            except Exception as e:
-                logging.warning("Could not read SDK version: %s", e)
-                sdk_ver = "unknown"
-            self.ui.sdkVersionLabel.setText(f"SDK: {sdk_ver or 'unknown'}")
-            
-            try:
-                con_ver = self.logic.cur_lifu_interface.hvcontroller.get_version()
-            except Exception as e:
-                logging.warning("Could not read console firmware version: %s", e)
-                con_ver = "unknown"
-            self.ui.consoleVersionLabel.setText(f"Console FW: {con_ver}")
-            
-            try:
-                module_count = self.logic.cur_lifu_interface.txdevice.get_module_count()
-            except Exception as e:
-                module_count = 0
-                logging.warning("Could not read TX module count: %s", e)
-            
-            modules_info = []
-            display_text = ""
-            
-            try:
-                for module_idx in range(module_count):
-                    tx_ver = self.logic.cur_lifu_interface.txdevice.get_version(module=module_idx)
-                    modules_info.append({
-                        "Module": module_idx,
-                        "FW": tx_ver
-                    })
-
-                display_text = "\n".join(
-                    f"TX {m['Module']} FW: v{m['FW']}"
-                    for m in modules_info
-                ) if modules_info else "TX FW: unknown"
-            except Exception as e:
-                logging.warning("Could not read TX firmware version: %s", e)
-                display_text = "TX FW: unknown"
-            self.ui.txVersionLabel.setText(display_text)
-        else:
-            self.ui.sdkVersionLabel.setText("")
-            self.ui.consoleVersionLabel.setText("")
-            self.ui.txVersionLabel.setText("")
 
     def updateDeviceConnectedStateFromDevice(self):
         if self.logic.get_lifu_device_connected():
@@ -793,7 +742,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             self.stop_monitoring()
 
             if self.cur_lifu_interface:
-                self.cur_lifu_interface.close()
+                # LIFUInterface.close() is a no-op in legacy openlifu.io; close sub-devices ourselves.
+                if self.cur_lifu_interface.txdevice:
+                    self.cur_lifu_interface.txdevice.close()
+                if self.cur_lifu_interface.hvcontroller:
+                    self.cur_lifu_interface.hvcontroller.close()
 
         except Exception as e:
             logging.warning("[LIFU] Error during interface cleanup: %s", e)
