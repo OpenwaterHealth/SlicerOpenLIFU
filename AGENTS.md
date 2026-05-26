@@ -159,6 +159,9 @@ Individual module tests create state needed by subsequent tests — they are not
 ### Adding new pip dependencies
 Adding a package to `python-requirements.txt` is not enough. You must also add an `import` check for it in `python_requirements_exist()` in `lazyimport.py`. Otherwise, users who already have the other deps installed will never trigger a reinstall, and the new package won't be found. Follow the existing `bcrypt`/`threadpoolctl` pattern.
 
+### Updating the pinned openlifu version
+When updating the pinned `openlifu` version in `OpenLIFULib/OpenLIFULib/Resources/python-requirements.txt`, consider whether the sample database tags in `OpenLIFULib/OpenLIFULib/sample_data.py` need to be updated. Remind about this.
+
 ### Qt signal slot signatures
 Qt's `clicked` signal always passes a `checked: bool` argument. Button slot handlers must accept it: `def on_foo_clicked(self, checked: bool)`. Omitting it causes a "takes 1 positional argument but 2 were given" error at runtime.
 
