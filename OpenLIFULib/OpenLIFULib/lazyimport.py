@@ -160,10 +160,3 @@ def segno_lz() -> "segno":
         check_and_install_python_requirements(prompt_if_found=False)
         import segno
     return sys.modules["segno"]
-
-def openlifu_sdk_lz() -> "openlifu_sdk":
-    """Import openlifu_sdk and return the module."""
-    if "openlifu_sdk" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
-        import openlifu_sdk
-    return sys.modules["openlifu_sdk"]

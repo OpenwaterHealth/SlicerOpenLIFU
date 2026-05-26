@@ -32,7 +32,6 @@ from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_wid
 
 if TYPE_CHECKING:
     import openlifu
-    import openlifu_sdk
 
 
 def _lifu_exceptions():
