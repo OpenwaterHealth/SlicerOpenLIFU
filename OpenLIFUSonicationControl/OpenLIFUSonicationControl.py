@@ -37,6 +37,53 @@ if TYPE_CHECKING:
     import openlifu
     import openlifu_sdk
 
+
+def _lifu_exceptions():
+    """Lazy accessor for the ``openlifu_sdk.io.exceptions`` module.
+
+    The exceptions module defines :class:`LIFUError` and its specialized
+    subclasses (e.g. :class:`LIFUHVSettleError`, :class:`LIFUSolutionError`,
+    :class:`LIFUNoTriggerStatusError`, ...). Each carries a stable numeric
+    ``code`` attribute and a human-readable message.
+    """
+    # openlifu_sdk_lz() guarantees the package is imported.
+    openlifu_sdk_lz()
+    import importlib
+    return importlib.import_module("openlifu_sdk.io.exceptions")
+
+
+def _format_lifu_error(exc: Exception) -> str:
+    """Format a :class:`LIFUError` (or any exception) into a user-friendly string.
+
+    The resulting string includes the exception class name, the numeric LIFU
+    error code (when available), and the underlying message.
+    """
+    code = getattr(exc, "code", None)
+    message = str(exc)
+    # LIFUError prepends a ``[LIFU-<code>] `` tag to the message; strip it so
+    # we can present the code in a more explicit way in the dialog.
+    if code is not None:
+        prefix = f"[LIFU-{code}] "
+        if message.startswith(prefix):
+            message = message[len(prefix):]
+        return f"{type(exc).__name__} (LIFU error code {code}):\n{message}"
+    return f"{type(exc).__name__}:\n{message}"
+
+
+def _display_lifu_error(exc: Exception, action_description: str) -> None:
+    """Show a Slicer error dialog describing a LIFU device exception.
+
+    Args:
+        exc: The exception that was raised by the openlifu-sdk.
+        action_description: Short human-readable description of what was being
+            attempted when the error occurred (e.g. "starting sonication").
+    """
+    logging.error("LIFU error while %s: %s", action_description, exc, exc_info=True)
+    slicer.util.errorDisplay(
+        f"Error while {action_description}.\n\n{_format_lifu_error(exc)}",
+        windowTitle="LIFU Device Error",
+    )
+
 #
 # OpenLIFUSonicationControl
 #
@@ -77,6 +124,8 @@ class SolutionOnHardwareState(Enum):
     SUCCESSFUL_SEND=0
     FAILED_SEND=1
     NOT_SENT=2
+    SENDING=3
+    RUN_FAILED=4
 
 #
 # OpenLIFUSonicationControlParameterNode
@@ -451,7 +500,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             returncode, run_parameters = runCompleteDialog.customexec_()
             if returncode:
                 self.logic.create_openlifu_run(run_parameters)
-        self.logic.stop()
+        LIFUError = _lifu_exceptions().LIFUError
+        try:
+            self.logic.stop()
+        except LIFUError as e:
+            _display_lifu_error(e, "stopping sonication")
         self.updateAllButtonsEnabled()
 
     @display_errors
@@ -498,22 +551,38 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
         logging.debug("onSendSonicationSolutionToDevicePushButtonClicked() called")
 
+        LIFUError = _lifu_exceptions().LIFUError
+        # Reflect the in-progress state immediately and flush the event loop so
+        # the user gets visual feedback while the (synchronous) device call runs.
+        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SENDING)
+        slicer.app.processEvents()
+
+        success = False
+        lifu_error_detail: str | None = None
         try:
-            self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution)
+            self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution.to_dict())
             if self.logic.cur_lifu_interface.get_status() != openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
             self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
             logging.debug("Solution successfully sent to device")
-            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
-                
-        except Exception as e:
-            logging.error("Exception thrown: %s", e)
-            import traceback
-            traceback.print_exc()
-            logging.debug(f" Failed to send solution to device: {e}")
-            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.FAILED_SEND, self.logic.cur_lifu_interface.get_status())
-
-        self.updateWorkflowControls()
+            success = True
+        except LIFUError as e:
+            # The openlifu-sdk raised a typed device-communication error.
+            # Show a descriptive popup including the exception type and LIFU error code.
+            lifu_error_detail = _format_lifu_error(e)
+            _display_lifu_error(e, "sending the sonication solution to the device")
+        finally:
+            # Any other (non-LIFUError) exception will propagate out via @display_errors,
+            # but we still want the UI state to reflect the failure on its way out.
+            if success:
+                self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.SUCCESSFUL_SEND)
+            else:
+                self.updateWidgetSolutionOnHardwareState(
+                    SolutionOnHardwareState.FAILED_SEND,
+                    self.logic.cur_lifu_interface.get_status(),
+                    detail=lifu_error_detail,
+                )
+            self.updateWorkflowControls()
 
     def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
@@ -532,12 +601,37 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             raise RuntimeError("Invalid solution; not running sonication.")
         self.ui.runProgressBar.value = 0
 
-        self.logic.run() 
+        # Give the user immediate visual feedback while the (potentially long)
+        # synchronous start_sonication() call runs. This is especially important
+        # because the HV settle wait can take a few seconds, and a faulty
+        # console may take even longer before raising LIFUHVSettleError.
+        self.ui.runHardwareStatusLabel.setProperty("text", "⏳ Starting sonication...")
+        slicer.app.processEvents()
+
+        LIFUError = _lifu_exceptions().LIFUError
+        try:
+            self.logic.run()
+        except LIFUError as e:
+            # The openlifu-sdk raised a typed device error (e.g. LIFUHVSettleError
+            # when the HV rail fails to settle on a faulty console). Surface it
+            # with the exception type and LIFU error code instead of a generic
+            # uncaught error popup, and reflect the failure in the solution
+            # state label so the green "Solution sent" message is replaced.
+            _display_lifu_error(e, "starting sonication")
+            self.ui.runHardwareStatusLabel.setProperty("text", "Run not in progress.")
+            self.updateWidgetSolutionOnHardwareState(
+                SolutionOnHardwareState.RUN_FAILED,
+                detail=_format_lifu_error(e),
+            )
         self.updateWorkflowControls()
         
     def onAbortClicked(self):
         logging.debug("onAbortClicked() called")
-        self.logic.abort()
+        LIFUError = _lifu_exceptions().LIFUError
+        try:
+            self.logic.abort()
+        except LIFUError as e:
+            _display_lifu_error(e, "aborting sonication")
         runCompleteDialog = OnRunCompletedDialog(False)
         returncode, run_parameters = runCompleteDialog.customexec_()
         if returncode:
@@ -570,29 +664,31 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateVersionLabels(self):
         """Populate SDK / console / TX firmware version labels when both devices are connected."""
         if self._cur_device_connected_state == DeviceConnectedState.CONNECTED:
+            import importlib.metadata
+            LIFUError = _lifu_exceptions().LIFUError
             try:
                 sdk_ver = openlifu_sdk_lz().LIFUInterface.get_sdk_version()
-            except Exception as e:
+            except importlib.metadata.PackageNotFoundError as e:
                 logging.warning("Could not read SDK version: %s", e)
                 sdk_ver = "unknown"
             self.ui.sdkVersionLabel.setText(f"SDK: {sdk_ver or 'unknown'}")
-            
+
             try:
                 con_ver = self.logic.cur_lifu_interface.hvcontroller.get_version()
-            except Exception as e:
+            except LIFUError as e:
                 logging.warning("Could not read console firmware version: %s", e)
                 con_ver = "unknown"
             self.ui.consoleVersionLabel.setText(f"Console FW: {con_ver}")
-            
+
             try:
                 module_count = self.logic.cur_lifu_interface.txdevice.get_module_count()
-            except Exception as e:
+            except LIFUError as e:
                 module_count = 0
                 logging.warning("Could not read TX module count: %s", e)
-            
+
             modules_info = []
             display_text = ""
-            
+
             try:
                 for module_idx in range(module_count):
                     tx_ver = self.logic.cur_lifu_interface.txdevice.get_version(module=module_idx)
@@ -605,7 +701,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                     f"TX {m['Module']} FW: v{m['FW']}"
                     for m in modules_info
                 ) if modules_info else "TX FW: unknown"
-            except Exception as e:
+            except LIFUError as e:
                 logging.warning("Could not read TX firmware version: %s", e)
                 display_text = "TX FW: unknown"
             self.ui.txVersionLabel.setText(display_text)
@@ -628,26 +724,52 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.connectedStateLabel.setProperty("text", "🔴 LIFU Device (not connected)")
         self.updateAllButtonsEnabled()
 
-    def updateWidgetSolutionOnHardwareState(self, solution_state: SolutionOnHardwareState, hardware_state: "openlifu_sdk.LIFUInterfaceStatus | None" = None):
+    def updateWidgetSolutionOnHardwareState(
+        self,
+        solution_state: SolutionOnHardwareState,
+        hardware_state: "openlifu_sdk.LIFUInterfaceStatus | None" = None,
+        detail: str | None = None,
+    ):
+        """Update the solution-on-hardware status label.
+
+        Args:
+            solution_state: One of the :class:`SolutionOnHardwareState` values.
+            hardware_state: Optional LIFUInterfaceStatus to include on FAILED_SEND.
+            detail: Optional extra text to append (e.g. the formatted message of
+                a :class:`LIFUError` for ``FAILED_SEND``/``RUN_FAILED`` states).
+        """
         self._cur_solution_on_hardware_state = solution_state
         if solution_state == SolutionOnHardwareState.SUCCESSFUL_SEND:
             self.ui.solutionStateLabel.setProperty("text", "Solution sent to device.")
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: green; border: 1px solid green; padding: 5px;")
-            self.updateRunEnabled()
+        elif solution_state == SolutionOnHardwareState.SENDING:
+            text = "⏳ Sending solution to device..."
+            self.ui.solutionStateLabel.setProperty("text", text)
+            # Amber/orange indicates an in-progress action.
+            self.ui.solutionStateLabel.setProperty(
+                "styleSheet", "color: #b36b00; border: 1px solid #b36b00; padding: 5px;"
+            )
         elif solution_state == SolutionOnHardwareState.FAILED_SEND:
             # If we have information from the hardware, display that too.
             if hardware_state is not None:
                 text = f"Send to device failed! (Hardware status: {hardware_state.name})"
             else:
                 text = "Send to device failed!"
+            if detail:
+                text = f"{text}\n{detail}"
 
             self.ui.solutionStateLabel.setProperty("text", text)
             self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
-            self.updateRunEnabled()
+        elif solution_state == SolutionOnHardwareState.RUN_FAILED:
+            text = "Run failed; re-send the solution to retry."
+            if detail:
+                text = f"{text}\n{detail}"
+            self.ui.solutionStateLabel.setProperty("text", text)
+            self.ui.solutionStateLabel.setProperty("styleSheet", "color: red; border: 1px solid red; padding: 5px;")
         elif solution_state == SolutionOnHardwareState.NOT_SENT:
-            self.ui.solutionStateLabel.setProperty("text", "")  
+            self.ui.solutionStateLabel.setProperty("text", "")
             self.ui.solutionStateLabel.setProperty("styleSheet", "border: none;")
-            self.updateRunEnabled()
+        self.updateRunEnabled()
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
@@ -684,12 +806,17 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
     def _run_monitor_loop(self):
         """Runs the asyncio event loop to monitor USB device status."""
         asyncio.set_event_loop(self._monitor_loop)
+        # This runs on a background daemon thread, so a broad except is used here
+        # deliberately: an unhandled exception here would otherwise silently kill
+        # the monitor thread. LIFU-specific errors and asyncio/OS errors are the
+        # expected failure modes; anything else also gets logged.
+        LIFUError = _lifu_exceptions().LIFUError
         try:
             self._monitor_loop.run_until_complete(
                 self.cur_lifu_interface.start_monitoring(interval=1)
             )
             self._monitor_loop.run_forever()
-        except Exception as e:
+        except (LIFUError, OSError, RuntimeError) as e:
             logging.error(f"[LIFU] Monitor loop error: {e}")
 
     def __init__(self) -> None:
@@ -790,13 +917,17 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if hasattr(self, "_monitor_loop") and self._monitor_loop:
             try:
                 self._monitor_loop.close()
-            except Exception as e:
+            except RuntimeError as e:
+                # asyncio raises RuntimeError if the loop is still running when
+                # close() is called; the call_soon_threadsafe(stop) above is
+                # best-effort and may race, so this is the realistic failure.
                 logging.warning("Error closing monitor loop: %s", e)
 
     def reinitialize_lifu_interface(self, test_mode: bool = False):
         """Cleanly shut down and reinitialize the LIFUInterface."""
         logging.debug("reinitialize_lifu_interface() called with test_mode=%s", test_mode)
 
+        LIFUError = _lifu_exceptions().LIFUError
         try:
             self.monitoring_timer.stop()
             self.stop_monitoring()
@@ -804,7 +935,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             if self.cur_lifu_interface:
                 self.cur_lifu_interface.close()
 
-        except Exception as e:
+        except (LIFUError, RuntimeError, OSError) as e:
             logging.warning("[LIFU] Error during interface cleanup: %s", e)
 
         # Recreate interface
@@ -993,7 +1124,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
             return result
 
-        except Exception as e:
+        except (ValueError, AttributeError, TypeError, ZeroDivisionError) as e:
             logging.error(f"Failed to parse status string: {e}")
             return result
         
@@ -1024,23 +1155,24 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         logging.info(f"📦 DATA [{descriptor}]: {message}")
 
         if descriptor == "TX":
+            LIFUError = _lifu_exceptions().LIFUError
             try:
                 parsed = self.parse_status_string(message)
                 progress = parsed["pulse_train_percent"]
-                self.qt_signals.runProgressUpdated.emit(progress) 
+                self.qt_signals.runProgressUpdated.emit(progress)
                 if parsed["status"] in {"RUNNING", "STOPPED"}:
                     # Update internal trigger state and notify QML
                     if parsed["status"] == "STOPPED":
                         logging.info("Trigger is stopped.")
                         self.cur_lifu_interface.set_status(openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_FINISHED)
-                        self.qt_signals.finishScanning.emit(True)  # Signal that scanning is finished 
+                        self.qt_signals.finishScanning.emit(True)  # Signal that scanning is finished
                     else:
                         #update status
                         self.cur_lifu_interface.set_status(openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_RUNNING)
-        
-            except Exception as e:
+
+            except (LIFUError, KeyError, TypeError) as e:
                 logging.error(f"Failed to parse and update trigger state: {e}")
-        
+
 
         self._dispatch_data_received(descriptor, message)
     
@@ -1057,8 +1189,18 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # ---- Start the run ----
         self.running = True
 
-        # TODO START SONICATION on HARDWARE
-        self.cur_lifu_interface.start_sonication()        
+        started = False
+        try:
+            self.cur_lifu_interface.start_sonication()
+            started = True
+        finally:
+            # If the hardware refused to start (e.g. LIFUHVSettleError when the
+            # HV rail does not settle in time), roll the running state back so
+            # that the UI returns to a consistent "not running" state. The
+            # exception itself is allowed to propagate to the caller, which is
+            # responsible for surfacing it (typically via _display_lifu_error).
+            if not started:
+                self.running = False
 
     def stop(self):
         logging.debug("Logic.stop() called")
