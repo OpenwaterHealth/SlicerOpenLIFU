@@ -49,7 +49,7 @@ class SlicerOpenLIFUTransducer:
         """Initialize object with needed scene nodes from just the openlifu object.
 
         Args:
-            transducer: The openlifu Transducer object
+            transducer: The openlifu.xdc.Transducer object
             transducer_matrix: The transform matrix of the transducer. Assumed to be the identity if None.
             transducer_abspaths_info: Dictionary containing absolute filepath info to any data affiliated with the transducer object.
                 This includes 'transducer_body_abspath' and 'registration_surface_abspath'. The registration surface model is required for

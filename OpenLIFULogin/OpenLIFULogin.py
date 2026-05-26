@@ -27,6 +27,7 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+import openlifu.db.database
 from OpenLIFULib import (
     BusyCursor,
     bcrypt_lz,
@@ -34,7 +35,6 @@ from OpenLIFULib import (
     get_current_user,
     check_and_install_python_requirements,
     get_required_openlifu_version,
-    openlifu_lz,
     openlifu_version_matches,
     python_requirements_exist,
 )
@@ -43,8 +43,7 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node
 
-# These imports are deferred at runtime using openlifu_lz, 
-# but are done here for IDE and static analysis purposes
+# These imports are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu.db
@@ -488,7 +487,7 @@ class ManageAccountsDialog(qt.QDialog):
                                           qt.QDialogButtonBox.Cancel)
         def on_accept():
             user.roles = roles_widget.to_list()
-            self.db.write_user(user, on_conflict=openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+            self.db.write_user(user, on_conflict=openlifu.db.database.OnConflictOpts.OVERWRITE)
             self.updateUsersList()
             dialog.accept()
 
@@ -553,8 +552,8 @@ class ManageAccountsDialog(qt.QDialog):
         if not returncode or user_dict is None:
             return
 
-        modifiedUser = openlifu_lz().db.User.from_dict(user_dict)
-        self.db.write_user(modifiedUser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        modifiedUser = openlifu.db.User.from_dict(user_dict)
+        self.db.write_user(modifiedUser, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
 
         # Update GUI
 
@@ -642,14 +641,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
     def _initDefaultUsers(self) -> None:
         """Create default User objects. This will prompt the user
         to install openlifu if it is not installed. """
-        self._default_anonymous_user = openlifu_lz().db.User(
+        self._default_anonymous_user = openlifu.db.User(
             id = "anonymous",
             password_hash = "",
             roles = [],
             name = "Anonymous",
             description = "This is the default role set when the app opens, without anyone logged in, with user account mode activated. It has no roles and is therefore the most restricted."
         )
-        self._default_admin_user = openlifu_lz().db.User(
+        self._default_admin_user = openlifu.db.User(
             id = "default_admin",
             password_hash = "default_admin",
             roles = ['admin'],
@@ -1178,6 +1177,6 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
-        get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        newOpenLIFUuser = openlifu.db.User.from_dict(user_parameters)
+        get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
 

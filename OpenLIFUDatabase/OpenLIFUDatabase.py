@@ -20,7 +20,7 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
-from OpenLIFULib import openlifu_lz
+import openlifu.db
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.util import (
     ensure_list,
@@ -28,11 +28,6 @@ from OpenLIFULib.util import (
     add_slicer_log_handler_for_openlifu_object,
 )
 
-# These imports are deferred at runtime using openlifu_lz, 
-# but are done here for IDE and static analysis purposes
-if TYPE_CHECKING:
-    import openlifu
-    import openlifu.db
 
 # OpenLIFUDatabase
 #
@@ -353,7 +348,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         Args:
             path: Path to the openlifu database folder on disk.
         """
-        self.db = openlifu_lz().db.Database(path)
+        self.db = openlifu.db.Database(path)
         add_slicer_log_handler_for_openlifu_object(self.db)
     
     @staticmethod

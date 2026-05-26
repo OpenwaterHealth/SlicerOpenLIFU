@@ -7,7 +7,6 @@ import vtk
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
 from OpenLIFULib.util import BusyCursor
-from OpenLIFULib.lazyimport import openlifu_lz
 
 def cast_volume_to_float(volume_node:vtkMRMLScalarVolumeNode) -> None:
     """Converts a volume node to float, replacing the underlying vtkImageData."""
@@ -37,7 +36,8 @@ def threshold_volume_by_foreground_mask(volume_node:vtkMRMLScalarVolumeNode) -> 
         logging.info("Casting volume to float for the sake of `threshold_volume_by_foreground_mask`.")
         cast_volume_to_float(volume_node)
 
-    foreground_mask = openlifu_lz().seg.skinseg.compute_foreground_mask(volume_array)
+    import openlifu
+    foreground_mask = openlifu.seg.skinseg.compute_foreground_mask(volume_array)
     slicer.util.arrayFromVolume(volume_node)[~foreground_mask] = background_value
     volume_node.GetDisplayNode().SetThreshold(volume_array_min,volume_array.max())
     volume_node.GetDisplayNode().SetApplyThreshold(1)

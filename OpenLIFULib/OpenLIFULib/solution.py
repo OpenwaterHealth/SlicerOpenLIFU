@@ -6,7 +6,7 @@ from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUSolutionWrapper,
 )
-from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz
+from OpenLIFULib.lazyimport import xarray_lz
 from OpenLIFULib.simulation import (
     make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,

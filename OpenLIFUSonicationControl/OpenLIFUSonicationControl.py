@@ -20,19 +20,16 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+import openlifu.plan.run
+import openlifu_sdk.io
 from OpenLIFULib import (
     SlicerOpenLIFURun,
     get_openlifu_data_parameter_node,
-    openlifu_lz,
-    openlifu_sdk_lz,
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_widget
 
-
-# This import is deferred at runtime using openlifu_lz, 
-# but is done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu_sdk
@@ -46,8 +43,6 @@ def _lifu_exceptions():
     :class:`LIFUNoTriggerStatusError`, ...). Each carries a stable numeric
     ``code`` attribute and a human-readable message.
     """
-    # openlifu_sdk_lz() guarantees the package is imported.
-    openlifu_sdk_lz()
     import importlib
     return importlib.import_module("openlifu_sdk.io.exceptions")
 
@@ -83,7 +78,6 @@ def _display_lifu_error(exc: Exception, action_description: str) -> None:
         f"Error while {action_description}.\n\n{_format_lifu_error(exc)}",
         windowTitle="LIFU Device Error",
     )
-
 #
 # OpenLIFUSonicationControl
 #
@@ -561,7 +555,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         lifu_error_detail: str | None = None
         try:
             self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution.to_dict())
-            if self.logic.cur_lifu_interface.get_status() != openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_READY:
+            if self.logic.cur_lifu_interface.get_status() != openlifu_sdk.io.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
             self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
             logging.debug("Solution successfully sent to device")
@@ -667,7 +661,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             import importlib.metadata
             LIFUError = _lifu_exceptions().LIFUError
             try:
-                sdk_ver = openlifu_sdk_lz().LIFUInterface.get_sdk_version()
+                sdk_ver = openlifu_sdk.io.LIFUInterface.get_sdk_version()
             except importlib.metadata.PackageNotFoundError as e:
                 logging.warning("Could not read SDK version: %s", e)
                 sdk_ver = "unknown"
@@ -727,7 +721,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateWidgetSolutionOnHardwareState(
         self,
         solution_state: SolutionOnHardwareState,
-        hardware_state: "openlifu_sdk.LIFUInterfaceStatus | None" = None,
+        hardware_state: "openlifu_sdk.io.LIFUInterfaceStatus | None" = None,
         detail: str | None = None,
     ):
         """Update the solution-on-hardware status label.
@@ -859,9 +853,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """List of functions to call when the LIFU interface receives data."""
 
         # ---- LIFU Interface Connection ----
-
         self._create_lifu_interface_bridge()
-        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+        self.cur_lifu_interface = openlifu_sdk.io.LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
         # Connect signals before starting the monitor thread to avoid missing early events
         self._connect_owsignals()
 
@@ -939,7 +932,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             logging.warning("[LIFU] Error during interface cleanup: %s", e)
 
         # Recreate interface
-        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(
+        self.cur_lifu_interface = openlifu_sdk.io.LIFUInterface(
             run_async=True,
             TX_test_mode=test_mode,
             HV_test_mode=test_mode
@@ -1164,11 +1157,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                     # Update internal trigger state and notify QML
                     if parsed["status"] == "STOPPED":
                         logging.info("Trigger is stopped.")
-                        self.cur_lifu_interface.set_status(openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_FINISHED)
+                        self.cur_lifu_interface.set_status(openlifu_sdk.io.LIFUInterfaceStatus.STATUS_FINISHED)
                         self.qt_signals.finishScanning.emit(True)  # Signal that scanning is finished
                     else:
                         #update status
-                        self.cur_lifu_interface.set_status(openlifu_sdk_lz().LIFUInterfaceStatus.STATUS_RUNNING)
+                        self.cur_lifu_interface.set_status(openlifu_sdk.io.LIFUInterfaceStatus.STATUS_RUNNING)
 
             except (LIFUError, KeyError, TypeError) as e:
                 logging.error(f"Failed to parse and update trigger state: {e}")
@@ -1242,7 +1235,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         else:
             raise RuntimeError("No loaded solution -- this run should not have been possible!")
              
-        run_openlifu = openlifu_lz().plan.run.Run(
+        run_openlifu = openlifu.plan.run.Run(
             id = run_id,
             name = f"Run_{timestamp}",
             success_flag = run_parameters["success_flag"],

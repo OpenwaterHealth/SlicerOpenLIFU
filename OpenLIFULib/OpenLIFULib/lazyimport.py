@@ -106,8 +106,8 @@ def check_and_install_kwave_binaries() -> bool:
     Returns whether they were successfully installed (or just already present).
     This assumes that openlifu can be imported already, so do not call this function until after that is assured.
     """
-    from openlifu.util.assets import get_kwave_paths
-    kwave_paths = get_kwave_paths()
+    import openlifu.util.assets
+    kwave_paths = openlifu.util.assets.get_kwave_paths()
     if all(p.exists() for p,_ in kwave_paths):
         return True
     
@@ -131,40 +131,6 @@ def check_and_install_kwave_binaries() -> bool:
             else:
                 raise RuntimeError("Unrecognized dialog action") # should never happen
     return all(p.exists() for p,_ in kwave_paths)
-
-def openlifu_lz() -> "openlifu":
-    """Import openlifu and return the module, checking that it is installed along the way."""
-    if "openlifu" not in sys.modules:
-        # In testing mode, automatically install missing requirements without prompting
-        if slicer.app.testingEnabled():
-            if not python_requirements_exist():
-                install_python_requirements()
-        else:
-            check_and_install_python_requirements(prompt_if_found=False)
-
-        with BusyCursor():
-            import openlifu
-            import openlifu_sdk
-            import openlifu.bf
-            import openlifu.db
-            import openlifu.geo
-            import openlifu.nav.photoscan
-            import openlifu.plan
-            import openlifu.seg.seg_methods
-            import openlifu.seg.skinseg
-            import openlifu.sim
-            import openlifu.util.assets
-            import openlifu.xdc
-            import openlifu.xdc.util
-
-        if slicer.app.testingEnabled():
-            # Ensure kwave assets are present (no-op if already installed)
-            from openlifu.util.assets import download_and_install_kwave_assets
-            download_and_install_kwave_assets()
-        elif not check_and_install_kwave_binaries():
-            raise RuntimeError("The openlifu library requires kwave binaries to be installed. There may be issues trying to run simulations.")
-
-    return sys.modules["openlifu"]
 
 def xarray_lz() -> "xarray":
     """Import xarray and return the module, checking that openlifu is installed along the way."""
@@ -196,8 +162,8 @@ def segno_lz() -> "segno":
     return sys.modules["segno"]
 
 def openlifu_sdk_lz() -> "openlifu_sdk":
-    """Import openlifu_sdk and return the module. openlifu_sdk is installed as a dependency
-    of openlifu, so openlifu_lz() must be called first to ensure it is available."""
+    """Import openlifu_sdk and return the module."""
     if "openlifu_sdk" not in sys.modules:
-        openlifu_lz()
+        check_and_install_python_requirements(prompt_if_found=False)
+        import openlifu_sdk
     return sys.modules["openlifu_sdk"]

@@ -380,10 +380,13 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         
-        # If testing is enabled, openlifu_lz installs
-        # openlifu if not installed and installs the kwave assets
-        from OpenLIFULib import openlifu_lz
-        openlifu_lz()
+        # Install openlifu if not installed and install kwave assets for testing
+        from OpenLIFULib.lazyimport import python_requirements_exist, install_python_requirements
+        if not python_requirements_exist():
+            install_python_requirements()
+        import openlifu
+        from openlifu.util.assets import download_and_install_kwave_assets
+        download_and_install_kwave_assets()
 
         self.setUp()
         

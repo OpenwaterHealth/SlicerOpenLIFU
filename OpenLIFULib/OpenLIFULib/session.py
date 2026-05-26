@@ -9,7 +9,6 @@ from slicer import (
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.util import get_openlifu_data_parameter_node, BusyCursor
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
-from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
 from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
@@ -34,7 +33,7 @@ def assign_openlifu_metadata_to_volume_node(volume_node: vtkMRMLScalarVolumeNode
 
 @parameterPack
 class SlicerOpenLIFUSession:
-    """An openlifu Session that has been loaded into Slicer (i.e. has associated scene data)"""
+    """An openlifu.plan.Session that has been loaded into Slicer (i.e. has associated scene data)"""
     session : SlicerOpenLIFUSessionWrapper
 
     volume_node : vtkMRMLScalarVolumeNode
@@ -140,7 +139,7 @@ class SlicerOpenLIFUSession:
         session : "openlifu.db.Session",
         volume_info : dict,
     ) -> "SlicerOpenLIFUSession":
-        """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
+        """Create a SlicerOpenLIFUSession from an openlifu.plan.Session, loading affiliated data into the scene.
 
         Args:
             session: OpenLIFU Session
@@ -194,7 +193,7 @@ class SlicerOpenLIFUSession:
         Args:
             targets: new list of targets
 
-        Returns: the now updated underlying openlifu Session
+        Returns: the now updated underlying openlifu.plan.Session
         """
 
         # Update target fiducial nodes in this object

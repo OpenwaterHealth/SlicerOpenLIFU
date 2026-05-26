@@ -22,13 +22,13 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+import openlifu.seg.virtual_fit
 from OpenLIFULib import (
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     get_openlifu_data_parameter_node,
     get_target_candidates,
-    openlifu_lz,
     threadpoolctl_lz,
 )
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
@@ -447,8 +447,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onTargetListWidgetItemDataChanged(self, item:qt.QListWidgetItem):
         node : vtkMRMLMarkupsFiducialNode = item.data(qt.Qt.UserRole)
-        node.SetName(item.text().replace(" ", "-")) # This becomes openlifu Point ID
-        node.SetNthControlPointLabel(0, item.text()) # This becomes openlifu Point name
+        node.SetName(item.text().replace(" ", "-")) # This becomes openlifu.geo.Point ID
+        node.SetNthControlPointLabel(0, item.text()) # This becomes openlifu.geo.Point name
         node.InvokeEvent(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT)
 
     def onTargetNameModified(self, caller, event):
@@ -1118,7 +1118,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             # tiny svd calls end up having more overhead than is worth it.
             # For some unknown reason, the improvement is only noticable when we do not use the embree
             # option in virtual fitting, which makes things very fast.
-            vf_transforms = openlifu_lz().seg.run_virtual_fit(
+            vf_transforms = openlifu.seg.virtual_fit.run_virtual_fit(
                 units = units,
                 target_RAS = target.GetNthControlPointPosition(0),
                 standoff_transform = transducer_openlifu.get_standoff_transform_in_units(units),

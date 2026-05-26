@@ -36,13 +36,14 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+import openlifu.nav.photoscan
+import openlifu.util.assets
 from OpenLIFULib import (
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUPhotoscan,
     SlicerOpenLIFUTransducer,
     get_cur_db,
     get_openlifu_data_parameter_node,
-    openlifu_lz,
     segno_lz,
 )
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
@@ -2487,7 +2488,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         )
 
         # We set download_masking_model=False when we call run_reconstruction in generate_photoscan, so that we can manage getting the model here:
-        modnet_path : Path = openlifu_lz().util.assets.get_modnet_path()
+        modnet_path : Path = openlifu.util.assets.get_modnet_path()
         if not modnet_path.exists():
             install_dialog = InstallAssetDialog(modnet_path.name, parent = slicer.util.mainWindow())
             if install_dialog.exec_() != qt.QDialog.Accepted:
@@ -2495,7 +2496,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             action, path = install_dialog.get_result()
             if action == "download":
                 try:
-                    openlifu_lz().util.assets.download_and_install_modnet()
+                    openlifu.util.assets.download_and_install_modnet()
                 except Exception as e:
                     slicer.util.errorDisplay(
                         text = f"An error occurred while downloading {modnet_path.name}: {e}",
@@ -2503,12 +2504,12 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                     )
                     raise e
             elif action =="browse":
-                openlifu_lz().util.assets.install_modnet_from_file(path)
+                openlifu.util.assets.install_modnet_from_file(path)
             else:
                 raise RuntimeError("Unrecognized dialog action") # should never happen
 
         photoscan_generation_options_dialog = PhotoscanGenerationOptionsDialog(
-            meshroom_pipeline_names = openlifu_lz().nav.photoscan.get_meshroom_pipeline_names(),
+            meshroom_pipeline_names = openlifu.nav.photoscan.get_meshroom_pipeline_names(),
             total_number_of_photos = total_number_of_photos,
         )
         
@@ -3301,13 +3302,13 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             f", matching_mode = {matching_mode}"
         )
 
-        photocollection_filepaths = openlifu_lz().nav.photoscan.preprocess_image_paths(
+        photocollection_filepaths = openlifu.nav.photoscan.preprocess_image_paths(
             paths = photocollection_filepaths,
             sort_by = "filename",
             sampling_rate = sampling_rate,
         )
         with BusyCursor():
-            photoscan_openlifu, data_dir = openlifu_lz().nav.photoscan.run_reconstruction(
+            photoscan_openlifu, data_dir = openlifu.nav.photoscan.run_reconstruction(
                 images = photocollection_filepaths,
                 pipeline_name = meshroom_pipeline,
                 input_resize_width = image_width,

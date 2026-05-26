@@ -10,8 +10,6 @@ from OpenLIFULib.coordinate_system_utils import (
     get_xx2mm_scale_factor,
     numpy_to_vtk_4x4,
 )
-from OpenLIFULib.lazyimport import openlifu_lz
-
 if TYPE_CHECKING:
     from openlifu.geo import ArrayTransform
     from openlifu import Transducer
@@ -40,9 +38,10 @@ def transducer_transform_node_to_openlifu(transform_node:vtkMRMLTransformNode, t
 
     See the reverse function `transform_node_from_openlifu`.
     """
+    import openlifu
     transform_array = slicer.util.arrayFromTransformMatrix(transform_node, toWorld=True)
     openlifu2slicer_matrix = create_openlifu2slicer_matrix(transducer_units)
-    return openlifu_lz().geo.ArrayTransform(
+    return openlifu.geo.ArrayTransform(
         matrix = np.linalg.inv(openlifu2slicer_matrix) @ transform_array,
         units = transducer_units,
     )
@@ -59,7 +58,7 @@ def transducer_transform_node_from_openlifu(
 
     Args:
         openlifu_transform_matrix: The 4x4 affine transform matrix, which is in `transform_units`
-        transducer: The openlifu Transducer that this transform node would eventually be applied to.
+        transducer: The openlifu.xdc.Transducer that this transform node would eventually be applied to.
             This is needed to get the units right, since conversion to the units of the transducer's native space
             is built into the transform node.
         transform_units: The units of `openlifu_transform_matrix`. If not provided then it is assumed that `openlifu2slicer_matrix`

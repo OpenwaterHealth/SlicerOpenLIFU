@@ -8,7 +8,6 @@ from OpenLIFULib.transform_conversion import (
     transducer_transform_node_from_openlifu,
     create_openlifu2slicer_matrix
     )
-from OpenLIFULib.lazyimport import openlifu_lz
 import numpy as np
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.util import get_cloned_node
@@ -40,7 +39,7 @@ def add_transducer_tracking_result(
         create the transducer localization result node. 
         transform_type: The direction of the transform - TRANSDUCER_TO_VOLUME or PHOTOSCAN_TO_VOLUME
         photoscan_id: The ID of the photoscan for which the transducer localization transform was computed.
-        session_id: The ID of the openlifu.Session during which transducer localization took place.
+        session_id: The ID of the openlifu.plan.Session during which transducer localization took place.
             If not provided then it is assumed the transducer localization took place without
             a session -- in such a workflow it is probably up to the user what they
             want to do with the resulting transform node since the transducer localization
@@ -109,7 +108,7 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
             (If the transducer model is not in "mm" then there is a built in unit conversion in the transform
             node matrix and this has to be removed to represent the transform in openlifu format.)
 
-    Returns the transducer localization results in openlifu Session format. To understand this format, see the documentation of
+    Returns the transducer localization results in openlifu.plan.Session format. To understand this format, see the documentation of
     openlifu.db.Session.transducer_tracking_results.
 
     See also the reverse function `add_transducer_tracking_results_from_openlifu_session_format`.
@@ -129,7 +128,8 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
         # Convert photoscan to volume transform to LPS
         transform_array = slicer.util.arrayFromTransformMatrix(photoscan_volume_node, toWorld=True)
         openlifu2slicer_matrix = create_openlifu2slicer_matrix('mm')
-        photoscan_to_volume_transform_openlifu = openlifu_lz().db.session.ArrayTransform(
+        import openlifu
+        photoscan_to_volume_transform_openlifu = openlifu.db.session.ArrayTransform(
             matrix = np.linalg.inv(openlifu2slicer_matrix) @ transform_array,
             units = 'mm',
         )
@@ -140,7 +140,7 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
 
         photoscan_id = transducer_volume_node.GetAttribute("TT:photoscanID")
         transducer_tracking_results_openlifu.append(
-            openlifu_lz().db.session.TransducerTrackingResult(
+            openlifu.db.session.TransducerTrackingResult(
                     photoscan_id = photoscan_id,
                     transducer_to_volume_transform = transducer_to_volume_transform_openlifu,
                     photoscan_to_volume_transform = photoscan_to_volume_transform_openlifu,
@@ -164,7 +164,7 @@ def add_transducer_tracking_results_from_openlifu_session_format(
     Args:
         tt_results_openlifu: Transducer localization results in the openlifu session format. 
         session_id: The ID of the session with which to tag these virtual fit result nodes.
-        transducer: The openlifu Transducer of the session. It is needed to configure transforms to be
+        transducer: The openlifu.xdc.Transducer of the session. It is needed to configure transforms to be
             in the correct units.
         replace: Whether to replace any existing transducer localization results that have the
             same session ID and photoscan ID. If this is off, then an error is raised

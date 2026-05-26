@@ -2,7 +2,6 @@ import slicer
 from slicer import vtkMRMLTransformNode
 from typing import Optional, Iterable, List, Tuple, Dict, TYPE_CHECKING, Union
 from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu, transducer_transform_node_from_openlifu
-from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.util import get_cloned_node
 
 if TYPE_CHECKING:
@@ -29,8 +28,8 @@ def add_virtual_fit_result(
             either cloned or stolen depending on the choice of `clone_node`.
         target_id: The ID of the target for which the virtual fit was computed.
             For example in a session-based workflow this should be the id of the
-            target openlifu.Point.
-        session_id: The ID of the openlifu.Session during which the virtual fit took place.
+            target openlifu.geo.Point.
+        session_id: The ID of the openlifu.plan.Session during which the virtual fit took place.
             If not provided then it is assumed the virtual fit took place without
             a session -- in such a workflow it is probably up to the user what they
             want to do with the virtual fit result transform node since the virtual fit
@@ -137,7 +136,7 @@ def get_virtual_fit_results_in_openlifu_session_format(session_id:str, units:str
             (If the transducer model is not in "mm" then there is a built in unit conversion in the transform
             node matrix and this has to be removed to represent the transform in openlifu format.)
 
-    Returns the virtual fit results in openlifu Session format. To understand this format, see the documentation of
+    Returns the virtual fit results in openlifu.plan.Session format. To understand this format, see the documentation of
     openlifu.db.Session.virtual_fit_results.
 
     See also the reverse function `add_virtual_fit_results_from_openlifu_session_format`.
@@ -171,7 +170,7 @@ def add_virtual_fit_results_from_openlifu_session_format(
         vf_results_openlifu: Virtual fit results in the openlifu session format. To understand this format,
             see the documentation of openlifu.db.Session.virtual_fit_results.
         session_id: The ID of the session with which to tag these virtual fit result nodes.
-        transducer: The openlifu Transducer of the session. It is needed to configure transforms to be
+        transducer: The openlifu.xdc.Transducer of the session. It is needed to configure transforms to be
             in the correct units.
         replace: Whether to replace any existing virtual fit results that have the
             same session ID, target ID, and rank. If this is off, then an error is raised

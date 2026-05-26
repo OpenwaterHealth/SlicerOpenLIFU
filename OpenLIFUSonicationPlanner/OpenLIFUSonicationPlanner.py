@@ -18,10 +18,10 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+import openlifu.plan.param_constraint
 from OpenLIFULib import (
     BusyCursor,
     check_and_install_kwave_binaries,
-    openlifu_lz,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUSolution,
@@ -41,8 +41,7 @@ from OpenLIFULib.util import (
 )
 from OpenLIFULib.notifications import notify
 
-# These imports are deferred at runtime using openlifu_lz,
-# but are done here for IDE and static analysis purposes
+# These imports are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu.plan
@@ -666,7 +665,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Populate the model
         for _, row in df.iterrows():
-            row["Status"] = row["Status"] if row["Status"] else openlifu_lz().plan.param_constraint.PARAM_STATUS_SYMBOLS["ok"]
+            row["Status"] = row["Status"] if row["Status"] else openlifu.plan.param_constraint.PARAM_STATUS_SYMBOLS["ok"]
             items = [create_noneditable_QStandardItem(format_value(cell)) for cell in row]
             self.globalAnalysisTableModel.appendRow(items)#
 
@@ -691,8 +690,7 @@ def compute_solution_openlifu(
     solution, simulation_result_aggregated, scaled_solution_analysis = protocol.calc_solution(
         transducer=transducer.transducer.transducer,
         volume=make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol),
-        target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target'),
-        session=session.session.session if session is not None else None,
+        target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target')
     )
     return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["intensity"], scaled_solution_analysis
 

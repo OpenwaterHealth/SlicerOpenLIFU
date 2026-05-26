@@ -21,10 +21,18 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+import openlifu.bf
+import openlifu.bf.apod_methods
+import openlifu.bf.delay_methods
+import openlifu.bf.focal_patterns
+import openlifu.db.database
+import openlifu.plan
+import openlifu.seg.seg_methods
+import openlifu.seg.virtual_fit
+import openlifu.sim
 from OpenLIFULib import (
     get_cur_db,
     get_openlifu_data_parameter_node,
-    openlifu_lz,
 )
 from OpenLIFULib.class_definition_widgets import (
     DictTableWidget,
@@ -39,8 +47,7 @@ from OpenLIFULib.util import (
     replace_widget,
 )
 
-# These imports are deferred at runtime using openlifu_lz, 
-# but are done here for IDE and static analysis purposes
+# These imports are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
 
@@ -240,13 +247,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.allowed_roles_widget = ListTableWidget(parent=self.ui.allowedRolesWidgetPlaceholder.parentWidget(), object_name="Role", object_type=str)
         replace_widget(self.ui.allowedRolesWidgetPlaceholder, self.allowed_roles_widget, self.ui)
 
-        self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
+        self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu.bf.Pulse, parent=self.ui.pulseDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Pulse")
         replace_widget(self.ui.pulseDefinitionWidgetPlaceholder, self.pulse_definition_widget, self.ui)
 
-        self.sequence_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Sequence")
+        self.sequence_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu.bf.Sequence, parent=self.ui.sequenceDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Parameters for Sequence")
         replace_widget(self.ui.sequenceDefinitionWidgetPlaceholder, self.sequence_definition_widget, self.ui)
 
-        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint], is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern")
+        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget([openlifu.bf.Wheel, openlifu.bf.SinglePoint], is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern")
         replace_widget(self.ui.abstractFocalPatternDefinitionWidgetPlaceholder, self.abstract_focal_pattern_definition_widget, self.ui)
 
         self.sim_setup_definition_widget = OpenLIFUSimSetupDefinitionFormWidget(parent=self.ui.simSetupDefinitionWidgetPlaceholder.parentWidget())
@@ -265,13 +272,13 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.parameter_constraints_widget = OpenLIFUParameterConstraintsWidget()
         replace_widget(self.ui.parameterConstraintsWidgetPlaceholder, self.parameter_constraints_widget, self.ui)
 
-        self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
+        self.target_constraints_widget = ListTableWidget(object_name="Target Constraint", object_type=openlifu.plan.TargetConstraints)
         replace_widget(self.ui.targetConstraintsWidgetPlaceholder, self.target_constraints_widget, self.ui)
 
         self.solution_analysis_options_definition_widget = OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget()
         replace_widget(self.ui.solutionAnalysisOptionsDefinitionWidgetPlaceholder, self.solution_analysis_options_definition_widget, self.ui)
 
-        self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu_lz().seg.virtual_fit.VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
+        self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls=openlifu.seg.virtual_fit.VirtualFitOptions, parent=self.ui.virtualFitOptionsDefinitionWidgetPlaceholder.parentWidget(), collapsible_title="Virtual Fit Options")
         replace_widget(self.ui.virtualFitOptionsDefinitionWidgetPlaceholder, self.virtual_fit_options_definition_widget, self.ui)
         self.virtual_fit_options_definition_widget.collapsible.collapsed = True  # start collapsed
 
@@ -618,7 +625,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if not filepath:
             return
 
-        protocol = openlifu_lz().plan.Protocol.from_file(filepath)
+        protocol = openlifu.plan.Protocol.from_file(filepath)
 
         if not self.load_protocol_from_openlifu(protocol):
             return
@@ -767,9 +774,9 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
         )
 
         if post_init:
-            return openlifu_lz().plan.Protocol(**protocol_fields)
+            return openlifu.plan.Protocol(**protocol_fields)
         else:
-            return instantiate_without_post_init(openlifu_lz().plan.Protocol, **protocol_fields)
+            return instantiate_without_post_init(openlifu.plan.Protocol, **protocol_fields)
 
     def setNewProtocolWidgets(self) -> None:
         self.setProtocolEditButtonEnabled(True)  # enable edit button (consistency)
@@ -939,12 +946,12 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
     def save_protocol_to_database(self, protocol: "openlifu.plan.Protocol") -> None:
         if get_cur_db() is None:
             raise RuntimeError("Cannot save protocol because there is no database connection")
-        get_cur_db().write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_protocol(protocol, openlifu.db.database.OnConflictOpts.OVERWRITE)
 
     def delete_protocol_from_database(self, protocol_id: str) -> None:
         if get_cur_db() is None:
             raise RuntimeError("Cannot delete protocol because there is no database connection")
-        get_cur_db().delete_protocol(protocol_id, openlifu_lz().db.database.OnConflictOpts.ERROR)
+        get_cur_db().delete_protocol(protocol_id, openlifu.db.database.OnConflictOpts.ERROR)
 
     def cache_protocol(self, protocol_id: str, protocol: "openlifu.plan.Protocol") -> None:
         self.cached_protocols[protocol_id] = protocol
@@ -977,31 +984,31 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def get_default_pulse(cls):
-        return openlifu_lz().bf.Pulse()
+        return openlifu.bf.Pulse()
 
     @classmethod
     def get_default_sequence(cls):
-        return openlifu_lz().bf.Sequence()
+        return openlifu.bf.Sequence()
 
     @classmethod
     def get_default_focal_pattern(cls):
-        return openlifu_lz().bf.focal_patterns.SinglePoint()
+        return openlifu.bf.focal_patterns.SinglePoint()
 
     @classmethod
     def get_default_sim_setup(cls):
-        return openlifu_lz().sim.SimSetup()
+        return openlifu.sim.SimSetup()
 
     @classmethod
     def get_default_delay_method(cls):
-        return openlifu_lz().bf.delay_methods.Direct()
+        return openlifu.bf.delay_methods.Direct()
 
     @classmethod
     def get_default_apodization_method(cls):
-        return openlifu_lz().bf.apod_methods.Uniform()
+        return openlifu.bf.apod_methods.Uniform()
 
     @classmethod
     def get_default_segmentation_method(cls):
-        return openlifu_lz().seg.seg_methods.UniformWater()
+        return openlifu.seg.seg_methods.UniformWater()
 
     @classmethod
     def get_default_parameter_constraints(cls):
@@ -1013,15 +1020,15 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def get_default_solution_analysis_options(cls):
-        return openlifu_lz().plan.SolutionAnalysisOptions()
+        return openlifu.plan.SolutionAnalysisOptions()
 
     @classmethod
     def get_default_virtual_fit_options(cls):
-        return openlifu_lz().seg.virtual_fit.VirtualFitOptions()
+        return openlifu.seg.virtual_fit.VirtualFitOptions()
 
     @classmethod
     def get_default_protocol(cls):
-        return openlifu_lz().plan.Protocol(
+        return openlifu.plan.Protocol(
             name=DefaultProtocolValues.NAME.value,
             id=DefaultProtocolValues.ID.value,
             description=DefaultProtocolValues.DESCRIPTION.value,
@@ -1042,7 +1049,7 @@ class OpenLIFUProtocolConfigLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def get_default_new_protocol(cls):
-        return openlifu_lz().plan.Protocol(
+        return openlifu.plan.Protocol(
             name=DefaultNewProtocolValues.NAME.value,
             id=DefaultNewProtocolValues.ID.value,
             description=DefaultNewProtocolValues.DESCRIPTION.value,
@@ -1086,7 +1093,7 @@ class OpenLIFUProtocolConfigTest(ScriptedLoadableModuleTest):
 
 class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
     def __init__(self, parent: Optional[qt.QWidget] = None):
-        super().__init__(openlifu_lz().sim.SimSetup, parent, is_collapsible=True, collapsible_title="Simulation Setup")
+        super().__init__(openlifu.sim.SimSetup, parent, is_collapsible=True, collapsible_title="Simulation Setup")
 
         # Modify the defaults and ranges for x_extent, y_extent, and z_extent
         x_ext_hbox = self._field_widgets['x_extent'].layout()
@@ -1116,7 +1123,7 @@ class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFo
 
 class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
     def __init__(self):
-        super().__init__([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
+        super().__init__([openlifu.bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
 
         # Select Direct as the default. Note: `get_default_delay_method` should
         # make sure Direct is also set.
@@ -1132,7 +1139,7 @@ class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleAB
 
 class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
     def __init__(self):
-        super().__init__([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
+        super().__init__([openlifu.bf.apod_methods.MaxAngle, openlifu.bf.apod_methods.PiecewiseLinear, openlifu.bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
 
         # Select Uniform as the default. Note: `get_default_apodization_method`
         # should make sure Uniform also set.
@@ -1184,7 +1191,7 @@ class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMul
         """
         # ---- Begin constructor overwrite ----
 
-        cls_list = [openlifu_lz().seg.seg_methods.UniformSegmentation, openlifu_lz().seg.seg_methods.UniformTissue, openlifu_lz().seg.seg_methods.UniformWater]
+        cls_list = [openlifu.seg.seg_methods.UniformSegmentation, openlifu.seg.seg_methods.UniformTissue, openlifu.seg.seg_methods.UniformWater]
         is_collapsible = False
         parent: Optional[qt.QWidget] = None
         collapsible_title = "Segmentation Method"
@@ -1387,7 +1394,7 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
                 if is_range_operator else self.error_spinboxes[0].value
             )
 
-            return openlifu_lz().plan.ParameterConstraint(operator, warning_value, error_value)
+            return openlifu.plan.ParameterConstraint(operator, warning_value, error_value)
 
         def _on_accept(self):
             display_name = self.parameter_name_input.currentText
@@ -1433,7 +1440,7 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
 
 class OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
     def __init__(self, parent: Optional[qt.QWidget] = None):
-        super().__init__(openlifu_lz().plan.SolutionAnalysisOptions, parent, collapsible_title="Solution Analysis Options")
+        super().__init__(openlifu.plan.SolutionAnalysisOptions, parent, collapsible_title="Solution Analysis Options")
 
         # Modify the widget for configuring SolutionAnalysis.param_constraints
         # so that it uses the OpenLIFUParameterConstraintsWidget
