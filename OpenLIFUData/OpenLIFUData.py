@@ -1,5 +1,6 @@
 # Standard library imports
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -1250,6 +1251,19 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.databasePopupButton.clicked.connect(self.onOpenDatabasePopup)
         self.ui.devicePopupButton.clicked.connect(self.onOpenDevicePopup)
 
+        # The device button uses a custom PNG icon (Resources/Icons/device.png)
+        # rather than an emoji glyph so we have a single piece of art that can
+        # be swapped in later. Loaded here in Python so we don't need a Qt
+        # resource (.qrc) file - matches the pattern used by OpenLIFUHome's
+        # toolbar sync action.
+        try:
+            module_dir = os.path.dirname(__file__)
+            icon_path = os.path.join(module_dir, "Resources", "Icons", "device.png")
+            if os.path.exists(icon_path):
+                self.ui.devicePopupButton.setIcon(qt.QIcon(icon_path))
+        except Exception as e:
+            logging.warning("Could not load device button icon: %s", e)
+
         # Top toolbar: Navigation (guided mode) and Permissions (user account
         # mode) dropdowns. Each dropdown drives the corresponding global state
         # via existing helpers; the comboboxes are kept in sync with those
@@ -1955,7 +1969,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         #   (False, False)          - nothing connected         -> black outline
         #   (True, False) /         - one half connected (TX    -> yellow outline
         #   (False, True)             only or HV only)
-        #   (True, True)            - fully connected           -> blue outline
+        #   (True, True)            - fully connected           -> green outline
         #
         # Reads ``is_device_connected()`` from OpenLIFUSonicationControl's
         # LIFUInterface. If the SonicationControl logic is not yet
@@ -1971,7 +1985,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             tx_conn, hv_conn = False, False
         if tx_conn and hv_conn:
             self.ui.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#1565c0")  # blue
+                _outline_style("devicePopupButton", "#2e7d32")  # green
             )
             self.ui.devicePopupButton.setToolTip(
                 "Hardware device fully connected (TX + HV). Click for details."
@@ -2208,9 +2222,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onOpenDevicePopup(self, checked: bool = False) -> None:
         """Show a compact info dialog with the current TX / HV device state.
 
-        Reads ``is_device_connected()`` from the OpenLIFUSonicationControl
-        module's LIFUInterface. If the SonicationControl logic is not yet
-        instantiated, a short "not available yet" message is shown instead.
+        Queries ``hvcontroller`` and ``txdevice`` on the OpenLIFUSonicationControl
+        module's ``LIFUInterface`` for hardware id and firmware version, plus
+        per-TX-module hardware id and firmware version. All I/O calls are
+        defensive: any failure is reported inline as "unknown" rather than
+        aborting the dialog (the SDK raises ``LIFUError`` on bus errors).
         """
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
@@ -2229,12 +2245,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             return
         try:
             tx_conn, hv_conn = iface.is_device_connected()
-        except (AttributeError, RuntimeError) as e:
+        except Exception as e:
             slicer.util.errorDisplay(
                 text=f"Could not query device connection status: {e}",
                 windowTitle="Device Status",
             )
             return
+
+        # Connection summary
         if tx_conn and hv_conn:
             summary = "Hardware device is fully connected."
         elif tx_conn or hv_conn:
@@ -2242,12 +2260,80 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             summary = f"Hardware device is partially connected ({half})."
         else:
             summary = "No hardware device is currently connected."
+
+        lines: List[str] = [summary, ""]
+
+        # Helper: encode a raw-hex HWID into base58, matching the test app's
+        # lifu_console.py / lifu_transmitter.py pattern. Important detail:
+        # the test app slices the raw-hex *string* to HW_ID_DATA_LENGTH (=12)
+        # characters before decoding (=> first 6 bytes, ~8 base58 chars). The
+        # raw hex returned by the SDK is 24 chars (12 bytes), but only the
+        # first half is used for the display ID. base58 ships with the
+        # openlifu_sdk environment; if for some reason it isn't importable we
+        # fall back to the raw hex string instead of failing.
+        def _encode_hwid_b58(raw_hex: str) -> str:
+            try:
+                import base58
+                from openlifu_sdk.io.LIFUConfig import HW_ID_DATA_LENGTH
+                return base58.b58encode(
+                    bytes.fromhex(raw_hex[:HW_ID_DATA_LENGTH])
+                ).decode("utf-8")
+            except Exception as enc_err:
+                logging.warning("Could not base58-encode HWID %r: %s", raw_hex, enc_err)
+                return raw_hex
+
+        # ---- Console (HV controller) ----
+        lines.append("Console:")
+        if hv_conn:
+            hv = iface.hvcontroller
+            try:
+                con_hwid_hex = hv.get_hardware_id(raw_hex=True)
+                con_hwid = _encode_hwid_b58(con_hwid_hex)
+            except Exception as e:
+                logging.warning("Could not read console HWID: %s", e)
+                con_hwid = "unknown"
+            try:
+                con_ver = hv.get_version()
+            except Exception as e:
+                logging.warning("Could not read console firmware version: %s", e)
+                con_ver = "unknown"
+            lines.append(f"  HWID: {con_hwid}")
+            lines.append(f"  Firmware: v{con_ver}")
+        else:
+            lines.append("  (not connected)")
+
+        lines.append("")
+
+        # ---- TX device + per-module info ----
+        lines.append("TX device:")
+        if tx_conn:
+            tx = iface.txdevice
+            try:
+                module_count = tx.get_module_count()
+            except Exception as e:
+                logging.warning("Could not read TX module count: %s", e)
+                module_count = 0
+            lines.append(f"  Modules connected: {module_count}")
+            for module_idx in range(module_count):
+                lines.append(f"  Module {module_idx}:")
+                try:
+                    mod_hwid_hex = tx.get_hardware_id(module=module_idx, raw_hex=True)
+                    mod_hwid = _encode_hwid_b58(mod_hwid_hex)
+                except Exception as e:
+                    logging.warning("Could not read TX module %d HWID: %s", module_idx, e)
+                    mod_hwid = "unknown"
+                try:
+                    mod_ver = tx.get_version(module=module_idx)
+                except Exception as e:
+                    logging.warning("Could not read TX module %d firmware: %s", module_idx, e)
+                    mod_ver = "unknown"
+                lines.append(f"    HWID: {mod_hwid}")
+                lines.append(f"    Firmware: v{mod_ver}")
+        else:
+            lines.append("  (not connected)")
+
         slicer.util.infoDisplay(
-            text=(
-                f"{summary}\n\n"
-                f"  TX connected: {tx_conn}\n"
-                f"  HV connected: {hv_conn}"
-            ),
+            text="\n".join(lines),
             windowTitle="Device Status",
         )
 
