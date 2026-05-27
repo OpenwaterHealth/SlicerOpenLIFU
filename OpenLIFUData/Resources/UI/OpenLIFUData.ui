@@ -94,7 +94,13 @@
            <string>Hardware device connection status</string>
           </property>
           <property name="text">
-           <string>🔌</string>
+           <string/>
+          </property>
+          <property name="iconSize">
+           <size>
+            <width>20</width>
+            <height>20</height>
+           </size>
           </property>
           <property name="minimumSize">
            <size>
