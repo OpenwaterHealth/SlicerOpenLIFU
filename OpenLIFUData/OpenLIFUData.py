@@ -1245,6 +1245,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Data page.
         self.ui.loginPopupButton.clicked.connect(self.onOpenLoginPopup)
         self.ui.databasePopupButton.clicked.connect(self.onOpenDatabasePopup)
+        self.ui.devicePopupButton.clicked.connect(self.onOpenDevicePopup)
 
         # Top toolbar: Navigation (guided mode) and Permissions (user account
         # mode) dropdowns. Each dropdown drives the corresponding global state
@@ -1364,6 +1365,23 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             )
         except (AttributeError, RuntimeError):
             pass
+
+        # Subscribe to LIFU device connect / disconnect events so the device
+        # button outline reflects the live (TX, HV) connection state. The
+        # callbacks fire on every TX or HV connection / disconnection; we
+        # just re-paint the toolbar buttons (``updateToolbarButtonStates``
+        # reads ``is_device_connected()`` itself).
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic.call_on_lifu_device_connected(
+                lambda *_args, **_kwargs: self.updateToolbarButtonStates()
+            )
+            sc_logic.call_on_lifu_device_disconnected(
+                lambda *_args, **_kwargs: self.updateToolbarButtonStates()
+            )
+        except (AttributeError, RuntimeError):
+            pass
+
         # Now that Login is fully alive, run the first sync of the Permissions
         # dropdown, per-section gating, and toolbar-button styling.
         self.updatePermissionsModeComboBox()
@@ -1927,6 +1945,50 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 "Connect a database first; account features look up users from the database."
             )
 
+        # --- Device ---
+        #
+        # Reflect TX/HV connectivity in the device button outline:
+        #
+        #   (False, False)          - nothing connected         -> black outline
+        #   (True, False) /         - one half connected (TX    -> yellow outline
+        #   (False, True)             only or HV only)
+        #   (True, True)            - fully connected           -> blue outline
+        #
+        # Reads ``is_device_connected()`` from OpenLIFUSonicationControl's
+        # LIFUInterface. If the SonicationControl logic is not yet
+        # instantiated (e.g. before its first navigation), we leave the
+        # button at its current style. The on-connect / on-disconnect
+        # callbacks installed in ``_wireDeferredLoginObservers`` will repaint
+        # whenever the underlying state changes.
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            iface = getattr(sc_logic, "cur_lifu_interface", None)
+            tx_conn, hv_conn = iface.is_device_connected() if iface is not None else (False, False)
+        except (AttributeError, RuntimeError):
+            tx_conn, hv_conn = False, False
+        if tx_conn and hv_conn:
+            self.ui.devicePopupButton.setStyleSheet(
+                _outline_style("devicePopupButton", "#1565c0")  # blue
+            )
+            self.ui.devicePopupButton.setToolTip(
+                "Hardware device fully connected (TX + HV). Click for details."
+            )
+        elif tx_conn or hv_conn:
+            self.ui.devicePopupButton.setStyleSheet(
+                _outline_style("devicePopupButton", "#f9a825")  # yellow / amber
+            )
+            half = "TX only" if tx_conn else "HV only"
+            self.ui.devicePopupButton.setToolTip(
+                f"Hardware partially connected ({half}). Click for details."
+            )
+        else:
+            self.ui.devicePopupButton.setStyleSheet(
+                _outline_style("devicePopupButton", "#000000")  # black
+            )
+            self.ui.devicePopupButton.setToolTip(
+                "No hardware device connected. Click for details."
+            )
+
     # ----- Dependency install (moved from OpenLIFULogin) -----
 
     def _initDependencyStatus(self) -> None:
@@ -2138,6 +2200,53 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             parent=slicer.util.mainWindow(),
         )
         dialog.exec_()
+
+    @display_errors
+    def onOpenDevicePopup(self, checked: bool = False) -> None:
+        """Show a compact info dialog with the current TX / HV device state.
+
+        Reads ``is_device_connected()`` from the OpenLIFUSonicationControl
+        module's LIFUInterface. If the SonicationControl logic is not yet
+        instantiated, a short "not available yet" message is shown instead.
+        """
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            iface = getattr(sc_logic, "cur_lifu_interface", None)
+        except (AttributeError, RuntimeError):
+            iface = None
+        if iface is None:
+            slicer.util.infoDisplay(
+                text=(
+                    "The LIFU interface has not been initialized yet.\n\n"
+                    "Open the OpenLIFU Sonication Control module once to "
+                    "initialize the hardware interface."
+                ),
+                windowTitle="Device Status",
+            )
+            return
+        try:
+            tx_conn, hv_conn = iface.is_device_connected()
+        except (AttributeError, RuntimeError) as e:
+            slicer.util.errorDisplay(
+                text=f"Could not query device connection status: {e}",
+                windowTitle="Device Status",
+            )
+            return
+        if tx_conn and hv_conn:
+            summary = "Hardware device is fully connected."
+        elif tx_conn or hv_conn:
+            half = "TX only" if tx_conn else "HV only"
+            summary = f"Hardware device is partially connected ({half})."
+        else:
+            summary = "No hardware device is currently connected."
+        slicer.util.infoDisplay(
+            text=(
+                f"{summary}\n\n"
+                f"  TX connected: {tx_conn}\n"
+                f"  HV connected: {hv_conn}"
+            ),
+            windowTitle="Device Status",
+        )
 
     @display_errors
     def onManageTransducersClicked(self, checked: bool = False) -> None:
