@@ -12,19 +12,66 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
-    <widget class="QPushButton" name="userAccountModePushButton">
-     <property name="text">
-      <string>Start User Account Mode</string>
+    <widget class="QGroupBox" name="activeUserGroupBox">
+     <property name="title">
+      <string>Active user</string>
      </property>
-     <property name="autoDefault">
-      <bool>false</bool>
-     </property>
-     <property name="default">
-      <bool>false</bool>
-     </property>
-     <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-      <bool>true</bool>
-     </property>
+     <layout class="QFormLayout" name="activeUserFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="activeUserNameTitleLabel">
+        <property name="text">
+         <string>Name:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="activeUserNameLabel">
+        <property name="text">
+         <string>Not Logged In</string>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="activeUserIdTitleLabel">
+        <property name="text">
+         <string>User ID:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="activeUserIdLabel">
+        <property name="text">
+         <string>Not Logged In</string>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="activeUserRolesTitleLabel">
+        <property name="text">
+         <string>Roles:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="activeUserRolesLabel">
+        <property name="text">
+         <string>Not Logged In</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -42,62 +89,6 @@
      <property name="wordWrap">
       <bool>true</bool>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QGroupBox" name="groupBox">
-     <property name="title">
-      <string>Install dependencies</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_3">
-      <item>
-       <layout class="QFormLayout" name="formLayout">
-        <item row="0" column="1">
-         <widget class="QPushButton" name="installPythonRequirementsPushButton">
-          <property name="text">
-           <string>Install Python Requirements</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="openlifuStatusIcon">
-          <property name="text">
-           <string>pythonStatus</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="ctkCollapsibleGroupBox" name="installDependenciesCollapsibleGroupBox">
-        <property name="title">
-         <string>Optional</string>
-        </property>
-        <layout class="QFormLayout" name="formLayout_2">
-         <item row="0" column="0">
-          <widget class="QLabel" name="adbStatusIcon">
-           <property name="text">
-            <string>adbStatus</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QPushButton" name="installADBPushButton">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-             <horstretch>2</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="text">
-            <string>Install Android Platform Tools</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-     </layout>
     </widget>
    </item>
    <item>
