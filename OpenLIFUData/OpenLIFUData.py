@@ -1887,6 +1887,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             cur_user = get_current_user()
         except (AttributeError, RuntimeError):
             cur_user = None
+        try:
+            uam = bool(get_user_account_mode_state())
+        except (AttributeError, RuntimeError):
+            uam = False
         # Treat "default_admin" and "anonymous" as not-signed-in for display
         # purposes; both are stand-in users that the Login module assigns
         # automatically depending on database / admin presence.
@@ -1901,12 +1905,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             )
             self.ui.loginPopupButton.setToolTip(
                 f"Signed in as {getattr(cur_user, 'name', '') or user_id}. "
-                f"Click to view account or log out."
+                f"Click to open Account."
+            )
+        elif uam:
+            # Permissions = "User" but no real user is signed in. Highlight the
+            # button red to nudge the user to log in.
+            self.ui.loginPopupButton.setStyleSheet(
+                _outline_style("loginPopupButton", "#c62828")
+            )
+            self.ui.loginPopupButton.setToolTip(
+                "Permissions is set to 'User'. Click to open Account and log in."
             )
         else:
             self.ui.loginPopupButton.setStyleSheet("")
             self.ui.loginPopupButton.setToolTip(
-                "Not signed in. Click to log in."
+                "Not signed in. Click to open Account."
             )
 
         # Login requires a database; disable the button when no database is
@@ -1914,7 +1927,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loginPopupButton.setEnabled(db_connected)
         if not db_connected:
             self.ui.loginPopupButton.setToolTip(
-                "Connect a database first; login looks up users from the database."
+                "Connect a database first; account features look up users from the database."
             )
 
     # ----- Dependency install (moved from OpenLIFULogin) -----
@@ -2114,7 +2127,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """Open the Login module's widget in a modal popup dialog."""
         dialog = _ModuleWidgetPopupDialog(
             module_name="OpenLIFULogin",
-            title="Login",
+            title="Account",
             parent=slicer.util.mainWindow(),
         )
         dialog.exec_()
