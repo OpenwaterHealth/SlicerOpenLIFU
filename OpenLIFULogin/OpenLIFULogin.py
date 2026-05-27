@@ -727,6 +727,40 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self._permissions_widgets.extend([self.ui.permissionsWidget1])
 
+        # Subscribe banners to database state changes and seed initial state.
+        try:
+            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+        except Exception:
+            db_logic = None
+        if db_logic is not None:
+            try:
+                db_logic.call_on_db_changed(self._onDatabaseChangedForBanners)
+                current_db = getattr(db_logic, "db", None)
+                for widget in self._user_account_banners:
+                    widget.change_database_status(current_db)
+            except Exception:
+                pass
+        # Seed active user state too.
+        current_user = getattr(self.logic, "active_user", None)
+        try:
+            current_uam = bool(self._parameterNode.user_account_mode) if self._parameterNode else False
+        except (AttributeError, RuntimeError):
+            current_uam = False
+        for widget in self._user_account_banners:
+            try:
+                widget.change_user_account_mode(current_uam)
+                widget.change_active_user(current_user)
+            except Exception:
+                pass
+
+    def _onDatabaseChangedForBanners(self, db) -> None:
+        """Dispatch DB-changed events to all cached UserAccountBanner widgets."""
+        for widget in self._user_account_banners:
+            try:
+                widget.change_database_status(db)
+            except Exception:
+                pass
+
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFULoginParameterNode]) -> None:
         """
         Set and observe parameter node.
@@ -816,10 +850,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # === Multiple things can block the login button ===
 
-        if not self._parameterNode.user_account_mode:
-            self.ui.loginLogoutButton.setEnabled(False)
-            self.ui.loginLogoutButton.setToolTip("The login feature is only available with user account mode turned on.")
-            return
+        # Note: in the new design (popup-based Account UI driven from the
+        # OpenLIFU Data toolbar), Permissions mode (formerly "user account
+        # mode") is selected via a dropdown that lives behind this modal
+        # popup. Gating login on UAM would leave the user unable to log in
+        # without first dismissing this popup, switching the dropdown, and
+        # reopening - which is confusing. Permissions mode now only governs
+        # role enforcement, not whether sign-in is available. Logging in is
+        # allowed in either mode as long as a database with an admin exists.
 
         if not get_cur_db():
             self.ui.loginLogoutButton.setEnabled(False)
@@ -961,8 +999,23 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
         self.updateUserInfoLabels()
+        # Refresh the login/logout button so the User-mode dropdown in the
+        # Data toolbar enables/disables this button immediately (it gates on
+        # ``self._parameterNode.user_account_mode``).
+        self.updateLoginLogoutButton()
+        # Banners stay visible regardless of UAM state; their internal styling
+        # already reflects whether a real user is signed in. Refresh them so
+        # the User-mode red outline appears/disappears immediately.
+        try:
+            uam = bool(self._parameterNode.user_account_mode) if self._parameterNode else False
+        except (AttributeError, RuntimeError):
+            uam = False
         for widget in self._user_account_banners:
-            widget.visible = self._parameterNode.user_account_mode
+            try:
+                widget.change_user_account_mode(uam)
+                widget.change_active_user(self.logic.active_user)
+            except Exception:
+                pass
 
     def enforceUserPermissions(self) -> None:
         
