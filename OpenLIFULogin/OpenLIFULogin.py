@@ -27,14 +27,9 @@ from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
 from OpenLIFULib import (
-    BusyCursor,
     ensure_python_requirements_for_module_enter,
     get_cur_db,
     get_current_user,
-    check_and_install_python_requirements,
-    get_required_openlifu_version,
-    openlifu_version_matches,
-    python_requirements_exist,
 )
 from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
@@ -621,21 +616,19 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         # Login
 
-        self.ui.userAccountModePushButton.clicked.connect(self.onUserAccountModeClicked)
         self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
         self.logic.call_on_active_user_changed(self.onActiveUserChanged)
 
         # Account management
-        
+
         self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
         self.inject_workflow_controls_into_placeholder()
 
-        # Install dependencies
-        self.ui.installPythonRequirementsPushButton.clicked.connect(self.onUpdateOpenLIFUClicked)
-        self._checkOpenLIFUVersionStatus()
-        self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
-        self._checkADBStatus()
+        # Note: User Account Mode toggling and the "Install dependencies"
+        # section both used to live here but have been moved to the Data page
+        # ("Permissions" dropdown in the top toolbar and the "Dependencies"
+        # collapsible section, respectively).
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -682,7 +675,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             if self.logic.active_user is None:
                 self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(self._cur_login_state)
-            self._checkOpenLIFUVersionStatus()
         self.updateLoginStateNotificationLabel()
 
     def exit(self) -> None:
@@ -750,17 +742,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
-
-    def onUserAccountModeClicked(self):
-        self._initDefaultUsers()
-        # toggle and propagate to parameter node
-        new_user_account_mode_state = not self._parameterNode.user_account_mode
-        set_user_account_mode_state(new_user_account_mode_state)
-
-        # reset user state
-        self.logic.active_user = self._default_anonymous_user
-        self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
-        self.updateWorkflowControls()
 
     @display_errors
     def onLoginLogoutClicked(self, checked: bool = False) -> None:
@@ -919,6 +900,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
         self.updateWorkflowControls()
+        self.updateUserInfoLabels()
 
     def updateLoginStateNotificationLabel(self):
         if self._cur_login_state == LoginState.NOT_LOGGED_IN:
@@ -940,18 +922,45 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             )
 
     def updateUserAccountModeButton(self):
-        if self._parameterNode.user_account_mode:
-            self.ui.userAccountModePushButton.setText("Exit User Account Mode")
-        else:
-            self.ui.userAccountModePushButton.setText("Start User Account Mode")
-            self.ui.userAccountModePushButton.setToolTip(
-                    "User Account mode will enforce restrictions over available widgets based on user credentials."
-                )
-    
+        # The User Account Mode toggle has been relocated to the Data page
+        # ("Permissions" dropdown). This method is preserved as a no-op so
+        # legacy call sites (e.g. ``onParameterNodeModified``) keep working.
+        return
+
+    def updateUserInfoLabels(self):
+        """Refresh the active-user info block (name / id / roles).
+
+        When user account mode is off or no real user is logged in (i.e. the
+        active user is the default anonymous user), each label reads
+        "Not Logged In". Otherwise the labels show the active user's name,
+        id, and comma-separated role list.
+        """
+        active = self.logic.active_user
+        is_anonymous = (
+            active is None
+            or getattr(active, "id", None) is None
+            or (self._default_anonymous_user is not None
+                and active is self._default_anonymous_user)
+        )
+        if is_anonymous or self._cur_login_state in (
+            LoginState.NOT_LOGGED_IN,
+            LoginState.UNSUCCESSFUL_LOGIN,
+        ):
+            placeholder = "Not Logged In"
+            self.ui.activeUserNameLabel.setText(placeholder)
+            self.ui.activeUserIdLabel.setText(placeholder)
+            self.ui.activeUserRolesLabel.setText(placeholder)
+            return
+        self.ui.activeUserNameLabel.setText(getattr(active, "name", "") or "")
+        self.ui.activeUserIdLabel.setText(getattr(active, "id", "") or "")
+        roles = getattr(active, "roles", None) or []
+        self.ui.activeUserRolesLabel.setText(", ".join(roles) if roles else "(none)")
+
     def onParameterNodeModified(self, caller, event) -> None:
         self.updateUserAccountModeButton()
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
+        self.updateUserInfoLabels()
         for widget in self._user_account_banners:
             widget.visible = self._parameterNode.user_account_mode
 
@@ -988,166 +997,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             slicer.util.getModuleLogic('OpenLIFUProtocolConfig').delete_protocol_from_cache(protocol_id)
         slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
         self._last_active_user = new_active_user
-
-    def _checkOpenLIFUVersionStatus(self) -> None:
-        import importlib.metadata
-        has_openlifu = python_requirements_exist()
-        version_ok = openlifu_version_matches() if has_openlifu else False
-
-        icon_name = qt.QStyle.SP_DialogApplyButton if (has_openlifu and version_ok) else qt.QStyle.SP_DialogCancelButton
-        pixmap = slicer.app.style().standardIcon(icon_name).pixmap(qt.QSize(16, 16))
-        self.ui.openlifuStatusIcon.setPixmap(pixmap)
-        self.ui.openlifuStatusIcon.setText("")
-
-        if not has_openlifu:
-            self.ui.installPythonRequirementsPushButton.setText("Install Python Requirements")
-        elif not version_ok:
-            try:
-                installed = importlib.metadata.version('openlifu')
-            except importlib.metadata.PackageNotFoundError:
-                installed = "unknown"
-            required = get_required_openlifu_version() or "unknown"
-            self.ui.installPythonRequirementsPushButton.setText(f"Update Python Requirements (openlifu: {installed} → {required})")
-        else:
-            try:
-                installed = importlib.metadata.version('openlifu')
-            except importlib.metadata.PackageNotFoundError:
-                installed = "unknown"
-            self.ui.installPythonRequirementsPushButton.setText(f"Reinstall Python Requirements (openlifu: {installed})")
-
-    @display_errors
-    def onUpdateOpenLIFUClicked(self, checked: bool = False) -> None:
-        check_and_install_python_requirements(prompt_if_found=True)
-        self._checkOpenLIFUVersionStatus()
-
-    def _checkADBStatus(self) -> None:
-        try:
-            adb_result = subprocess.run(["adb", "--version"], capture_output=True, check=True, text=True)
-            adb_version = adb_result.stdout.splitlines()[0] if adb_result.stdout else "unknown version"
-            adb_installed = True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            adb_installed = False
-            adb_version = None
-
-        adb_icon_name = qt.QStyle.SP_DialogApplyButton if adb_installed else qt.QStyle.SP_DialogCancelButton
-        adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
-        self.ui.adbStatusIcon.setPixmap(adb_pixmap)
-        self.ui.adbStatusIcon.setText("")
-
-        if adb_installed:
-            self.ui.installADBPushButton.setEnabled(False)
-            self.ui.installADBPushButton.setText(f"Android Platform Tools installed ({adb_version})")
-        else:
-            self.ui.installADBPushButton.setEnabled(True)
-            self.ui.installADBPushButton.setText("Install Android Platform Tools")
-
-    @display_errors
-    def onInstallADBClicked(self, checked: bool = False) -> None:
-        if sys.platform.startswith("win"):
-            self._installADBWindows()
-        elif sys.platform == "darwin":
-            self._installADBMac()
-        elif sys.platform.startswith("linux"):
-            self._installADBLinux()
-        else:
-            slicer.util.infoDisplay("ADB installation is not supported on this platform.")
-
-    def _installADBWindows(self) -> None:
-        if not slicer.util.confirmYesNoDisplay(
-            "This will download Android Platform Tools (~7 MB) from Google "
-            "and add the installation directory to your Windows user PATH. Continue?"
-        ):
-            return
-
-        selected_dir = qt.QFileDialog.getExistingDirectory(
-            slicer.util.mainWindow(),
-            "Choose installation directory for Android Platform Tools",
-            str(Path.home()),
-            qt.QFileDialog.ShowDirsOnly,
-        )
-        if not selected_dir:
-            return
-
-        selected_dir = Path(selected_dir)
-        self.ui.installADBPushButton.setEnabled(False)
-        tmp_dir = None
-
-        try:
-            ADB_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
-
-            with BusyCursor():
-                tmp_dir = tempfile.mkdtemp(prefix="adb_install_")
-                zip_path = Path(tmp_dir) / "platform-tools-latest-windows.zip"
-
-                urllib.request.urlretrieve(ADB_URL, str(zip_path))
-
-                with zipfile.ZipFile(str(zip_path), 'r') as zf:
-                    zf.extractall(str(selected_dir))
-
-                platform_tools_path = str(selected_dir / "platform-tools")
-
-                # Patch the current process's PATH immediately so ADB is usable right away
-                os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + platform_tools_path
-
-                # Write to Windows user PATH registry key for persistence across sessions
-                # User PATH does not require admin permissions
-                import winreg
-                try:
-                    with winreg.CreateKey(
-                        winreg.HKEY_CURRENT_USER, "Environment",
-                    ) as reg_key:
-                        try:
-                            current_path, _ = winreg.QueryValueEx(reg_key, "Path")
-                        except FileNotFoundError:
-                            current_path = ""
-                        entries = [p for p in current_path.split(os.pathsep) if p]
-                        if platform_tools_path not in entries:
-                            entries.append(platform_tools_path)
-                            winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
-                                              os.pathsep.join(entries))
-                except OSError as e:
-                    slicer.util.warningDisplay(
-                        f"ADB installed, but PATH could not be saved to the registry ({e}). "
-                        f"Add {platform_tools_path} to your user PATH manually to persist after restart."
-                    )
-
-        finally:
-            if tmp_dir is not None:
-                import shutil
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-            self._checkADBStatus()
-
-    def _installADBMac(self) -> None:
-        if not slicer.util.confirmYesNoDisplay(
-            "This will run 'brew install android-platform-tools' to install ADB. "
-            "Homebrew must already be installed. Continue?"
-        ):
-            return
-
-        self.ui.installADBPushButton.setEnabled(False)
-        self.ui.installADBPushButton.setText("Installing via Homebrew...")
-        slicer.app.processEvents()
-
-        try:
-            with BusyCursor():
-                result = subprocess.run(
-                    ["brew", "install", "android-platform-tools"],
-                    capture_output=True, text=True,
-                )
-            if result.returncode != 0:
-                slicer.util.errorDisplay(
-                    f"Homebrew installation failed:\n{result.stderr or result.stdout}"
-                )
-        finally:
-            self._checkADBStatus()
-
-    def _installADBLinux(self) -> None:
-        slicer.util.infoDisplay(
-            "To install ADB on Debian-based Linux, run the following commands in a terminal:\n\n"
-            "    sudo apt update\n"
-            "    sudo apt install android-tools-adb\n\n"
-            "After installing, reopen the application to verify."
-        )
 
 # OpenLIFULoginLogic
 #

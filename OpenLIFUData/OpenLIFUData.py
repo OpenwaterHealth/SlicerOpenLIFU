@@ -1,6 +1,11 @@
 # Standard library imports
 import json
 import os
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import zipfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Optional, List, Tuple, Dict, Sequence, TYPE_CHECKING
@@ -32,9 +37,13 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolution,
     SlicerOpenLIFUTransducer,
     assign_openlifu_metadata_to_volume_node,
+    check_and_install_python_requirements,
     ensure_python_requirements_for_module_enter,
     get_cur_db,
+    get_required_openlifu_version,
     get_target_candidates,
+    openlifu_version_matches,
+    python_requirements_exist,
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
@@ -44,7 +53,12 @@ from OpenLIFULib.transducer_tracking_results import (
     get_photoscan_id_from_transducer_tracking_result,
     is_transducer_tracking_result_node,
 )
-from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state, UserAccountBanner
+from OpenLIFULib.user_account_mode_util import (
+    get_current_user,
+    get_user_account_mode_state,
+    set_user_account_mode_state,
+    UserAccountBanner,
+)
 from OpenLIFULib.util import (
     BusyCursor,
     create_noneditable_QStandardItem,
@@ -1232,8 +1246,26 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loginPopupButton.clicked.connect(self.onOpenLoginPopup)
         self.ui.databasePopupButton.clicked.connect(self.onOpenDatabasePopup)
 
-        # Top toolbar: guided mode toggle, mirroring the OpenLIFUHome button.
-        self.ui.guidedModeToggleButton.clicked.connect(self.onGuidedModeToggleClicked)
+        # Top toolbar: Navigation (guided mode) and Permissions (user account
+        # mode) dropdowns. Each dropdown drives the corresponding global state
+        # via existing helpers; the comboboxes are kept in sync with those
+        # states through ``updateNavigationModeComboBox`` /
+        # ``updatePermissionsModeComboBox`` (called from observers below and on
+        # enter()).
+        self.ui.navigationModeComboBox.currentIndexChanged.connect(
+            self.onNavigationModeChanged
+        )
+        self.ui.permissionsModeComboBox.currentIndexChanged.connect(
+            self.onPermissionsModeChanged
+        )
+
+        # Dependencies collapsible section: status checks + install buttons.
+        # These previously lived on the Login page; they are independent of the
+        # login state so they belong on the Data page.
+        self.ui.installPythonRequirementsPushButton.clicked.connect(
+            self.onUpdateOpenLIFUClicked
+        )
+        self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
 
         # Protocols collapsible section
         self.ui.manageProtocolsPushButton.clicked.connect(
@@ -1266,20 +1298,68 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_sessionCollapsibleButton_checked_and_enabled()
         self.updateWorkflowControls()
 
-        # Sync the top-toolbar guided-mode toggle with whatever Home reports,
-        # and observe the Home parameter node so subsequent changes (e.g.
-        # toggled from OpenLIFUHome itself) keep this toggle in sync.
-        self.updateGuidedModeToggleButton()
+        # Sync the navigation dropdown with the current guided-mode state
+        # (Home is safe to touch during setup), then observe Home so external
+        # changes keep the dropdown in sync.
+        self._initDependencyStatus()
+        self.updateNavigationModeComboBox()
         try:
             home_parameter_node = slicer.util.getModuleLogic("OpenLIFUHome").getParameterNode()
             self.addObserver(
                 home_parameter_node,
                 vtk.vtkCommand.ModifiedEvent,
-                lambda caller, event: self.updateGuidedModeToggleButton(),
+                lambda caller, event: self.updateNavigationModeComboBox(),
             )
         except (AttributeError, RuntimeError):
-            # Home logic not ready yet; the toggle will still sync on enter().
+            # Home logic not ready yet; the dropdown will still sync on enter().
             pass
+
+        # IMPORTANT: defer ALL OpenLIFULogin interaction out of setup().
+        #
+        # Anything that reaches into the Login module - including
+        # ``get_user_account_mode_state()``, ``get_current_user()`` and
+        # ``slicer.util.getModuleLogic("OpenLIFULogin")`` - forces the Login
+        # widget to be instantiated. ``OpenLIFULoginWidget.setup`` then walks
+        # every OpenLIFU module's ``widgetRepresentation()`` to cache
+        # permission widgets, which re-enters this Data widget and drags
+        # OpenLIFUProtocolConfig into a half-built state (triggering
+        # ``AttributeError: 'pulse_definition_widget'``). Pushing this wiring
+        # onto a 0-ms QTimer runs it past the end of the current setup call so
+        # the Login cache-walk happens in isolation.
+        #
+        # The Permissions dropdown stays at its default "Unrestricted" value
+        # until this deferred sync runs (~1 event-loop tick later).
+        qt.QTimer.singleShot(0, self._wireDeferredLoginObservers)
+
+    def _wireDeferredLoginObservers(self) -> None:
+        """Wire Login-parameter-node observation, active-user callback, and
+        initial Permissions-dropdown sync.
+
+        Must run *after* this widget's setup() returns; see the comment in
+        setup() for why we defer it via QTimer.singleShot(0).
+        """
+        try:
+            login_parameter_node = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
+            self.addObserver(
+                login_parameter_node,
+                vtk.vtkCommand.ModifiedEvent,
+                lambda caller, event: (
+                    self.updatePermissionsModeComboBox(),
+                    self.updatePermissionsGating(),
+                ),
+            )
+        except (AttributeError, RuntimeError):
+            return
+        try:
+            slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
+                lambda _user: self.updatePermissionsGating()
+            )
+        except (AttributeError, RuntimeError):
+            pass
+        # Now that Login is fully alive, run the first sync of the Permissions
+        # dropdown and the per-section gating.
+        self.updatePermissionsModeComboBox()
+        self.updatePermissionsGating()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.logic.subject = None
@@ -1652,33 +1732,290 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
 
-    def updateGuidedModeToggleButton(self) -> None:
-        """Sync the top-toolbar guided-mode toggle with the Home module's state."""
+    def updateNavigationModeComboBox(self) -> None:
+        """Sync the Navigation dropdown with the Home module's guided-mode state."""
         try:
             in_guided_mode = bool(get_guided_mode_state())
         except (AttributeError, RuntimeError):
-            # The Home parameter node may not yet be available very early during
-            # application startup; skip the sync until it is.
+            # Home parameter node not yet available very early in startup.
             return
-        toggle = self.ui.guidedModeToggleButton
-        # Block signals while syncing so we don't re-fire the toggle handler.
-        was_blocked = toggle.blockSignals(True)
+        combo = self.ui.navigationModeComboBox
+        target_index = 1 if in_guided_mode else 0
+        if combo.currentIndex == target_index:
+            return
+        was_blocked = combo.blockSignals(True)
         try:
-            toggle.setChecked(in_guided_mode)
-            toggle.setText("Exit Guided Mode" if in_guided_mode else "Start Guided Mode")
+            combo.setCurrentIndex(target_index)
         finally:
-            toggle.blockSignals(was_blocked)
+            combo.blockSignals(was_blocked)
 
     @display_errors
-    def onGuidedModeToggleClicked(self, checked: bool) -> None:
-        """Enter or exit guided mode in response to the top-toolbar toggle."""
-        if checked:
+    def onNavigationModeChanged(self, index: int) -> None:
+        """Enter or exit guided mode in response to the Navigation dropdown."""
+        if index == 1:
             # Defer to the Home logic so the same start-of-workflow gating
             # (login, database selected, etc.) is enforced.
             slicer.util.getModuleLogic("OpenLIFUHome").start_guided_mode()
         else:
             set_guided_mode_state(False)
-        self.updateGuidedModeToggleButton()
+        # If start_guided_mode rejected the request, snap the dropdown back.
+        self.updateNavigationModeComboBox()
+
+    def updatePermissionsModeComboBox(self) -> None:
+        """Sync the Permissions dropdown with the Login module's user_account_mode state.
+
+        Safe to call before the Login module is instantiated: if the underlying
+        state isn't readable yet we leave the dropdown at its current value.
+        """
+        try:
+            uam = bool(get_user_account_mode_state())
+        except (AttributeError, RuntimeError):
+            return
+        combo = self.ui.permissionsModeComboBox
+        target_index = 1 if uam else 0
+        if combo.currentIndex == target_index:
+            return
+        was_blocked = combo.blockSignals(True)
+        try:
+            combo.setCurrentIndex(target_index)
+        finally:
+            combo.blockSignals(was_blocked)
+
+    @display_errors
+    def onPermissionsModeChanged(self, index: int) -> None:
+        """Toggle user account mode in response to the Permissions dropdown."""
+        set_user_account_mode_state(index == 1)
+        self.updatePermissionsGating()
+
+    def updatePermissionsGating(self) -> None:
+        """Gate the body of the Data page when permissions are restricted.
+
+        When Permissions = "User" and the active user is not authenticated
+        (i.e. the default anonymous user with no roles), disable the section
+        collapsibles below the top toolbar so the user is nudged to log in
+        before interacting with the rest of the page. Once they log in (or
+        switch back to Unrestricted), the sections re-enable.
+
+        Safe to call before the Login module is instantiated.
+        """
+        try:
+            uam = bool(get_user_account_mode_state())
+        except (AttributeError, RuntimeError):
+            uam = False
+        try:
+            cur_user = get_current_user()
+            has_role = bool(getattr(cur_user, "roles", None))
+        except (AttributeError, RuntimeError):
+            has_role = False
+        gate_active = uam and not has_role
+        # Section collapsibles to gate. The dependencies section is left
+        # enabled even when gated so the user can still install requirements.
+        gated_sections = [
+            self.ui.subjectCollapsibleButton,
+            self.ui.protocolsCollapsibleButton,
+            self.ui.transducersCollapsibleButton,
+            self.ui.objectsCollapsibleButton,
+        ]
+        for section in gated_sections:
+            section.setEnabled(not gate_active)
+            if gate_active:
+                section.setToolTip(
+                    "Permissions is set to 'User'. Log in to access this section."
+                )
+            else:
+                section.setToolTip("")
+
+    # ----- Dependency install (moved from OpenLIFULogin) -----
+
+    def _initDependencyStatus(self) -> None:
+        """Initialize the openlifu / ADB dependency status indicators."""
+        self._checkOpenLIFUVersionStatus()
+        self._checkADBStatus()
+
+    def _checkOpenLIFUVersionStatus(self) -> None:
+        import importlib.metadata
+        has_openlifu = python_requirements_exist()
+        version_ok = openlifu_version_matches() if has_openlifu else False
+
+        icon_name = (
+            qt.QStyle.SP_DialogApplyButton
+            if (has_openlifu and version_ok)
+            else qt.QStyle.SP_DialogCancelButton
+        )
+        pixmap = slicer.app.style().standardIcon(icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.openlifuStatusIcon.setPixmap(pixmap)
+        self.ui.openlifuStatusIcon.setText("")
+
+        if not has_openlifu:
+            self.ui.installPythonRequirementsPushButton.setText("Install Python Requirements")
+        elif not version_ok:
+            try:
+                installed = importlib.metadata.version("openlifu")
+            except importlib.metadata.PackageNotFoundError:
+                installed = "unknown"
+            required = get_required_openlifu_version() or "unknown"
+            self.ui.installPythonRequirementsPushButton.setText(
+                f"Update Python Requirements (openlifu: {installed} → {required})"
+            )
+        else:
+            try:
+                installed = importlib.metadata.version("openlifu")
+            except importlib.metadata.PackageNotFoundError:
+                installed = "unknown"
+            self.ui.installPythonRequirementsPushButton.setText(
+                f"Reinstall Python Requirements (openlifu: {installed})"
+            )
+
+    @display_errors
+    def onUpdateOpenLIFUClicked(self, checked: bool = False) -> None:
+        check_and_install_python_requirements(prompt_if_found=True)
+        self._checkOpenLIFUVersionStatus()
+
+    def _checkADBStatus(self) -> None:
+        try:
+            adb_result = subprocess.run(
+                ["adb", "--version"], capture_output=True, check=True, text=True
+            )
+            adb_version = (
+                adb_result.stdout.splitlines()[0]
+                if adb_result.stdout
+                else "unknown version"
+            )
+            adb_installed = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            adb_installed = False
+            adb_version = None
+
+        adb_icon_name = (
+            qt.QStyle.SP_DialogApplyButton
+            if adb_installed
+            else qt.QStyle.SP_DialogCancelButton
+        )
+        adb_pixmap = slicer.app.style().standardIcon(adb_icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.adbStatusIcon.setPixmap(adb_pixmap)
+        self.ui.adbStatusIcon.setText("")
+
+        if adb_installed:
+            self.ui.installADBPushButton.setEnabled(False)
+            self.ui.installADBPushButton.setText(
+                f"Android Platform Tools installed ({adb_version})"
+            )
+        else:
+            self.ui.installADBPushButton.setEnabled(True)
+            self.ui.installADBPushButton.setText("Install Android Platform Tools")
+
+    @display_errors
+    def onInstallADBClicked(self, checked: bool = False) -> None:
+        if sys.platform.startswith("win"):
+            self._installADBWindows()
+        elif sys.platform == "darwin":
+            self._installADBMac()
+        elif sys.platform.startswith("linux"):
+            self._installADBLinux()
+        else:
+            slicer.util.infoDisplay("ADB installation is not supported on this platform.")
+
+    def _installADBWindows(self) -> None:
+        if not slicer.util.confirmYesNoDisplay(
+            "This will download Android Platform Tools (~7 MB) from Google "
+            "and add the installation directory to your Windows user PATH. Continue?"
+        ):
+            return
+
+        selected_dir = qt.QFileDialog.getExistingDirectory(
+            slicer.util.mainWindow(),
+            "Choose installation directory for Android Platform Tools",
+            str(Path.home()),
+            qt.QFileDialog.ShowDirsOnly,
+        )
+        if not selected_dir:
+            return
+
+        selected_dir = Path(selected_dir)
+        self.ui.installADBPushButton.setEnabled(False)
+        tmp_dir = None
+
+        try:
+            ADB_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+
+            with BusyCursor():
+                tmp_dir = tempfile.mkdtemp(prefix="adb_install_")
+                zip_path = Path(tmp_dir) / "platform-tools-latest-windows.zip"
+
+                urllib.request.urlretrieve(ADB_URL, str(zip_path))
+
+                with zipfile.ZipFile(str(zip_path), "r") as zf:
+                    zf.extractall(str(selected_dir))
+
+                platform_tools_path = str(selected_dir / "platform-tools")
+
+                # Write to Windows user PATH registry key
+                # User PATH does not require admin permissions
+                import winreg
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    "Environment",
+                    0,
+                    winreg.KEY_READ | winreg.KEY_WRITE,
+                ) as reg_key:
+                    try:
+                        current_path, _ = winreg.QueryValueEx(reg_key, "Path")
+                    except FileNotFoundError:
+                        current_path = ""
+                    entries = [p for p in current_path.split(os.pathsep) if p]
+                    if platform_tools_path not in entries:
+                        entries.append(platform_tools_path)
+                        winreg.SetValueEx(
+                            reg_key,
+                            "Path",
+                            0,
+                            winreg.REG_EXPAND_SZ,
+                            os.pathsep.join(entries),
+                        )
+
+                # Patch the current process's PATH so the re-check below works immediately
+                os.environ["PATH"] = (
+                    os.environ.get("PATH", "") + os.pathsep + platform_tools_path
+                )
+
+        finally:
+            if tmp_dir is not None:
+                import shutil
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            self._checkADBStatus()
+
+    def _installADBMac(self) -> None:
+        if not slicer.util.confirmYesNoDisplay(
+            "This will run 'brew install android-platform-tools' to install ADB. "
+            "Homebrew must already be installed. Continue?"
+        ):
+            return
+
+        self.ui.installADBPushButton.setEnabled(False)
+        self.ui.installADBPushButton.setText("Installing via Homebrew...")
+        slicer.app.processEvents()
+
+        try:
+            with BusyCursor():
+                result = subprocess.run(
+                    ["brew", "install", "android-platform-tools"],
+                    capture_output=True,
+                    text=True,
+                )
+            if result.returncode != 0:
+                slicer.util.errorDisplay(
+                    f"Homebrew installation failed:\n{result.stderr or result.stdout}"
+                )
+        finally:
+            self._checkADBStatus()
+
+    def _installADBLinux(self) -> None:
+        slicer.util.infoDisplay(
+            "To install ADB on Debian-based Linux, run the following commands in a terminal:\n\n"
+            "    sudo apt update\n"
+            "    sudo apt install android-tools-adb\n\n"
+            "After installing, reopen the application to verify."
+        )
 
     @display_errors
     def onOpenLoginPopup(self, checked: bool = False) -> None:
@@ -1719,7 +2056,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
-        self.updateGuidedModeToggleButton()
+        self.updateNavigationModeComboBox()
+        self.updatePermissionsModeComboBox()
+        self.updatePermissionsGating()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
