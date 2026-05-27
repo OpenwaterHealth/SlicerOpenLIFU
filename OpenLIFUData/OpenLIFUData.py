@@ -37,7 +37,7 @@ from OpenLIFULib import (
     get_target_candidates,
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
 from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results,
@@ -1002,6 +1002,149 @@ def sessionInvalidatedDialogDisplay(message:str) -> bool:
     ).customexec_()
 
 
+class _ModuleWidgetPopupDialog(qt.QDialog):
+    """A modal dialog that presents another Slicer module's widget as a native popup.
+
+    The given module's ``widgetRepresentation()`` is temporarily reparented into
+    this dialog so its full UI and behaviour are preserved without duplicating
+    code. When the dialog closes the widget is reparented back. To make the
+    popup look like a native dialog (rather than a hosted module panel) we also
+    hide the developer-mode "Reload & Test" section and the guided-mode
+    workflow-controls widget while the dialog is open, and restore them on
+    close.
+    """
+
+    def __init__(self, module_name: str, title: str, parent=None):
+        qt.QDialog.__init__(self, parent or slicer.util.mainWindow())
+        self._module_name = module_name
+        self.setWindowTitle(title)
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.setMinimumWidth(450)
+
+        self._hosted_widget = slicer.util.getModule(module_name).widgetRepresentation()
+        # Remember where the widget originally lived so we can put it back.
+        self._original_parent = self._hosted_widget.parent()
+        self._original_visible = self._hosted_widget.visible
+
+        # Collect the embedded-panel-only chrome (dev "Reload & Test" section
+        # and guided-mode workflow controls) so we can hide it while the popup
+        # is shown and restore its previous visibility on close.
+        #
+        # The reload section is created by ``ScriptedLoadableModuleWidget.setup``
+        # without a Qt object name, but it is exposed as the Python attribute
+        # ``reloadCollapsibleButton`` on the Python widget instance (which we
+        # reach via ``slicer.util.getModuleWidget``). The workflow controls
+        # widget is a ``WorkflowControls``-class child that replaces the
+        # ``workflowControlsPlaceholder`` at module setup time, so we find it
+        # by class name in the widget tree.
+        self._hidden_children: "List[Tuple[qt.QWidget, bool]]" = []
+
+        try:
+            python_widget = slicer.util.getModuleWidget(module_name)
+        except Exception:  # noqa: BLE001 - widget may not yet be instantiated
+            python_widget = None
+        reload_section = getattr(python_widget, "reloadCollapsibleButton", None)
+        if reload_section is not None:
+            self._hidden_children.append((reload_section, reload_section.visible))
+            reload_section.setVisible(False)
+
+        for workflow_widget in slicer.util.findChildren(
+            self._hosted_widget, className="WorkflowControls"
+        ):
+            self._hidden_children.append((workflow_widget, workflow_widget.visible))
+            workflow_widget.setVisible(False)
+
+        layout = qt.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._hosted_widget)
+        self._hosted_widget.setVisible(True)
+
+        # Done button row.
+        button_row = qt.QHBoxLayout()
+        button_row.addStretch(1)
+        done_button = qt.QPushButton("Done")
+        # Wrap in lambda: QPushButton.clicked emits a `checked` bool which would
+        # otherwise be passed as a positional arg to QDialog.accept() and raise
+        # "Called accept() -> void with wrong number of arguments: (False,)".
+        done_button.clicked.connect(lambda: self.accept())
+        button_row.addWidget(done_button)
+        layout.addLayout(button_row)
+
+    def _restore_hosted_widget(self) -> None:
+        """Reparent the hosted widget back to its original parent."""
+        if self._hosted_widget is None:
+            return
+        # Restore the visibility of children we temporarily hid.
+        for child, was_visible in self._hidden_children:
+            try:
+                child.setVisible(was_visible)
+            except Exception:  # noqa: BLE001 - widget may already be gone
+                pass
+        self._hidden_children = []
+        # Reparent back. If the original parent has a layout, re-add to it; if
+        # not, just set the parent so Slicer's module panel can rediscover it
+        # the next time the module is selected.
+        self._hosted_widget.setParent(self._original_parent)
+        original_layout = (
+            self._original_parent.layout() if self._original_parent is not None else None
+        )
+        if original_layout is not None:
+            original_layout.addWidget(self._hosted_widget)
+        self._hosted_widget.setVisible(self._original_visible)
+        self._hosted_widget = None
+
+    def closeEvent(self, event):
+        # Note: do NOT call ``super().closeEvent(event)``. Slicer's Qt binding
+        # does not expose QWidget.closeEvent through ``super()`` and that raises
+        # ``AttributeError: 'super' object has no attribute 'closeEvent'``.
+        # QDialog's default closeEvent simply calls ``reject()``, which will
+        # route through ``done()`` below and trigger our cleanup.
+        self._restore_hosted_widget()
+
+    def done(self, result):
+        # done() is called for accept()/reject() and is the most reliable entry
+        # point that fires for both keyboard-Esc and the Done button.
+        self._restore_hosted_widget()
+        qt.QDialog.done(self, result)
+
+    def _restore_hosted_widget(self) -> None:
+        """Reparent the hosted widget back to its original parent."""
+        if self._hosted_widget is None:
+            return
+        # Restore the visibility of children we temporarily hid.
+        for child, was_visible in self._hidden_children:
+            try:
+                child.setVisible(was_visible)
+            except Exception:  # noqa: BLE001 - widget may already be gone
+                pass
+        self._hidden_children = []
+        # Reparent back. If the original parent has a layout, re-add to it; if
+        # not, just set the parent so Slicer's module panel can rediscover it
+        # the next time the module is selected.
+        self._hosted_widget.setParent(self._original_parent)
+        original_layout = (
+            self._original_parent.layout() if self._original_parent is not None else None
+        )
+        if original_layout is not None:
+            original_layout.addWidget(self._hosted_widget)
+        self._hosted_widget.setVisible(self._original_visible)
+        self._hosted_widget = None
+
+    def closeEvent(self, event):
+        # Note: do NOT call ``super().closeEvent(event)``. Slicer's Qt binding
+        # does not expose QWidget.closeEvent through ``super()`` and that raises
+        # ``AttributeError: 'super' object has no attribute 'closeEvent'``.
+        # QDialog's default closeEvent simply calls ``reject()``, which will
+        # route through ``done()`` below and trigger our cleanup.
+        self._restore_hosted_widget()
+
+    def done(self, result):
+        # done() is called for accept()/reject() and is the most reliable entry
+        # point that fires for both keyboard-Esc and the Done button.
+        self._restore_hosted_widget()
+        qt.QDialog.done(self, result)
+
+
 #
 # OpenLIFUDataWidget
 #
@@ -1057,7 +1200,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadedObjectsView.setColumnWidth(1, 150)
         self.ui.loadProtocolButton.clicked.connect(self.onLoadProtocolPressed)
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
-        self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
 
@@ -1083,8 +1225,25 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # ---- Internal button setup ----
 
-        # Go to protocol config
-        self.ui.configureProtocolsPushButton.clicked.connect(lambda : slicer.util.selectModule("OpenLIFUProtocolConfig"))
+        # Top toolbar: login and database popup buttons. These open the
+        # existing OpenLIFULogin / OpenLIFUDatabase module widgets inside a
+        # modal popup so the user does not have to navigate away from the
+        # Data page.
+        self.ui.loginPopupButton.clicked.connect(self.onOpenLoginPopup)
+        self.ui.databasePopupButton.clicked.connect(self.onOpenDatabasePopup)
+
+        # Top toolbar: guided mode toggle, mirroring the OpenLIFUHome button.
+        self.ui.guidedModeToggleButton.clicked.connect(self.onGuidedModeToggleClicked)
+
+        # Protocols collapsible section
+        self.ui.manageProtocolsPushButton.clicked.connect(
+            lambda: slicer.util.selectModule("OpenLIFUProtocolConfig")
+        )
+
+        # Transducers collapsible section (manager popup not yet implemented).
+        self.ui.manageTransducersPushButton.clicked.connect(
+            self.onManageTransducersClicked
+        )
 
         # Subject collapsible section
         self.ui.chooseSubjectButton.clicked.connect(self.on_load_subject_clicked)
@@ -1106,6 +1265,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_sessionCollapsibleButton_checked_and_enabled()
         self.updateWorkflowControls()
+
+        # Sync the top-toolbar guided-mode toggle with whatever Home reports,
+        # and observe the Home parameter node so subsequent changes (e.g.
+        # toggled from OpenLIFUHome itself) keep this toggle in sync.
+        self.updateGuidedModeToggleButton()
+        try:
+            home_parameter_node = slicer.util.getModuleLogic("OpenLIFUHome").getParameterNode()
+            self.addObserver(
+                home_parameter_node,
+                vtk.vtkCommand.ModifiedEvent,
+                lambda caller, event: self.updateGuidedModeToggleButton(),
+            )
+        except (AttributeError, RuntimeError):
+            # Home logic not ready yet; the toggle will still sync on enter().
+            pass
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.logic.subject = None
@@ -1240,15 +1414,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.logic.load_volume_from_file(filepath)
             self.updateLoadedObjectsView() # Call function here to update view based on node attributes
 
-
-    def onLoadFiducialsPressed(self) -> None:
-        """ Call slicer dialog to load fiducials into the scene"""
-
-        # Should use "slicer.util.openAddFiducialsDialog()"" to load the Fiducials dialog. This doesn't work because
-        # the ioManager functions are bugged - they have not been updated to use the new file type name for Markups.
-        # Instead, using a workaround that directly calls the ioManager with the correct file type name for Markups.
-        ioManager = slicer.app.ioManager()
-        return ioManager.openDialog("MarkupsFile", slicer.qSlicerFileDialog.Read)
 
     @display_errors
     def onLoadPhotoscanPressed(self, checked:bool) -> None:
@@ -1487,12 +1652,74 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
 
+    def updateGuidedModeToggleButton(self) -> None:
+        """Sync the top-toolbar guided-mode toggle with the Home module's state."""
+        try:
+            in_guided_mode = bool(get_guided_mode_state())
+        except (AttributeError, RuntimeError):
+            # The Home parameter node may not yet be available very early during
+            # application startup; skip the sync until it is.
+            return
+        toggle = self.ui.guidedModeToggleButton
+        # Block signals while syncing so we don't re-fire the toggle handler.
+        was_blocked = toggle.blockSignals(True)
+        try:
+            toggle.setChecked(in_guided_mode)
+            toggle.setText("Exit Guided Mode" if in_guided_mode else "Start Guided Mode")
+        finally:
+            toggle.blockSignals(was_blocked)
+
+    @display_errors
+    def onGuidedModeToggleClicked(self, checked: bool) -> None:
+        """Enter or exit guided mode in response to the top-toolbar toggle."""
+        if checked:
+            # Defer to the Home logic so the same start-of-workflow gating
+            # (login, database selected, etc.) is enforced.
+            slicer.util.getModuleLogic("OpenLIFUHome").start_guided_mode()
+        else:
+            set_guided_mode_state(False)
+        self.updateGuidedModeToggleButton()
+
+    @display_errors
+    def onOpenLoginPopup(self, checked: bool = False) -> None:
+        """Open the Login module's widget in a modal popup dialog."""
+        dialog = _ModuleWidgetPopupDialog(
+            module_name="OpenLIFULogin",
+            title="Login",
+            parent=slicer.util.mainWindow(),
+        )
+        dialog.exec_()
+
+    @display_errors
+    def onOpenDatabasePopup(self, checked: bool = False) -> None:
+        """Open the Database module's widget in a modal popup dialog."""
+        dialog = _ModuleWidgetPopupDialog(
+            module_name="OpenLIFUDatabase",
+            title="Database",
+            parent=slicer.util.mainWindow(),
+        )
+        dialog.exec_()
+
+    @display_errors
+    def onManageTransducersClicked(self, checked: bool = False) -> None:
+        """Open the Transducer manager popup.
+
+        This is a placeholder while the manager dialog is being implemented; for
+        now it informs the user that the feature is in progress.
+        """
+        slicer.util.infoDisplay(
+            text="The Transducer manager dialog is not yet implemented. "
+                 "Use 'Manual Object Load > Load Transducer' for now.",
+            windowTitle="Manage Transducers",
+        )
+
     def enter(self) -> None:
         """Called each time the user opens this module."""
         ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
+        self.updateGuidedModeToggleButton()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""

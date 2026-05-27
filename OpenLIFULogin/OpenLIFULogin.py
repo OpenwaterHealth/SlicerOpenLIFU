@@ -81,6 +81,11 @@ class OpenLIFULogin(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
+        # Hide this module from the module selector panel. Its functionality is
+        # surfaced via the Login popup on the Data page; the module's logic and
+        # widget representation remain accessible to other modules through
+        # ``slicer.util.getModuleLogic`` / ``slicer.util.getModuleWidget``.
+        self.parent.hidden = True
 
 class LoginState(Enum):
     NOT_LOGGED_IN=0

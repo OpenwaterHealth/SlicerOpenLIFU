@@ -67,6 +67,11 @@ class OpenLIFUDatabase(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
+        # Hide this module from the module selector panel. Its functionality is
+        # surfaced via the Database popup on the Data page; the module's logic
+        # and widget representation remain accessible to other modules through
+        # ``slicer.util.getModuleLogic`` / ``slicer.util.getModuleWidget``.
+        self.parent.hidden = True
 
 #
 # OpenLIFUDatabaseParameterNode
