@@ -45,28 +45,6 @@
       <item>
        <layout class="QHBoxLayout" name="topToolbarLayout">
         <item>
-         <widget class="QPushButton" name="loginPopupButton">
-          <property name="toolTip">
-           <string>Open the user login / account panel</string>
-          </property>
-          <property name="text">
-           <string>👤</string>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>32</width>
-            <height>28</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>40</width>
-            <height>28</height>
-           </size>
-          </property>
-         </widget>
-        </item>
-        <item>
          <widget class="QPushButton" name="databasePopupButton">
           <property name="toolTip">
            <string>Open the database configuration panel</string>
@@ -76,14 +54,36 @@
           </property>
           <property name="minimumSize">
            <size>
-            <width>32</width>
-            <height>28</height>
+            <width>40</width>
+            <height>32</height>
            </size>
           </property>
           <property name="maximumSize">
            <size>
+            <width>48</width>
+            <height>32</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="loginPopupButton">
+          <property name="toolTip">
+           <string>Open the user login / account panel</string>
+          </property>
+          <property name="text">
+           <string>👤</string>
+          </property>
+          <property name="minimumSize">
+           <size>
             <width>40</width>
-            <height>28</height>
+            <height>32</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>48</width>
+            <height>32</height>
            </size>
           </property>
          </widget>

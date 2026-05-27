@@ -1303,6 +1303,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # changes keep the dropdown in sync.
         self._initDependencyStatus()
         self.updateNavigationModeComboBox()
+        # Note: do NOT call updateToolbarButtonStates() here. It reads
+        # get_current_user() which routes through getModuleLogic("OpenLIFULogin"),
+        # forcing the Login widget to be instantiated and re-triggering the
+        # cache-walk recursion / ProtocolConfig AttributeError. The toolbar is
+        # styled once the deferred wiring runs (one event-loop tick later).
         try:
             home_parameter_node = slicer.util.getModuleLogic("OpenLIFUHome").getParameterNode()
             self.addObserver(
@@ -1352,19 +1357,24 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             return
         try:
             slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
-                lambda _user: self.updatePermissionsGating()
+                lambda _user: (
+                    self.updatePermissionsGating(),
+                    self.updateToolbarButtonStates(),
+                )
             )
         except (AttributeError, RuntimeError):
             pass
         # Now that Login is fully alive, run the first sync of the Permissions
-        # dropdown and the per-section gating.
+        # dropdown, per-section gating, and toolbar-button styling.
         self.updatePermissionsModeComboBox()
         self.updatePermissionsGating()
+        self.updateToolbarButtonStates()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.logic.subject = None
         self.logic.clear_session()
         self.update_loadSubjectButton_enabled()
+        self.updateToolbarButtonStates()
 
     def on_subject_changed(self, subject: Optional["openlifu.db.Subject"] = None):
         self.logic.clear_session()
@@ -1825,6 +1835,85 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             else:
                 section.setToolTip("")
 
+    def updateToolbarButtonStates(self) -> None:
+        """Reflect database / login status in the top-toolbar icon buttons.
+
+        - The Database button gets a red outline when no database is loaded,
+          green when a database is connected.
+        - The Login button stays unstyled when no user is signed in, and turns
+          green when a real (non-anonymous, non-default-admin) user is
+          authenticated. It is disabled whenever no database is loaded, since
+          login requires database access to look up users.
+
+        Safe to call before the Login module is instantiated.
+        """
+        # Stylesheet helper: a 2px coloured border around the emoji button
+        # without overriding padding (which would crush the glyph's render
+        # box and make the icon disappear). The selector is scoped to the
+        # specific objectName so it doesn't leak into nested QPushButtons.
+        def _outline_style(object_name: str, hex_color: str) -> str:
+            return (
+                f"QPushButton#{object_name} {{ "
+                f"border: 2px solid {hex_color}; "
+                f"border-radius: 4px; "
+                f"}}"
+            )
+
+        # --- Database ---
+        try:
+            db_connected = get_cur_db() is not None
+        except (AttributeError, RuntimeError):
+            db_connected = False
+        if db_connected:
+            self.ui.databasePopupButton.setStyleSheet(
+                _outline_style("databasePopupButton", "#2e7d32")
+            )
+            self.ui.databasePopupButton.setToolTip(
+                "Database is connected. Click to view or change."
+            )
+        else:
+            self.ui.databasePopupButton.setStyleSheet(
+                _outline_style("databasePopupButton", "#c62828")
+            )
+            self.ui.databasePopupButton.setToolTip(
+                "No database is connected. Click to choose a database directory."
+            )
+
+        # --- Login ---
+        try:
+            cur_user = get_current_user()
+        except (AttributeError, RuntimeError):
+            cur_user = None
+        # Treat "default_admin" and "anonymous" as not-signed-in for display
+        # purposes; both are stand-in users that the Login module assigns
+        # automatically depending on database / admin presence.
+        user_id = getattr(cur_user, "id", None)
+        is_real_user = (
+            cur_user is not None
+            and user_id not in (None, "anonymous", "default_admin")
+        )
+        if is_real_user:
+            self.ui.loginPopupButton.setStyleSheet(
+                _outline_style("loginPopupButton", "#2e7d32")
+            )
+            self.ui.loginPopupButton.setToolTip(
+                f"Signed in as {getattr(cur_user, 'name', '') or user_id}. "
+                f"Click to view account or log out."
+            )
+        else:
+            self.ui.loginPopupButton.setStyleSheet("")
+            self.ui.loginPopupButton.setToolTip(
+                "Not signed in. Click to log in."
+            )
+
+        # Login requires a database; disable the button when no database is
+        # loaded (it can't do anything useful in that state).
+        self.ui.loginPopupButton.setEnabled(db_connected)
+        if not db_connected:
+            self.ui.loginPopupButton.setToolTip(
+                "Connect a database first; login looks up users from the database."
+            )
+
     # ----- Dependency install (moved from OpenLIFULogin) -----
 
     def _initDependencyStatus(self) -> None:
@@ -2059,6 +2148,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateNavigationModeComboBox()
         self.updatePermissionsModeComboBox()
         self.updatePermissionsGating()
+        self.updateToolbarButtonStates()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
