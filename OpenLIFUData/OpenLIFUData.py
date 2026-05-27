@@ -1020,6 +1020,566 @@ def sessionInvalidatedDialogDisplay(message:str) -> bool:
     ).customexec_()
 
 
+# ---------------------------------------------------------------------------
+# Transducer Manager
+# ---------------------------------------------------------------------------
+
+# IDs that ship as part of the openlifu reference database and are required
+# as templates when constructing a TransducerArray from a connected device.
+# Deleting one of these is gated behind a confirmation dialog.
+PROTECTED_TRANSDUCER_IDS = frozenset({
+    "openlifu_1x155",
+    "openlifu_1x400",
+    "openlifu_2x155",
+    "openlifu_2x400",
+})
+
+# (n_modules, freq_khz) -> template id. Mirrors openlifu.xdc.transducerarray._DEFAULT_TEMPLATE_IDS.
+_TEMPLATE_IDS_BY_COUNT_FREQ: Dict[Tuple[int, int], str] = {
+    (1, 155): "openlifu_1x155",
+    (1, 400): "openlifu_1x400",
+    (2, 155): "openlifu_2x155",
+    (2, 400): "openlifu_2x400",
+}
+
+
+def _read_connected_user_configs(iface) -> List[dict]:
+    """Pull a ``user_config`` dict from every connected TX module.
+
+    Returns the list in module-index order. Raises ``RuntimeError`` if no
+    modules are connected or any ``read_config`` call returns ``None``.
+    """
+    if iface is None:
+        raise RuntimeError(
+            "The LIFU interface has not been initialized. Open the OpenLIFU "
+            "Sonication Control module to initialize the hardware interface."
+        )
+    txdevice = getattr(iface, "txdevice", None)
+    if txdevice is None:
+        raise RuntimeError("The LIFU interface has no TX device.")
+    count = int(txdevice.get_tx_module_count())
+    if count <= 0:
+        raise RuntimeError("No TX modules are connected.")
+    user_configs: List[dict] = []
+    for i in range(count):
+        cfg = txdevice.read_config(module=i)
+        if cfg is None:
+            raise RuntimeError(
+                f"Failed to read user_config from TX module {i}. "
+                f"The module may not have been provisioned."
+            )
+        user_configs.append(json.loads(cfg.get_json_str()))
+    return user_configs
+
+
+def _resolve_template_id_for_user_configs(user_configs: List[dict]) -> Tuple[str, Optional[dict]]:
+    """Return ``(template_id, device_block)`` for a list of module user_configs.
+
+    Prefers ``user_configs[0]["device"]["template"]`` if present, otherwise
+    falls back to ``(n_modules, freq)``. ``device_block`` is the parsed
+    ``device`` sub-dict of the lead module or ``None`` if no such block exists.
+
+    Raises:
+        RuntimeError: if neither source can resolve a template id (e.g. all
+            modules omit ``freq``).
+    """
+    device_block = user_configs[0].get("device") or None
+    if device_block:
+        tid = device_block.get("template")
+        if isinstance(tid, str) and tid:
+            return tid, device_block
+
+    freqs = {c.get("freq") for c in user_configs if c.get("freq") is not None}
+    if len(freqs) > 1:
+        raise RuntimeError(
+            f"Connected TX modules report mismatched frequencies: {sorted(freqs)}"
+        )
+    freq = next(iter(freqs)) if freqs else None
+    if freq is None:
+        raise RuntimeError(
+            "Connected TX modules do not report a frequency; cannot infer "
+            "a default template id."
+        )
+    tid = _TEMPLATE_IDS_BY_COUNT_FREQ.get((len(user_configs), int(freq)))
+    if tid is None:
+        raise RuntimeError(
+            f"No default template is defined for {len(user_configs)} module(s) "
+            f"at {int(freq)} kHz."
+        )
+    return tid, device_block
+
+
+class DeviceConfigEditDialog(qt.QDialog):
+    """Prompt the user for ``id`` + ``name`` of a new transducer assembled from a connected device.
+
+    Used by :class:`TransducerManagerDialog` when the connected device's
+    lead module does not yet carry a ``device`` block in its user_config.
+    The template id and the per-module HWID list are shown read-only so the
+    user can confirm what is being saved.
+    """
+
+    def __init__(self, template_id: str, module_hwids: List[str], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Add Transducer from Device")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.template_id = template_id
+        self.module_hwids = list(module_hwids)
+        self._setup()
+
+    def _setup(self) -> None:
+        layout = qt.QFormLayout()
+        self.setLayout(layout)
+
+        self.idEdit = qt.QLineEdit()
+        self.idEdit.setPlaceholderText("e.g. my_array_001")
+        layout.addRow(_("Transducer ID:"), self.idEdit)
+
+        self.nameEdit = qt.QLineEdit()
+        self.nameEdit.setPlaceholderText("e.g. My Array #1")
+        layout.addRow(_("Transducer Name:"), self.nameEdit)
+
+        templateLabel = qt.QLabel(self.template_id)
+        templateLabel.setStyleSheet("color: #888;")
+        templateLabel.setToolTip(
+            "Inferred from the number of connected modules and their reported "
+            "frequency. The template provides the mesh files."
+        )
+        layout.addRow(_("Template:"), templateLabel)
+
+        hwidList = qt.QListWidget()
+        hwidList.setSelectionMode(qt.QAbstractItemView.NoSelection)
+        hwidList.setFocusPolicy(qt.Qt.NoFocus)
+        for idx, hwid in enumerate(self.module_hwids):
+            hwidList.addItem(f"Module {idx}: {hwid}")
+        hwidList.setFixedHeight(min(120, 22 * max(1, len(self.module_hwids)) + 10))
+        layout.addRow(_("Modules:"), hwidList)
+
+        self.buttonBox = qt.QDialogButtonBox(qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
+        layout.addWidget(self.buttonBox)
+        self.buttonBox.accepted.connect(self._validate)
+        self.buttonBox.rejected.connect(self.reject)
+
+    def _validate(self) -> None:
+        if not self.idEdit.text.strip():
+            slicer.util.errorDisplay("Transducer ID is required.", parent=self)
+            return
+        if not self.nameEdit.text.strip():
+            slicer.util.errorDisplay("Transducer name is required.", parent=self)
+            return
+        self.accept()
+
+    def customexec_(self) -> Tuple[int, str, str]:
+        rc = self.exec_()
+        return rc, self.idEdit.text.strip(), self.nameEdit.text.strip()
+
+
+class TransducerManagerDialog(qt.QDialog):
+    """Tabular manager for transducer definitions stored in the loaded database.
+
+    Columns: ``[LED, ID, Name, Modules]``. The LED on a row is lit green when
+    the row's ID matches the ``device.id`` reported by the currently
+    connected hardware's lead module. Actions:
+
+    * **Add from File** -- existing ``load_transducer_from_file`` path.
+    * **Add from Device** -- calls
+      :py:meth:`openlifu.xdc.TransducerArray.get_connected` against the
+      OpenLIFUSonicationControl module's ``LIFUInterface``; surfaces the
+      "device config / hardware" validation errors from openlifu-python and
+      prompts the user for ``id`` + ``name`` when the lead module carries no
+      ``device`` block.
+    * **Preview** -- loads the selected transducer into the Slicer scene
+      via the existing ``load_transducer_from_openlifu`` path.
+    * **Delete** -- removes the selected transducer from the database, with
+      a special confirmation when one of the four built-in templates is
+      targeted.
+    """
+
+    def __init__(self, db: "openlifu.db.Database", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Manage Transducers")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.db = db
+        self._setup()
+        self.refresh()
+
+    # ---- UI ----
+    def _setup(self) -> None:
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        cols = ["", "ID", "Name", "Modules"]
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setHighlightSections(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 22)
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, qt.QHeaderView.Stretch)
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+        # Action buttons
+        actionRow = qt.QHBoxLayout()
+        self.addFileButton = qt.QPushButton("Add from File")
+        self.addFileButton.setToolTip("Load a transducer definition from a JSON file on disk")
+        self.addDeviceButton = qt.QPushButton("Add from Device")
+        self.addDeviceButton.setToolTip(
+            "Assemble a transducer definition from the connected TX modules' user_configs"
+        )
+        self.previewButton = qt.QPushButton("Preview")
+        self.previewButton.setToolTip("Load the selected transducer into the scene")
+        self.deleteButton = qt.QPushButton("Delete")
+        self.deleteButton.setToolTip("Remove the selected transducer from the database")
+        for b in (self.addFileButton, self.addDeviceButton, self.previewButton, self.deleteButton):
+            b.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            actionRow.addWidget(b)
+        layout.addLayout(actionRow)
+
+        # Close
+        bb = qt.QDialogButtonBox()
+        bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        self.addFileButton.clicked.connect(self.onAddFromFile)
+        self.addDeviceButton.clicked.connect(self.onAddFromDevice)
+        self.previewButton.clicked.connect(self.onPreview)
+        self.deleteButton.clicked.connect(self.onDelete)
+        self.table.doubleClicked.connect(self.onPreview)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.45), int(screen.height() * 0.35))
+
+    # ---- LED helpers ----
+    @staticmethod
+    def _make_led_icon(color: str) -> qt.QIcon:
+        """Build a small filled-circle icon in the requested CSS color."""
+        pix = qt.QPixmap(16, 16)
+        pix.fill(qt.Qt.transparent)
+        painter = qt.QPainter(pix)
+        try:
+            painter.setRenderHint(qt.QPainter.Antialiasing, True)
+            painter.setPen(qt.QPen(qt.QColor("#444"), 1))
+            painter.setBrush(qt.QBrush(qt.QColor(color)))
+            painter.drawEllipse(2, 2, 12, 12)
+        finally:
+            painter.end()
+        return qt.QIcon(pix)
+
+    def _connected_device_id(self) -> Optional[str]:
+        """Return the ``device.id`` from the lead-module user_config of the connected device.
+
+        Returns ``None`` if no device is connected, or the lead module carries
+        no ``device`` block, or any read fails.
+        """
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            iface = getattr(sc_logic, "cur_lifu_interface", None)
+            if iface is None:
+                return None
+            tx_conn, _hv = iface.is_device_connected()
+            if not tx_conn:
+                return None
+            cfg = iface.txdevice.read_config(module=0)
+            if cfg is None:
+                return None
+            data = json.loads(cfg.get_json_str())
+            dev = data.get("device") or {}
+            did = dev.get("id")
+            return did if isinstance(did, str) and did else None
+        except Exception as e:
+            logging.debug("Transducer manager: could not query connected device id: %s", e)
+            return None
+
+    # ---- Table population ----
+    def refresh(self) -> None:
+        self.table.setSortingEnabled(False)
+        self.table.clearContents()
+        try:
+            ids = list(self.db.get_transducer_ids() or [])
+        except Exception as e:
+            logging.warning("Could not list transducer ids: %s", e)
+            ids = []
+        connected_id = self._connected_device_id()
+        on_icon = self._make_led_icon("#2ecc71")   # green
+        off_icon = self._make_led_icon("#444")     # dim gray
+
+        self.table.setRowCount(len(ids))
+        for row, tid in enumerate(ids):
+            # Resolve metadata via a non-converting load so we get the TransducerArray.
+            try:
+                obj = self.db.load_transducer(tid, convert_array=False)
+                name = getattr(obj, "name", tid)
+                if hasattr(obj, "modules"):
+                    n_mods = len(obj.modules)
+                else:
+                    n_mods = 1
+            except Exception as e:
+                logging.warning("Could not load transducer %s for listing: %s", tid, e)
+                name = tid
+                n_mods = 0
+
+            led_item = qt.QTableWidgetItem()
+            led_item.setIcon(on_icon if (connected_id and tid == connected_id) else off_icon)
+            led_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
+            led_item.setToolTip("Connected" if (connected_id and tid == connected_id) else "")
+            self.table.setItem(row, 0, led_item)
+            self.table.setItem(row, 1, qt.QTableWidgetItem(str(tid)))
+            self.table.setItem(row, 2, qt.QTableWidgetItem(str(name)))
+            self.table.setItem(row, 3, qt.QTableWidgetItem(str(n_mods)))
+
+        self.table.resizeRowsToContents()
+        self.table.setSortingEnabled(True)
+
+    def _selected_transducer_id(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        if not items:
+            return None
+        row = items[0].row()
+        idItem = self.table.item(row, 1)
+        return idItem.text() if idItem else None
+
+    # ---- Actions ----
+    @display_errors
+    def onAddFromFile(self, checked: bool = False) -> None:
+        qsettings = qt.QSettings()
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(),
+            "Load transducer",
+            qsettings.value("OpenLIFU/databaseDirectory", "."),
+            "Transducers (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+        # Delegate to the existing module logic so the load is consistent with
+        # the legacy "Manual Object Load > Load Transducer" path. After loading
+        # into the scene, also persist into the database.
+        logic = slicer.util.getModuleLogic("OpenLIFUData")
+        loaded = logic.load_transducer_from_file(filepath)
+        if loaded is None:
+            # load_transducer_from_file currently returns None; fall back to
+            # parsing the file again to get something we can write to the db.
+            try:
+                obj = openlifu_lz().xdc.util.load_transducer_from_file(filepath, convert_array=False)
+            except Exception as e:
+                slicer.util.errorDisplay(f"Failed to read transducer file: {e}", parent=self)
+                return
+        else:
+            obj = loaded
+        try:
+            self.db.write_transducer(obj, on_conflict="overwrite")
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write transducer to database: {e}", parent=self)
+            return
+        self.refresh()
+
+    @display_errors
+    def onAddFromDevice(self, checked: bool = False) -> None:
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            iface = getattr(sc_logic, "cur_lifu_interface", None)
+        except (AttributeError, RuntimeError):
+            iface = None
+        if iface is None:
+            slicer.util.errorDisplay(
+                "The LIFU interface has not been initialized. Open the OpenLIFU "
+                "Sonication Control module to initialize the hardware interface.",
+                parent=self,
+            )
+            return
+        try:
+            tx_conn, _hv = iface.is_device_connected()
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not query device connection: {e}", parent=self)
+            return
+        if not tx_conn:
+            slicer.util.errorDisplay("No TX device is currently connected.", parent=self)
+            return
+
+        # 1. Pull user_configs.
+        try:
+            user_configs = _read_connected_user_configs(iface)
+        except Exception as e:
+            slicer.util.errorDisplay(
+                f"Could not read user_config from the connected device:\n\n{e}",
+                parent=self,
+            )
+            return
+
+        # 2. Resolve the template id (device.template if present, else count+freq).
+        try:
+            template_id, device_block = _resolve_template_id_for_user_configs(user_configs)
+        except Exception as e:
+            slicer.util.errorDisplay(str(e), parent=self)
+            return
+
+        # 3. Template MUST exist in the database -- the meshless fallback is
+        #    not acceptable in the Slicer UI (the meshes are needed for
+        #    visualization and registration).
+        try:
+            db_ids = list(self.db.get_transducer_ids() or [])
+        except Exception:
+            db_ids = []
+        if template_id not in db_ids:
+            slicer.util.errorDisplay(
+                f"The required template transducer '{template_id}' is not in the loaded "
+                f"database. Add it (e.g. from the openlifu sample database) and try again.",
+                parent=self,
+            )
+            return
+
+        # 4. If the device has no ``device`` block, prompt for id + name.
+        arr_id: Optional[str] = None
+        arr_name: Optional[str] = None
+        if device_block is None:
+            hwids = [str(c.get("hwid")) for c in user_configs]
+            dlg = DeviceConfigEditDialog(template_id=template_id, module_hwids=hwids, parent=self)
+            rc, arr_id, arr_name = dlg.customexec_()
+            if not rc:
+                return
+
+        # 5. Assemble. Use ``use_default_template=False`` so any future db
+        #    lookup failure becomes an error rather than a silent meshless
+        #    fallback. Capture the db-mismatch UserWarning emitted by
+        #    openlifu-python so we can surface it.
+        import warnings as _warnings
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
+            try:
+                arr = openlifu_lz().xdc.TransducerArray.get_connected(
+                    interface=iface,
+                    db=self.db,
+                    arr_id=arr_id,
+                    arr_name=arr_name,
+                    use_default_template=False,
+                )
+            except Exception as e:
+                slicer.util.errorDisplay(
+                    f"Failed to assemble transducer from device:\n\n{e}",
+                    parent=self,
+                )
+                return
+        mismatch_warning = next(
+            (str(w.message) for w in caught if "differs from the version" in str(w.message)),
+            None,
+        )
+        if mismatch_warning:
+            confirmed = slicer.util.confirmYesNoDisplay(
+                f"{mismatch_warning}\n\nOverwrite the database copy with the version "
+                f"assembled from the connected device?",
+                "Database mismatch",
+                parent=self,
+            )
+            if not confirmed:
+                return
+
+        # 6. Write to db, copying mesh files in from the template's directory.
+        try:
+            paths = self.db.get_transducer_absolute_filepaths(template_id) or {}
+            reg_path = paths.get("registration_surface_abspath") or None
+            body_path = paths.get("transducer_body_abspath") or None
+            self.db.write_transducer(
+                arr,
+                registration_surface_model_filepath=reg_path,
+                transducer_body_model_filepath=body_path,
+                on_conflict="overwrite",
+            )
+        except Exception as e:
+            slicer.util.errorDisplay(
+                f"Failed to write transducer to database:\n\n{e}",
+                parent=self,
+            )
+            return
+
+        slicer.util.infoDisplay(
+            f"Saved transducer '{arr.id}' to the database.",
+            windowTitle="Add from Device",
+            parent=self,
+        )
+        self.refresh()
+
+    @display_errors
+    def onPreview(self, *args) -> None:
+        tid = self._selected_transducer_id()
+        if not tid:
+            slicer.util.errorDisplay("Select a transducer first.", parent=self)
+            return
+        try:
+            obj = self.db.load_transducer(tid, convert_array=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not load transducer '{tid}': {e}", parent=self)
+            return
+        try:
+            abspaths = self.db.get_transducer_absolute_filepaths(tid)
+        except Exception:
+            abspaths = {}
+        logic = slicer.util.getModuleLogic("OpenLIFUData")
+        logic.load_transducer_from_openlifu(obj, abspaths)
+
+    @display_errors
+    def onDelete(self, *args) -> None:
+        tid = self._selected_transducer_id()
+        if not tid:
+            slicer.util.errorDisplay("Select a transducer first.", parent=self)
+            return
+        if tid in PROTECTED_TRANSDUCER_IDS:
+            confirmed = slicer.util.confirmYesNoDisplay(
+                "You are about to delete a built-in transducer definition. "
+                "This is used as a template when connecting new transducers of "
+                "this type. Are you sure you want to delete it?",
+                "Delete built-in transducer",
+                parent=self,
+            )
+        else:
+            confirmed = slicer.util.confirmYesNoDisplay(
+                f"Delete transducer '{tid}' from the database?",
+                "Delete transducer",
+                parent=self,
+            )
+        if not confirmed:
+            return
+        try:
+            self._delete_transducer_from_db(tid)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to delete transducer '{tid}': {e}", parent=self)
+            return
+        self.refresh()
+
+    def _delete_transducer_from_db(self, transducer_id: str) -> None:
+        """Remove ``transducer_id`` from the database.
+
+        ``openlifu.db.Database`` does not currently expose a ``delete_transducer``
+        method, so we mirror the on-disk layout produced by ``write_transducer``:
+        drop the id from ``transducers.json`` and remove the per-transducer
+        directory.
+        """
+        import shutil
+        ids = list(self.db.get_transducer_ids() or [])
+        if transducer_id not in ids:
+            return
+        ids = [i for i in ids if i != transducer_id]
+        self.db.write_transducer_ids(ids)
+        try:
+            transducer_dir = Path(self.db.get_transducer_filename(transducer_id)).parent
+            if transducer_dir.is_dir():
+                shutil.rmtree(transducer_dir)
+        except Exception as e:
+            logging.warning(
+                "Removed transducer '%s' from index but could not remove its "
+                "directory: %s",
+                transducer_id, e,
+            )
+
+
 class _ModuleWidgetPopupDialog(qt.QDialog):
     """A modal dialog that presents another Slicer module's widget as a native popup.
 
@@ -2341,14 +2901,19 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onManageTransducersClicked(self, checked: bool = False) -> None:
         """Open the Transducer manager popup.
 
-        This is a placeholder while the manager dialog is being implemented; for
-        now it informs the user that the feature is in progress.
+        Requires a loaded database. The dialog presents the transducers stored
+        in that database in a table and offers add-from-file / add-from-device
+        / preview / delete actions.
         """
-        slicer.util.infoDisplay(
-            text="The Transducer manager dialog is not yet implemented. "
-                 "Use 'Manual Object Load > Load Transducer' for now.",
-            windowTitle="Manage Transducers",
-        )
+        db = get_cur_db()
+        if db is None:
+            slicer.util.errorDisplay(
+                "A database must be loaded before the Transducer manager can be opened.",
+                windowTitle="Manage Transducers",
+            )
+            return
+        dlg = TransducerManagerDialog(db=db, parent=slicer.util.mainWindow())
+        dlg.exec_()
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
