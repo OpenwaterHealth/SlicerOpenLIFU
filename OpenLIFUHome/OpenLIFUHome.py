@@ -111,8 +111,10 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateGuidedModeButton()
 
         # Switch modules
-        self.ui.databasePushButton.clicked.connect(lambda : self.switchModule(self.ui.databasePushButton.text))
-        self.ui.loginPushButton.clicked.connect(lambda : self.switchModule(self.ui.loginPushButton.text))
+        # Note: the Database and Login modules are intentionally not surfaced
+        # from the Home page anymore. They are accessed via icon-button popups
+        # at the top of the Data page (their modules are hidden from the module
+        # selector).
         self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
         self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
         self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))

@@ -59,20 +59,6 @@
           <number>0</number>
          </property>
          <item>
-          <widget class="QPushButton" name="databasePushButton">
-           <property name="text">
-            <string>OpenLIFU Database</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="loginPushButton">
-           <property name="text">
-            <string>OpenLIFU Login</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QPushButton" name="dataPushButton">
            <property name="text">
             <string>OpenLIFU Data</string>
