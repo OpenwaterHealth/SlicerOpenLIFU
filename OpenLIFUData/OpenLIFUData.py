@@ -1110,33 +1110,53 @@ def _resolve_template_id_for_user_configs(user_configs: List[dict]) -> Tuple[str
 
 
 class DeviceConfigEditDialog(qt.QDialog):
-    """Prompt the user for ``id`` + ``name`` of a new transducer assembled from a connected device.
+    """Prompt the user for ``id`` + ``name`` of a transducer assembled from a connected device.
 
-    Used by :class:`TransducerManagerDialog` when the connected device's
-    lead module does not yet carry a ``device`` block in its user_config.
-    The template id and the per-module HWID list are shown read-only so the
-    user can confirm what is being saved.
+    Shown by :class:`TransducerManagerDialog` whenever the user clicks
+    *Add from Device*, regardless of whether the lead module already carries
+    a ``device`` block (existing values are pre-populated and remain
+    editable). The template id and the per-module HWID list are read-only so
+    the user can confirm what is being saved.
     """
 
-    def __init__(self, template_id: str, module_hwids: List[str], parent="mainWindow"):
+    def __init__(
+        self,
+        template_id: str,
+        module_hwids: List[str],
+        initial_id: str = "",
+        initial_name: str = "",
+        parent="mainWindow",
+    ):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
         self.setWindowTitle("Add Transducer from Device")
         self.setWindowModality(qt.Qt.WindowModal)
+        # Drop the unimplemented ``?`` help button from the title bar.
+        self.setWindowFlags(self.windowFlags() & ~qt.Qt.WindowContextHelpButtonHint)
         self.template_id = template_id
         self.module_hwids = list(module_hwids)
+        self._initial_id = initial_id
+        self._initial_name = initial_name
         self._setup()
 
     def _setup(self) -> None:
-        layout = qt.QFormLayout()
-        self.setLayout(layout)
+        # Outer VBox so we can place the form on top and the button row at the
+        # bottom; QFormLayout.addWidget does not span the form as a row, which
+        # is why the original button box wasn't showing up.
+        outer = qt.QVBoxLayout()
+        self.setLayout(outer)
+
+        form = qt.QFormLayout()
+        outer.addLayout(form)
 
         self.idEdit = qt.QLineEdit()
         self.idEdit.setPlaceholderText("e.g. my_array_001")
-        layout.addRow(_("Transducer ID:"), self.idEdit)
+        self.idEdit.setText(self._initial_id)
+        form.addRow(_("Transducer ID:"), self.idEdit)
 
         self.nameEdit = qt.QLineEdit()
         self.nameEdit.setPlaceholderText("e.g. My Array #1")
-        layout.addRow(_("Transducer Name:"), self.nameEdit)
+        self.nameEdit.setText(self._initial_name)
+        form.addRow(_("Transducer Name:"), self.nameEdit)
 
         templateLabel = qt.QLabel(self.template_id)
         templateLabel.setStyleSheet("color: #888;")
@@ -1144,7 +1164,7 @@ class DeviceConfigEditDialog(qt.QDialog):
             "Inferred from the number of connected modules and their reported "
             "frequency. The template provides the mesh files."
         )
-        layout.addRow(_("Template:"), templateLabel)
+        form.addRow(_("Template:"), templateLabel)
 
         hwidList = qt.QListWidget()
         hwidList.setSelectionMode(qt.QAbstractItemView.NoSelection)
@@ -1152,10 +1172,20 @@ class DeviceConfigEditDialog(qt.QDialog):
         for idx, hwid in enumerate(self.module_hwids):
             hwidList.addItem(f"Module {idx}: {hwid}")
         hwidList.setFixedHeight(min(120, 22 * max(1, len(self.module_hwids)) + 10))
-        layout.addRow(_("Modules:"), hwidList)
+        form.addRow(_("Modules:"), hwidList)
 
-        self.buttonBox = qt.QDialogButtonBox(qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
-        layout.addWidget(self.buttonBox)
+        # NOTE: PythonQt's QDialogButtonBox flag-constructor binding is flaky;
+        # construct empty and then setStandardButtons, like the other dialogs
+        # in this module (AddNewSubjectDialog, CreateNewSessionDialog).
+        self.buttonBox = qt.QDialogButtonBox()
+        self.buttonBox.setStandardButtons(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        # Per UX request: call the accept button "Finish".
+        finishBtn = self.buttonBox.button(qt.QDialogButtonBox.Ok)
+        if finishBtn is not None:
+            finishBtn.setText("Finish")
+        outer.addWidget(self.buttonBox)
         self.buttonBox.accepted.connect(self._validate)
         self.buttonBox.rejected.connect(self.reject)
 
@@ -1437,15 +1467,31 @@ class TransducerManagerDialog(qt.QDialog):
             )
             return
 
-        # 4. If the device has no ``device`` block, prompt for id + name.
-        arr_id: Optional[str] = None
-        arr_name: Optional[str] = None
-        if device_block is None:
-            hwids = [str(c.get("hwid")) for c in user_configs]
-            dlg = DeviceConfigEditDialog(template_id=template_id, module_hwids=hwids, parent=self)
-            rc, arr_id, arr_name = dlg.customexec_()
-            if not rc:
-                return
+        # 4. Always show the edit dialog (prepopulated from any existing
+        #    device block) so the user can confirm / change the id and name
+        #    before we assemble + write.
+        hwids = [str(c.get("hwid")) for c in user_configs]
+        initial_id = ""
+        initial_name = ""
+        if device_block is not None:
+            initial_id = str(device_block.get("id") or "")
+            initial_name = str(device_block.get("name") or "")
+        dlg = DeviceConfigEditDialog(
+            template_id=template_id,
+            module_hwids=hwids,
+            initial_id=initial_id,
+            initial_name=initial_name,
+            parent=self,
+        )
+        rc, arr_id, arr_name = dlg.customexec_()
+        if not rc:
+            return
+        # Detect changes that warrant pushing the new device block back to the
+        # connected hardware: either there was no device block at all, or the
+        # user edited the id or name.
+        id_changed = device_block is None or arr_id != initial_id
+        name_changed = device_block is None or arr_name != initial_name
+        should_offer_writeback = device_block is None or id_changed or name_changed
 
         # 5. Assemble. Use ``use_default_template=False`` so any future db
         #    lookup failure becomes an error rather than a silent meshless
@@ -1505,7 +1551,56 @@ class TransducerManagerDialog(qt.QDialog):
             windowTitle="Add from Device",
             parent=self,
         )
+
+        # 7. If the device block didn't exist (or the user edited id/name),
+        #    offer to push the new device block down to module 0 so the
+        #    physical device starts reporting it on the next read.
+        if should_offer_writeback:
+            confirmed = slicer.util.confirmYesNoDisplay(
+                "Write this transducer's device definition (id, name, modules) "
+                "back to the connected device's module 0?\n\n"
+                "This updates the on-device user_config so the device will "
+                "report itself as this transducer on subsequent connects.",
+                "Write device config",
+                parent=self,
+            )
+            if confirmed:
+                try:
+                    self._write_device_block_to_module0(iface, arr, user_configs[0])
+                except Exception as e:
+                    slicer.util.errorDisplay(
+                        f"Failed to write device config to module 0:\n\n{e}",
+                        parent=self,
+                    )
+
         self.refresh()
+
+    def _write_device_block_to_module0(self, iface, arr, lead_user_config: dict) -> None:
+        """Overwrite the ``device`` section of module 0's user_config and write it back.
+
+        Reads module 0's current user_config dict (passed in as
+        ``lead_user_config`` to avoid an extra round-trip), splices in the
+        new ``device`` block derived from the just-assembled
+        :class:`TransducerArray`, and calls
+        ``txdevice.write_config_json(json_str, module=0)``.
+        """
+        new_device = arr.to_device_config()
+        # ``to_device_config`` records the assembled template id when present
+        # so future ``get_connected`` calls can prefer it over the (count, freq)
+        # default mapping.
+        try:
+            template_id, _ = _resolve_template_id_for_user_configs([lead_user_config])
+            new_device.setdefault("template", template_id)
+        except Exception:
+            pass
+        updated = dict(lead_user_config)
+        updated["device"] = new_device
+        json_str = json.dumps(updated)
+        iface.txdevice.write_config_json(json_str, module=0)
+        logging.info(
+            "Wrote new device block (id=%s) to TX module 0 user_config.",
+            new_device.get("id"),
+        )
 
     @display_errors
     def onPreview(self, *args) -> None:
