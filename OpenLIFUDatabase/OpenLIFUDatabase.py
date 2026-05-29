@@ -1,5 +1,6 @@
 # Standard library imports
 import json
+import logging
 import os
 import shutil
 import sys
@@ -155,6 +156,14 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         # Call the routine to update from data parameter node
         self.updateAll()
 
+        # If a database was already loaded (e.g. by the auto-connect in
+        # OpenLIFUData firing during Slicer boot, before this widget was ever
+        # instantiated), our onDatabaseChanged callback never fired for that
+        # load. Run the post-load sync now so the line edit and status label
+        # reflect the live db.
+        if self.logic.db is not None:
+            self.onDatabaseChanged(self.logic.db)
+
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         if self.sampleDatabaseSetupController is not None:
@@ -279,6 +288,17 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.updateAll()
         if db is not None:
+            # Reflect the loaded db's path in the directory line edit. The
+            # bidirectional connectGui binding does not reliably propagate a
+            # parameter value that was set BEFORE the widget existed (e.g. by
+            # the auto-connect in OpenLIFUData firing during Slicer boot), so
+            # we set the path directly here.
+            try:
+                db_path_str = str(getattr(db, "path", "") or "")
+                if db_path_str and self.ui.databaseDirectoryLineEdit.currentPath != db_path_str:
+                    self.ui.databaseDirectoryLineEdit.setCurrentPath(db_path_str)
+            except Exception as e:
+                logging.warning("Could not sync databaseDirectoryLineEdit with db.path: %s", e)
             self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: 1px solid green;")
 
     def updateDatabaseConnectedStateLabel(self):
@@ -320,7 +340,36 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             True if the user selected a directory (clicked Open),
             False if the user canceled the dialog.
         """
-        previous_path: str = self.ui.databaseDirectoryLineEdit.currentPath or "."
+        # Determine the starting directory for the dialog. Source-of-truth
+        # priority (highest first):
+        #   1. The currently-loaded openlifu database's path -- this is the
+        #      most reliable signal right after restart-time auto-connect,
+        #      because the line edit may still show its placeholder "." even
+        #      though the db is fully loaded.
+        #   2. The persisted QSetting "OpenLIFU/databaseDirectory".
+        #   3. The line edit's currentPath (treating "" / "." as empty so we
+        #      don't pin the dialog to the working directory).
+        #   4. The user's home directory.
+        previous_path: str = ""
+        try:
+            cur_db = self.logic.db
+            if cur_db is not None:
+                cur_path = getattr(cur_db, "path", None)
+                if cur_path:
+                    previous_path = str(cur_path)
+        except Exception:
+            pass
+        if previous_path in ("", "."):
+            qsettings = qt.QSettings()
+            qs_path = str(qsettings.value("OpenLIFU/databaseDirectory", "") or "").strip()
+            if qs_path not in ("", "."):
+                previous_path = qs_path
+        if previous_path in ("", "."):
+            le_path = str(self.ui.databaseDirectoryLineEdit.currentPath or "").strip()
+            if le_path not in ("", "."):
+                previous_path = le_path
+        if previous_path in ("", "."):
+            previous_path = str(Path.home())
 
         selected_path: str = qt.QFileDialog.getExistingDirectory(
             self.ui.databaseDirectoryLineEdit,
@@ -374,6 +423,20 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
     @db.setter
     def db(self, db_value : Optional["openlifu.db.Database"]):
         self._db = db_value
+        # Push the db path into the parameter node so any GUI element bound via
+        # SlicerParameterName="databaseDirectory" (notably the
+        # databaseDirectoryLineEdit in the Database widget) reflects the live
+        # database location. This is important when the database is loaded
+        # outside of the Database widget's normal flow -- e.g. via the
+        # auto-connect on boot in OpenLIFUData, or when the widget is hosted
+        # inside the Data page popup and never receives an enter() call to
+        # hydrate its parameter node from QSettings.
+        try:
+            parameterNode = self.getParameterNode().parameterNode
+            if db_value is not None:
+                parameterNode.SetParameter("databaseDirectory", str(getattr(db_value, "path", "")))
+        except Exception as e:
+            logging.warning("Could not propagate db.path to parameter node: %s", e)
         for f in self._on_db_changed_callbacks:
             f(self._db)
 

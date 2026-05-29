@@ -1069,12 +1069,36 @@ def _read_connected_user_configs(iface) -> List[dict]:
     return user_configs
 
 
+def _module_count_from_template_id(template_id: str) -> Optional[int]:
+    """Parse the leading module count out of a template id like ``openlifu_2x400``.
+
+    Returns ``None`` if the id does not match the expected ``..._<N>x<freq>``
+    convention.
+    """
+    if not isinstance(template_id, str):
+        return None
+    tail = template_id.rsplit("_", 1)[-1]  # e.g. "2x400"
+    if "x" not in tail:
+        return None
+    head = tail.split("x", 1)[0]
+    try:
+        return int(head)
+    except ValueError:
+        return None
+
+
 def _resolve_template_id_for_user_configs(user_configs: List[dict]) -> Tuple[str, Optional[dict]]:
     """Return ``(template_id, device_block)`` for a list of module user_configs.
 
-    Prefers ``user_configs[0]["device"]["template"]`` if present, otherwise
-    falls back to ``(n_modules, freq)``. ``device_block`` is the parsed
-    ``device`` sub-dict of the lead module or ``None`` if no such block exists.
+    Prefers ``user_configs[0]["device"]["template"]`` if present **and** its
+    encoded module count agrees with ``len(user_configs)``. Otherwise falls
+    back to ``(n_modules, freq)``. ``device_block`` is the parsed ``device``
+    sub-dict of the lead module or ``None`` if no such block exists.
+
+    The consistency check guards against stale device metadata: e.g. a 2x
+    transducer whose module 0 was once provisioned with a ``openlifu_1x400``
+    template would otherwise be reported as 1x400 even after the second
+    module is connected.
 
     Raises:
         RuntimeError: if neither source can resolve a template id (e.g. all
@@ -1084,7 +1108,17 @@ def _resolve_template_id_for_user_configs(user_configs: List[dict]) -> Tuple[str
     if device_block:
         tid = device_block.get("template")
         if isinstance(tid, str) and tid:
-            return tid, device_block
+            recorded_count = _module_count_from_template_id(tid)
+            if recorded_count is None or recorded_count == len(user_configs):
+                return tid, device_block
+            # Stale / mismatched template id on module 0 -- ignore it and
+            # fall through to the (count, freq) inference below.
+            logging.warning(
+                "Ignoring stale device.template=%r on module 0: it claims %d "
+                "module(s) but %d are currently connected. Falling back to "
+                "count+freq inference.",
+                tid, recorded_count, len(user_configs),
+            )
 
     freqs = {c.get("freq") for c in user_configs if c.get("freq") is not None}
     if len(freqs) > 1:
@@ -2057,6 +2091,41 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updatePermissionsGating()
         self.updateToolbarButtonStates()
 
+        # If a database directory was remembered from a previous session
+        # (QSettings("OpenLIFU/databaseDirectory")) and it still looks like a
+        # valid openlifu database root, auto-connect to it now so the user
+        # doesn't have to re-open the Database popup on every Slicer boot.
+        self._tryAutoConnectDatabase()
+
+    def _tryAutoConnectDatabase(self) -> None:
+        """Best-effort auto-connect to the last-used openlifu database.
+
+        Reads the persisted ``OpenLIFU/databaseDirectory`` QSetting and, if it
+        points at a valid openlifu database root and no database is currently
+        loaded, calls the Database logic's ``load_database()``. All errors are
+        swallowed (logged) -- a missing or moved database directory must not
+        block module setup.
+        """
+        try:
+            if get_cur_db() is not None:
+                return  # already connected
+            qsettings = qt.QSettings()
+            path_str = qsettings.value("OpenLIFU/databaseDirectory", "")
+            if not path_str:
+                return
+            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            path = Path(str(path_str))
+            if not db_logic.path_is_openlifu_database_root(path):
+                logging.info(
+                    "Skipping database auto-connect: %s is not a valid openlifu "
+                    "database root.", path,
+                )
+                return
+            db_logic.load_database(path)
+            logging.info("Auto-connected to openlifu database at %s", path)
+        except Exception as e:
+            logging.warning("Database auto-connect failed: %s", e)
+
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
         self.logic.subject = None
         self.logic.clear_session()
@@ -2548,15 +2617,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # --- Database ---
         try:
-            db_connected = get_cur_db() is not None
+            cur_db = get_cur_db()
         except (AttributeError, RuntimeError):
-            db_connected = False
+            cur_db = None
+        db_connected = cur_db is not None
         if db_connected:
             self.ui.databasePopupButton.setStyleSheet(
                 _outline_style("databasePopupButton", "#2e7d32")
             )
+            db_path = getattr(cur_db, "path", None) or "(unknown location)"
             self.ui.databasePopupButton.setToolTip(
-                "Database is connected. Click to view or change."
+                f"Database is connected at:\n{db_path}\n\nClick to view or change."
             )
         else:
             self.ui.databasePopupButton.setStyleSheet(
@@ -2661,9 +2732,35 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     # ----- Dependency install (moved from OpenLIFULogin) -----
 
     def _initDependencyStatus(self) -> None:
-        """Initialize the openlifu / ADB dependency status indicators."""
+        """Initialize the openlifu / ADB dependency status indicators.
+
+        Also enforces the collapse defaults for the Dependencies section:
+
+        * The "Optional" sub-section (ADB) is always collapsed initially --
+          users rarely need it.
+        * The outer Dependencies section is collapsed when openlifu is
+          installed and version-matched (the common case) and expanded when
+          openlifu is missing or out of date so the user is immediately
+          pointed at the "Install/Update Python Requirements" button.
+        """
         self._checkOpenLIFUVersionStatus()
         self._checkADBStatus()
+
+        # Optional dependencies (ADB) -- always start collapsed.
+        try:
+            self.ui.installDependenciesCollapsibleGroupBox.collapsed = True
+        except AttributeError:
+            pass
+
+        # Outer Dependencies section -- expanded only when openlifu is not OK.
+        openlifu_ok = python_requirements_exist() and openlifu_version_matches()
+        try:
+            self.ui.dependenciesCollapsibleButton.collapsed = bool(openlifu_ok)
+            # ctkCollapsibleButton's ``checked`` mirrors ``not collapsed``
+            # in the .ui file; keep them in sync defensively.
+            self.ui.dependenciesCollapsibleButton.setChecked(not openlifu_ok)
+        except AttributeError:
+            pass
 
     def _checkOpenLIFUVersionStatus(self) -> None:
         import importlib.metadata
@@ -3017,6 +3114,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updatePermissionsModeComboBox()
         self.updatePermissionsGating()
         self.updateToolbarButtonStates()
+        # If a database directory was remembered but auto-connect did not run
+        # at startup (e.g. the Database logic wasn't reachable yet), try again
+        # on each entry into the module so the user sees the database loaded.
+        self._tryAutoConnectDatabase()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
