@@ -97,8 +97,13 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUHomeLogic()
-        self.setupCloudSyncToolBar()
         # === Connections and UI setup =======
+
+        # The standalone OpenLIFUCloudSync module has been deprecated -- its
+        # controls live in the Database popup on the Data page. We still
+        # bootstrap the singleton logic here so the background sync engine
+        # can autostart on boot when the user has it enabled.
+        getCloudSyncLogic()
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -136,55 +141,14 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         slicer.util.selectModule(moduleButtonText)
 
-    def setupCloudSyncToolBar(self):
-        mw = slicer.util.mainWindow()
-        try:
-            self.openLIFUToolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
-        except:
-            self.openLIFUToolBar = None
-        if not self.openLIFUToolBar:
-            self.openLIFUToolBar = qt.QToolBar("CloudSync Toolbar")
-            self.openLIFUToolBar.setObjectName("CloudSyncToolBar")
-            mw.addToolBar(self.openLIFUToolBar)
-
-        self.syncAction = self.openLIFUToolBar.findChild(qt.QAction, "OpenLIFUToolbarSyncAction")
-
-        if not self.syncAction:
-            self.syncAction = qt.QAction("Sync Cloud", self.openLIFUToolBar)
-            self.syncAction.setObjectName("OpenLIFUToolbarSyncAction")
-
-            moduleDir = os.path.dirname(__file__)
-            iconPath = os.path.join(moduleDir, 'Resources', 'Icons','sync.png')
-            self.syncAction.setIcon(qt.QIcon(iconPath))
-
-            self.openLIFUToolBar.addAction(self.syncAction)
-
-            self.syncAction.triggered.connect(self.onToolbarSyncTriggered)
-        
-    def onToolbarSyncTriggered(self):
-        # 1. Save current module for the 'Back' button
-        current_mod = slicer.util.moduleSelector().selectedModule
-        if current_mod != "OpenLIFUCloudSync":
-            slicer.util.mainWindow().setProperty("OpenLIFU_PreviousModule", current_mod)
-        # 2. Switch to the new independent module
-        slicer.util.selectModule("OpenLIFUCloudSync")
-    
-    def onSyncClicked(self):
-        """Handler for when the toolbar button is pressed."""
-        try:            
-            slicer.util.getModuleLogic("OpenLIFUDatabase").performSync()
-            slicer.util.infoDisplay("Synchronization completed successfully.")
-        except Exception as e:
-            slicer.util.errorDisplay(f"Sync failed: {str(e)}")
-        finally:
-            qt.QApplication.restoreOverrideCursor()
-
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
 
+        # Legacy: an older build of this module installed a "CloudSyncToolBar"
+        # that navigated to the now-deprecated OpenLIFUCloudSync module.
+        # Remove it on cleanup if it is still present from a previous launch.
         mw = slicer.util.mainWindow()
-        # Find and remove the entire toolbar
         toolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
         if toolBar:
             mw.removeToolBar(toolBar)
