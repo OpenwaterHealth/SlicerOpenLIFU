@@ -29,6 +29,9 @@ class CloudStatusHelper(qt.QObject):
     statusChanged = qt.Signal(str, str)
     # Generic state-changed signal (login / service running / enabled flags)
     stateChanged = qt.Signal()
+    # Emits the active cloud environment name (e.g. "prod", "dev"). Fired
+    # at startup and any time the environment is re-evaluated.
+    environmentChanged = qt.Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -41,6 +44,16 @@ class OpenLIFUCloudSync(ScriptedLoadableModule):
         self.parent.categories = [
             translate("qSlicerAbstractCoreModule", "OpenLIFU")]
         self.parent.dependencies = ["OpenLIFUHome"]
+        self.parent.contributors = ["Andrew Howe (Kitware), Erik (NVP Software)"]
+        self.parent.helpText = _(
+            "Cloud sync controls have moved into the Database popup on the Data page. "
+            "This module provides the background sync engine."
+        )
+        self.parent.acknowledgementText = _(
+            "This is part of Openwater's OpenLIFU, an open-source "
+            "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
+            "and development."
+        )
         # Deprecated: cloud-sync controls now live inside the Database popup
         # on the Data page. The logic class below is still the source of
         # truth for the background sync engine, but this standalone module
@@ -74,15 +87,50 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     _SETTING_REFRESH_TOKEN = "OpenLIFU/CloudRefreshToken"
     _SETTING_SERVICE_ENABLED = "OpenLIFU/CloudSyncEnabled"
     _SETTING_LAST_SYNC = "OpenLIFU/CloudLastSync"
+    _SETTING_ACCOUNT_EMAIL = "OpenLIFU/CloudAccountEmail"
+    _SETTING_ENVIRONMENT = "OpenLIFU/CloudEnvironment"
+
+    # API keys per environment.
+    _API_KEYS = {
+        "prod": "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY",
+        "dev": "AIzaSyA45zDuDfjpkgmnszo5SRsoLdL4mJqgA8E",
+    }
 
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
         self.syncProcess = None
-        self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
         self._cloudTokens = None
         self._last_sync_timestamp = qt.QSettings().value(self._SETTING_LAST_SYNC, "") or ""
         self._last_status_message = ""
         self._service_failed = False
+
+        # Determine the active environment from the ``OPENLIFU_CLOUD_ENV``
+        # system environment variable. Anything other than "prod" is
+        # surfaced verbatim so a future "dev2" / "staging" doesn't need
+        # code changes here. If the value is missing or "prod", we treat
+        # it as production.
+        previous_environment = qt.QSettings().value(self._SETTING_ENVIRONMENT, "prod")
+        self.environment = self.getEnvironment()
+        # API key: use the table when known, otherwise fall back to prod
+        # (so unknown/staging environments still authenticate against the
+        # same Identity Toolkit project as prod by default).
+        self.apiKey = self._API_KEYS.get(self.environment, self._API_KEYS["prod"])
+
+        # Switching environments invalidates any saved credentials, since
+        # the refresh token is bound to a specific Firebase project.
+        if self.environment != previous_environment:
+            qt.QSettings().setValue(self._SETTING_ENVIRONMENT, self.environment)
+            logger.info(
+                f"Cloud environment changed from '{previous_environment}' to "
+                f"'{self.environment}'; clearing stored credentials."
+            )
+            # Note: forget_credentials() is safe even though the heartbeat
+            # timer hasn't started yet -- it just clears state.
+            self._stopSyncProcess()
+            self._cloudTokens = None
+            qt.QSettings().remove(self._SETTING_REFRESH_TOKEN)
+            qt.QSettings().remove(self._SETTING_ACCOUNT_EMAIL)
+
         # Instantiate signal bridge
         self.statusHelper = CloudStatusHelper()
 
@@ -99,6 +147,28 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
         # Defer heartbeat startup
         qt.QTimer.singleShot(1000, self.startHeartbeat)
+        # Surface the active environment to any listeners that hooked up
+        # before this point in the construction sequence.
+        qt.QTimer.singleShot(0, lambda: self.statusHelper.environmentChanged.emit(self.environment))
+
+    # ---------------- Environment ----------------
+
+    def getEnvironment(self) -> str:
+        """Read the active cloud environment from ``OPENLIFU_CLOUD_ENV``.
+
+        Defaults to ``"prod"`` when the variable is unset or empty. Any
+        non-empty value other than "prod" is returned in lowercase as-is
+        so future environments (e.g. "dev2", "staging") do not require
+        code changes.
+        """
+        env = (os.getenv("OPENLIFU_CLOUD_ENV") or "prod").strip().lower()
+        if not env:
+            env = "prod"
+        self.environment = env
+        return env
+
+    def is_production_environment(self) -> bool:
+        return self.environment == "prod"
 
     # ---------------- Service-enabled flag ----------------
 
@@ -162,6 +232,9 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def get_status_message(self) -> str:
         return self._last_status_message or ""
+
+    def get_account_email(self) -> str:
+        return qt.QSettings().value(self._SETTING_ACCOUNT_EMAIL, "") or ""
 
     # ---------------- Heartbeat / process supervision ----------------
 
@@ -232,8 +305,13 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self.syncProcess.readyReadStandardOutput.connect(self.onProcessOutput)
         self.syncProcess.finished.connect(self.onProcessFinished)
 
-        args = [scriptPath, "--db_path", db_dir, "--api_key",
-                self.apiKey, "--refresh_token", refresh_token]
+        args = [
+            scriptPath,
+            "--db_path", db_dir,
+            "--api_key", self.apiKey,
+            "--refresh_token", refresh_token,
+            "--env", self.environment,
+        ]
         self.syncProcess.start(sys.executable, args)
         logger.info("Cloud Sync Engine started via QProcess.")
         self._service_failed = False
@@ -390,8 +468,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
                 "refreshToken": data['refreshToken'],
                 "expiresAt": time.time() + int(data['expiresIn'])
             }
-            qt.QSettings().setValue(
-                self._SETTING_REFRESH_TOKEN, data['refreshToken'])
+            qt.QSettings().setValue(self._SETTING_REFRESH_TOKEN, data['refreshToken'])
+            qt.QSettings().setValue(self._SETTING_ACCOUNT_EMAIL, email)
             self._service_failed = False
             qt.QTimer.singleShot(100, self.heartbeat)
             self._notifyStateChanged()
@@ -408,6 +486,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self._stopSyncProcess()
         self._cloudTokens = None
         qt.QSettings().remove(self._SETTING_REFRESH_TOKEN)
+        qt.QSettings().remove(self._SETTING_ACCOUNT_EMAIL)
         self._notifyStateChanged()
 
     def logout(self):

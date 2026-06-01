@@ -22,6 +22,7 @@ from OpenLIFULib.util import (
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 
 from OpenLIFUCloudSync import getCloudSyncLogic
+
 #
 # OpenLIFUHome
 #
@@ -80,8 +81,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
-
-        getCloudSyncLogic()
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
