@@ -236,11 +236,21 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             return
 
         moduleDir = os.path.dirname(__file__)
-        scriptPath = os.path.abspath(os.path.join(
-            moduleDir, "..", "bin", "OpenLIFUCloudSyncCLI.py"))
+        # In a packaged / CMake-built layout the CLI is installed to
+        # ``<lib>/bin/OpenLIFUCloudSyncCLI.py`` (a sibling of the
+        # ``qt-scripted-modules`` directory that holds this file). When
+        # running from the source tree it lives in the
+        # ``OpenLIFUCloudSyncEngine`` subfolder. Try both.
+        candidatePaths = [
+            os.path.abspath(os.path.join(moduleDir, "..", "bin", "OpenLIFUCloudSyncCLI.py")),
+            os.path.abspath(os.path.join(moduleDir, "OpenLIFUCloudSyncEngine", "OpenLIFUCloudSyncCLI.py")),
+        ]
+        scriptPath = next((p for p in candidatePaths if os.path.exists(p)), None)
 
-        if not os.path.exists(scriptPath):
-            logging.error(f"Sync Engine not found at: {scriptPath}")
+        if scriptPath is None:
+            logging.error(
+                "Sync Engine not found. Looked in: " + ", ".join(candidatePaths)
+            )
             self._service_failed = True
             self._notifyStateChanged()
             return
@@ -306,17 +316,53 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self._safeStatusUpdate("Sync Stopped")
 
     def _stopSyncProcess(self) -> None:
-        """Terminate the background sync process if it is running."""
-        if self.syncProcess and self.syncProcess.state() != qt.QProcess.NotRunning:
-            logger.info("Stopping background sync engine...")
-            try:
-                self.syncProcess.terminate()
-                if not self.syncProcess.waitForFinished(2000):
-                    self.syncProcess.kill()
-            finally:
-                self.syncProcess = None
-        else:
+        """Terminate the background sync process if it is running.
+
+        Uses a graceful three-stage shutdown so we don't end up with the
+        Qt warning "QProcess: Destroyed while process is still running":
+
+        1. Ask the engine to shut down by writing ``STOP\\n`` and closing
+           its stdin. The engine watches stdin and runs ``cloud.stop()``
+           cleanly when it sees EOF or the STOP sentinel.
+        2. If it doesn't exit within 5 s, fall back to ``terminate()``.
+        3. If it still hasn't exited after another 2 s, ``kill()`` it and
+           wait for the OS to reap the process before dropping the
+           QProcess reference.
+        """
+        proc = self.syncProcess
+        if proc is None or proc.state() == qt.QProcess.NotRunning:
             self.syncProcess = None
+            return
+
+        logger.info("Stopping background sync engine...")
+        self._safeStatusUpdate("Stopping...")
+        try:
+            # Stage 1: graceful stdin handshake.
+            try:
+                proc.write(b"STOP\n")
+                proc.closeWriteChannel()
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"Could not send STOP to sync engine: {e}")
+
+            if proc.waitForFinished(5000):
+                return
+
+            # Stage 2: terminate.
+            logger.warning(
+                "Sync engine did not stop after STOP request; terminating.")
+            proc.terminate()
+            if proc.waitForFinished(2000):
+                return
+
+            # Stage 3: hard kill, and wait so the QProcess wrapper isn't
+            # destroyed while the OS process is still running.
+            logger.warning(
+                "Sync engine did not respond to terminate; killing.")
+            proc.kill()
+            proc.waitForFinished(2000)
+        finally:
+            self.syncProcess = None
+            self._safeStatusUpdate("Sync stopped.")
 
     def cleanup(self):
         """Gracefully kill the background process."""
