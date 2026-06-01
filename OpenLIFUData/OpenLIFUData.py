@@ -2108,7 +2108,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # (QSettings("OpenLIFU/databaseDirectory")) and it still looks like a
         # valid openlifu database root, auto-connect to it now so the user
         # doesn't have to re-open the Database popup on every Slicer boot.
-        self._tryAutoConnectDatabase()
+        # Defer this an additional event-loop tick so the Data widget has a
+        # chance to paint before the (potentially slow) openlifu lazy-import
+        # and database scan run.
+        qt.QTimer.singleShot(50, self._tryAutoConnectDatabase)
 
     def _tryAutoConnectDatabase(self) -> None:
         """Best-effort auto-connect to the last-used openlifu database.
@@ -2118,6 +2121,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         loaded, calls the Database logic's ``load_database()``. All errors are
         swallowed (logged) -- a missing or moved database directory must not
         block module setup.
+
+        Shows a modal "Loading database..." popup while the load runs, since
+        the very first ``load_database`` call triggers the lazy import of the
+        entire ``openlifu`` package and can take a few seconds.
         """
         try:
             if get_cur_db() is not None:
@@ -2134,8 +2141,24 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                     "database root.", path,
                 )
                 return
-            db_logic.load_database(path)
-            logging.info("Auto-connected to openlifu database at %s", path)
+
+            progress = qt.QProgressDialog(
+                _("Loading database..."), "", 0, 0, slicer.util.mainWindow()
+            )
+            progress.setWindowTitle(_("OpenLIFU"))
+            progress.setWindowModality(qt.Qt.ApplicationModal)
+            progress.setCancelButton(None)
+            progress.setMinimumDuration(0)
+            progress.setAutoClose(False)
+            progress.setAutoReset(False)
+            progress.show()
+            slicer.app.processEvents()
+            try:
+                db_logic.load_database(path)
+                logging.info("Auto-connected to openlifu database at %s", path)
+            finally:
+                progress.close()
+                progress.deleteLater()
         except Exception as e:
             logging.warning("Database auto-connect failed: %s", e)
 
@@ -2760,6 +2783,35 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             tx_conn, hv_conn = iface.is_device_connected() if iface is not None else (False, False)
         except (AttributeError, RuntimeError):
             tx_conn, hv_conn = False, False
+
+        # Log device-connection status whenever the (tx, hv) tuple changes
+        # from the previous call so the user can see what the outline color
+        # actually represents. The OWSignal-driven connect/disconnect logs
+        # in OpenLIFUSonicationControl only fire on transitions during a
+        # running session; this sees the polled state too (e.g. on first
+        # render with the device already in use by another Slicer instance,
+        # where no signal ever fires).
+        prev = getattr(self, "_last_device_conn_state", "unset")
+        cur = (bool(tx_conn), bool(hv_conn))
+        if cur != prev:
+            self._last_device_conn_state = cur
+            if cur == (True, True):
+                logging.info("Hardware device fully connected (TX + HV).")
+            elif cur == (True, False):
+                logging.info("Hardware device partially connected (TX only).")
+            elif cur == (False, True):
+                logging.info("Hardware device partially connected (HV only).")
+            else:
+                if iface is None:
+                    logging.info(
+                        "Hardware device not connected "
+                        "(SonicationControl interface not yet initialized)."
+                    )
+                else:
+                    logging.info(
+                        "Hardware device not connected. The COM ports may be "
+                        "in use by another application or no device is plugged in."
+                    )
         if tx_conn and hv_conn:
             self.ui.devicePopupButton.setStyleSheet(
                 _outline_style("devicePopupButton", "#2e7d32")  # green
