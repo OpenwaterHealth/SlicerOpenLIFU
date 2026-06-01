@@ -152,6 +152,9 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.ui.cloudLoginButton.clicked.connect(self.onCloudLoginButtonClicked)
         self._cloudSyncLogic.statusHelper.statusChanged.connect(self._onCloudStatusChanged)
         self._cloudSyncLogic.statusHelper.stateChanged.connect(self._refreshCloudSyncUI)
+        self._cloudSyncLogic.statusHelper.environmentChanged.connect(
+            lambda _env: self._refreshCloudSyncUI()
+        )
         # Sync the checkbox to its persisted setting without firing the
         # toggled handler (which would needlessly call set_service_enabled).
         self.ui.enableCloudSyncCheckBox.blockSignals(True)
@@ -435,6 +438,15 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             self.ui.cloudLastSyncValueLabel.text = last
         elif not self.ui.cloudLastSyncValueLabel.text:
             self.ui.cloudLastSyncValueLabel.text = _("Never")
+
+        # Environment row: hidden for production, shown otherwise so the
+        # user can tell at a glance which Firebase project is active.
+        env = logic.environment or "prod"
+        show_env = env != "prod"
+        self.ui.cloudEnvironmentLabel.setVisible(show_env)
+        self.ui.cloudEnvironmentValueLabel.setVisible(show_env)
+        if show_env:
+            self.ui.cloudEnvironmentValueLabel.text = env
 
         # Login/Logout button label.
         if logged_in:
