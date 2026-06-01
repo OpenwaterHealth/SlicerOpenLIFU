@@ -2091,6 +2091,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updatePermissionsGating()
         self.updateToolbarButtonStates()
 
+        # Cloud-sync state changes (login / service running / enabled flag)
+        # need to repaint the database popup button outline + icon overlay.
+        try:
+            from OpenLIFUCloudSync import getCloudSyncLogic
+            getCloudSyncLogic().call_on_state_changed(
+                lambda: self.updateToolbarButtonStates()
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         # If a database directory was remembered from a previous session
         # (QSettings("OpenLIFU/databaseDirectory")) and it still looks like a
         # valid openlifu database root, auto-connect to it now so the user
@@ -2621,14 +2631,55 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         except (AttributeError, RuntimeError):
             cur_db = None
         db_connected = cur_db is not None
+
+        # Cloud-sync overlay state. We mirror the database button's icon
+        # text to communicate cloud state when the user has opted into the
+        # service:
+        #   - service disabled       -> "📁"   (plain folder)
+        #   - service enabled, OK    -> "☁📁"  (cloud + folder, green outline)
+        #   - service enabled, broken-> "🌩📁" (cloud-with-bolt + folder,
+        #                                       yellow outline)
+        # The yellow / red / green priority for the outline is:
+        #   no DB                    -> red
+        #   DB + sync disabled       -> green
+        #   DB + sync enabled + OK   -> green
+        #   DB + sync enabled + bad  -> yellow
+        try:
+            from OpenLIFUCloudSync import getCloudSyncLogic
+            cs_logic = getCloudSyncLogic()
+            cs_enabled = cs_logic.is_service_enabled()
+            cs_running = cs_logic.is_service_running()
+            cs_logged_in = cs_logic.is_logged_in()
+            cs_failed = cs_logic.did_service_fail()
+        except Exception:  # noqa: BLE001 - logic optional
+            cs_enabled = cs_running = cs_logged_in = cs_failed = False
+
+        cloud_ok = cs_enabled and cs_running and cs_logged_in and not cs_failed
+        cloud_broken = cs_enabled and not cloud_ok
+
+        if cs_enabled and cloud_ok:
+            self.ui.databasePopupButton.setText("☁📁")
+        elif cloud_broken:
+            self.ui.databasePopupButton.setText("🌩📁")
+        else:
+            self.ui.databasePopupButton.setText("📁")
+
         if db_connected:
+            outline_color = "#f9a825" if cloud_broken else "#2e7d32"  # yellow / green
             self.ui.databasePopupButton.setStyleSheet(
-                _outline_style("databasePopupButton", "#2e7d32")
+                _outline_style("databasePopupButton", outline_color)
             )
             db_path = getattr(cur_db, "path", None) or "(unknown location)"
-            self.ui.databasePopupButton.setToolTip(
-                f"Database is connected at:\n{db_path}\n\nClick to view or change."
-            )
+            tip = f"Database is connected at:\n{db_path}"
+            if cs_enabled:
+                if cloud_ok:
+                    tip += "\n\nCloud sync: running"
+                elif not cs_logged_in:
+                    tip += "\n\nCloud sync: enabled but not logged in"
+                elif cs_failed or not cs_running:
+                    tip += "\n\nCloud sync: service failed to start"
+            tip += "\n\nClick to view or change."
+            self.ui.databasePopupButton.setToolTip(tip)
         else:
             self.ui.databasePopupButton.setStyleSheet(
                 _outline_style("databasePopupButton", "#c62828")

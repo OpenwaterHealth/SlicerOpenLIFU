@@ -2,11 +2,10 @@ import qt
 import slicer
 import time
 import os
+import requests
 import signal
 import logging
-from pathlib import Path
-from OpenLIFULib import ensure_python_requirements_for_module_enter
-from OpenLIFULib.util import display_errors
+from typing import Callable, List
 from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
@@ -28,6 +27,8 @@ def getCloudSyncLogic():
 class CloudStatusHelper(qt.QObject):
     # Signal carries: (statusMessage, timestamp)
     statusChanged = qt.Signal(str, str)
+    # Generic state-changed signal (login / service running / enabled flags)
+    stateChanged = qt.Signal()
 
     def __init__(self):
         super().__init__()
@@ -40,92 +41,129 @@ class OpenLIFUCloudSync(ScriptedLoadableModule):
         self.parent.categories = [
             translate("qSlicerAbstractCoreModule", "OpenLIFU")]
         self.parent.dependencies = ["OpenLIFUHome"]
+        # Deprecated: cloud-sync controls now live inside the Database popup
+        # on the Data page. The logic class below is still the source of
+        # truth for the background sync engine, but this standalone module
+        # is hidden from the module selector.
+        self.parent.hidden = True
 
 
 class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
+    """Minimal placeholder widget. The cloud-sync UI now lives in the
+    Database popup; this widget exists only so the module can still be
+    instantiated by Slicer without errors.
+    """
+
     def setup(self):
         ScriptedLoadableModuleWidget.setup(self)
-        self.logic = getCloudSyncLogic()
+        # Make sure the singleton logic is alive so QSettings-based
+        # autostart on boot still works.
+        getCloudSyncLogic()
 
-        uiPath = os.path.join(os.path.dirname(__file__),
-                              'Resources', 'UI', 'OpenLIFUCloudSync.ui')
-        if not os.path.exists(uiPath):
-            uiPath = self.resourcePath('UI/OpenLIFUCloudSync.ui')
-
-        self.uiWidget = slicer.util.loadUI(uiPath)
-        self.layout.addWidget(self.uiWidget)
-        self.ui = slicer.util.childWidgetVariables(self.uiWidget)
-
-        # Connect UI signals
-        self.ui.backButton.clicked.connect(self.onBack)
-        self.ui.loginButton.clicked.connect(self.onLoginToggle)
-
-        if hasattr(self.ui, 'syncButton'):
-            self.ui.syncButton.hide()
-
-        self.logic.statusHelper.statusChanged.connect(
-            self.onCloudStatusChanged)
-
-        self.updateGUI()
-
-    def enter(self):
-        ensure_python_requirements_for_module_enter()
-        self.updateGUI()
-
-    def onCloudStatusChanged(self, message, timestamp):
-        """Thread-safe update of UI labels from background cloud events."""
-        slicer.util.showStatusMessage(f"Cloud: {message}", 3000)
-        if hasattr(self.ui, 'lastSyncLabel'):
-            self.ui.lastSyncLabel.text = timestamp
-
-    def updateGUI(self):
-        token = self.logic.getValidToken()
-        isLoggedIn = token is not None
-        self.ui.statusLabel.text = _(
-            "Logged In") if isLoggedIn else _("Not Logged In")
-        self.ui.loginButton.text = _(
-            "Logout") if isLoggedIn else _("Login to Cloud")
-
-    def onBack(self, checked=False):
-        prev_module = slicer.util.mainWindow().property("OpenLIFU_PreviousModule")
-        slicer.util.selectModule(
-            prev_module if prev_module else "OpenLIFUHome")
-
-    def onLoginToggle(self, checked=False):
-        if self.logic.getValidToken():
-            self.logic.logout()
-        else:
-            from OpenLIFULogin import UsernamePasswordDialog
-            dlg = UsernamePasswordDialog()
-            res, user, pw = dlg.customexec_()
-            if res == qt.QDialog.Accepted:
-                success, msg = self.logic.login(user, pw)
-                if not success:
-                    slicer.util.errorDisplay(f"Login failed: {msg}")
-        self.updateGUI()
+        label = qt.QLabel(
+            _("Cloud Sync controls have moved into the Database popup on the Data page.")
+        )
+        label.setWordWrap(True)
+        self.layout.addWidget(label)
+        self.layout.addStretch(1)
 
 
 class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
+
+    # QSettings keys
+    _SETTING_REFRESH_TOKEN = "OpenLIFU/CloudRefreshToken"
+    _SETTING_SERVICE_ENABLED = "OpenLIFU/CloudSyncEnabled"
+    _SETTING_LAST_SYNC = "OpenLIFU/CloudLastSync"
+
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
         self.syncProcess = None
         self.apiKey = "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
         self._cloudTokens = None
-        self._isServiceRunning = False
-        self._active_runner = None
+        self._last_sync_timestamp = qt.QSettings().value(self._SETTING_LAST_SYNC, "") or ""
+        self._last_status_message = ""
+        self._service_failed = False
         # Instantiate signal bridge
         self.statusHelper = CloudStatusHelper()
 
+        self._state_callbacks: List[Callable[[], None]] = []
+
         # Cleanup connections for both graceful and terminal exits
         slicer.app.connect("aboutToQuit()", self.cleanup)
-        signal.signal(signal.SIGINT, self._handleTerminalInterrupt)
+        try:
+            signal.signal(signal.SIGINT, self._handleTerminalInterrupt)
+        except (ValueError, OSError):
+            # signal.signal can only be called from the main thread; ignore
+            # if the logic is instantiated outside of it.
+            pass
 
         # Defer heartbeat startup
         qt.QTimer.singleShot(1000, self.startHeartbeat)
 
-        # self.dummyTimer = qt.QTimer()
-        # self.dummyTimer.timeout.connect(lambda: None) # Do nothing
-        # self.dummyTimer.start(100) # Fire every 100ms to "nudge" the GIL
+    # ---------------- Service-enabled flag ----------------
+
+    def is_service_enabled(self) -> bool:
+        """True if the user has opted in to running the background sync
+        service. Persisted across sessions in QSettings."""
+        v = qt.QSettings().value(self._SETTING_SERVICE_ENABLED, False)
+        # QSettings on some platforms stores bools as strings.
+        if isinstance(v, str):
+            return v.lower() in ("1", "true", "yes")
+        return bool(v)
+
+    def set_service_enabled(self, enabled: bool) -> None:
+        """Toggle the cloud-sync service. When disabled, any running
+        background process is stopped immediately. Credentials are NOT
+        cleared by this call."""
+        qt.QSettings().setValue(self._SETTING_SERVICE_ENABLED, bool(enabled))
+        if enabled:
+            self._service_failed = False
+            qt.QTimer.singleShot(100, self.heartbeat)
+        else:
+            self._stopSyncProcess()
+        self._notifyStateChanged()
+
+    # ---------------- State observers ----------------
+
+    def call_on_state_changed(self, f: Callable[[], None]) -> None:
+        self._state_callbacks.append(f)
+
+    def _notifyStateChanged(self) -> None:
+        for f in list(self._state_callbacks):
+            try:
+                f()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Cloud-sync state callback failed: {e}")
+        try:
+            self.statusHelper.stateChanged.emit()
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ---------------- Status accessors ----------------
+
+    def is_logged_in(self) -> bool:
+        """True iff a refresh token is stored. The token may still need
+        refreshing before any API call."""
+        return bool(qt.QSettings().value(self._SETTING_REFRESH_TOKEN))
+
+    def is_service_running(self) -> bool:
+        return (
+            self.syncProcess is not None
+            and self.syncProcess.state() != qt.QProcess.NotRunning
+        )
+
+    def did_service_fail(self) -> bool:
+        """True if the service was enabled and a launch attempt failed (or the
+        process exited unexpectedly) without a subsequent successful start."""
+        return self._service_failed
+
+    def get_last_sync_timestamp(self) -> str:
+        return self._last_sync_timestamp or ""
+
+    def get_status_message(self) -> str:
+        return self._last_status_message or ""
+
+    # ---------------- Heartbeat / process supervision ----------------
 
     def _handleTerminalInterrupt(self, signum, frame):
         """Ensures cleanup runs even if Ctrl+C is pressed in terminal."""
@@ -141,6 +179,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def heartbeat(self):
         logger.info("Heartbeat: Checking Cloud Sync status...")
+        if not self.is_service_enabled():
+            return
         token = self.getValidToken()
         if not self.syncProcess and token:
             self.attemptAutoStartSync()
@@ -148,7 +188,9 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def _safeStatusUpdate(self, status):
         """Thread-safe bridge to emit UI updates from background threads."""
         timestamp = time.strftime("%H:%M:%S")
+        self._last_status_message = status
         self.statusHelper.statusChanged.emit(status, timestamp)
+        self._notifyStateChanged()
 
     def attemptAutoStartSync(self):
         import sys
@@ -156,12 +198,17 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         if self.syncProcess and self.syncProcess.state() != qt.QProcess.NotRunning:
             return
 
+        if not self.is_service_enabled():
+            return
+
         db_dir = qt.QSettings().value("OpenLIFU/databaseDirectory")
-        refresh_token = qt.QSettings().value("OpenLIFU/CloudRefreshToken")
+        refresh_token = qt.QSettings().value(self._SETTING_REFRESH_TOKEN)
         token = self.getValidToken()
 
         if not token or not refresh_token or not db_dir:
             logger.warning("Sync failed: Missing token or database directory.")
+            self._service_failed = True
+            self._notifyStateChanged()
             return
 
         moduleDir = os.path.dirname(__file__)
@@ -170,6 +217,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
         if not os.path.exists(scriptPath):
             logging.error(f"Sync Engine not found at: {scriptPath}")
+            self._service_failed = True
+            self._notifyStateChanged()
             return
 
         env = qt.QProcessEnvironment.systemEnvironment()
@@ -187,6 +236,9 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
                 self.apiKey, "--refresh_token", refresh_token]
         self.syncProcess.start(sys.executable, args)
         logger.info("Cloud Sync Engine started via QProcess.")
+        self._service_failed = False
+        self._last_status_message = "Starting"
+        self._notifyStateChanged()
 
     def onProcessOutput(self):
         """Captures real-time prints and logs from the child process."""
@@ -215,24 +267,40 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
                 elif line.startswith("SYNC_COMPLETED_AT:"):
                     timestamp = line.split(":", 1)[1]
+                    self._last_sync_timestamp = timestamp
+                    qt.QSettings().setValue(self._SETTING_LAST_SYNC, timestamp)
+                    self._last_status_message = "Idle"
                     self.statusHelper.statusChanged.emit("Idle", timestamp)
+                    self._notifyStateChanged()
 
     def onProcessFinished(self, exitStatus):
         logger.info(f"Sync Engine stopped. Exit code: {exitStatus}")
+        # If the user still wants the service enabled, the unexpected exit
+        # is a failure; otherwise it was an explicit stop.
+        if self.is_service_enabled():
+            self._service_failed = True
         self._safeStatusUpdate("Sync Stopped")
+
+    def _stopSyncProcess(self) -> None:
+        """Terminate the background sync process if it is running."""
+        if self.syncProcess and self.syncProcess.state() != qt.QProcess.NotRunning:
+            logger.info("Stopping background sync engine...")
+            try:
+                self.syncProcess.terminate()
+                if not self.syncProcess.waitForFinished(2000):
+                    self.syncProcess.kill()
+            finally:
+                self.syncProcess = None
+        else:
+            self.syncProcess = None
 
     def cleanup(self):
         """Gracefully kill the background process."""
-        if self.syncProcess and self.syncProcess.state() != qt.QProcess.NotRunning:
-            logger.info("Stopping background sync engine...")
-            self.syncProcess.terminate()
-            if not self.syncProcess.waitForFinished(2000):
-                self.syncProcess.kill()
-            self.syncProcess = None
+        self._stopSyncProcess()
 
     def getValidToken(self):
         if not self._cloudTokens:
-            savedRef = qt.QSettings().value("OpenLIFU/CloudRefreshToken")
+            savedRef = qt.QSettings().value(self._SETTING_REFRESH_TOKEN)
             if not savedRef:
                 return None
             self._cloudTokens = {"refreshToken": savedRef, "expiresAt": 0}
@@ -261,30 +329,89 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             logger.error(f"Token refresh failed: {e}")
             self._cloudTokens = None
 
-    def login(self, email, password):
-        """Authenticates user and saves refresh token."""
-        import requests
+    # Map Firebase Identity Toolkit error codes to user-friendly text.
+    # See https://firebase.google.com/docs/reference/rest/auth#section-sign-in-email-password
+    _LOGIN_ERROR_MESSAGES = {
+        "EMAIL_NOT_FOUND": "No account with that email was found.",
+        "INVALID_PASSWORD": "Incorrect password.",
+        "INVALID_LOGIN_CREDENTIALS": "Incorrect email or password.",
+        "INVALID_EMAIL": "The email address is not valid.",
+        "MISSING_PASSWORD": "Please enter a password.",
+        "MISSING_EMAIL": "Please enter an email.",
+        "USER_DISABLED": "This account has been disabled by an administrator.",
+        "TOO_MANY_ATTEMPTS_TRY_LATER":
+            "Too many failed attempts. Please wait and try again.",
+        "OPERATION_NOT_ALLOWED": "Password sign-in is disabled for this project.",
+    }
 
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
+    def _friendly_login_error(self, response, exc) -> str:
+        """Translate a Firebase auth response (or transport exception) into
+        a one-line user-readable message."""
+        # Network / no-response failure.
+        if response is None:
+            if isinstance(exc, requests.exceptions.Timeout):
+                return "Login timed out. Check your network connection."
+            if isinstance(exc, requests.exceptions.ConnectionError):
+                return "Could not reach the cloud login server. Check your network connection."
+            return f"Login failed: {exc}"
+        # Try to parse the Firebase error envelope.
+        code = None
         try:
-            r = requests.post(url, json={
+            payload = response.json()
+            err = payload.get("error", {}) if isinstance(payload, dict) else {}
+            raw = err.get("message", "") if isinstance(err, dict) else ""
+            # Firebase sometimes appends details after a colon, e.g.
+            # "TOO_MANY_ATTEMPTS_TRY_LATER : ...". Strip to the first token.
+            code = raw.split(":", 1)[0].strip() if raw else None
+        except ValueError:
+            code = None
+        mapped = self._LOGIN_ERROR_MESSAGES.get(code) if code else None
+        if mapped:
+            return mapped
+        if response.status_code == 400:
+            return "Login failed: invalid credentials or request was rejected by the server."
+        if 500 <= response.status_code < 600:
+            return f"Cloud login server error ({response.status_code}). Please try again later."
+        return f"Login failed ({response.status_code})."
+
+    def login(self, email, password):
+        """Authenticates user and saves refresh token.
+
+        Returns ``(success, message)``. On failure, ``message`` is a short
+        user-readable string suitable for display in a popup or status bar.
+        """
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
+        response = None
+        try:
+            response = requests.post(url, json={
                               "email": email, "password": password, "returnSecureToken": True}, timeout=5)
-            r.raise_for_status()
-            data = r.json()
+            response.raise_for_status()
+            data = response.json()
             self._cloudTokens = {
                 "idToken": data['idToken'],
                 "refreshToken": data['refreshToken'],
                 "expiresAt": time.time() + int(data['expiresIn'])
             }
             qt.QSettings().setValue(
-                "OpenLIFU/CloudRefreshToken", data['refreshToken'])
+                self._SETTING_REFRESH_TOKEN, data['refreshToken'])
+            self._service_failed = False
             qt.QTimer.singleShot(100, self.heartbeat)
+            self._notifyStateChanged()
             return True, "Success"
         except Exception as e:
-            logger.error(f"Login error: {e}")
-            return False, str(e)
+            friendly = self._friendly_login_error(response, e)
+            logger.error(f"Login error: {friendly} (raw: {e})")
+            return False, friendly
+
+    def forget_credentials(self):
+        """Clear stored credentials. Stops the service (since it can't run
+        without a refresh token) but does NOT toggle the service-enabled
+        flag, so the next successful login will resume autostart."""
+        self._stopSyncProcess()
+        self._cloudTokens = None
+        qt.QSettings().remove(self._SETTING_REFRESH_TOKEN)
+        self._notifyStateChanged()
 
     def logout(self):
-        self.cleanup()
-        self._cloudTokens = None
-        qt.QSettings().remove("OpenLIFU/CloudRefreshToken")
+        """Backwards-compatible alias for forget_credentials."""
+        self.forget_credentials()

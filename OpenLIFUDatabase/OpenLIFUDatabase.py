@@ -141,6 +141,21 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.ui.connectDatabaseButton.clicked.connect(self.onLoadDatabaseClicked)
         self.ui.databaseDirectoryLineEdit.currentPathChanged.connect(self.on_database_directory_path_changed)
 
+        # ---- Cloud Sync controls (formerly OpenLIFUCloudSync module) ----
+        from OpenLIFUCloudSync import getCloudSyncLogic
+        self._cloudSyncLogic = getCloudSyncLogic()
+        self._cloud_login_error: Optional[str] = None
+        self.ui.enableCloudSyncCheckBox.toggled.connect(self.onEnableCloudSyncToggled)
+        self.ui.cloudLoginButton.clicked.connect(self.onCloudLoginButtonClicked)
+        self._cloudSyncLogic.statusHelper.statusChanged.connect(self._onCloudStatusChanged)
+        self._cloudSyncLogic.statusHelper.stateChanged.connect(self._refreshCloudSyncUI)
+        # Sync the checkbox to its persisted setting without firing the
+        # toggled handler (which would needlessly call set_service_enabled).
+        self.ui.enableCloudSyncCheckBox.blockSignals(True)
+        self.ui.enableCloudSyncCheckBox.setChecked(self._cloudSyncLogic.is_service_enabled())
+        self.ui.enableCloudSyncCheckBox.blockSignals(False)
+        self._refreshCloudSyncUI()
+
         # You do not need to connect databaseDirectoryLineEdit
         # currentPathChanged to something that updates the parameter node
         # because the SlicerParameterName dynamic property was given to the
@@ -324,6 +339,114 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         character. Note: focus only affects border when the line edit is
         actively selected!"""
         self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: 1px solid yellow;")
+
+    # ---- Cloud Sync ----------------------------------------------------
+
+    @display_errors
+    def onEnableCloudSyncToggled(self, checked: bool) -> None:
+        self._cloudSyncLogic.set_service_enabled(bool(checked))
+        # _refreshCloudSyncUI is invoked via the stateChanged signal.
+
+    @display_errors
+    def onCloudLoginButtonClicked(self, checked: bool = False) -> None:
+        if self._cloudSyncLogic.is_logged_in():
+            # Logged-in: button acts as Logout / Forget Credentials.
+            self._cloudSyncLogic.forget_credentials()
+            self._setCloudLoginError(None)
+            return
+        from OpenLIFULogin import UsernamePasswordDialog
+        dlg = UsernamePasswordDialog()
+        res, user, pw = dlg.customexec_()
+        if res != qt.QDialog.Accepted:
+            return
+
+        # Immediate "Logging in..." feedback. The login() call below is a
+        # synchronous blocking HTTP request (5s timeout) so we show a small
+        # modal progress dialog with no cancel button to keep the user
+        # informed while it runs.
+        progress = qt.QProgressDialog(
+            _("Logging in to cloud..."), "", 0, 0, slicer.util.mainWindow()
+        )
+        progress.setWindowTitle(_("Cloud Login"))
+        progress.setWindowModality(qt.Qt.ApplicationModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.show()
+        slicer.app.processEvents()
+        try:
+            success, msg = self._cloudSyncLogic.login(user, pw)
+        finally:
+            progress.close()
+            progress.deleteLater()
+
+        if not success:
+            self._setCloudLoginError(msg)
+            slicer.util.errorDisplay(msg, windowTitle="Cloud login failed")
+        else:
+            self._setCloudLoginError(None)
+
+    def _setCloudLoginError(self, message: Optional[str]) -> None:
+        """Show / clear a red 'Login failed' message in the account-status
+        label to flag the most recent login failure. Called with ``None`` to
+        clear.
+        """
+        self._cloud_login_error = message or None
+        # Always run the refresh; it will pick up the stored error and apply
+        # the red styling (or restore normal styling when cleared).
+        self._refreshCloudSyncUI()
+
+    def _onCloudStatusChanged(self, message: str, timestamp: str) -> None:
+        slicer.util.showStatusMessage(f"Cloud: {message}", 3000)
+        if timestamp:
+            self.ui.cloudLastSyncValueLabel.text = timestamp
+        self._refreshCloudSyncUI()
+
+    def _refreshCloudSyncUI(self) -> None:
+        logic = self._cloudSyncLogic
+        logged_in = logic.is_logged_in()
+        enabled = logic.is_service_enabled()
+
+        # Clear any stale login-error indicator once the user is signed in.
+        if logged_in and self._cloud_login_error is not None:
+            self._cloud_login_error = None
+
+        # Account status text. The login-failed indicator (red) takes
+        # precedence so the user sees what just went wrong.
+        if self._cloud_login_error:
+            self.ui.cloudAccountStatusLabel.setStyleSheet("color: #c62828;")
+            self.ui.cloudAccountStatusLabel.text = _("Login failed")
+            self.ui.cloudAccountStatusLabel.setToolTip(self._cloud_login_error)
+            self.ui.cloudLoginButton.setToolTip(self._cloud_login_error)
+        else:
+            self.ui.cloudAccountStatusLabel.setStyleSheet("")
+            self.ui.cloudAccountStatusLabel.setToolTip("")
+            self.ui.cloudLoginButton.setToolTip("")
+            self.ui.cloudAccountStatusLabel.text = (
+                _("Logged In") if logged_in else _("Not Logged In")
+            )
+
+        # Last sync text (only overwrite if we have a value).
+        last = logic.get_last_sync_timestamp()
+        if last:
+            self.ui.cloudLastSyncValueLabel.text = last
+        elif not self.ui.cloudLastSyncValueLabel.text:
+            self.ui.cloudLastSyncValueLabel.text = _("Never")
+
+        # Login/Logout button label.
+        if logged_in:
+            if enabled:
+                self.ui.cloudLoginButton.text = _("Log out of Cloud")
+            else:
+                self.ui.cloudLoginButton.text = _("Forget Credentials")
+        else:
+            self.ui.cloudLoginButton.text = _("Log in to Cloud")
+
+        # The login button is always enabled when logged-in (so the user can
+        # forget credentials), and only enabled when logged-out if the
+        # service-enabled flag is on.
+        self.ui.cloudLoginButton.setEnabled(logged_in or enabled)
 
     def _custom_browse(self) -> bool:
         """
