@@ -347,7 +347,32 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     @display_errors
     def onEnableCloudSyncToggled(self, checked: bool) -> None:
-        self._cloudSyncLogic.set_service_enabled(bool(checked))
+        # ``set_service_enabled(True)`` spawns the engine subprocess (fast)
+        # and ``set_service_enabled(False)`` performs the multi-stage stop
+        # handshake which can take several seconds. Either way, give the
+        # user a visible "in progress" indicator instead of letting the UI
+        # appear frozen.
+        message = (
+            _("Starting cloud sync service...")
+            if checked
+            else _("Stopping cloud sync service...")
+        )
+        progress = qt.QProgressDialog(
+            message, "", 0, 0, slicer.util.mainWindow()
+        )
+        progress.setWindowTitle(_("Cloud Sync"))
+        progress.setWindowModality(qt.Qt.ApplicationModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.show()
+        slicer.app.processEvents()
+        try:
+            self._cloudSyncLogic.set_service_enabled(bool(checked))
+        finally:
+            progress.close()
+            progress.deleteLater()
         # _refreshCloudSyncUI is invoked via the stateChanged signal.
 
     @display_errors

@@ -97,12 +97,21 @@ def main():
         logging.info(f"Initializing Sync Engine for: {args.db_path}")
         cloud = Cloud(args.env)
 
+        # Dedupe so we only emit a status line on actual transitions --
+        # otherwise the cloud library's per-poll callbacks produce a
+        # flood of identical CLOUD_STATUS:synchronizing lines.
+        last_status = None
+
         def on_cloud_status(status_obj):
             """
             Callback from the Cloud class.
             status_obj is an instance of the Status class.
             """
+            nonlocal last_status
             current_status = status_obj.status
+            if current_status == last_status:
+                return
+            last_status = current_status
 
             # SYNC_COMPLETED_AT and CLOUD_STATUS are control-protocol
             # messages parsed by the parent process; keep them as plain
@@ -124,7 +133,10 @@ def main():
         cloud.start(db_path)
 
         logging.info("Sync started.")
-        cloud.sync()
+        # start_background_sync() performs an initial sync itself, so
+        # don't double-sync here -- a separate cloud.sync() call would
+        # produce a redundant "Sync complete." before the background
+        # loop kicks off.
         cloud.start_background_sync()
         logging.debug("Entering background monitor mode.")
         while not stop_event.is_set():

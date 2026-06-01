@@ -3,6 +3,7 @@ import asyncio
 import logging
 import re
 import threading
+from collections import deque
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Callable, Dict, List, TYPE_CHECKING
@@ -274,8 +275,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.user_account_banner.visible = False
 
         # ---- Connect loggers into Slicer ----
-
-        add_slicer_log_handler("LIFUInterface", "LIFUInterface", use_dialogs=False)
+        #
+        # The openlifu_sdk and LIFUInterface package handlers are
+        # registered in ``OpenLIFUSonicationControlLogic.__init__`` so
+        # they are in place before LIFUInterface spawns its UART monitor
+        # threads (and so they work even when other modules access this
+        # Logic before our Widget.setup() runs).
+        #
+        # Other legacy short-name loggers, kept for any callers that still
+        # emit under these names directly.
         add_slicer_log_handler("UART", "UART", use_dialogs=False)
         add_slicer_log_handler("LIFUHVController", "LIFUHVController", use_dialogs=False)
         add_slicer_log_handler("LIFUTXDevice", "LIFUTXDevice", use_dialogs=False)
@@ -863,9 +871,33 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
 
     def _pumpMonitoringLoop(self):
+        # Drain any OWSignal events that were enqueued from background
+        # (UART monitor / reader) threads and re-emit them on the main
+        # thread. See ``_connect_owsignals`` for why we go through a queue
+        # instead of connecting OWSignal directly to ``qt.Signal.emit``.
+        self._drain_owsignal_queue()
         if self._monitor_loop.is_running():
             # Harmless tickle: sends a no-op callback into the loop to keep it alive
             self._monitor_loop.call_soon_threadsafe(lambda: None)
+
+    def _drain_owsignal_queue(self):
+        """Re-emit queued OWSignal events on the main thread.
+
+        Called from the main-thread ``monitoring_timer`` tick. Pops items
+        out under the queue lock so a flood of background-thread emits
+        cannot starve us.
+        """
+        # Snapshot under the lock so we don't hold it across signal emits.
+        with self._owsignal_lock:
+            if not self._owsignal_queue:
+                return
+            pending = list(self._owsignal_queue)
+            self._owsignal_queue.clear()
+        for sig_name, args in pending:
+            try:
+                getattr(self.qt_signals, sig_name).emit(*args)
+            except Exception:  # noqa: BLE001
+                logging.exception("Error dispatching queued %s", sig_name)
 
     def _run_monitor_loop(self):
         """Runs the asyncio event loop to monitor USB device status."""
@@ -886,6 +918,47 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         logging.debug("OpenLIFUSonicationControlLogic.__init__() called")
         ScriptedLoadableModuleLogic.__init__(self)
+
+        # ---- Connect SDK loggers into Slicer ----
+        #
+        # This MUST happen before ``LIFUInterface(...)`` is constructed
+        # below, because that spawns UART monitor threads which start
+        # logging immediately. We also have to do it here in Logic.__init__
+        # rather than in Widget.setup(): the Data module calls
+        # ``getModuleLogic("OpenLIFUSonicationControl")`` to look up the
+        # interface, which constructs Logic without ever running
+        # Widget.setup().
+        #
+        # The openlifu_sdk submodules use ``logging.getLogger(__name__)``
+        # (e.g. ``openlifu_sdk.io.uart``). We attach a single Slicer
+        # handler to the package-level logger and set
+        # ``propagate = False`` -- that is critical because SDK warnings
+        # are emitted from background threads (UART monitor / reader),
+        # and if they propagate up to the root logger, whichever handler
+        # is attached there (Slicer's default console handler) will run
+        # on the background thread and may touch Qt -- producing
+        # "QObject::setParent: Cannot set parent, new parent is in a
+        # different thread" warnings. Our SlicerLogHandler short-circuits
+        # cleanly on non-main-thread records.
+        #
+        # We deliberately do NOT call ``setLevel`` on the SDK logger;
+        # the SDK is responsible for its own verbosity (currently it
+        # defaults to WARNING, which is what we want). Connect /
+        # disconnect / error events are surfaced as INFO via the
+        # dedicated "LIFUInterface" logger below, driven from the SDK's
+        # OWSignal callbacks.
+        add_slicer_log_handler("openlifu_sdk", "openlifu_sdk", use_dialogs=False)
+        logging.getLogger("openlifu_sdk").propagate = False
+
+        # Our own "LIFUInterface" logger: routed through Slicer (no
+        # dialogs) and pinned at INFO so connect / disconnect events
+        # emitted from on_lifu_device_connected / on_lifu_device_disconnected
+        # below show up in the terminal regardless of the root level.
+        add_slicer_log_handler("LIFUInterface", "LIFUInterface", use_dialogs=False)
+        lifu_logger = logging.getLogger("LIFUInterface")
+        lifu_logger.setLevel(logging.INFO)
+        lifu_logger.propagate = False
+        self._lifu_logger = lifu_logger
 
         self._running : bool = False
         """Whether sonication is currently running. Do not set this directly -- use the `running` property."""
@@ -923,6 +996,21 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- LIFU Interface Connection ----
 
+        # Thread-safe queue that buffers OWSignal events emitted from the
+        # UART monitor / reader threads. They get drained and re-emitted
+        # as Qt signals on the main thread by ``_drain_owsignal_queue``,
+        # which is called from the ``monitoring_timer`` tick.
+        #
+        # We do NOT connect OWSignal directly to ``qt.Signal.emit``
+        # because OWSignal invokes its callbacks synchronously in the
+        # caller's thread. PythonQt (the binding Slicer uses) cannot
+        # cleanly post a queued meta-call from a non-Qt thread on a
+        # QObject that lives on the main thread, and emits a string of
+        # ``QObject::setParent: Cannot set parent, new parent is in a
+        # different thread`` warnings every time it tries.
+        self._owsignal_queue: deque = deque()
+        self._owsignal_lock = threading.Lock()
+
         self._create_lifu_interface_bridge()
         self.cur_lifu_interface = None
         self._lifu_interface_is_simulated = False
@@ -932,11 +1020,15 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
         """The active Solution object last sent to the ultrasound hardware."""
 
-        # Set logging
-        logging.getLogger("LIFUInterface").setLevel(logging.ERROR)
-        logging.getLogger("UART").setLevel(logging.ERROR)
-        logging.getLogger("LIFUHVController").setLevel(logging.ERROR)
-        logging.getLogger("LIFUTXDevice").setLevel(logging.ERROR)
+        # Note: we deliberately do NOT clobber the "LIFUInterface" /
+        # "UART" / "LIFUHVController" / "LIFUTXDevice" logger levels here
+        # any more. The previous code pinned them all to ERROR, which
+        # silently swallowed the connect / disconnect INFO messages we
+        # set up at the top of this method. SDK verbosity is now managed
+        # by the SDK itself (defaults to WARNING for the openlifu_sdk
+        # package logger we route through ``add_slicer_log_handler``);
+        # the legacy short-name loggers above stay at their inherited
+        # level so anything emitted under those names still surfaces.
 
     def _create_lifu_interface_bridge(self):
         """Create the bridge QObject and wire its output signals to handlers. Call once from __init__."""
@@ -946,16 +1038,30 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.qt_signals.signal_data_received.connect(self.on_lifu_data_received)
 
     def _connect_owsignals(self):
-        """Wire the current interface's OWSignals into the bridge. Call from __init__ and reinitialize_lifu_interface."""
+        """Wire the current interface's OWSignals into the main-thread queue.
+
+        OWSignal callbacks fire synchronously in the emitter's thread
+        (UART monitor / reader). We MUST NOT touch Qt from those threads
+        directly, so each callback just appends a (signal_name, args)
+        record to ``_owsignal_queue`` under a lock; ``_pumpMonitoringLoop``
+        drains it on the main thread.
+        """
         if self.cur_lifu_interface is None:
             return
+
+        def make_enqueue(sig_name: str):
+            def _enqueue(*args):
+                with self._owsignal_lock:
+                    self._owsignal_queue.append((sig_name, args))
+            return _enqueue
+
         for device in (self.cur_lifu_interface.hvcontroller, self.cur_lifu_interface.txdevice):
             if device is None:
                 continue
-            device.signal_connected.connect(self.qt_signals.signal_connected.emit)
-            device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
-            device.signal_data_received.connect(self.qt_signals.signal_data_received.emit)
-            device.signal_error.connect(self.qt_signals.signal_error.emit)
+            device.signal_connected.connect(make_enqueue("signal_connected"))
+            device.signal_disconnected.connect(make_enqueue("signal_disconnected"))
+            device.signal_data_received.connect(make_enqueue("signal_data_received"))
+            device.signal_error.connect(make_enqueue("signal_error"))
 
     @property
     def lifu_interface_is_simulated(self) -> bool:
@@ -1239,11 +1345,15 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             f(descriptor, message)
 
     def on_lifu_device_connected(self, descriptor, port):
-        logging.info(f"🔌 CONNECTED: {descriptor} on port {port}")
+        # Use the dedicated "LIFUInterface" logger (set up in __init__
+        # at INFO with a Slicer handler and propagate=False) so this
+        # message reaches the terminal regardless of the root level,
+        # without crossing thread boundaries to root handlers.
+        self._lifu_logger.info(f"🔌 CONNECTED: {descriptor} on port {port}")
         self._dispatch_device_connected()
 
     def on_lifu_device_disconnected(self, descriptor, port):
-        logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
+        self._lifu_logger.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
         self._dispatch_device_disconnected()
     
     def on_lifu_data_received(self, descriptor, message):
