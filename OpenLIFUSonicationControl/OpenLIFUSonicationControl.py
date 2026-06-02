@@ -888,7 +888,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             )
             self._monitor_loop.run_forever()
         except Exception as e:
-            logging.error("[LIFU] Monitor loop error: %s", e, exc_info=True)
+            # Background asyncio thread -- route through the dedicated
+            # LIFUInterface logger (propagate=False) instead of the root
+            # logger to avoid cross-thread Qt parenting issues.
+            self._lifu_logger.error("[LIFU] Monitor loop error: %s", e, exc_info=True)
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
@@ -1286,7 +1289,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             return result
 
         except (ValueError, AttributeError, TypeError, ZeroDivisionError) as e:
-            logging.error(f"Failed to parse status string: {e}")
+            self._lifu_logger.error(f"Failed to parse status string: {e}")
             return result
         
     def _dispatch_device_connected(self):
@@ -1317,7 +1320,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """Called when the LIFUInterface receives data from the hardware.
         This is used to update the run progress and hardware status.
         """
-        logging.info(f"📦 DATA [{descriptor}]: {message}")
+        # OWSignal callback: runs on a background UART thread. Use the
+        # dedicated LIFUInterface logger (propagate=False) instead of the
+        # root logger to keep these high-frequency records off Slicer's
+        # root handler, which feeds Qt-backed sinks and risks cross-
+        # thread parenting warnings.
+        self._lifu_logger.info(f"📦 DATA [{descriptor}]: {message}")
 
         if descriptor == "TX":
             LIFUError = _lifu_exceptions().LIFUError
@@ -1328,7 +1336,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 if parsed["status"] in {"RUNNING", "STOPPED"}:
                     # Update internal trigger state and notify QML
                     if parsed["status"] == "STOPPED":
-                        logging.info("Trigger is stopped.")
+                        self._lifu_logger.info("Trigger is stopped.")
                         import openlifu_sdk
 
                         self.cur_lifu_interface.set_status(openlifu_sdk.LIFUInterfaceStatus.STATUS_FINISHED)
@@ -1340,7 +1348,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                         self.cur_lifu_interface.set_status(openlifu_sdk.LIFUInterfaceStatus.STATUS_RUNNING)
 
             except (LIFUError, KeyError, TypeError) as e:
-                logging.error(f"Failed to parse and update trigger state: {e}")
+                self._lifu_logger.error(f"Failed to parse and update trigger state: {e}")
 
 
         self._dispatch_data_received(descriptor, message)
