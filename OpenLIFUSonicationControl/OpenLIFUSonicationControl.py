@@ -3,7 +3,6 @@ import asyncio
 import logging
 import re
 import threading
-from collections import deque
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Callable, Dict, List, TYPE_CHECKING
@@ -871,33 +870,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
 
     def _pumpMonitoringLoop(self):
-        # Drain any OWSignal events that were enqueued from background
-        # (UART monitor / reader) threads and re-emit them on the main
-        # thread. See ``_connect_owsignals`` for why we go through a queue
-        # instead of connecting OWSignal directly to ``qt.Signal.emit``.
-        self._drain_owsignal_queue()
         if self._monitor_loop.is_running():
             # Harmless tickle: sends a no-op callback into the loop to keep it alive
             self._monitor_loop.call_soon_threadsafe(lambda: None)
-
-    def _drain_owsignal_queue(self):
-        """Re-emit queued OWSignal events on the main thread.
-
-        Called from the main-thread ``monitoring_timer`` tick. Pops items
-        out under the queue lock so a flood of background-thread emits
-        cannot starve us.
-        """
-        # Snapshot under the lock so we don't hold it across signal emits.
-        with self._owsignal_lock:
-            if not self._owsignal_queue:
-                return
-            pending = list(self._owsignal_queue)
-            self._owsignal_queue.clear()
-        for sig_name, args in pending:
-            try:
-                getattr(self.qt_signals, sig_name).emit(*args)
-            except Exception:  # noqa: BLE001
-                logging.exception("Error dispatching queued %s", sig_name)
 
     def _run_monitor_loop(self):
         """Runs the asyncio event loop to monitor USB device status."""
@@ -996,21 +971,6 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- LIFU Interface Connection ----
 
-        # Thread-safe queue that buffers OWSignal events emitted from the
-        # UART monitor / reader threads. They get drained and re-emitted
-        # as Qt signals on the main thread by ``_drain_owsignal_queue``,
-        # which is called from the ``monitoring_timer`` tick.
-        #
-        # We do NOT connect OWSignal directly to ``qt.Signal.emit``
-        # because OWSignal invokes its callbacks synchronously in the
-        # caller's thread. PythonQt (the binding Slicer uses) cannot
-        # cleanly post a queued meta-call from a non-Qt thread on a
-        # QObject that lives on the main thread, and emits a string of
-        # ``QObject::setParent: Cannot set parent, new parent is in a
-        # different thread`` warnings every time it tries.
-        self._owsignal_queue: deque = deque()
-        self._owsignal_lock = threading.Lock()
-
         self._create_lifu_interface_bridge()
         self.cur_lifu_interface = None
         self._lifu_interface_is_simulated = False
@@ -1038,30 +998,16 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.qt_signals.signal_data_received.connect(self.on_lifu_data_received)
 
     def _connect_owsignals(self):
-        """Wire the current interface's OWSignals into the main-thread queue.
-
-        OWSignal callbacks fire synchronously in the emitter's thread
-        (UART monitor / reader). We MUST NOT touch Qt from those threads
-        directly, so each callback just appends a (signal_name, args)
-        record to ``_owsignal_queue`` under a lock; ``_pumpMonitoringLoop``
-        drains it on the main thread.
-        """
+        """Wire the current interface's OWSignals into the bridge. Call from __init__ and reinitialize_lifu_interface."""
         if self.cur_lifu_interface is None:
             return
-
-        def make_enqueue(sig_name: str):
-            def _enqueue(*args):
-                with self._owsignal_lock:
-                    self._owsignal_queue.append((sig_name, args))
-            return _enqueue
-
         for device in (self.cur_lifu_interface.hvcontroller, self.cur_lifu_interface.txdevice):
             if device is None:
                 continue
-            device.signal_connected.connect(make_enqueue("signal_connected"))
-            device.signal_disconnected.connect(make_enqueue("signal_disconnected"))
-            device.signal_data_received.connect(make_enqueue("signal_data_received"))
-            device.signal_error.connect(make_enqueue("signal_error"))
+            device.signal_connected.connect(self.qt_signals.signal_connected.emit)
+            device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
+            device.signal_data_received.connect(self.qt_signals.signal_data_received.emit)
+            device.signal_error.connect(self.qt_signals.signal_error.emit)
 
     @property
     def lifu_interface_is_simulated(self) -> bool:
