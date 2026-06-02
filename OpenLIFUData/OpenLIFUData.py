@@ -1234,6 +1234,453 @@ class DeviceConfigEditDialog(qt.QDialog):
         return rc, self.idEdit.text.strip(), self.nameEdit.text.strip()
 
 
+# ---- Transducer preview helpers ------------------------------------------
+
+def _eval_sensitivity(
+    sens: "float | list[tuple[float, float]] | None",
+    frequency: float,
+) -> float:
+    """Evaluate a (possibly frequency-dependent) sensitivity at ``frequency``.
+
+    Mirrors :py:func:`openlifu.xdc.element.sensitivity_at_frequency` so the
+    preview dialog can compute effective per-element sensitivity without
+    depending on import-time access to that helper.
+    """
+    if sens is None:
+        return 0.0
+    if isinstance(sens, list):
+        if not sens:
+            return 0.0
+        freqs = [float(f) for f, _ in sens]
+        values = [float(v) for _, v in sens]
+        return float(np.interp(float(frequency), freqs, values))
+    return float(sens)
+
+
+def _format_num(value: float, precision: int = 3) -> str:
+    try:
+        return np.format_float_positional(float(value), precision=precision, trim="-")
+    except Exception:
+        return str(value)
+
+
+def _format_sensitivity(sens, frequency: float) -> str:
+    """Human-readable summary of a sensitivity, evaluated at ``frequency`` if needed."""
+    if isinstance(sens, list):
+        if not sens:
+            return "[]"
+        eff = _eval_sensitivity(sens, frequency)
+        return f"{_format_num(eff)} Pa/V (interp @ {_format_num(frequency, 0)} Hz, {len(sens)} pts)"
+    return f"{_format_num(sens)} Pa/V"
+
+
+class TransducerPreviewDialog(qt.QDialog):
+    """Standalone two-panel preview of an openlifu Transducer or TransducerArray.
+
+    Left panel: a :class:`QTreeWidget` showing the transducer hierarchy
+    (array → modules → elements) with native expand/collapse. Right panel:
+    an isolated 3D view showing the transducer geometry built from
+    ``transducer.get_polydata()`` plus optional body and registration
+    surface meshes. Nothing is added to the data parameter node, and all
+    temporary nodes are removed when the dialog closes.
+    """
+
+    def __init__(
+        self,
+        transducer: "openlifu.xdc.Transducer",
+        body_abspath: Optional[str] = None,
+        registration_surface_abspath: Optional[str] = None,
+        parent="mainWindow",
+    ):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.transducer = transducer
+        self._body_abspath = body_abspath
+        self._registration_surface_abspath = registration_surface_abspath
+        self._model_node = None
+        self._body_model_node = None
+        self._registration_surface_model_node = None
+        self._view_node = None
+        self._view_owner_node = None
+        self.setWindowTitle(f"Transducer Preview - {getattr(transducer, 'name', getattr(transducer, 'id', ''))}")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self._setup()
+        self._setup_view_node()
+        self._setup_model_node()
+        self._setup_body_model_node()
+        self._setup_registration_surface_node()
+        # Reset the camera to fit the transducer in the preview view
+        try:
+            view_widget_3d = self.viewWidget.threeDView() if hasattr(self.viewWidget, "threeDView") else None
+            if view_widget_3d is not None:
+                view_widget_3d.resetFocalPoint()
+                view_widget_3d.resetCamera()
+        except Exception as e:
+            logging.debug("TransducerPreviewDialog: could not reset camera: %s", e)
+        self.finished.connect(self._cleanup)
+
+    def _setup(self) -> None:
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.55))
+        self.setMinimumWidth(700)
+        self.setMinimumHeight(450)
+
+        outer = qt.QVBoxLayout()
+        self.setLayout(outer)
+
+        splitter = qt.QSplitter(qt.Qt.Horizontal, self)
+        outer.addWidget(splitter, 1)
+
+        # Left panel: native Qt tree with collapsible sections. This avoids
+        # spinning up a Chromium runtime just to render <details>/<summary>.
+        self.infoTree = qt.QTreeWidget(splitter)
+        self.infoTree.setColumnCount(2)
+        self.infoTree.setHeaderLabels(["Field", "Value"])
+        self.infoTree.setMinimumWidth(360)
+        self.infoTree.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
+        self.infoTree.setAlternatingRowColors(True)
+        self.infoTree.setRootIsDecorated(True)
+        self.infoTree.setUniformRowHeights(True)
+        self.infoTree.setSelectionMode(qt.QAbstractItemView.NoSelection)
+        # Wider "Field" column by default; user can still drag to resize.
+        header = self.infoTree.header()
+        header.setSectionResizeMode(0, qt.QHeaderView.Interactive)
+        header.setSectionResizeMode(1, qt.QHeaderView.Stretch)
+        header.setStretchLastSection(True)
+        self.infoTree.setColumnWidth(0, 200)
+        try:
+            self._populate_info_tree()
+        except Exception as e:
+            logging.warning("TransducerPreviewDialog: failed to populate info tree: %s", e)
+            self.infoTree.clear()
+            err_item = qt.QTreeWidgetItem(["error", str(e)])
+            self.infoTree.addTopLevelItem(err_item)
+        self.infoTree.expandToDepth(0)
+
+        # Right panel: 3D view widget bound to a private view node
+        self.viewWidget = slicer.qMRMLThreeDWidget(splitter)
+        self.viewWidget.setMRMLScene(slicer.mrmlScene)
+        self.viewWidget.setMinimumHeight(300)
+        self.viewWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+
+        splitter.addWidget(self.infoTree)
+        splitter.addWidget(self.viewWidget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        splitter.setSizes([440, 560])
+
+        # Close button
+        bb = qt.QDialogButtonBox()
+        bb.setStandardButtons(qt.QDialogButtonBox.Close)
+        bb.rejected.connect(self.reject)
+        bb.accepted.connect(self.accept)
+        outer.addWidget(bb)
+
+    # ---- Info tree population --------------------------------------------
+
+    def _populate_info_tree(self) -> None:
+        """Build the left-panel tree from the transducer object.
+
+        Handles both ``TransducerArray`` (has ``modules``) and a plain
+        ``Transducer`` (has ``elements``). Per-element sensitivity values
+        are shown as the *effective* product of the element's stored
+        sensitivity and the parent module's sensitivity, evaluated at the
+        module's center frequency when frequency-dependent.
+        """
+        tree = self.infoTree
+        tree.clear()
+
+        obj = self.transducer
+        is_array = hasattr(obj, "modules")
+
+        def _make_item(key: str, value: str) -> qt.QTreeWidgetItem:
+            """Create a tree item with key/value strings and tooltips on each cell."""
+            item = qt.QTreeWidgetItem([str(key), str(value)])
+            # Tooltips show the full text on hover so users can read content
+            # that is clipped by the column width.
+            item.setToolTip(0, str(key))
+            item.setToolTip(1, str(value))
+            return item
+
+        def add_kv(parent, key: str, value: str) -> qt.QTreeWidgetItem:
+            item = _make_item(key, value)
+            if parent is None:
+                tree.addTopLevelItem(item)
+            else:
+                parent.addChild(item)
+            return item
+
+        def add_branch(parent, key: str, value: str) -> qt.QTreeWidgetItem:
+            """Create a tree item intended to hold children (gets tooltips too)."""
+            item = _make_item(key, value)
+            if parent is None:
+                tree.addTopLevelItem(item)
+            else:
+                parent.addChild(item)
+            return item
+
+        def add_attrs(parent, attrs: dict) -> None:
+            if not attrs:
+                return
+            attrs_item = add_branch(parent, "Attrs", f"{len(attrs)} key(s)")
+            for k in sorted(str(k) for k in attrs):
+                v = attrs[k]
+                # Compact display for arrays / lists / dicts
+                if isinstance(v, np.ndarray):
+                    val_str = f"ndarray shape={v.shape} dtype={v.dtype}"
+                elif isinstance(v, (list, tuple)):
+                    val_str = f"{type(v).__name__}(len={len(v)})"
+                elif isinstance(v, dict):
+                    val_str = f"dict({len(v)} key(s))"
+                else:
+                    val_str = str(v)
+                add_kv(attrs_item, k, val_str)
+
+        def add_element(parent_item, element, module_freq: float, module_sens) -> None:
+            module_sens_at_f = _eval_sensitivity(module_sens, module_freq)
+            try:
+                eff_sens = (
+                    [(f, v * module_sens_at_f) for f, v in element.sensitivity]
+                    if isinstance(element.sensitivity, list)
+                    else float(element.sensitivity) * module_sens_at_f
+                )
+            except Exception:
+                eff_sens = element.sensitivity
+            sens_summary = _format_sensitivity(eff_sens, module_freq)
+            elem_label = f"#{element.index} (pin {element.pin})"
+            elem_summary = (
+                f"pos [{_format_num(element.position[0])}, "
+                f"{_format_num(element.position[1])}, "
+                f"{_format_num(element.position[2])}]  "
+                f"size [{_format_num(element.size[0])}, {_format_num(element.size[1])}]"
+            )
+            elem_item = add_branch(parent_item, elem_label, elem_summary)
+            add_kv(elem_item, "Index", str(element.index))
+            add_kv(elem_item, "Pin", str(element.pin))
+            add_kv(elem_item, "Units", str(getattr(element, "units", "")))
+            add_kv(
+                elem_item,
+                "Position",
+                f"[{_format_num(element.position[0])}, "
+                f"{_format_num(element.position[1])}, "
+                f"{_format_num(element.position[2])}]",
+            )
+            try:
+                az_deg, el_deg, roll_deg = np.degrees([element.az, element.el, element.roll])
+                add_kv(
+                    elem_item,
+                    "Orientation (deg)",
+                    f"az={_format_num(az_deg)}, el={_format_num(el_deg)}, roll={_format_num(roll_deg)}",
+                )
+            except Exception:
+                pass
+            add_kv(
+                elem_item,
+                "Size",
+                f"[{_format_num(element.size[0])}, {_format_num(element.size[1])}]",
+            )
+            add_kv(elem_item, "Sensitivity (effective)", sens_summary)
+            if isinstance(element.sensitivity, list):
+                stored_item = add_branch(
+                    elem_item,
+                    "Sensitivity (stored)",
+                    f"{len(element.sensitivity)} (freq, value) point(s)",
+                )
+                for f, v in element.sensitivity:
+                    add_kv(stored_item, f"{_format_num(f, 0)} Hz", f"{_format_num(v)}")
+            else:
+                add_kv(elem_item, "Sensitivity (stored)", _format_num(element.sensitivity))
+
+        def add_transducer(parent_item, t) -> None:
+            """Populate fields and elements of a Transducer-like object.
+
+            ``parent_item`` may be ``None`` to add directly at the top level
+            of the tree.
+            """
+            n_elements = t.numelements() if hasattr(t, "numelements") else len(getattr(t, "elements", []))
+            add_kv(parent_item, "ID", str(getattr(t, "id", "")))
+            add_kv(parent_item, "Name", str(getattr(t, "name", "")))
+            add_kv(parent_item, "Frequency", f"{_format_num(getattr(t, 'frequency', 0.0), 0)} Hz")
+            add_kv(parent_item, "Units", str(getattr(t, "units", "")))
+            add_kv(parent_item, "Sensitivity", _format_sensitivity(getattr(t, "sensitivity", 1.0), getattr(t, "frequency", 0.0)))
+            add_kv(
+                parent_item,
+                "Crosstalk",
+                f"frac={_format_num(getattr(t, 'crosstalk_frac', 0.0))}, "
+                f"dist={_format_num(getattr(t, 'crosstalk_dist', 0.0))} m",
+            )
+            add_kv(parent_item, "Registration mesh", str(getattr(t, "registration_surface_filename", None)))
+            add_kv(parent_item, "Body mesh", str(getattr(t, "transducer_body_filename", None)))
+
+            elements_item = add_branch(parent_item, "Elements", f"{n_elements} element(s)")
+            for el in getattr(t, "elements", []):
+                add_element(elements_item, el, getattr(t, "frequency", 0.0), getattr(t, "sensitivity", 1.0))
+
+            add_attrs(parent_item, getattr(t, "attrs", {}) or {})
+
+        if is_array:
+            total_elements = sum(m.numelements() for m in obj.modules)
+            # Top-level summary items (no redundant root "TransducerArray" node)
+            add_kv(None, "ID", str(getattr(obj, "id", "")))
+            add_kv(None, "Name", str(getattr(obj, "name", "")))
+            add_kv(None, "Total Elements", str(total_elements))
+
+            modules_item = add_branch(None, "Modules", f"{len(obj.modules)} module(s)")
+            for i, m in enumerate(obj.modules):
+                hwid = (m.attrs or {}).get("hwid") if hasattr(m, "attrs") else None
+                tx, ty, tz = (
+                    m.transform[0, 3], m.transform[1, 3], m.transform[2, 3]
+                ) if hasattr(m, "transform") else (0.0, 0.0, 0.0)
+                module_summary = (
+                    f"{getattr(m, 'id', '')} | {m.numelements()} els | "
+                    f"HWID={hwid} | "
+                    f"t=[{_format_num(tx)}, {_format_num(ty)}, {_format_num(tz)}]"
+                )
+                module_item = add_branch(modules_item, f"Module {i}", module_summary)
+                add_transducer(module_item, m)
+
+            add_attrs(None, getattr(obj, "attrs", {}) or {})
+            modules_item.setExpanded(True)
+        else:
+            # Plain Transducer: populate top-level fields directly.
+            add_transducer(None, obj)
+
+    def _setup_view_node(self) -> None:
+        tid = getattr(self.transducer, "id", "transducer")
+        layoutName = f"TransducerPreview-{tid}"
+        # Owner node so the layout manager doesn't manage this view
+        self._view_owner_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
+
+        viewLogic = slicer.vtkMRMLViewLogic()
+        viewLogic.SetMRMLScene(slicer.mrmlScene)
+        viewNode = viewLogic.AddViewNode(layoutName)
+        viewNode.SetLayoutLabel("XDC")
+        viewNode.SetLayoutColor([0.30, 0.55, 0.85])
+        viewNode.SetName(f"view-preview-{tid}")
+        viewNode.SetAndObserveParentLayoutNodeID(self._view_owner_node.GetID())
+        viewNode.SetAttribute("isWizardViewNode", "true")
+        viewNode.SetBackgroundColor(0.20, 0.25, 0.35)
+        viewNode.SetBackgroundColor2(0.10, 0.12, 0.18)
+        viewNode.SetBoxVisible(False)
+        viewNode.SetAxisLabelsVisible(False)
+        self._view_node = viewNode
+        self.viewWidget.setMRMLViewNode(viewNode)
+
+    def _setup_model_node(self) -> None:
+        try:
+            # If we were handed a TransducerArray, convert to a flat Transducer
+            # just for the purpose of building the preview polydata.
+            if hasattr(self.transducer, "to_transducer"):
+                mesh_source = self.transducer.to_transducer()
+            else:
+                mesh_source = self.transducer
+            polydata = mesh_source.get_polydata(units="mm", facecolor=[0.0, 0.8, 1.0, 1.0])
+        except Exception as e:
+            logging.warning("TransducerPreviewDialog: failed to build polydata: %s", e)
+            return
+        modelNode = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLModelNode", f"TransducerPreview-{getattr(self.transducer, 'id', 'transducer')}"
+        )
+        modelNode.SetAndObservePolyData(polydata)
+        modelNode.CreateDefaultDisplayNodes()
+        displayNode = modelNode.GetDisplayNode()
+        if displayNode is not None:
+            # The polydata carries an unsigned-char color array as point
+            # scalars; disable scalar coloring so VTK doesn't try to compute a
+            # scalar range from it (which logs "Bad table range: [0, -1]").
+            displayNode.SetScalarVisibility(False)
+            displayNode.SetColor(0.0, 0.8, 1.0)
+            displayNode.SetOpacity(1.0)
+            displayNode.SetVisibility(True)
+            # Restrict visibility to our private view node only
+            displayNode.SetViewNodeIDs([self._view_node.GetID()])
+        self._model_node = modelNode
+
+    def _setup_body_model_node(self) -> None:
+        """Optionally load the transducer body mesh into the preview view."""
+        if not self._body_abspath:
+            return
+        try:
+            expected_name = getattr(self.transducer, "transducer_body_filename", None)
+            if expected_name and Path(self._body_abspath).name != expected_name:
+                logging.warning(
+                    "TransducerPreviewDialog: body file name mismatch (got %s, expected %s); skipping",
+                    Path(self._body_abspath).name,
+                    expected_name,
+                )
+                return
+            bodyNode = slicer.util.loadModel(self._body_abspath)
+        except Exception as e:
+            logging.warning("TransducerPreviewDialog: could not load body mesh '%s': %s", self._body_abspath, e)
+            return
+        if bodyNode is None:
+            return
+        bodyNode.SetName(f"TransducerPreviewBody-{getattr(self.transducer, 'id', 'transducer')}")
+        displayNode = bodyNode.GetDisplayNode()
+        if displayNode is None:
+            bodyNode.CreateDefaultDisplayNodes()
+            displayNode = bodyNode.GetDisplayNode()
+        if displayNode is not None:
+            displayNode.SetColor(0.85, 0.85, 0.88)
+            displayNode.SetOpacity(0.45)
+            displayNode.SetVisibility(True)
+            if self._view_node is not None:
+                displayNode.SetViewNodeIDs([self._view_node.GetID()])
+        self._body_model_node = bodyNode
+
+    def _setup_registration_surface_node(self) -> None:
+        """Optionally load the transducer registration surface mesh."""
+        if not self._registration_surface_abspath:
+            return
+        try:
+            expected_name = getattr(self.transducer, "registration_surface_filename", None)
+            if expected_name and Path(self._registration_surface_abspath).name != expected_name:
+                logging.warning(
+                    "TransducerPreviewDialog: registration surface name mismatch (got %s, expected %s); skipping",
+                    Path(self._registration_surface_abspath).name,
+                    expected_name,
+                )
+                return
+            surfNode = slicer.util.loadModel(self._registration_surface_abspath)
+        except Exception as e:
+            logging.warning(
+                "TransducerPreviewDialog: could not load registration surface '%s': %s",
+                self._registration_surface_abspath, e,
+            )
+            return
+        if surfNode is None:
+            return
+        surfNode.SetName(
+            f"TransducerPreviewSurface-{getattr(self.transducer, 'id', 'transducer')}"
+        )
+        displayNode = surfNode.GetDisplayNode()
+        if displayNode is None:
+            surfNode.CreateDefaultDisplayNodes()
+            displayNode = surfNode.GetDisplayNode()
+        if displayNode is not None:
+            displayNode.SetColor(0.45, 0.85, 0.55)
+            displayNode.SetOpacity(0.55)
+            displayNode.SetVisibility(True)
+            if self._view_node is not None:
+                displayNode.SetViewNodeIDs([self._view_node.GetID()])
+        self._registration_surface_model_node = surfNode
+
+    def _cleanup(self, *args) -> None:
+        for node_attr in (
+            "_model_node",
+            "_body_model_node",
+            "_registration_surface_model_node",
+            "_view_node",
+            "_view_owner_node",
+        ):
+            node = getattr(self, node_attr, None)
+            if node is not None:
+                try:
+                    slicer.mrmlScene.RemoveNode(node)
+                except Exception as e:
+                    logging.debug("TransducerPreviewDialog: cleanup failed for %s: %s", node_attr, e)
+                setattr(self, node_attr, None)
+
+
 class TransducerManagerDialog(qt.QDialog):
     """Tabular manager for transducer definitions stored in the loaded database.
 
@@ -1248,8 +1695,9 @@ class TransducerManagerDialog(qt.QDialog):
       "device config / hardware" validation errors from openlifu-python and
       prompts the user for ``id`` + ``name`` when the lead module carries no
       ``device`` block.
-    * **Preview** -- loads the selected transducer into the Slicer scene
-      via the existing ``load_transducer_from_openlifu`` path.
+    * **Preview** -- opens a standalone two-panel dialog rendering the
+      transducer geometry alongside its ``_repr_html_`` summary, without
+      loading it into the main Slicer scene.
     * **Delete** -- removes the selected transducer from the database, with
       a special confirmation when one of the four built-in templates is
       targeted.
@@ -1297,7 +1745,7 @@ class TransducerManagerDialog(qt.QDialog):
             "Assemble a transducer definition from the connected TX modules' user_configs"
         )
         self.previewButton = qt.QPushButton("Preview")
-        self.previewButton.setToolTip("Load the selected transducer into the scene")
+        self.previewButton.setToolTip("Open a standalone preview of the selected transducer")
         self.deleteButton = qt.QPushButton("Delete")
         self.deleteButton.setToolTip("Remove the selected transducer from the database")
         for b in (self.addFileButton, self.addDeviceButton, self.previewButton, self.deleteButton):
@@ -1640,16 +2088,23 @@ class TransducerManagerDialog(qt.QDialog):
             slicer.util.errorDisplay("Select a transducer first.", parent=self)
             return
         try:
-            obj = self.db.load_transducer(tid, convert_array=True)
+            obj = self.db.load_transducer(tid, convert_array=False)
         except Exception as e:
             slicer.util.errorDisplay(f"Could not load transducer '{tid}': {e}", parent=self)
             return
         try:
-            abspaths = self.db.get_transducer_absolute_filepaths(tid)
+            abspaths = self.db.get_transducer_absolute_filepaths(tid) or {}
         except Exception:
             abspaths = {}
-        logic = slicer.util.getModuleLogic("OpenLIFUData")
-        logic.load_transducer_from_openlifu(obj, abspaths)
+        body_path = abspaths.get("transducer_body_abspath")
+        registration_path = abspaths.get("registration_surface_abspath")
+        dialog = TransducerPreviewDialog(
+            obj,
+            body_abspath=body_path,
+            registration_surface_abspath=registration_path,
+            parent=self,
+        )
+        dialog.exec_()
 
     @display_errors
     def onDelete(self, *args) -> None:
