@@ -2108,9 +2108,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # (QSettings("OpenLIFU/databaseDirectory")) and it still looks like a
         # valid openlifu database root, auto-connect to it now so the user
         # doesn't have to re-open the Database popup on every Slicer boot.
-        # Defer this an additional event-loop tick so the Data widget has a
-        # chance to paint before the (potentially slow) openlifu lazy-import
-        # and database scan run.
+        # Defer one event-loop tick so the "Loading database..." progress
+        # dialog can actually paint before the (potentially slow) openlifu
+        # lazy-import + database scan runs. This is especially important in
+        # the custom desktop app where setup() runs at startup before the
+        # main window has rendered.
         qt.QTimer.singleShot(50, self._tryAutoConnectDatabase)
 
     def _tryAutoConnectDatabase(self) -> None:
@@ -2795,20 +2797,25 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         cur = (bool(tx_conn), bool(hv_conn))
         if cur != prev:
             self._last_device_conn_state = cur
+            # Route through the same "LIFUInterface" logger that
+            # OpenLIFUSonicationControl configures (Slicer status bar +
+            # Python Console via stdout StreamHandler). Using the root
+            # logger here would only land in the error-log table.
+            lifu_logger = logging.getLogger("LIFUInterface")
             if cur == (True, True):
-                logging.info("Hardware device fully connected (TX + HV).")
+                lifu_logger.info("Hardware device fully connected (TX + HV).")
             elif cur == (True, False):
-                logging.info("Hardware device partially connected (TX only).")
+                lifu_logger.info("Hardware device partially connected (TX only).")
             elif cur == (False, True):
-                logging.info("Hardware device partially connected (HV only).")
+                lifu_logger.info("Hardware device partially connected (HV only).")
             else:
                 if iface is None:
-                    logging.info(
+                    lifu_logger.info(
                         "Hardware device not connected "
                         "(SonicationControl interface not yet initialized)."
                     )
                 else:
-                    logging.info(
+                    lifu_logger.info(
                         "Hardware device not connected. The COM ports may be "
                         "in use by another application or no device is plugged in."
                     )

@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import re
+import sys
 import threading
 from datetime import datetime
 from enum import Enum
@@ -28,7 +29,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_widget
+from OpenLIFULib.util import SlicerLogHandler, add_slicer_log_handler, display_errors, replace_widget
 
 
 # This import is deferred at runtime using openlifu_lz, 
@@ -866,10 +867,20 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # dialogs) and pinned at INFO so connect / disconnect events
         # emitted from on_lifu_device_connected / on_lifu_device_disconnected
         # below show up in the terminal regardless of the root level.
+        # SlicerLogHandler routes INFO records to the status bar / error
+        # log model only -- it does NOT write to stdout. Add a plain
+        # StreamHandler so these messages also show up in Slicer's
+        # Python Console (which captures sys.stdout).
         add_slicer_log_handler("LIFUInterface", "LIFUInterface", use_dialogs=False)
         lifu_logger = logging.getLogger("LIFUInterface")
         lifu_logger.setLevel(logging.INFO)
         lifu_logger.propagate = False
+        if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, SlicerLogHandler)
+                   for h in lifu_logger.handlers):
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setLevel(logging.INFO)
+            stream_handler.setFormatter(logging.Formatter("[LIFUInterface] %(message)s"))
+            lifu_logger.addHandler(stream_handler)
         self._lifu_logger = lifu_logger
 
         self._running : bool = False
