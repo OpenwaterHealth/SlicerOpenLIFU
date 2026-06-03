@@ -33,6 +33,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
@@ -121,6 +122,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+        # Restructure into shared header (read-only) + scrollable body + footer.
+        self.module_header = apply_module_layout(
+            uiWidget, ui_namespace=self.ui, header_read_only=True
+        )
+
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -134,13 +140,15 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.globalAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are for the whole solution, i.e. over all focus points
         self.ui.globalAnalysisTableView.setModel(self.globalAnalysisTableModel)
 
-        # User account banner widget replacement
-        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
-        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
+        # User-account status is now shown by the shared header inserted
+        # by ``apply_module_layout`` above; no per-module banner needed.
 
         # ---- Inject guided mode workflow controls ----
 
         self.inject_workflow_controls_into_placeholder()
+
+        # ---- Passive header observers ----
+        wire_passive_module_header(self, self.module_header)
 
         # ---- Connections ----
 

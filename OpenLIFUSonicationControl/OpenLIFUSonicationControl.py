@@ -27,6 +27,7 @@ from OpenLIFULib import (
     get_openlifu_data_parameter_node,
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import SlicerLogHandler, add_slicer_log_handler, display_errors, replace_widget
 
@@ -257,6 +258,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+        # Restructure into shared header (read-only) + scrollable body + footer.
+        self.module_header = apply_module_layout(
+            uiWidget, ui_namespace=self.ui, header_read_only=True
+        )
+
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -267,12 +273,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUSonicationControlLogic()
 
-        # User account banner widget replacement. Note: the visibility is
-        # initialized to false because this widget will *always* exist before
-        # the login module parameter node.
-        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
-        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
-        self.user_account_banner.visible = False
+        # User-account status is now shown by the shared header inserted
+        # by ``apply_module_layout`` above; no per-module banner needed.
 
         # ---- Connect loggers into Slicer ----
         #
@@ -291,6 +293,9 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ---- Inject guided mode workflow controls ----
 
         self.inject_workflow_controls_into_placeholder()
+
+        # ---- Passive header observers ----
+        wire_passive_module_header(self, self.module_header)
 
         # ---- Connections ----
 

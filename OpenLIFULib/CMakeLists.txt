@@ -7,6 +7,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/class_definition_widgets.py
   OpenLIFULib/util.py
   OpenLIFULib/guided_mode_util.py
+  OpenLIFULib/module_layout.py
   OpenLIFULib/user_account_mode_util.py
   OpenLIFULib/dependency_utils.py
   OpenLIFULib/parameter_node_utils.py

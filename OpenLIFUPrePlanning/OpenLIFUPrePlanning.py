@@ -33,6 +33,7 @@ from OpenLIFULib import (
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
@@ -139,6 +140,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+        # Restructure into shared header (read-only) + scrollable body + footer.
+        self.module_header = apply_module_layout(
+            uiWidget, ui_namespace=self.ui, header_read_only=True
+        )
 
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
@@ -153,16 +158,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
         slicer.util.getModule("OpenLIFUData").widgetRepresentation()
 
-        # User account banner widget replacement. Note: the visibility is
-        # initialized to false because this widget will *always* exist before
-        # the login module parameter node.
-        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
-        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
-        self.user_account_banner.visible = False
+        # User-account status is now shown by the shared header inserted
+        # by ``apply_module_layout`` above; no per-module banner needed.
 
         # ---- Inject guided mode workflow controls ----
 
         self.inject_workflow_controls_into_placeholder()
+
+        # ---- Passive header observers ----
+        # Keep the read-only header status indicators in sync with global
+        # state (database / login / device / cloud sync / mode dropdowns).
+        wire_passive_module_header(self, self.module_header)
 
         # ---- Connections ----
 

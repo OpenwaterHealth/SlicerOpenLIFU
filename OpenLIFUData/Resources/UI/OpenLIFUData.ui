@@ -25,184 +25,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="topToolbarWidget" native="true">
-     <layout class="QVBoxLayout" name="topToolbarOuterLayout">
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <property name="spacing">
-       <number>4</number>
-      </property>
-      <item>
-       <layout class="QHBoxLayout" name="topToolbarLayout">
-        <item>
-         <widget class="QPushButton" name="databasePopupButton">
-          <property name="toolTip">
-           <string>Open the database configuration panel</string>
-          </property>
-          <property name="text">
-           <string>📁</string>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>40</width>
-            <height>32</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>48</width>
-            <height>32</height>
-           </size>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="loginPopupButton">
-          <property name="toolTip">
-           <string>Open the user login / account panel</string>
-          </property>
-          <property name="text">
-           <string>👤</string>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>40</width>
-            <height>32</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>48</width>
-            <height>32</height>
-           </size>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="devicePopupButton">
-          <property name="toolTip">
-           <string>Hardware device connection status</string>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-          <property name="iconSize">
-           <size>
-            <width>20</width>
-            <height>20</height>
-           </size>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>40</width>
-            <height>32</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>48</width>
-            <height>32</height>
-           </size>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="topToolbarSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="modesRowLayout">
-        <property name="spacing">
-         <number>4</number>
-        </property>
-        <item>
-         <widget class="QLabel" name="navigationModeLabel">
-          <property name="text">
-           <string>Navigation:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="navigationModeComboBox">
-          <property name="toolTip">
-           <string>Unrestricted: free navigation. Guided: walk step-by-step through the treatment workflow.</string>
-          </property>
-          <item>
-           <property name="text">
-            <string>Unrestricted</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Guided</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item>
-         <spacer name="modesRowSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>8</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item>
-         <widget class="QLabel" name="permissionsModeLabel">
-          <property name="text">
-           <string>Permissions:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="permissionsModeComboBox">
-          <property name="toolTip">
-           <string>Unrestricted: every control is available. User: role-based restrictions are enforced; log in to access controls.</string>
-          </property>
-          <item>
-           <property name="text">
-            <string>Unrestricted</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>User</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-       </layout>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="subjectCollapsibleButton">
      <property name="text">
       <string>Subject</string>
@@ -793,19 +615,19 @@
      </layout>
     </widget>
    </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
    <item>
     <widget class="QWidget" name="workflowControlsPlaceholder" native="true">
      <property name="styleSheet">
