@@ -49,6 +49,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
+from OpenLIFULib.module_layout import apply_module_layout
 from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results,
@@ -2338,6 +2339,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+        # Restructure the page into header (interactive on Data) + scrollable
+        # body + footer. The header's children are aliased onto self.ui so
+        # existing self.ui.databasePopupButton / self.ui.loginPopupButton /
+        # self.ui.devicePopupButton / self.ui.navigationModeComboBox /
+        # self.ui.permissionsModeComboBox references continue to work.
+        self.module_header = apply_module_layout(
+            uiWidget, ui_namespace=self.ui, header_read_only=False
+        )
+
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -2347,12 +2357,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUDataLogic()
 
-        # User account banner widget replacement. Note: the visibility is
-        # initialized to false because this widget will *always* exist before
-        # the login module parameter node.
-        self.user_account_banner = UserAccountBanner(parent=self.ui.userAccountBannerPlaceholder.parentWidget())
-        replace_widget(self.ui.userAccountBannerPlaceholder, self.user_account_banner, self.ui)
-        self.user_account_banner.visible = False
+        # The legacy user-account banner has been retired; the shared
+        # ``ModuleHeaderWidget`` (inserted by ``apply_module_layout`` above)
+        # owns the database / account / device status indicators now.
 
         # Manual object loading UI and the loaded objects view
         self.loadedObjectsItemModel = qt.QStandardItemModel()
@@ -3239,6 +3246,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             iface = getattr(sc_logic, "cur_lifu_interface", None)
             tx_conn, hv_conn = iface.is_device_connected() if iface is not None else (False, False)
         except (AttributeError, RuntimeError):
+            iface = None
             tx_conn, hv_conn = False, False
 
         # Log device-connection status whenever the (tx, hv) tuple changes
