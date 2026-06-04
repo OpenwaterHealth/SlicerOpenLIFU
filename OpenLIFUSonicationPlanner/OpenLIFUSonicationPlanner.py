@@ -2,6 +2,7 @@
 import warnings
 from dataclasses import fields
 import math
+from pathlib import Path
 from typing import Optional, Union, Tuple, TYPE_CHECKING, get_origin, get_args
 
 # Third-party imports
@@ -183,6 +184,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.solutionPushButton.clicked.connect(self.onComputeSolutionClicked)
         self.ui.renderPNPCheckBox.toggled.connect(self.onrenderPNPCheckBoxToggled)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
+        self.ui.exportButton.clicked.connect(self.onExportClicked)
 
         # Refresh approval-status tooltips on the Target/Transducer comboboxes
         # whenever the user changes their selection.
@@ -569,16 +571,24 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.approveButton.setEnabled(False)
             self.ui.approveButton.setToolTip("There is no active solution to write the approval")
             self.ui.approveButton.setText("Approve solution")
+            self.ui.exportButton.setEnabled(False)
+            self.ui.exportButton.setToolTip("There is no active solution to export")
         elif not self.logic.solution_analysis_exists():
             self.ui.approveButton.setEnabled(False)
             self.ui.approveButton.setToolTip("The solution cannot be approved because there is no solution analysis.")
             self.ui.approveButton.setText("Approve solution")
+            self.ui.exportButton.setEnabled(True)
+            self.ui.exportButton.setToolTip("Export the active solution to a JSON file (with optional simulation data .nc file)")
         elif self.logic.solution_analysis_has_errors():
             self.ui.approveButton.setEnabled(False)
             self.ui.approveButton.setToolTip("The solution cannot be approved because the solution analysis has errors.")
             self.ui.approveButton.setText("Approve solution")
+            self.ui.exportButton.setEnabled(True)
+            self.ui.exportButton.setToolTip("Export the active solution to a JSON file (with optional simulation data .nc file)")
         else:
             self.ui.approveButton.setEnabled(True)
+            self.ui.exportButton.setEnabled(True)
+            self.ui.exportButton.setToolTip("Export the active solution to a JSON file (with optional simulation data .nc file)")
             if data_parameter_node.loaded_solution.is_approved():
                 self.ui.approveButton.setText("Unapprove solution")
                 self.ui.approveButton.setToolTip(
@@ -626,6 +636,88 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.toggle_solution_approval()
 
         self.updateWorkflowControls()
+
+    @display_errors
+    def onExportClicked(self, checked: bool):
+        """Export the active solution to a JSON file (and optionally a .nc
+        file with the simulation data) chosen by the user."""
+        data_parameter_node = get_openlifu_data_parameter_node()
+        loaded_solution = data_parameter_node.loaded_solution
+        if loaded_solution is None:
+            raise RuntimeError("Cannot export solution because there is no active solution.")
+        solution_openlifu: "openlifu.plan.Solution" = loaded_solution.solution.solution
+
+        # Build a save dialog with an extra "Also export simulation data"
+        # checkbox embedded directly in the file picker.
+        initial_dir = slicer.app.defaultScenePath
+        safe_id = "".join(
+            c if c.isalnum() or c in (" ", "-", "_") else "_"
+            for c in solution_openlifu.id
+        )
+        initial_file = str(Path(initial_dir) / f"{safe_id}.json")
+
+        dialog = qt.QFileDialog(
+            slicer.util.mainWindow(),
+            "Export Solution",
+            initial_file,
+            "Solution JSON (*.json);;All Files (*)",
+        )
+        dialog.setAcceptMode(qt.QFileDialog.AcceptSave)
+        dialog.setOption(qt.QFileDialog.DontUseNativeDialog, True)
+        dialog.setDefaultSuffix("json")
+
+        export_nc_checkbox = qt.QCheckBox(
+            "Also export simulation data (.nc file alongside the .json)"
+        )
+        export_nc_checkbox.setChecked(True)
+        dialog_layout = dialog.layout()
+        if isinstance(dialog_layout, qt.QGridLayout):
+            dialog_layout.addWidget(
+                export_nc_checkbox,
+                dialog_layout.rowCount(),
+                0,
+                1,
+                dialog_layout.columnCount(),
+            )
+        else:
+            dialog_layout.addWidget(export_nc_checkbox)
+
+        if not dialog.exec_():
+            return
+        selected_files = dialog.selectedFiles()
+        if not selected_files:
+            return
+
+        json_path = Path(selected_files[0])
+        if json_path.suffix.lower() != ".json":
+            json_path = json_path.with_suffix(".json")
+
+        include_nc = export_nc_checkbox.isChecked()
+        # Match openlifu's own naming convention for the companion .nc file
+        # (strip everything from the first dot in the json filename and append .nc).
+        nc_path: Optional[Path] = None
+        if include_nc:
+            nc_path = json_path.with_name(json_path.name.split(".")[0] + ".nc")
+
+        # The QFileDialog (non-native) already prompts about overwriting the
+        # JSON. We additionally need to check the companion .nc file.
+        if nc_path is not None and nc_path.exists():
+            if not slicer.util.confirmYesNoDisplay(
+                text=f"The file already exists:\n{nc_path}\n\nOverwrite?",
+                windowTitle="Overwrite existing file?",
+            ):
+                return
+
+        with BusyCursor():
+            if include_nc:
+                solution_openlifu.to_files(json_path, nc_path)
+            else:
+                json_path.parent.mkdir(parents=True, exist_ok=True)
+                json_path.write_text(
+                    solution_openlifu.to_json(include_simulation_data=False, compact=False)
+                )
+
+        notify(f"Solution exported to:\n{json_path}")
 
     def onParameterNodeModified(self, caller, event) -> None:
         # ---- Update the solution analysis ----
