@@ -25,30 +25,84 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
-     <layout class="QVBoxLayout" name="verticalLayout">
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
+     <property name="text">
+      <string>Inputs</string>
+     </property>
+     <property name="collapsed">
+      <bool>true</bool>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_inputs">
       <item>
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
-        </property>
+       <widget class="QWidget" name="algorithmInputWidgetPlaceholder" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="label">
+           <property name="text">
+            <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="virtualFitApprovalStatusLabel">
-     <property name="text">
-      <string>(virtual fit approval status here)</string>
+    <widget class="QWidget" name="computeSolutionPermissionsWidget" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+       <string>operator</string>
+      </stringlist>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QLabel" name="trackingApprovalStatusLabel">
-     <property name="text">
-      <string>(transducer localization approval here)</string>
-     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_compute">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="solutionPushButton">
+        <property name="text">
+         <string>Compute sonication solution</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="solutionProgressBar">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="maximum">
+         <number>1</number>
+        </property>
+        <property name="value">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -146,57 +200,6 @@ analysis.</string>
     </spacer>
    </item>
    <item>
-    <widget class="QWidget" name="permissionsWidget" native="true">
-     <property name="slicer.openlifu.allowed-roles" stdset="0">
-      <stringlist>
-       <string>admin</string>
-       <string>operator</string>
-      </stringlist>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <item>
-       <widget class="QPushButton" name="solutionPushButton">
-        <property name="text">
-         <string>Compute sonication solution</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QProgressBar" name="solutionProgressBar">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="maximum">
-         <number>1</number>
-        </property>
-        <property name="value">
-         <number>0</number>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="approveButton">
-        <property name="text">
-         <string>Approve solution</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="CollapsibleButton">
      <property name="text">
       <string>Peak Negative Pressure Rendering</string>
@@ -261,6 +264,37 @@ analysis.</string>
         </property>
         <property name="invertedAppearance">
          <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="approvePermissionsWidget" native="true">
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+       <string>operator</string>
+      </stringlist>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_approve">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="approveButton">
+        <property name="text">
+         <string>Approve solution</string>
         </property>
        </widget>
       </item>

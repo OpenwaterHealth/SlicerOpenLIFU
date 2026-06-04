@@ -129,6 +129,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             uiWidget, ui_namespace=self.ui, header_read_only=True
         )
 
+        # Lift the "Approve solution" button out of the scrollable body so it
+        # stays pinned just above the workflow controls.
+        self._lift_approve_widget_out_of_scroll_area(uiWidget)
+
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -168,8 +172,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updatePNPSliders()
-        self.updateVirtualFitApprovalStatusLabel()
-        self.updateTrackingApprovalStatusLabel()
         self.updateSolutionAnalysis()
 
         # Add observers on the Data module's parameter node and this module's own parameter node
@@ -184,6 +186,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.renderPNPCheckBox.toggled.connect(self.onrenderPNPCheckBoxToggled)
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
 
+        # Refresh approval-status tooltips on the Target/Transducer comboboxes
+        # whenever the user changes their selection.
+        for _input_name in ("Target", "Transducer"):
+            self.algorithm_input_widget.connect_combobox_indexchanged_signal(
+                self._update_input_combobox_tooltips, input_type=_input_name
+            )
+
         # Connect PNP sliders
         self.ui.pnpColorSlider.valuesChanged.connect(self.onPnpColorSliderChanged)
         self.ui.pnpOpacitySlider.valueChanged.connect(self.onPnpOpacitySliderChanged)
@@ -195,6 +204,24 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.initializeParameterNode()
 
         self.updateWorkflowControls()
+
+    def _lift_approve_widget_out_of_scroll_area(self, uiWidget) -> None:
+        """Reparent ``approvePermissionsWidget`` from the scrollable body into
+        the top-level layout, just above the workflow-controls placeholder, so
+        the Approve button stays visible without scrolling.
+        """
+        approve_widget = self.ui.approvePermissionsWidget
+        workflow_placeholder = self.ui.workflowControlsPlaceholder
+        top_layout = uiWidget.layout()
+        workflow_index = -1
+        for i in range(top_layout.count()):
+            if top_layout.itemAt(i).widget() is workflow_placeholder:
+                workflow_index = i
+                break
+        if workflow_index < 0:
+            return
+        approve_widget.setParent(uiWidget)
+        top_layout.insertWidget(workflow_index, approve_widget)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -277,6 +304,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateInputOptions(self):
         """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
         self.algorithm_input_widget.update()
+        self._decorate_approval_status_in_comboboxes()
 
         # Determine whether solution can be computed based on the status of combo boxes
         self.checkCanComputeSolution()
@@ -381,8 +409,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updatePNPSliders()
-        self.updateVirtualFitApprovalStatusLabel()
-        self.updateTrackingApprovalStatusLabel()
         self.updateApproveButton()
 
         if get_openlifu_data_parameter_node().loaded_solution is None:
@@ -471,35 +497,72 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNode.solution_analysis = None
             notify(f"Solution deleted:\n{reason}")
 
-    def updateVirtualFitApprovalStatusLabel(self) -> None:
+    def _decorate_approval_status_in_comboboxes(self) -> None:
+        """Decorate Target and Transducer combobox items with a check-mark
+        prefix and a tooltip describing the approval status, then refresh the
+        comboboxes' own tooltips. Should be called after
+        ``self.algorithm_input_widget.update()``, which rebuilds the items
+        from scratch (so we always start from undecorated text).
+        """
         loaded_session = get_openlifu_data_parameter_node().loaded_session
-        if loaded_session is not None:
-            target_ids = loaded_session.get_virtual_fit_approvals()
-            if len(target_ids) == 0:
-                self.ui.virtualFitApprovalStatusLabel.text = ""
-            else:
-                self.ui.virtualFitApprovalStatusLabel.text = (
-                    "Virtual fit is approved for the following targets:\n- "
-                    + "\n- ".join(target_ids)
-                )
-        else:
-            self.ui.virtualFitApprovalStatusLabel.text = ""
+        approved_target_ids = (
+            set(loaded_session.get_virtual_fit_approvals())
+            if loaded_session is not None else set()
+        )
+        approved_photoscan_ids = (
+            set(loaded_session.get_transducer_tracking_approvals())
+            if loaded_session is not None else set()
+        )
+        # Transducer-tracking approvals are stored per photoscan within a
+        # session; a session's transducer is considered tracking-approved if
+        # any of its affiliated photoscans is approved.
+        has_tracking_approval = loaded_session is not None and len(approved_photoscan_ids) > 0
 
-    def updateTrackingApprovalStatusLabel(self) -> None:
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        if loaded_session is not None:
-            photoscan_ids = loaded_session.get_transducer_tracking_approvals()
-            if len(photoscan_ids) == 0:
-                self.ui.trackingApprovalStatusLabel.text = f"WARNING: Transducer localization is not approved for any photoscans!"
-                self.ui.trackingApprovalStatusLabel.styleSheet = "color:red;"
-            else:
-                self.ui.trackingApprovalStatusLabel.text = (
-                    "Transducer localization is approved for the following photoscans:\n- "
-                    + "\n- ".join(photoscan_ids)
+        # --- Target combobox ---
+        target_box = self.algorithm_input_widget.inputs_dict["Target"].combo_box
+        for i in range(target_box.count):
+            target_node = target_box.itemData(i)
+            if target_node is None:
+                continue
+            target_id = target_node.GetName()
+            if target_id in approved_target_ids:
+                target_box.setItemText(i, f"\u2713 {target_box.itemText(i)}")
+                target_box.setItemData(
+                    i,
+                    f"Virtual Fit is approved for Target {target_id}",
+                    qt.Qt.ToolTipRole,
                 )
-                self.ui.trackingApprovalStatusLabel.styleSheet = ""
-        else:
-            self.ui.trackingApprovalStatusLabel.text = ""
+
+        # --- Transducer combobox ---
+        tx_box = self.algorithm_input_widget.inputs_dict["Transducer"].combo_box
+        for i in range(tx_box.count):
+            slicer_tx = tx_box.itemData(i)
+            if slicer_tx is None:
+                continue
+            if has_tracking_approval:
+                tx_name = slicer_tx.transducer.transducer.name
+                tx_box.setItemText(i, f"\u2713 {tx_box.itemText(i)}")
+                tx_box.setItemData(
+                    i,
+                    f"Transducer Localization is approved for Transducer {tx_name}",
+                    qt.Qt.ToolTipRole,
+                )
+
+        self._update_input_combobox_tooltips()
+
+    def _update_input_combobox_tooltips(self, *args) -> None:
+        """Mirror the current Target/Transducer item's tooltip onto the
+        combobox itself, so the approval message is shown on hover when the
+        dropdown is collapsed. If the current item has no per-item tooltip,
+        the combobox tooltip is cleared.
+        """
+        for input_name in ("Target", "Transducer"):
+            if input_name not in self.algorithm_input_widget.inputs_dict:
+                continue
+            box = self.algorithm_input_widget.inputs_dict[input_name].combo_box
+            idx = box.currentIndex
+            item_tooltip = box.itemData(idx, qt.Qt.ToolTipRole) if idx >= 0 else None
+            box.setToolTip(item_tooltip or "")
 
     def updateApproveButton(self):
         data_parameter_node = get_openlifu_data_parameter_node()
