@@ -278,7 +278,7 @@ analysis.</string>
        <string>operator</string>
       </stringlist>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_approve">
+     <layout class="QHBoxLayout" name="verticalLayout_approve">
       <property name="leftMargin">
        <number>0</number>
       </property>
@@ -295,6 +295,16 @@ analysis.</string>
        <widget class="QPushButton" name="approveButton">
         <property name="text">
          <string>Approve solution</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="exportButton">
+        <property name="toolTip">
+         <string>Export the active solution to a JSON file (with optional simulation data .nc file)</string>
+        </property>
+        <property name="text">
+         <string>Export solution</string>
         </property>
        </widget>
       </item>
