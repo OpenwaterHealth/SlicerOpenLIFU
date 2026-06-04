@@ -61,11 +61,6 @@ configurations based on target location and transducer setup.
 Interfaces with Openwater focused ultrasound transducer hardware to execute
 planned sonications. Supports real-time monitoring and device control.
 
-### ⚙️  OpenLIFUProtocolConfig
-
-Manages treatment protocols in the OpenLIFU database, including frequency,
-intensity, and pulse duration settings used in planning and treatment.
-
 ### 📚 OpenLIFULib
 
 A shared utility library containing core classes and functions used system-wide.

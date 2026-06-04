@@ -67,7 +67,6 @@ class OpenLIFULogin(ScriptedLoadableModule):
             "OpenLIFUData",
             "OpenLIFUHome",
             "OpenLIFUPrePlanning",
-            "OpenLIFUProtocolConfig",
             "OpenLIFUSonicationControl",
             "OpenLIFUSonicationPlanner",
             "OpenLIFUTransducerLocalization",
@@ -708,7 +707,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             "OpenLIFUData",
             "OpenLIFUHome",
             "OpenLIFUPrePlanning",
-            "OpenLIFUProtocolConfig",
             "OpenLIFUSonicationControl",
             "OpenLIFUSonicationPlanner",
             "OpenLIFUTransducerLocalization",
@@ -1026,10 +1024,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         for protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
             slicer.util.getModuleLogic('OpenLIFUData').remove_protocol(protocol_id)
 
-        # Clear Protocol config cached items (e.g. new protocols)
-        for protocol_id in list(slicer.util.getModuleLogic('OpenLIFUProtocolConfig').cached_protocols.keys()):
-            slicer.util.getModuleLogic('OpenLIFUProtocolConfig').delete_protocol_from_cache(protocol_id)
-        slicer.util.getModuleWidget('OpenLIFUProtocolConfig').reloadProtocols()
         self._last_active_user = new_active_user
 
 # OpenLIFULoginLogic
