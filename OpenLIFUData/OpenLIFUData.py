@@ -5,11 +5,12 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import urllib.request
 import zipfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Optional, List, Tuple, Dict, Sequence, TYPE_CHECKING
+from typing import Any, Callable, Optional, List, Tuple, Dict, Sequence, TYPE_CHECKING
 
 # Third-party imports
 import ctk
@@ -46,6 +47,13 @@ from OpenLIFULib import (
     openlifu_version_matches,
     python_requirements_exist,
 )
+from OpenLIFULib.class_definition_widgets import (
+    DictTableWidget,
+    instantiate_without_post_init,
+    ListTableWidget,
+    OpenLIFUAbstractDataclassDefinitionFormWidget,
+    OpenLIFUAbstractMultipleABCDefinitionFormWidget,
+)
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
 from OpenLIFULib.module_layout import apply_module_layout
@@ -66,6 +74,7 @@ from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
     display_errors,
     ensure_list,
+    get_openlifu_data_parameter_node,
     replace_widget,
 )
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
@@ -2305,6 +2314,1033 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
         qt.QDialog.done(self, result)
 
 
+# ---------------------------------------------------------------------------
+# Protocol Manager
+# ---------------------------------------------------------------------------
+#
+# These classes were moved here from the (now-deleted) OpenLIFUProtocolConfig
+# module. The standalone Protocol Configuration module was replaced with a
+# popup-table workflow modeled after :class:`TransducerManagerDialog`:
+#
+#   * :class:`ProtocolManagerDialog` -- table + New/Import/Duplicate/Edit/
+#     Preview/Export/Delete actions.
+#   * :class:`ProtocolEditDialog`    -- modal Save/Cancel editor with
+#     name/ID/description above a scrollable area of collapsible parameter
+#     sections.
+#   * :class:`ProtocolPreviewDialog` -- modal QTreeWidget JSON viewer.
+#
+# The specialized parameter-section form widgets (Sim Setup, Delay/Apodization/
+# Segmentation methods, Parameter Constraints, Solution Analysis Options) are
+# preserved verbatim from the old module so the editor UX matches.
+
+
+class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
+    def __init__(self, parent: Optional[qt.QWidget] = None):
+        super().__init__(openlifu_lz().sim.SimSetup, parent, is_collapsible=True, collapsible_title="Simulation Setup")
+
+        x_ext_hbox = self._field_widgets['x_extent'].layout()
+        y_ext_hbox = self._field_widgets['y_extent'].layout()
+        z_ext_hbox = self._field_widgets['z_extent'].layout()
+
+        self.modify_widget_spinbox(x_ext_hbox.itemAt(0).widget(), default_value=-30, min_value=-200, max_value=-1)
+        self.modify_widget_spinbox(x_ext_hbox.itemAt(1).widget(), default_value=30, min_value=1, max_value=200)
+        self.modify_widget_spinbox(y_ext_hbox.itemAt(0).widget(), default_value=-30, min_value=-200, max_value=-1)
+        self.modify_widget_spinbox(y_ext_hbox.itemAt(1).widget(), default_value=30, min_value=1, max_value=200)
+        self.modify_widget_spinbox(z_ext_hbox.itemAt(0).widget(), default_value=-4, min_value=-4, max_value=-4)
+        self.modify_widget_spinbox(z_ext_hbox.itemAt(1).widget(), default_value=60, min_value=1, max_value=200)
+
+        spacing_spinbox = self._field_widgets['spacing']
+        self.modify_widget_spinbox(spacing_spinbox, default_value=1.0, min_value=0.1, max_value=2.0)
+
+        options_dicttablewidget = self._field_widgets['options']
+        options_dicttablewidget.key_name = "Simulation Option"
+        options_dicttablewidget.val_name = "Value"
+        options_dicttablewidget.add_button.text = "Add Simulation Option"
+        options_dicttablewidget.remove_button.text = "Remove Simulation Option"
+        options_dicttablewidget.table.setHorizontalHeaderLabels(["Simulation Option", "Value"])
+        options_dicttablewidget.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
+
+
+class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
+    def __init__(self):
+        super().__init__([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
+        self.forms.setCurrentIndex(0)
+        direct_definition_form_widget = self.forms.widget(0)
+        c0_spinbox = direct_definition_form_widget._field_widgets['c0']
+        direct_definition_form_widget.modify_widget_spinbox(c0_spinbox, default_value=1480, min_value=1000, max_value=3000)
+
+
+class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
+    def __init__(self):
+        super().__init__([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
+        # Drive the index change via the selector so the combo box and the
+        # stacked widget stay in sync (setting forms.setCurrentIndex directly
+        # leaves the combo box at index 0, leading to silent mis-saves).
+        self.selector.setCurrentIndex(2)
+        maxangle_definition_form_widget = self.forms.widget(0)
+        max_angle_spinbox = maxangle_definition_form_widget._field_widgets['max_angle']
+        maxangle_definition_form_widget.modify_widget_spinbox(max_angle_spinbox, default_value=30, min_value=0, max_value=90)
+
+
+def _get_form_as_segmentation_method(self, post_init: bool = True):
+    """Custom replacement for ``get_form_as_class`` for the segmentation form."""
+    d = self.get_form_as_dict()
+    if self._cls.__name__ in ["UniformWater", "UniformTissue"]:
+        d.pop("ref_material")
+    if post_init:
+        return self._cls(**d)
+    else:
+        return instantiate_without_post_init(self._cls, **d)
+
+
+class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
+    """Custom multi-ABC form widget for SegmentationMethod that disables
+    ``ref_material`` editing on the UniformWater / UniformTissue forms."""
+
+    def __init__(self):
+        cls_list = [openlifu_lz().seg.seg_methods.UniformSegmentation, openlifu_lz().seg.seg_methods.UniformTissue, openlifu_lz().seg.seg_methods.UniformWater]
+        is_collapsible = False
+        parent: Optional[qt.QWidget] = None
+        custom_abc_title = "Segmentation Method"
+
+        self.cls_list = cls_list
+        self.base_class_name = cls_list[0].__bases__[0].__name__
+        self.custom_abc_title = self.base_class_name if custom_abc_title is None else custom_abc_title
+
+        qt.QWidget.__init__(self, parent)
+
+        top_level_layout = qt.QFormLayout(self)
+        self.selector = qt.QComboBox()
+        self.forms = qt.QStackedWidget()
+
+        for cls in cls_list:
+            self.selector.addItem(cls.__name__)
+            widget = OpenLIFUAbstractDataclassDefinitionFormWidget(cls, parent, is_collapsible, "Segmentation Method")
+            widget.get_form_as_class = types.MethodType(_get_form_as_segmentation_method, widget)
+            self.forms.addWidget(widget)
+
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} type"), self.selector)
+        top_level_layout.addRow(qt.QLabel(f"{self.custom_abc_title} options"), self.forms)
+        self.selector.currentIndexChanged.connect(self._on_index_changed)
+
+        # Default to UniformWater (drive via selector so the combo box and the
+        # stacked widget stay in sync).
+        self.selector.setCurrentIndex(2)
+
+        for idx in (1, 2):  # UniformTissue, UniformWater: lock ref_material
+            ref_material_line_edit = self.forms.widget(idx)._field_widgets['ref_material']
+            ref_material_line_edit.setEnabled(False)
+
+        for abc_form_widget_index in range(self.forms.count):
+            materials_dicttablewidget = self.forms.widget(abc_form_widget_index)._field_widgets['materials']
+            materials_dicttablewidget.key_name = "Material"
+            materials_dicttablewidget.val_name = "Definition"
+            materials_dicttablewidget.add_button.text = "Add Material"
+            materials_dicttablewidget.remove_button.text = "Remove Material"
+            materials_dicttablewidget.table.setHorizontalHeaderLabels(["Material", "Definition"])
+            materials_dicttablewidget.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
+
+
+class OpenLIFUParameterConstraintsWidget(DictTableWidget):
+    """Customized DictTableWidget with a domain-specific Add dialog."""
+
+    class CreateParameterParameterConstraintDialog(qt.QDialog):
+        """Dialog for creating a parameter constraint (warning + error thresholds)."""
+
+        def __init__(self, existing_keys: List[str], parent="mainWindow"):
+            super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+            self.existing_keys = existing_keys
+            self.setWindowTitle("Create Parameter Constraint")
+            self.setMinimumWidth(350)
+
+            self.operator_display_map = {
+                "<": "is less than (<)",
+                "<=": "is less than or equal to (<=)",
+                ">": "is greater than (>)",
+                ">=": "is greater than or equal to (>=)",
+                "within": "is within",
+                "inside": "is inside",
+                "outside": "is outside",
+                "outside_inclusive": "is outside inclusive",
+            }
+            self.inverse_operator_display_map = {v: k for k, v in self.operator_display_map.items()}
+
+            self.parameter_key_map = {
+                "Thermal Index (TIC)": "TIC",
+                "Mechanical Index (MI)": "MI",
+                "Mainlobe PNP (MPa)": "mainlobe_pnp_MPa",
+                "Mainlobe I_SPPA (W/cm^2)": "mainlobe_isppa_Wcm2",
+                "Mainlobe I_SPTA (W/cm^2)": "mainlobe_ispta_Wcm2",
+                "3 dB Lateral Beamwidth (mm)": "beamwidth_lat_3dB_mm",
+                "3 dB Elevational Beamwidth (mm)": "beamwidth_ele_3dB_mm",
+                "3 dB Axial Beamwidth (mm)": "beamwidth_ax_3dB_mm",
+                "6 dB Lateral Beamwidth (mm)": "beamwidth_lat_6dB_mm",
+                "6 dB Elevational Beamwidth (mm)": "beamwidth_ele_6dB_mm",
+                "6 dB Axial Beamwidth (mm)": "beamwidth_ax_6dB_mm",
+                "Sidelobe PNP (MPa)": "sidelobe_pnp_MPa",
+                "Sidelobe I_SPPA (W/cm2)": "sidelobe_isppa_Wcm2",
+                "Global PNP (MPa)": "global_pnp_MPa",
+                "Global I_SPPA (W/cm^2)": "global_isppa_Wcm2",
+                "Global I_SPTA (W/cm^2)": "global_ispta_Wcm2",
+                "Emitted Pressure (MPa)": "p0_MPa",
+                "Emitted Power (W)": "power_W",
+            }
+            self.inverse_parameter_key_map = {v: k for k, v in self.parameter_key_map.items()}
+
+            self.setup()
+
+        def setup(self):
+            self.setMinimumWidth(400)
+            self.setContentsMargins(15, 15, 15, 15)
+
+            formLayout = qt.QFormLayout()
+            formLayout.setSpacing(5)
+            self.setLayout(formLayout)
+
+            self.parameter_name_input = qt.QComboBox()
+            self.parameter_name_input.addItems(list(self.parameter_key_map.keys()))
+            formLayout.addRow(_("Parameter Name:"), self.parameter_name_input)
+
+            self.operator_selector = qt.QComboBox()
+            self.operator_selector.addItems(list(self.operator_display_map.values()))
+            self.operator_selector.currentTextChanged.connect(self._update_visible_spinboxes)
+            formLayout.addRow(_("Operator:"), self.operator_selector)
+
+            self.warning_spinboxes = []
+            self.error_spinboxes = []
+            self.warning_and_label = qt.QLabel("and")
+            self.warning_and_label.setAlignment(qt.Qt.AlignCenter)
+            self.error_and_label = qt.QLabel("and")
+            self.error_and_label.setAlignment(qt.Qt.AlignCenter)
+
+            self.warning_box_layout = qt.QHBoxLayout()
+            self.error_box_layout = qt.QHBoxLayout()
+
+            warning_container = qt.QWidget()
+            warning_container.setLayout(self.warning_box_layout)
+            formLayout.addRow(_("Warning Value(s):"), warning_container)
+
+            error_container = qt.QWidget()
+            error_container.setLayout(self.error_box_layout)
+            formLayout.addRow(_("Error Value(s):"), error_container)
+
+            self._init_spinboxes()
+
+            self.buttonBox = qt.QDialogButtonBox()
+            self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
+            formLayout.addWidget(self.buttonBox)
+
+            self.buttonBox.rejected.connect(self.reject)
+            self.buttonBox.accepted.connect(self._on_accept)
+
+        def _init_spinboxes(self):
+            for _i in range(2):
+                warning_spinbox = qt.QDoubleSpinBox()
+                error_spinbox = qt.QDoubleSpinBox()
+                warning_spinbox.setRange(-1e6, 1e6)
+                error_spinbox.setRange(-1e6, 1e6)
+                self.warning_spinboxes.append(warning_spinbox)
+                self.error_spinboxes.append(error_spinbox)
+                self.warning_box_layout.addWidget(warning_spinbox)
+                self.error_box_layout.addWidget(error_spinbox)
+
+            self.warning_box_layout.insertWidget(1, self.warning_and_label)
+            self.error_box_layout.insertWidget(1, self.error_and_label)
+
+            self._update_visible_spinboxes(self.operator_selector.currentText)
+
+        def _update_visible_spinboxes(self, display_operator: str):
+            operator = self.inverse_operator_display_map[display_operator]
+            use_two_values = operator in ['within', 'inside', 'outside', 'outside_inclusive']
+            for i in range(2):
+                self.warning_spinboxes[i].setVisible(use_two_values or i == 0)
+                self.error_spinboxes[i].setVisible(use_two_values or i == 0)
+            self.warning_and_label.setVisible(use_two_values)
+            self.error_and_label.setVisible(use_two_values)
+
+        def _get_parameter_constraint_as_class(self) -> "openlifu.plan.ParameterConstraint":
+            display_operator = self.operator_selector.currentText
+            operator = self.inverse_operator_display_map[display_operator]
+            is_range_operator = operator in ['within', 'inside', 'outside', 'outside_inclusive']
+
+            warning_value = (
+                (self.warning_spinboxes[0].value, self.warning_spinboxes[1].value)
+                if is_range_operator else self.warning_spinboxes[0].value
+            )
+            error_value = (
+                (self.error_spinboxes[0].value, self.error_spinboxes[1].value)
+                if is_range_operator else self.error_spinboxes[0].value
+            )
+
+            return openlifu_lz().plan.ParameterConstraint(operator, warning_value, error_value)
+
+        def _on_accept(self):
+            display_name = self.parameter_name_input.currentText
+            parameter_name = self.parameter_key_map[display_name]
+
+            if not parameter_name:
+                slicer.util.errorDisplay("Parameter name cannot be empty.", parent=self)
+                return
+            if parameter_name in self.existing_keys:
+                slicer.util.errorDisplay("You cannot define multiple constraints for the same parameter.", parent=self)
+                return
+
+            self.accept()
+
+        def customexec_(self):
+            returncode = self.exec_()
+            if returncode == qt.QDialog.Accepted:
+                display_name = self.parameter_name_input.currentText
+                parameter_name = self.parameter_key_map[display_name]
+                return returncode, parameter_name, self._get_parameter_constraint_as_class()
+            return returncode, None, None
+
+    def __init__(self):
+        super().__init__(key_name="Parameter", val_name="Parameter Constraint")
+        self.add_button.text = "Add Parameter Constraint"
+        self.remove_button.text = "Remove Parameter Constraint"
+
+    def _open_add_dialog(self):
+        existing_keys = list(self.to_dict().keys())
+        createDlg = self.CreateParameterParameterConstraintDialog(existing_keys)
+        returncode, param, param_constraint = createDlg.customexec_()
+        if not returncode:
+            return
+        self._add_row(param, param_constraint)
+
+
+class OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
+    def __init__(self, parent: Optional[qt.QWidget] = None):
+        super().__init__(openlifu_lz().plan.SolutionAnalysisOptions, parent, collapsible_title="Solution Analysis Options")
+
+        old_param_constraints_dicttablewidget = self._field_widgets['param_constraints']
+        new_param_constraints_widget = OpenLIFUParameterConstraintsWidget()
+        replace_widget(old_param_constraints_dicttablewidget, new_param_constraints_widget)
+        self._field_widgets['param_constraints'] = new_param_constraints_widget
+
+
+# ---- Default protocol factories ----
+
+def _default_protocol_blueprint() -> Dict[str, Any]:
+    """Common keyword args for a freshly-created Protocol (no id/name/description/roles)."""
+    olz = openlifu_lz()
+    return dict(
+        pulse=olz.bf.Pulse(),
+        sequence=olz.bf.Sequence(),
+        focal_pattern=olz.bf.focal_patterns.SinglePoint(),
+        sim_setup=olz.sim.SimSetup(),
+        delay_method=olz.bf.delay_methods.Direct(),
+        apod_method=olz.bf.apod_methods.Uniform(),
+        seg_method=olz.seg.seg_methods.UniformWater(),
+        param_constraints={},
+        target_constraints=[],
+        analysis_options=olz.plan.SolutionAnalysisOptions(),
+        virtual_fit_options=olz.seg.virtual_fit.VirtualFitOptions(),
+    )
+
+
+def _build_default_new_protocol() -> "openlifu.plan.Protocol":
+    """Return a freshly-created Protocol pre-populated with the current user's
+    non-admin roles, used as the starting point for the *New* action."""
+    user = get_current_user()
+    allowed_roles = [r for r in (user.roles if user is not None else []) if r != "admin"]
+    return openlifu_lz().plan.Protocol(
+        name="New Protocol",
+        id="new_protocol",
+        description="",
+        allowed_roles=allowed_roles,
+        **_default_protocol_blueprint(),
+    )
+
+
+def _generate_unique_protocol_id(db: "openlifu.db.Database", base: str = "new_protocol") -> str:
+    """Return ``{base}_N`` where N is the smallest positive integer that does
+    not collide with any existing protocol in the database or with the
+    in-memory loaded set."""
+    try:
+        existing = set(db.get_protocol_ids() or []) if db is not None else set()
+    except Exception:
+        existing = set()
+    try:
+        existing.update(get_openlifu_data_parameter_node().loaded_protocols.keys())
+    except Exception:
+        pass
+    i = 1
+    while f"{base}_{i}" in existing:
+        i += 1
+    return f"{base}_{i}"
+
+
+# ---- Editor dialog ----
+
+class ProtocolEditDialog(qt.QDialog):
+    """Modal Save/Cancel editor for a single :class:`openlifu.plan.Protocol`.
+
+    Layout:
+        * Header: Name / ID / Description (always visible).
+        * Body: scrollable area of collapsible parameter sections (Allowed
+          Roles, Pulse, Sequence, Focal Pattern, Sim Setup, Delay/Apod/Seg
+          methods, Parameter Constraints, Target Constraints, Solution
+          Analysis Options, Virtual Fit Options).
+        * Footer: validity indicator + Save / Cancel buttons.
+    """
+
+    def __init__(self, protocol: "openlifu.plan.Protocol", db: "openlifu.db.Database", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Edit Protocol")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.setWindowFlags(self.windowFlags() & ~qt.Qt.WindowContextHelpButtonHint)
+        self._db = db
+        self._initial_protocol = protocol
+        self._saved_protocol: Optional["openlifu.plan.Protocol"] = None
+        self._setup()
+        self._populate_ui_from_protocol(protocol)
+        # Update validity once initial state is loaded.
+        self._update_validity_indicator()
+
+    def get_saved_protocol(self) -> Optional["openlifu.plan.Protocol"]:
+        """Return the protocol the user committed via Save, or ``None`` if cancelled."""
+        return self._saved_protocol
+
+    # ---- UI build ----
+    def _setup(self) -> None:
+        outer = qt.QVBoxLayout()
+        self.setLayout(outer)
+
+        # --- Header (Name / ID / Description) ---
+        headerForm = qt.QFormLayout()
+        self.nameLineEdit = qt.QLineEdit()
+        self.nameLineEdit.setToolTip("The name of the protocol")
+        self.idLineEdit = qt.QLineEdit()
+        self.idLineEdit.setToolTip("The unique identifier of the protocol")
+        self.descriptionTextEdit = qt.QPlainTextEdit()
+        self.descriptionTextEdit.setToolTip("A more detailed description of the protocol")
+        self.descriptionTextEdit.setMaximumHeight(80)
+        headerForm.addRow(_("Name"), self.nameLineEdit)
+        headerForm.addRow(_("Protocol ID"), self.idLineEdit)
+        headerForm.addRow(_("Description"), self.descriptionTextEdit)
+        outer.addLayout(headerForm)
+
+        # --- Scrollable body ---
+        self.scrollArea = qt.QScrollArea()
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        scrollContents = qt.QWidget()
+        bodyLayout = qt.QVBoxLayout(scrollContents)
+
+        # Allowed Roles (collapsible)
+        self.allowed_roles_widget = ListTableWidget(object_name="Role", object_type=str)
+        self._allowed_roles_collapsible = ctk.ctkCollapsibleButton()
+        self._allowed_roles_collapsible.text = "Allowed Roles"
+        self._allowed_roles_collapsible.collapsed = True
+        _ar_layout = qt.QVBoxLayout(self._allowed_roles_collapsible)
+        _ar_layout.addWidget(self.allowed_roles_widget)
+        bodyLayout.addWidget(self._allowed_roles_collapsible)
+
+        # Pulse / Sequence / Focal Pattern / Sim Setup / Delay / Apod / Seg
+        # All of these provide their own collapsible / labeled headers.
+        self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
+            cls=openlifu_lz().bf.Pulse, collapsible_title="Parameters for Pulse")
+        self.pulse_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
+        bodyLayout.addWidget(self.pulse_definition_widget)
+        self.pulse_definition_widget.collapsible.collapsed = True
+
+        self.sequence_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
+            cls=openlifu_lz().bf.Sequence, collapsible_title="Parameters for Sequence")
+        self.sequence_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
+        bodyLayout.addWidget(self.sequence_definition_widget)
+        self.sequence_definition_widget.collapsible.collapsed = True
+
+        self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget(
+            [openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint],
+            is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern",
+        )
+        _fp_collapsible = ctk.ctkCollapsibleButton()
+        _fp_collapsible.text = "Focal Pattern"
+        _fp_collapsible.collapsed = True
+        _fp_layout = qt.QVBoxLayout(_fp_collapsible)
+        _fp_layout.addWidget(self.abstract_focal_pattern_definition_widget)
+        bodyLayout.addWidget(_fp_collapsible)
+
+        self.sim_setup_definition_widget = OpenLIFUSimSetupDefinitionFormWidget()
+        self.sim_setup_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
+        bodyLayout.addWidget(self.sim_setup_definition_widget)
+        self.sim_setup_definition_widget.collapsible.collapsed = True
+
+        self.abstract_delay_method_definition_widget = OpenLIFUAbstractDelayMethodDefinitionFormWidget()
+        _delay_collapsible = ctk.ctkCollapsibleButton()
+        _delay_collapsible.text = "Delay Method"
+        _delay_collapsible.collapsed = True
+        _delay_layout = qt.QVBoxLayout(_delay_collapsible)
+        _delay_layout.addWidget(self.abstract_delay_method_definition_widget)
+        bodyLayout.addWidget(_delay_collapsible)
+
+        self.abstract_apodization_method_definition_widget = OpenLIFUAbstractApodizationMethodDefinitionFormWidget()
+        _apod_collapsible = ctk.ctkCollapsibleButton()
+        _apod_collapsible.text = "Apodization Method"
+        _apod_collapsible.collapsed = True
+        _apod_layout = qt.QVBoxLayout(_apod_collapsible)
+        _apod_layout.addWidget(self.abstract_apodization_method_definition_widget)
+        bodyLayout.addWidget(_apod_collapsible)
+
+        self.abstract_segmentation_method_definition_widget = OpenLIFUAbstractSegmentationMethodDefinitionFormWidget()
+        _seg_collapsible = ctk.ctkCollapsibleButton()
+        _seg_collapsible.text = "Segmentation Method"
+        _seg_collapsible.collapsed = True
+        _seg_layout = qt.QVBoxLayout(_seg_collapsible)
+        _seg_layout.addWidget(self.abstract_segmentation_method_definition_widget)
+        bodyLayout.addWidget(_seg_collapsible)
+
+        # Parameter Constraints (collapsible)
+        self.parameter_constraints_widget = OpenLIFUParameterConstraintsWidget()
+        self._param_constraints_collapsible = ctk.ctkCollapsibleButton()
+        self._param_constraints_collapsible.text = "Parameter Constraints"
+        self._param_constraints_collapsible.collapsed = True
+        _pc_layout = qt.QVBoxLayout(self._param_constraints_collapsible)
+        _pc_layout.addWidget(self.parameter_constraints_widget)
+        bodyLayout.addWidget(self._param_constraints_collapsible)
+
+        # Target Constraints (collapsible)
+        self.target_constraints_widget = ListTableWidget(
+            object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
+        self._target_constraints_collapsible = ctk.ctkCollapsibleButton()
+        self._target_constraints_collapsible.text = "Target Constraints"
+        self._target_constraints_collapsible.collapsed = True
+        _tc_layout = qt.QVBoxLayout(self._target_constraints_collapsible)
+        _tc_layout.addWidget(self.target_constraints_widget)
+        bodyLayout.addWidget(self._target_constraints_collapsible)
+
+        # Solution Analysis Options
+        self.solution_analysis_options_definition_widget = OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget()
+        self.solution_analysis_options_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
+        bodyLayout.addWidget(self.solution_analysis_options_definition_widget)
+        self.solution_analysis_options_definition_widget.collapsible.collapsed = True
+
+        # Virtual Fit Options
+        self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
+            cls=openlifu_lz().seg.virtual_fit.VirtualFitOptions, collapsible_title="Virtual Fit Options")
+        self.virtual_fit_options_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
+        bodyLayout.addWidget(self.virtual_fit_options_definition_widget)
+        self.virtual_fit_options_definition_widget.collapsible.collapsed = True
+
+        bodyLayout.addStretch(1)
+        self.scrollArea.setWidget(scrollContents)
+        outer.addWidget(self.scrollArea, 1)
+
+        # --- Footer ---
+        self.validityLabel = qt.QLabel("")
+        self.validityLabel.setAlignment(qt.Qt.AlignCenter)
+        self.validityLabel.setWordWrap(True)
+        outer.addWidget(self.validityLabel)
+
+        self.buttonBox = qt.QDialogButtonBox()
+        self.saveButton = self.buttonBox.addButton("Save", qt.QDialogButtonBox.AcceptRole)
+        self.cancelButton = self.buttonBox.addButton("Cancel", qt.QDialogButtonBox.RejectRole)
+        self.buttonBox.accepted.connect(self._on_save_clicked)
+        self.buttonBox.rejected.connect(self.reject)
+        outer.addWidget(self.buttonBox)
+
+        # Wire validity-indicator updates to all editor signals.
+        self.nameLineEdit.textChanged.connect(self._update_validity_indicator)
+        self.idLineEdit.textChanged.connect(self._update_validity_indicator)
+        self.descriptionTextEdit.textChanged.connect(self._update_validity_indicator)
+        self.allowed_roles_widget.table.itemChanged.connect(lambda *_a, **_kw: self._update_validity_indicator())
+        for w in (
+            self.pulse_definition_widget, self.sequence_definition_widget,
+            self.abstract_focal_pattern_definition_widget, self.sim_setup_definition_widget,
+            self.abstract_delay_method_definition_widget, self.abstract_apodization_method_definition_widget,
+            self.abstract_segmentation_method_definition_widget,
+            self.solution_analysis_options_definition_widget, self.virtual_fit_options_definition_widget,
+        ):
+            w.add_value_changed_signals(lambda *_a, **_kw: self._update_validity_indicator())
+        self.parameter_constraints_widget.table.itemChanged.connect(lambda *_a, **_kw: self._update_validity_indicator())
+        self.target_constraints_widget.table.itemChanged.connect(lambda *_a, **_kw: self._update_validity_indicator())
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.75))
+
+    # ---- I/O between Protocol object and form ----
+    def _populate_ui_from_protocol(self, protocol: "openlifu.plan.Protocol") -> None:
+        self.nameLineEdit.setText(protocol.name)
+        self.idLineEdit.setText(protocol.id)
+        self.descriptionTextEdit.setPlainText(protocol.description)
+        self.allowed_roles_widget.from_list(protocol.allowed_roles)
+        self.pulse_definition_widget.update_form_from_class(protocol.pulse)
+        self.sequence_definition_widget.update_form_from_class(protocol.sequence)
+        self.abstract_focal_pattern_definition_widget.update_form_from_class(protocol.focal_pattern)
+        self.sim_setup_definition_widget.update_form_from_class(protocol.sim_setup)
+        self.abstract_delay_method_definition_widget.update_form_from_class(protocol.delay_method)
+        self.abstract_apodization_method_definition_widget.update_form_from_class(protocol.apod_method)
+        self.abstract_segmentation_method_definition_widget.update_form_from_class(protocol.seg_method)
+        self.parameter_constraints_widget.from_dict(protocol.param_constraints)
+        self.target_constraints_widget.from_list(protocol.target_constraints)
+        self.solution_analysis_options_definition_widget.update_form_from_class(protocol.analysis_options)
+        self.virtual_fit_options_definition_widget.update_form_from_class(protocol.virtual_fit_options)
+
+    def _build_protocol_from_ui(self, post_init: bool = True) -> "openlifu.plan.Protocol":
+        fields = dict(
+            name=self.nameLineEdit.text,
+            id=self.idLineEdit.text,
+            description=self.descriptionTextEdit.toPlainText(),
+            allowed_roles=self.allowed_roles_widget.to_list(),
+            pulse=self.pulse_definition_widget.get_form_as_class(post_init=post_init),
+            sequence=self.sequence_definition_widget.get_form_as_class(post_init=post_init),
+            focal_pattern=self.abstract_focal_pattern_definition_widget.get_form_as_class(post_init=post_init),
+            sim_setup=self.sim_setup_definition_widget.get_form_as_class(post_init=post_init),
+            delay_method=self.abstract_delay_method_definition_widget.get_form_as_class(post_init=post_init),
+            apod_method=self.abstract_apodization_method_definition_widget.get_form_as_class(post_init=post_init),
+            seg_method=self.abstract_segmentation_method_definition_widget.get_form_as_class(post_init=post_init),
+            param_constraints=self.parameter_constraints_widget.to_dict(),
+            target_constraints=self.target_constraints_widget.to_list(),
+            analysis_options=self.solution_analysis_options_definition_widget.get_form_as_class(post_init=post_init),
+            virtual_fit_options=self.virtual_fit_options_definition_widget.get_form_as_class(post_init=post_init),
+        )
+        if post_init:
+            return openlifu_lz().plan.Protocol(**fields)
+        return instantiate_without_post_init(openlifu_lz().plan.Protocol, **fields)
+
+    def _update_validity_indicator(self) -> None:
+        try:
+            self._build_protocol_from_ui(post_init=True)
+        except Exception as e:
+            self.validityLabel.setText(f"Protocol is invalid: {e}")
+            self.validityLabel.setStyleSheet("color: red; border: 1px solid red; padding: 3px;")
+            self.saveButton.setEnabled(False)
+        else:
+            self.validityLabel.setText("")
+            self.validityLabel.setStyleSheet("border: none;")
+            self.saveButton.setEnabled(True)
+
+    # ---- Save handler ----
+    @display_errors
+    def _on_save_clicked(self, *_a, **_kw) -> None:
+        try:
+            entered = self._build_protocol_from_ui(post_init=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not save the protocol due to the following reason:\n{e}", parent=self)
+            return
+        if entered.id == "":
+            slicer.util.errorDisplay("You cannot save a protocol without entering in a Protocol ID.", parent=self)
+            return
+        if self._db is None:
+            slicer.util.errorDisplay("Cannot save protocol because there is no database connection.", parent=self)
+            return
+        # Overwrite check: only prompt when the saved id collides with an
+        # *existing* protocol in the database whose id differs from the one we
+        # started editing.
+        try:
+            existing_ids = set(self._db.get_protocol_ids() or [])
+        except Exception:
+            existing_ids = set()
+        if entered.id in existing_ids and entered.id != self._initial_protocol.id:
+            if not slicer.util.confirmYesNoDisplay(
+                text="A protocol with this ID already exists in the database. Overwrite it?",
+                windowTitle="Overwrite Confirmation",
+            ):
+                return
+        try:
+            self._db.write_protocol(entered, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write protocol to database: {e}", parent=self)
+            return
+        self._saved_protocol = entered
+        self.accept()
+
+
+# ---- Preview dialog ----
+
+class ProtocolPreviewDialog(qt.QDialog):
+    """Read-only QTreeWidget JSON view of a protocol with action buttons for
+    Duplicate / Edit / Export / Close.
+
+    When ``manager`` is provided, the action buttons delegate back to it so
+    that any changes made via Edit/Duplicate are reflected in the manager's
+    table; the preview dialog closes itself before invoking the action.
+    """
+
+    def __init__(
+        self,
+        protocol: "openlifu.plan.Protocol",
+        manager: Optional["ProtocolManagerDialog"] = None,
+        parent="mainWindow",
+    ):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle(f"Preview/Edit: {protocol.name} (ID: {protocol.id})")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.setWindowFlags(self.windowFlags() & ~qt.Qt.WindowContextHelpButtonHint)
+        self._protocol = protocol
+        self._manager = manager
+        self._setup()
+
+    def _setup(self) -> None:
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        self.tree = qt.QTreeWidget()
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderLabels(["Key", "Value"])
+        self.tree.setAlternatingRowColors(True)
+        self.tree.header().setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)
+        self.tree.header().setStretchLastSection(True)
+        layout.addWidget(self.tree, 1)
+
+        try:
+            data = self._protocol.to_dict()
+        except Exception as e:
+            data = {"error": f"Could not serialize protocol: {e}"}
+
+        root = qt.QTreeWidgetItem(self.tree, [f"{self._protocol.id}", ""])
+        self._populate_tree_node(root, data)
+        root.setExpanded(True)
+
+        bb = qt.QDialogButtonBox()
+        self.duplicateButton = bb.addButton("Duplicate", qt.QDialogButtonBox.ActionRole)
+        self.duplicateButton.setToolTip(
+            "Open the editor on a copy of this protocol (id suffixed with '_copy')"
+        )
+        self.editButton = bb.addButton("Edit", qt.QDialogButtonBox.ActionRole)
+        self.editButton.setToolTip("Open this protocol in the editor")
+        self.exportButton = bb.addButton("Export", qt.QDialogButtonBox.ActionRole)
+        self.exportButton.setToolTip("Save this protocol to a JSON file on disk")
+        self.closeButton = bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        self.closeButton.setToolTip("Close the preview without making changes")
+        bb.rejected.connect(self.reject)
+        self.duplicateButton.clicked.connect(self._on_duplicate)
+        self.editButton.clicked.connect(self._on_edit)
+        self.exportButton.clicked.connect(self._on_export)
+        layout.addWidget(bb)
+
+        # If we are not embedded in a manager, hide actions that require one.
+        if self._manager is None:
+            self.duplicateButton.setVisible(False)
+            self.editButton.setVisible(False)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.4), int(screen.height() * 0.5))
+
+    @display_errors
+    def _on_edit(self, *_a, **_kw) -> None:
+        if self._manager is None:
+            return
+        self.accept()
+        self._manager._open_editor_and_propagate(self._protocol)
+
+    @display_errors
+    def _on_duplicate(self, *_a, **_kw) -> None:
+        if self._manager is None:
+            return
+        self.accept()
+        copy = self._protocol
+        copy.id = f"{copy.id}_copy"
+        copy.name = f"{copy.name} (Copy)"
+        self._manager._open_editor_and_propagate(copy)
+
+    @display_errors
+    def _on_export(self, *_a, **_kw) -> None:
+        ProtocolManagerDialog._export_protocol_to_file(self._protocol, parent=self)
+
+    @classmethod
+    def _populate_tree_node(cls, parent_item: qt.QTreeWidgetItem, value: Any) -> None:
+        if isinstance(value, dict):
+            for k, v in value.items():
+                child = qt.QTreeWidgetItem(parent_item, [str(k), "" if isinstance(v, (dict, list)) else cls._format_scalar(v)])
+                if isinstance(v, (dict, list)):
+                    cls._populate_tree_node(child, v)
+        elif isinstance(value, list):
+            for i, v in enumerate(value):
+                child = qt.QTreeWidgetItem(parent_item, [f"[{i}]", "" if isinstance(v, (dict, list)) else cls._format_scalar(v)])
+                if isinstance(v, (dict, list)):
+                    cls._populate_tree_node(child, v)
+
+    @staticmethod
+    def _format_scalar(v: Any) -> str:
+        try:
+            return json.dumps(v, default=str)
+        except Exception:
+            return str(v)
+
+
+# ---- Manager dialog ----
+
+class ProtocolManagerDialog(qt.QDialog):
+    """Tabular manager for protocols stored in the loaded database.
+
+    Columns: ``[ID, Name, Roles, Description]``. Top-level actions:
+
+      * **New** -- create a blank protocol and open the editor.
+      * **Import** -- load a protocol JSON file from disk into the database.
+      * **Preview/Edit** -- open the preview window for the selected protocol;
+        the preview window itself offers Edit / Duplicate / Export actions.
+      * **Delete** -- remove the selected protocol from the database.
+    """
+
+    def __init__(self, db: "openlifu.db.Database", parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle("Manage Protocols")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.setWindowFlags(self.windowFlags() & ~qt.Qt.WindowContextHelpButtonHint)
+        self.db = db
+        self._setup()
+        self.refresh()
+
+    # ---- UI ----
+    def _setup(self) -> None:
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        cols = ["ID", "Name", "Roles", "Description"]
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setHighlightSections(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, qt.QHeaderView.Stretch)
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+        actionRow = qt.QHBoxLayout()
+        self.newButton = qt.QPushButton("New")
+        self.newButton.setToolTip("Create a new blank protocol and open the editor")
+        self.importButton = qt.QPushButton("Import")
+        self.importButton.setToolTip("Import a protocol definition from a JSON file on disk")
+        self.previewEditButton = qt.QPushButton("Preview/Edit")
+        self._tooltip_preview_enabled = (
+            "Open a preview of the selected protocol; from there you can edit, duplicate, or export it"
+        )
+        self._tooltip_disabled = "No Protocol Selected"
+        self.previewEditButton.setToolTip(self._tooltip_preview_enabled)
+        self.deleteButton = qt.QPushButton("Delete")
+        self._tooltip_delete_enabled = "Remove the selected protocol from the database"
+        self.deleteButton.setToolTip(self._tooltip_delete_enabled)
+        for b in (self.newButton, self.importButton, self.previewEditButton, self.deleteButton):
+            b.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            actionRow.addWidget(b)
+        layout.addLayout(actionRow)
+
+        bb = qt.QDialogButtonBox()
+        closeButton = bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        closeButton.setToolTip("Close the protocol manager")
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        self.newButton.clicked.connect(self.onNew)
+        self.importButton.clicked.connect(self.onImport)
+        self.previewEditButton.clicked.connect(self.onPreviewEdit)
+        self.deleteButton.clicked.connect(self.onDelete)
+        self.table.doubleClicked.connect(self.onPreviewEdit)
+        self.table.itemSelectionChanged.connect(self._update_action_buttons_state)
+
+        self._update_action_buttons_state()
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.5), int(screen.height() * 0.4))
+
+    def _update_action_buttons_state(self) -> None:
+        """Enable/disable selection-dependent buttons and update their tooltips."""
+        has_selection = self._selected_protocol_id() is not None
+        self.previewEditButton.setEnabled(has_selection)
+        self.deleteButton.setEnabled(has_selection)
+        self.previewEditButton.setToolTip(
+            self._tooltip_preview_enabled if has_selection else self._tooltip_disabled
+        )
+        self.deleteButton.setToolTip(
+            self._tooltip_delete_enabled if has_selection else self._tooltip_disabled
+        )
+
+    # ---- Population ----
+    def refresh(self) -> None:
+        self.table.setSortingEnabled(False)
+        self.table.clearContents()
+        try:
+            ids = list(self.db.get_protocol_ids() or [])
+        except Exception as e:
+            logging.warning("Could not list protocol ids: %s", e)
+            ids = []
+
+        self.table.setRowCount(len(ids))
+        for row, pid in enumerate(ids):
+            try:
+                p = self.db.load_protocol(pid)
+                name = getattr(p, "name", pid)
+                roles = ", ".join(getattr(p, "allowed_roles", []) or [])
+                description = (getattr(p, "description", "") or "").replace("\n", " ")
+            except Exception as e:
+                logging.warning("Could not load protocol %s for listing: %s", pid, e)
+                name, roles, description = pid, "", ""
+
+            self.table.setItem(row, 0, qt.QTableWidgetItem(str(pid)))
+            self.table.setItem(row, 1, qt.QTableWidgetItem(str(name)))
+            self.table.setItem(row, 2, qt.QTableWidgetItem(roles))
+            self.table.setItem(row, 3, qt.QTableWidgetItem(description))
+        self.table.resizeRowsToContents()
+        self.table.setSortingEnabled(True)
+        self._update_action_buttons_state()
+
+    def _selected_protocol_id(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        if not items:
+            return None
+        idItem = self.table.item(items[0].row(), 0)
+        return idItem.text() if idItem else None
+
+    def _load_selected_protocol(self) -> Optional["openlifu.plan.Protocol"]:
+        pid = self._selected_protocol_id()
+        if pid is None:
+            return None
+        try:
+            return self.db.load_protocol(pid)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to load protocol {pid}: {e}", parent=self)
+            return None
+
+    # ---- Actions ----
+    def _open_editor_and_propagate(self, protocol: "openlifu.plan.Protocol") -> None:
+        """Open the editor for ``protocol``; on Save, refresh the table and
+        propagate the new/updated protocol into the data parameter node so the
+        rest of the app sees the change."""
+        dlg = ProtocolEditDialog(protocol=protocol, db=self.db, parent=self)
+        if dlg.exec_() != qt.QDialog.Accepted:
+            return
+        saved = dlg.get_saved_protocol()
+        if saved is None:
+            return
+        # Reflect the saved protocol in the in-memory loaded set so other
+        # modules (e.g. SonicationPlanner) pick up the new/updated definition.
+        try:
+            data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+            data_logic.load_protocol_from_openlifu(saved, replace_confirmed=True)
+        except Exception as e:
+            logging.warning("Could not refresh in-memory protocol after save: %s", e)
+        self.refresh()
+
+    @display_errors
+    def onNew(self, checked: bool = False) -> None:
+        protocol = _build_default_new_protocol()
+        protocol.id = _generate_unique_protocol_id(self.db)
+        self._open_editor_and_propagate(protocol)
+
+    @display_errors
+    def onImport(self, checked: bool = False) -> None:
+        qsettings = qt.QSettings()
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(),
+            "Import protocol",
+            qsettings.value("OpenLIFU/databaseDirectory", "."),
+            "Protocols (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            protocol = openlifu_lz().plan.Protocol.from_file(filepath)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to read protocol file: {e}", parent=self)
+            return
+        # Confirm overwrite if collision.
+        try:
+            existing_ids = set(self.db.get_protocol_ids() or [])
+        except Exception:
+            existing_ids = set()
+        if protocol.id in existing_ids:
+            if not slicer.util.confirmYesNoDisplay(
+                text=f'A protocol with id "{protocol.id}" already exists in the database. Overwrite it?',
+                windowTitle="Overwrite Confirmation",
+            ):
+                return
+        try:
+            self.db.write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write protocol to database: {e}", parent=self)
+            return
+        try:
+            data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+            data_logic.load_protocol_from_openlifu(protocol, replace_confirmed=True)
+        except Exception as e:
+            logging.warning("Could not refresh in-memory protocol after import: %s", e)
+        self.refresh()
+
+    @display_errors
+    def onDuplicate(self, checked: bool = False) -> None:
+        protocol = self._load_selected_protocol()
+        if protocol is None:
+            return
+        protocol.id = f"{protocol.id}_copy"
+        protocol.name = f"{protocol.name} (Copy)"
+        self._open_editor_and_propagate(protocol)
+
+    @display_errors
+    def onEdit(self, *_a, **_kw) -> None:
+        protocol = self._load_selected_protocol()
+        if protocol is None:
+            return
+        self._open_editor_and_propagate(protocol)
+
+    @display_errors
+    def onPreviewEdit(self, *_a, **_kw) -> None:
+        protocol = self._load_selected_protocol()
+        if protocol is None:
+            return
+        ProtocolPreviewDialog(protocol, manager=self, parent=self).exec_()
+
+    @display_errors
+    def onExport(self, checked: bool = False) -> None:
+        protocol = self._load_selected_protocol()
+        if protocol is None:
+            return
+        self._export_protocol_to_file(protocol, parent=self)
+
+    @staticmethod
+    def _export_protocol_to_file(protocol: "openlifu.plan.Protocol", parent: qt.QWidget) -> None:
+        """Prompt the user for a save path and write ``protocol`` to disk."""
+        safe_id = "".join(c if c.isalnum() or c in (' ', '-', '_') else "_" for c in protocol.id)
+        initial_file = str(Path(slicer.app.defaultScenePath) / f"{safe_id}.json")
+        filepath = qt.QFileDialog.getSaveFileName(
+            slicer.util.mainWindow(),
+            "Export Protocol",
+            initial_file,
+            "Protocols (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            protocol.to_file(filepath)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write protocol file: {e}", parent=parent)
+            return
+
+    @display_errors
+    def onDelete(self, checked: bool = False) -> None:
+        pid = self._selected_protocol_id()
+        if pid is None:
+            return
+        if not slicer.util.confirmYesNoDisplay(
+            text=f'Are you sure you want to delete the protocol "{pid}"?',
+            windowTitle="Protocol Delete Confirmation",
+        ):
+            return
+        try:
+            self.db.delete_protocol(pid, openlifu_lz().db.database.OnConflictOpts.ERROR)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to delete protocol from database: {e}", parent=self)
+            return
+        # Also drop from the in-memory loaded set if present.
+        try:
+            loaded = get_openlifu_data_parameter_node().loaded_protocols
+            if pid in loaded:
+                loaded.pop(pid)
+        except Exception as e:
+            logging.warning("Could not unload deleted protocol %s: %s", pid, e)
+        self.refresh()
+
+
 #
 # OpenLIFUDataWidget
 #
@@ -2435,7 +3471,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Protocols collapsible section
         self.ui.manageProtocolsPushButton.clicked.connect(
-            lambda: slicer.util.selectModule("OpenLIFUProtocolConfig")
+            self.onManageProtocolsClicked
         )
 
         # Transducers collapsible section (manager popup not yet implemented).
@@ -3677,6 +4713,24 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         dlg = TransducerManagerDialog(db=db, parent=slicer.util.mainWindow())
         dlg.exec_()
 
+    @display_errors
+    def onManageProtocolsClicked(self, checked: bool = False) -> None:
+        """Open the Protocol manager popup.
+
+        Requires a loaded database. The dialog presents the protocols stored
+        in that database in a table and offers New / Import / Duplicate /
+        Edit / Preview / Export / Delete actions.
+        """
+        db = get_cur_db()
+        if db is None:
+            slicer.util.errorDisplay(
+                "A database must be loaded before the Protocol manager can be opened.",
+                windowTitle="Manage Protocols",
+            )
+            return
+        dlg = ProtocolManagerDialog(db=db, parent=slicer.util.mainWindow())
+        dlg.exec_()
+
     def enter(self) -> None:
         """Called each time the user opens this module."""
         ensure_python_requirements_for_module_enter()
@@ -4329,9 +5383,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
     def load_protocol_from_openlifu(self, protocol:"openlifu.plan.Protocol", replace_confirmed: bool = False) -> None:
         """Load an openlifu protocol object into the scene as a SlicerOpenLIFUProtocol,
-        adding it to the list of loaded openlifu objects. If there are
-        changes in the protocol config, also confirms user wants to discard
-        changes.
+        adding it to the list of loaded openlifu objects.
 
         Args:
             protocol: The openlifu Protocol object
@@ -4346,34 +5398,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        # check if user wants to overwrite WIPs
-        protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
-        if not protocolConfigLogic.confirm_and_overwrite_protocol_cache(protocol):
-            return
-
         self.getParameterNode().loaded_protocols[protocol.id] = SlicerOpenLIFUProtocol(protocol)
 
     def remove_protocol(self, protocol_id:str) -> None:
-        """Remove a protocol from the list of loaded protocols. If there are
-        changes in the protocol config, also confirms user wants to discard
-        changes."""
+        """Remove a protocol from the list of loaded protocols."""
         loaded_protocols = self.getParameterNode().loaded_protocols
         if not protocol_id in loaded_protocols:
             raise IndexError(f"No protocol with ID {protocol_id} appears to be loaded; cannot remove it.")
-
-        # check if user wants to save changes
-        protocolConfigLogic = slicer.util.getModuleLogic('OpenLIFUProtocolConfig')
-        if protocolConfigLogic.protocol_id_is_in_cache(protocol_id):
-            if slicer.util.confirmYesNoDisplay(
-                text=f"You have unsaved changes in the protocol you are about to remove. Do you want to save changes?",
-                windowTitle="Save Changes Confirmation",
-            ):
-                protocolConfigLogic.save_protocol_to_database(protocolConfigLogic.cached_protocols[protocol_id])
-
-
         loaded_protocols.pop(protocol_id)
-        # We must delete from cache after because parameter node update might add it back to cache
-        protocolConfigLogic.delete_protocol_from_cache(protocol_id)
 
     def load_transducer_from_file(self, filepath:str) -> None:
         import openlifu.xdc.util

@@ -31,13 +31,6 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="QPushButton" name="protocolConfigPushButton">
-        <property name="text">
-         <string>OpenLIFU Protocol Configuration</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QGroupBox" name="guidedWorkflowGroupBox">
         <property name="title">
          <string>Guided Workflow Modules</string>

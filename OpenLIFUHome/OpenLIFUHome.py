@@ -126,7 +126,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))
         self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
         self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
-        self.ui.protocolConfigPushButton.clicked.connect(lambda : self.switchModule(self.ui.protocolConfigPushButton.text))
 
         qt.QTimer.singleShot(1000, slicer.util.getModuleLogic("OpenLIFUCloudSync").startHeartbeat)
 
@@ -139,9 +138,6 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # This is due to max path character limits on longer module names
         if (moduleButtonText == "OpenLIFUSonicationPlanning"):
             moduleButtonText = moduleButtonText[:-3] + "er"
-
-        if (moduleButtonText == "OpenLIFUProtocolConfiguration"):
-            moduleButtonText = moduleButtonText[:-7]  # strip to -Config
 
         slicer.util.selectModule(moduleButtonText)
         

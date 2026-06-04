@@ -81,7 +81,6 @@ The extension has 9 feature modules plus a shared library, all as Slicer scripte
 | **OpenLIFUTransducerLocalization** | Photogrammetry-based transducer tracking |
 | **OpenLIFUSonicationPlanner** | Solution computation (beamforming + k-Wave simulation) |
 | **OpenLIFUSonicationControl** | Hardware interface, run execution and recording |
-| **OpenLIFUProtocolConfig** | Protocol creation/editing (admin only) |
 | **OpenLIFULib** | Shared utility library (not a UI module) |
 
 ### Workflow Data Flow
