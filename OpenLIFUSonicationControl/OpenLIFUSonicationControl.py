@@ -631,6 +631,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                 SolutionOnHardwareState.RUN_FAILED,
                 detail=_format_lifu_error(e),
             )
+        else:
+            # The hardware acknowledged starting; reflect that immediately so
+            # the user isn't left looking at a stale "Run not in progress." label
+            # (an artifact of the in-run callback ordering) until the first
+            # status update arrives from the device, which can take a while.
+            self.ui.runHardwareStatusLabel.setProperty("text", "Run in progress.")
+            slicer.app.processEvents()
         self.updateWorkflowControls()
         
     def onAbortClicked(self):
