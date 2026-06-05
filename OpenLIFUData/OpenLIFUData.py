@@ -2730,8 +2730,13 @@ class ProtocolEditDialog(qt.QDialog):
         self.scrollArea = qt.QScrollArea()
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        self.scrollArea.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAsNeeded)
         scrollContents = qt.QWidget()
         bodyLayout = qt.QVBoxLayout(scrollContents)
+        # Reserve room on the right edge for the vertical scrollbar so input
+        # widgets do not get clipped by it. The exact value is the platform's
+        # scrollbar metric; 18px works on every Qt style we ship.
+        bodyLayout.setContentsMargins(0, 0, 18, 0)
 
         # Allowed Roles (collapsible)
         self.allowed_roles_widget = ListTableWidget(object_name="Role", object_type=str)
@@ -2886,7 +2891,10 @@ class ProtocolEditDialog(qt.QDialog):
         self.target_constraints_widget.table.itemChanged.connect(lambda *_a, **_kw: self._update_validity_indicator())
 
         screen = qt.QDesktopWidget().screenGeometry()
-        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.75))
+        # Shrink the dialog width: the form needs roughly half the screen, not
+        # the previous 55%. Height stays generous so users can see most of the
+        # collapsible sections at once.
+        self.resize(int(screen.width() * 0.4), int(screen.height() * 0.75))
 
     # ---- I/O between Protocol object and form ----
     def _populate_ui_from_protocol(self, protocol: "openlifu.plan.Protocol") -> None:
