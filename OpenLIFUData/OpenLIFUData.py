@@ -2697,6 +2697,8 @@ class ProtocolEditDialog(qt.QDialog):
         self._populate_ui_from_protocol(protocol)
         # Update validity once initial state is loaded.
         self._update_validity_indicator()
+        # Populate initial collapsible-section summaries from the loaded values.
+        self._refresh_section_summaries()
 
     def get_saved_protocol(self) -> Optional["openlifu.plan.Protocol"]:
         """Return the protocol the user committed via Save, or ``None`` if cancelled."""
@@ -2739,17 +2741,25 @@ class ProtocolEditDialog(qt.QDialog):
 
         # Pulse / Sequence / Focal Pattern / Sim Setup / Delay / Apod / Seg
         # All of these provide their own collapsible / labeled headers.
+        # ``_summary_sections`` collects (collapsible_button, form_widget,
+        # base_title) so we can append a live one-liner summary (from each
+        # underlying openlifu class's ``get_summary()``) to the section header
+        # whenever the user edits a field.
+        self._summary_sections: list[tuple[Any, Any, str]] = []
+
         self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
             cls=openlifu_lz().bf.Pulse, collapsible_title="Parameters for Pulse")
         self.pulse_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.pulse_definition_widget)
         self.pulse_definition_widget.collapsible.collapsed = True
+        self._summary_sections.append((self.pulse_definition_widget.collapsible, self.pulse_definition_widget, "Pulse"))
 
         self.sequence_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
             cls=openlifu_lz().bf.Sequence, collapsible_title="Parameters for Sequence")
         self.sequence_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.sequence_definition_widget)
         self.sequence_definition_widget.collapsible.collapsed = True
+        self._summary_sections.append((self.sequence_definition_widget.collapsible, self.sequence_definition_widget, "Sequence"))
 
         self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget(
             [openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint],
@@ -2761,11 +2771,13 @@ class ProtocolEditDialog(qt.QDialog):
         _fp_layout = qt.QVBoxLayout(_fp_collapsible)
         _fp_layout.addWidget(self.abstract_focal_pattern_definition_widget)
         bodyLayout.addWidget(_fp_collapsible)
+        self._summary_sections.append((_fp_collapsible, self.abstract_focal_pattern_definition_widget, "Focal Pattern"))
 
         self.sim_setup_definition_widget = OpenLIFUSimSetupDefinitionFormWidget()
         self.sim_setup_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.sim_setup_definition_widget)
         self.sim_setup_definition_widget.collapsible.collapsed = True
+        self._summary_sections.append((self.sim_setup_definition_widget.collapsible, self.sim_setup_definition_widget, "Sim Setup"))
 
         self.abstract_delay_method_definition_widget = OpenLIFUAbstractDelayMethodDefinitionFormWidget()
         _delay_collapsible = ctk.ctkCollapsibleButton()
@@ -2774,6 +2786,7 @@ class ProtocolEditDialog(qt.QDialog):
         _delay_layout = qt.QVBoxLayout(_delay_collapsible)
         _delay_layout.addWidget(self.abstract_delay_method_definition_widget)
         bodyLayout.addWidget(_delay_collapsible)
+        self._summary_sections.append((_delay_collapsible, self.abstract_delay_method_definition_widget, "Delay Method"))
 
         self.abstract_apodization_method_definition_widget = OpenLIFUAbstractApodizationMethodDefinitionFormWidget()
         _apod_collapsible = ctk.ctkCollapsibleButton()
@@ -2782,6 +2795,7 @@ class ProtocolEditDialog(qt.QDialog):
         _apod_layout = qt.QVBoxLayout(_apod_collapsible)
         _apod_layout.addWidget(self.abstract_apodization_method_definition_widget)
         bodyLayout.addWidget(_apod_collapsible)
+        self._summary_sections.append((_apod_collapsible, self.abstract_apodization_method_definition_widget, "Apodization Method"))
 
         self.abstract_segmentation_method_definition_widget = OpenLIFUAbstractSegmentationMethodDefinitionFormWidget()
         _seg_collapsible = ctk.ctkCollapsibleButton()
@@ -2790,6 +2804,7 @@ class ProtocolEditDialog(qt.QDialog):
         _seg_layout = qt.QVBoxLayout(_seg_collapsible)
         _seg_layout.addWidget(self.abstract_segmentation_method_definition_widget)
         bodyLayout.addWidget(_seg_collapsible)
+        self._summary_sections.append((_seg_collapsible, self.abstract_segmentation_method_definition_widget, "Segmentation Method"))
 
         # Parameter Constraints (collapsible)
         self.parameter_constraints_widget = OpenLIFUParameterConstraintsWidget()
@@ -2815,6 +2830,11 @@ class ProtocolEditDialog(qt.QDialog):
         self.solution_analysis_options_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.solution_analysis_options_definition_widget)
         self.solution_analysis_options_definition_widget.collapsible.collapsed = True
+        self._summary_sections.append((
+            self.solution_analysis_options_definition_widget.collapsible,
+            self.solution_analysis_options_definition_widget,
+            "Solution Analysis Options",
+        ))
 
         # Virtual Fit Options
         self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
@@ -2822,6 +2842,11 @@ class ProtocolEditDialog(qt.QDialog):
         self.virtual_fit_options_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.virtual_fit_options_definition_widget)
         self.virtual_fit_options_definition_widget.collapsible.collapsed = True
+        self._summary_sections.append((
+            self.virtual_fit_options_definition_widget.collapsible,
+            self.virtual_fit_options_definition_widget,
+            "Virtual Fit Options",
+        ))
 
         bodyLayout.addStretch(1)
         self.scrollArea.setWidget(scrollContents)
@@ -2853,6 +2878,7 @@ class ProtocolEditDialog(qt.QDialog):
             self.solution_analysis_options_definition_widget, self.virtual_fit_options_definition_widget,
         ):
             w.add_value_changed_signals(lambda *_a, **_kw: self._update_validity_indicator())
+            w.add_value_changed_signals(lambda *_a, **_kw: self._refresh_section_summaries())
         self.parameter_constraints_widget.table.itemChanged.connect(lambda *_a, **_kw: self._update_validity_indicator())
         self.target_constraints_widget.table.itemChanged.connect(lambda *_a, **_kw: self._update_validity_indicator())
 
@@ -2910,6 +2936,22 @@ class ProtocolEditDialog(qt.QDialog):
             self.validityLabel.setText("")
             self.validityLabel.setStyleSheet("border: none;")
             self.saveButton.setEnabled(True)
+
+    def _refresh_section_summaries(self) -> None:
+        """Update each section's collapsible header with a live one-liner
+        derived from the underlying openlifu class's ``get_summary()``.
+
+        Failures (e.g. invalid intermediate state during editing) are silently
+        ignored: the section header is reset to its base title, and the
+        validity indicator already surfaces the underlying validation error.
+        """
+        for collapsible, form_widget, base_title in getattr(self, "_summary_sections", []):
+            try:
+                instance = form_widget.get_form_as_class(post_init=False)
+                summary = instance.get_summary() if hasattr(instance, "get_summary") else ""
+            except Exception:
+                summary = ""
+            collapsible.text = f"{base_title} - {summary}" if summary else base_title
 
     # ---- Save handler ----
     @display_errors

@@ -1,5 +1,6 @@
 # Standard library imports
 import inspect
+import math
 from dataclasses import fields, is_dataclass, MISSING
 from typing import (
     Annotated,
@@ -22,6 +23,161 @@ from slicer.i18n import tr as _
 
 # OpenLIFULib imports
 from OpenLIFULib.util import get_hints
+
+
+# ----------------------------------------------------------------------
+# Numeric line-edit helpers
+# ----------------------------------------------------------------------
+#
+# Form widgets use ``QLineEdit`` with a numeric validator for int/float
+# fields (rather than ``QSpinBox`` / ``QDoubleSpinBox``) so that display
+# strings never carry stray trailing zeros from a fixed ``decimals``
+# setting. The Qt dynamic property ``_NUMERIC_KIND_PROP`` tags each numeric
+# line edit with ``"int"`` or ``"float"`` so the rest of the form code can
+# distinguish numeric inputs from plain-string ``QLineEdit``\\ s.
+
+_NUMERIC_KIND_PROP = "_olfu_numeric_kind"
+_NUMERIC_PRECISION_PROP = "_olfu_numeric_precision"
+_DEFAULT_NUMERIC_PRECISION = 6
+
+
+def _format_numeric_for_edit(value: float, precision: int) -> str:
+    """Format ``value`` for display in a numeric line edit.
+
+    Uses fixed-point with ``precision`` decimals, then strips trailing
+    zeros. Falls back to ``%g`` when fixed-point would render a non-zero
+    value as ``"0"``.
+    """
+    if value is None:
+        return ""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if not math.isfinite(value):
+        return str(value)
+    precision = max(0, int(precision))
+    text = f"{value:.{precision}f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+        if text in ("", "-"):
+            text = "0"
+    if value != 0 and float(text) == 0:
+        text = f"{value:.6g}"
+    return text
+
+
+def _make_float_lineedit(precision: Optional[int] = None, value: float = 0.0,
+                         min_value: float = -1e12, max_value: float = 1e12) -> qt.QLineEdit:
+    """Create a ``QLineEdit`` configured as a floating-point numeric input."""
+    w = qt.QLineEdit()
+    w.setProperty(_NUMERIC_KIND_PROP, "float")
+    p = _DEFAULT_NUMERIC_PRECISION if precision is None else int(precision)
+    w.setProperty(_NUMERIC_PRECISION_PROP, p)
+    validator = qt.QDoubleValidator(float(min_value), float(max_value), p, w)
+    validator.setNotation(qt.QDoubleValidator.StandardNotation)
+    w.setValidator(validator)
+    w.setText(_format_numeric_for_edit(value, p))
+    return w
+
+
+def _make_int_lineedit(value: int = 0,
+                       min_value: int = -2_000_000_000,
+                       max_value: int = 2_000_000_000) -> qt.QLineEdit:
+    """Create a ``QLineEdit`` configured as an integer numeric input."""
+    w = qt.QLineEdit()
+    w.setProperty(_NUMERIC_KIND_PROP, "int")
+    w.setValidator(qt.QIntValidator(int(min_value), int(max_value), w))
+    w.setText(str(int(value)))
+    return w
+
+
+def _numeric_kind(widget: qt.QWidget) -> Optional[str]:
+    """Return ``"int"`` / ``"float"`` if ``widget`` is a numeric line edit, else ``None``."""
+    if not isinstance(widget, qt.QLineEdit):
+        return None
+    kind = widget.property(_NUMERIC_KIND_PROP)
+    if kind in ("int", "float"):
+        return kind
+    return None
+
+
+def _is_numeric_widget(widget: qt.QWidget) -> bool:
+    return _numeric_kind(widget) is not None
+
+
+def _get_numeric_value(widget: qt.QWidget) -> Any:
+    """Extract the parsed numeric value from a numeric line edit.
+
+    Returns ``0`` / ``0.0`` for empty or unparseable text (the validator
+    keeps invalid keystrokes from being entered in the first place, so this
+    fallback only matters during construction).
+    """
+    kind = _numeric_kind(widget)
+    text = widget.text.strip() if widget.text is not None else ""
+    if kind == "float":
+        try:
+            return float(text)
+        except (TypeError, ValueError):
+            return 0.0
+    if kind == "int":
+        try:
+            return int(text)
+        except (TypeError, ValueError):
+            return 0
+    return None
+
+
+def _set_numeric_value(widget: qt.QWidget, value: Any) -> None:
+    """Write ``value`` into a numeric line edit, formatting per its precision."""
+    kind = _numeric_kind(widget)
+    if kind == "float":
+        precision = widget.property(_NUMERIC_PRECISION_PROP)
+        if precision is None:
+            precision = _DEFAULT_NUMERIC_PRECISION
+        widget.setText(_format_numeric_for_edit(float(value), int(precision)))
+    elif kind == "int":
+        try:
+            widget.setText(str(int(value)))
+        except (TypeError, ValueError):
+            widget.setText(str(value))
+
+
+def _apply_numeric_range(widget: qt.QWidget, min_value: Optional[float] = None,
+                         max_value: Optional[float] = None) -> None:
+    """Tighten the validator range of a numeric line edit (no-op for others)."""
+    kind = _numeric_kind(widget)
+    if kind is None:
+        return
+    validator = widget.validator()
+    if kind == "float" and isinstance(validator, qt.QDoubleValidator):
+        if min_value is not None:
+            validator.setBottom(float(min_value))
+        if max_value is not None:
+            validator.setTop(float(max_value))
+    elif kind == "int" and isinstance(validator, qt.QIntValidator):
+        if min_value is not None:
+            validator.setBottom(int(min_value))
+        if max_value is not None:
+            validator.setTop(int(max_value))
+
+
+def _apply_numeric_precision(widget: qt.QWidget, precision: int) -> None:
+    """Update the stored precision (decimals) for a float line edit and reformat."""
+    if _numeric_kind(widget) != "float":
+        return
+    p = max(0, int(precision))
+    widget.setProperty(_NUMERIC_PRECISION_PROP, p)
+    validator = widget.validator()
+    if isinstance(validator, qt.QDoubleValidator):
+        validator.setDecimals(p)
+    # Reformat any existing text so trailing zeros are trimmed to the new precision.
+    text = widget.text.strip() if widget.text is not None else ""
+    if text:
+        try:
+            widget.setText(_format_numeric_for_edit(float(text), p))
+        except ValueError:
+            pass
 
 
 def instantiate_without_post_init(cls: Type, **kwargs) -> Any:
@@ -463,8 +619,8 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         each attribute of an instance created from the specified dataclass. Input
         widgets are generated based on attribute types:
 
-        - int: QSpinBox
-        - float: QDoubleSpinBox
+        - int: QLineEdit (validated as integer)
+        - float: QLineEdit (validated as floating-point, with metadata-driven precision)
         - str: QLineEdit
         - bool: QCheckBox
         - dict: DictTableWidget (2 columns for key-value pairs)
@@ -489,6 +645,21 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
 
         super().__init__(parent)
         self._field_widgets: dict[str, qt.QWidget] = {}
+        # Metadata and display-affecting state captured per field. ``_field_metadata``
+        # holds the ``OpenLIFUFieldData`` annotation (when present) so that the
+        # form can apply unit suffixes, decimal precision, and storage<->display
+        # unit conversion. ``_field_labels`` holds the QLabel widget for each
+        # field so that unit suffixes can be refreshed when a sibling unit field
+        # (``units_field``) changes.
+        self._field_metadata: dict[str, Any] = {}
+        self._field_labels: dict[str, qt.QLabel] = {}
+        self._field_label_base: dict[str, str] = {}
+        # Fields that are *referenced* via another field's ``units_field``
+        # while the referring field also declares a fixed ``display_units``.
+        # We hide such unit dropdowns from the form (display is locked to the
+        # nice unit) and just shuttle their stored values through unchanged.
+        # Maps hidden field name -> last known value.
+        self._hidden_unit_values: dict[str, Any] = {}
         self._cls = cls
 
         if is_collapsible:
@@ -513,12 +684,43 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
         type_hints = get_hints(cls, include_extras=True)
         dataclass_fields = {f.name: f for f in fields(cls)}
 
+        # First pass: discover unit sibling fields that should be hidden.
+        # A field ``X`` is hidden when *any* other field's annotation has both
+        # ``units_field == X`` and a non-empty ``display_units``: in that case
+        # the editor always shows the value in the fixed display unit, so the
+        # dropdown for ``X`` would be misleading. We still need to round-trip
+        # ``X``'s value so save/load preserves it; defaults are seeded here.
+        hidden_unit_field_names: set[str] = set()
+        for ann in type_hints.values():
+            if get_origin(ann) is not Annotated:
+                continue
+            ann_args = get_args(ann)
+            if len(ann_args) < 2:
+                continue
+            meta = ann_args[1]
+            units_field = getattr(meta, "units_field", None)
+            display_units = getattr(meta, "display_units", None)
+            if units_field and display_units:
+                hidden_unit_field_names.add(units_field)
+        for hidden in hidden_unit_field_names:
+            field_info = dataclass_fields.get(hidden)
+            if field_info is None:
+                continue
+            if field_info.default is not MISSING:
+                self._hidden_unit_values[hidden] = field_info.default
+            elif field_info.default_factory is not MISSING:  # type: ignore
+                self._hidden_unit_values[hidden] = field_info.default_factory()  # type: ignore
+
         for name, annotated_type in type_hints.items():
 
             # Some dataclass fields cannot be initialized
             field_info = dataclass_fields.get(name)
             if field_info is None or not field_info.init:
                 continue # Skip fields not meant to be initialized. e.g., openlifu.seg.material.Material.param_ids
+
+            # Skip unit sibling dropdowns whose siblings have a fixed display_units.
+            if name in hidden_unit_field_names:
+                continue
 
             # Now, for each member of cls, create widgets and tooltips
             origin = get_origin(annotated_type)
@@ -531,17 +733,182 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                 tooltip_text = metadata.description if metadata.description is not None else f"Write a description for {name}"
             else:  # Field was not Annotated[]
                 base_type = annotated_type
+                metadata = None
                 label_text = name
                 tooltip_text = f"Write a description for {name}"
 
             widget = self._create_widget_for_type(base_type)
             if widget:
+                base_label = label_text
+                # Apply per-field display metadata (units, precision) to the widget.
+                if metadata is not None:
+                    self._field_metadata[name] = metadata
+                    self._apply_metadata_to_widget(widget, metadata)
+                    # Append a static unit suffix to the label, if known. For
+                    # ``units_field`` annotations the suffix is filled in later
+                    # (and refreshed on update) once we have an instance.
+                    static_unit = self._static_display_unit(metadata)
+                    if static_unit:
+                        label_text = f"{base_label} ({static_unit})"
+                    if metadata.units or metadata.display_units or metadata.units_field:
+                        unit_hint = static_unit or f"<from {metadata.units_field}>"
+                        tooltip_text = f"{tooltip_text}\nUnits: {unit_hint}"
                 label = qt.QLabel(label_text)
                 label.setToolTip(tooltip_text)
                 widget.setToolTip(tooltip_text)
 
                 form_layout.addRow(label, widget)
                 self._field_widgets[name] = widget
+                self._field_labels[name] = label
+                self._field_label_base[name] = base_label
+
+    # ------------------------------------------------------------------
+    # Display-metadata helpers (units, precision, label suffix refresh)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _static_display_unit(metadata: Any) -> Optional[str]:
+        """Return the display unit declared by ``metadata`` (or ``None``).
+
+        Returns ``display_units`` if set; otherwise returns ``units`` only when
+        no ``units_field`` is present (since for ``units_field`` annotations
+        the storage unit varies at runtime and the suffix is therefore
+        dynamic). Used to decide what unit symbol to append to a field's label.
+        """
+        if metadata is None:
+            return None
+        display = getattr(metadata, "display_units", None)
+        if display:
+            return display
+        if getattr(metadata, "units_field", None):
+            return None
+        return getattr(metadata, "units", None)
+
+    def _apply_metadata_to_widget(self, widget: qt.QWidget, metadata: Any) -> None:
+        """Apply per-field display metadata (currently: precision) to ``widget``."""
+        precision = getattr(metadata, "precision", None)
+        if precision is None:
+            return
+        # ``precision`` applies to floating-point widgets only. Integer widgets
+        # are unaffected (precision is implicitly 0).
+        if _numeric_kind(widget) == "float":
+            _apply_numeric_precision(widget, int(precision))
+            return
+        # Tuple containers: apply precision to all numeric children.
+        layout = widget.layout() if isinstance(widget, qt.QWidget) else None
+        if layout is None:
+            return
+        for child in slicer.util.findChildren(widget):
+            if _numeric_kind(child) == "float":
+                _apply_numeric_precision(child, int(precision))
+
+    def _resolve_display_unit(self, name: str, instance_or_values: Any) -> Optional[str]:
+        """Return the display unit suffix for field ``name`` given a value source.
+
+        Prefers ``metadata.display_units`` when set (so the editor shows the
+        same fixed unit regardless of how the underlying protocol stores the
+        value). Falls back to the sibling field for ``units_field``
+        annotations without a fixed display unit, then to ``metadata.units``.
+        """
+        metadata = self._field_metadata.get(name)
+        if metadata is None:
+            return None
+        display = getattr(metadata, "display_units", None)
+        if display:
+            return display
+        units_field = getattr(metadata, "units_field", None)
+        if units_field:
+            if isinstance(instance_or_values, dict):
+                return instance_or_values.get(units_field)
+            return getattr(instance_or_values, units_field, None)
+        return getattr(metadata, "units", None)
+
+    def _convert_value(
+        self,
+        name: str,
+        value: Any,
+        from_storage_to_display: bool,
+        instance_or_values: Any,
+    ) -> Any:
+        """Convert a numeric (or tuple of numeric) value between storage and display units.
+
+        Falls back to the original ``value`` whenever metadata is missing or
+        unit conversion is not applicable. The storage unit is taken from the
+        sibling field named by ``metadata.units_field`` when present, otherwise
+        from ``metadata.units``. The display unit is ``metadata.display_units``
+        when set, otherwise the storage unit (so a missing ``display_units``
+        means no conversion).
+        """
+        metadata = self._field_metadata.get(name)
+        if metadata is None:
+            return value
+        units_field = getattr(metadata, "units_field", None)
+        if units_field:
+            if isinstance(instance_or_values, dict):
+                storage_unit = instance_or_values.get(units_field)
+            else:
+                storage_unit = getattr(instance_or_values, units_field, None)
+        else:
+            storage_unit = getattr(metadata, "units", None)
+        display_unit = getattr(metadata, "display_units", None) or storage_unit
+        if not storage_unit or not display_unit or storage_unit == display_unit:
+            return value
+        try:
+            from openlifu.util.units import getunitconversion
+        except Exception:  # openlifu not yet importable (e.g. tests)
+            return value
+        try:
+            if from_storage_to_display:
+                scale = getunitconversion(storage_unit, display_unit)
+            else:
+                scale = getunitconversion(display_unit, storage_unit)
+        except Exception:
+            return value
+        if isinstance(value, (tuple, list)):
+            return type(value)(self._scale_numeric(v, scale) for v in value)
+        return self._scale_numeric(value, scale)
+
+    @staticmethod
+    def _scale_numeric(v: Any, scale: float) -> Any:
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v) * scale
+        if isinstance(v, (tuple, list)):
+            return type(v)(
+                OpenLIFUAbstractDataclassDefinitionFormWidget._scale_numeric(x, scale) for x in v
+            )
+        return v
+
+    def _convert_values_for_display(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``values`` with numeric fields converted from
+        storage units to display units, ready to be pushed to widgets."""
+        out: dict[str, Any] = {}
+        for name, val in values.items():
+            out[name] = self._convert_value(name, val, from_storage_to_display=True, instance_or_values=values)
+        return out
+
+    def _convert_values_for_storage(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Inverse of :meth:`_convert_values_for_display`. Used when reading the
+        form back into a dataclass instance."""
+        out: dict[str, Any] = {}
+        for name, val in values.items():
+            out[name] = self._convert_value(name, val, from_storage_to_display=False, instance_or_values=values)
+        return out
+
+    def _refresh_dynamic_unit_labels(self, instance_or_values: Any) -> None:
+        """Refresh the unit suffix on labels whose metadata uses ``units_field``
+        without a fixed ``display_units``. (When ``display_units`` is set the
+        suffix is constant and was applied at widget-creation time.)"""
+        for name, metadata in self._field_metadata.items():
+            if not getattr(metadata, "units_field", None):
+                continue
+            if getattr(metadata, "display_units", None):
+                continue  # fixed display; no refresh needed
+            label = self._field_labels.get(name)
+            if label is None:
+                continue
+            base = self._field_label_base.get(name, name)
+            unit = self._resolve_display_unit(name, instance_or_values)
+            label.setText(f"{base} ({unit})" if unit else base)
 
     def _create_widget_for_type(self, annotated_type: Any) -> Optional[qt.QWidget]:
         origin = get_origin(annotated_type)
@@ -549,16 +916,18 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
 
         def create_basic_widget(typ: Any) -> Optional[qt.QWidget]:
             if typ is int:
-                w = qt.QSpinBox()
-                w.setRange(*self.DEFAULT_INT_RANGE)
-                w.setValue(self.DEFAULT_INT_VALUE)
-                return w
+                return _make_int_lineedit(
+                    value=self.DEFAULT_INT_VALUE,
+                    min_value=self.DEFAULT_INT_RANGE[0],
+                    max_value=self.DEFAULT_INT_RANGE[1],
+                )
             elif typ is float:
-                w = qt.QDoubleSpinBox()
-                w.setDecimals(self.DEFAULT_FLOAT_NUM_DECIMALS)
-                w.setRange(*self.DEFAULT_FLOAT_RANGE)
-                w.setValue(self.DEFAULT_FLOAT_VALUE)
-                return w
+                return _make_float_lineedit(
+                    precision=self.DEFAULT_FLOAT_NUM_DECIMALS,
+                    value=self.DEFAULT_FLOAT_VALUE,
+                    min_value=self.DEFAULT_FLOAT_RANGE[0],
+                    max_value=self.DEFAULT_FLOAT_RANGE[1],
+                )
             elif typ is str:
                 return qt.QLineEdit()
             elif typ is bool:
@@ -644,16 +1013,41 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
 
         Args:
             values: Dictionary mapping attribute names to new values.
+
+        Values are interpreted as being in *storage* units; metadata-driven
+        conversion to display units is applied before pushing to the widgets.
         """
+
+        # Capture any hidden unit-sibling values so save can preserve them
+        # and so unit-conversion can resolve the storage unit.
+        for hidden in self._hidden_unit_values:
+            if hidden in values:
+                self._hidden_unit_values[hidden] = values[hidden]
+
+        # Make sure conversion sees the (possibly hidden) sibling units. We
+        # work on a merged copy so the caller's dict is not mutated.
+        merged_values = dict(values)
+        for hidden, val in self._hidden_unit_values.items():
+            merged_values.setdefault(hidden, val)
+
+        # Convert from storage to display units up-front, using the merged
+        # dict for sibling-resolution.
+        merged_values = self._convert_values_for_display(merged_values)
+        # Refresh any dynamic-unit label suffixes (e.g. for ``units_field``)
+        # so the GUI reflects the current sibling-unit value.
+        self._refresh_dynamic_unit_labels(merged_values)
 
         def _set_widget_value(widget: qt.QWidget, value: Any) -> None:
             """
             Helper method to set a value on a widget based on its type, with relaxed type checks.
             """
-            if isinstance(widget, qt.QSpinBox) and isinstance(value, int):
-                widget.setValue(value)
-            elif isinstance(widget, qt.QDoubleSpinBox) and isinstance(value, (int, float)):
-                widget.setValue(float(value))
+            if _is_numeric_widget(widget):
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    _set_numeric_value(widget, value)
+                else:
+                    raise TypeError(
+                        f"Numeric widget received non-numeric value: {value!r}"
+                    )
             elif isinstance(widget, qt.QLineEdit):
                 widget.setText(str(value))
             elif isinstance(widget, qt.QCheckBox) and isinstance(value, bool):
@@ -662,15 +1056,13 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                 raise TypeError("Invalid tuple field: dict inside a tuple structure not yet supported.")
             else:
                 raise TypeError(f"Unsupported widget-value combination: {type(widget)} and {type(value)}")
-    
-        for name, val in values.items():
+
+        for name, val in merged_values.items():
             if name not in self._field_widgets:
                 continue
             w = self._field_widgets[name]
-            if isinstance(w, qt.QSpinBox):
-                w.setValue(int(val))
-            elif isinstance(w, qt.QDoubleSpinBox):
-                w.setValue(float(val))
+            if _is_numeric_widget(w):
+                _set_numeric_value(w, val)
             elif isinstance(w, qt.QLineEdit):
                 w.setText(str(val))
             elif isinstance(w, qt.QCheckBox):
@@ -692,43 +1084,40 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                         row_item = layout.itemAt(row_idx)
                         row_widget = row_item.widget()
                         if isinstance(row_val, tuple):
-                            # row is a tuple 
+                            # row is a tuple
                             row_layout = row_widget.layout()
                             if row_layout.count() != len(row_val):
                                 continue
                             for col_idx, col_val in enumerate(row_val):
                                 child = row_layout.itemAt(col_idx).widget()
                                 _set_widget_value(child, col_val)
-                                
+
                         else:
                             # row is a single widget
                             _set_widget_value(row_widget, row_val)
 
     def get_form_as_dict(self) -> dict[str, Any]:
         """
-        Returns the current form values as a dictionary.
+        Returns the current form values as a dictionary, with metadata-driven
+        unit conversion applied (display units back to storage units).
         """
-        
+
         def _extract_widget_value(widget: qt.QWidget) -> Any:
             """
             Helper method to get a value from a widget based on its type.
             """
-            if isinstance(widget, qt.QSpinBox):
-                return widget.value
-            elif isinstance(widget, qt.QDoubleSpinBox):
-                return widget.value
-            elif isinstance(widget, qt.QLineEdit):
+            if _is_numeric_widget(widget):
+                return _get_numeric_value(widget)
+            if isinstance(widget, qt.QLineEdit):
                 return widget.text
-            elif isinstance(widget, qt.QCheckBox):
+            if isinstance(widget, qt.QCheckBox):
                 return widget.isChecked()
             return None
 
         values: dict[str, Any] = {}
         for name, w in self._field_widgets.items():
-            if isinstance(w, qt.QSpinBox):
-                values[name] = w.value
-            elif isinstance(w, qt.QDoubleSpinBox):
-                values[name] = w.value
+            if _is_numeric_widget(w):
+                values[name] = _get_numeric_value(w)
             elif isinstance(w, qt.QLineEdit):
                 values[name] = w.text
             elif isinstance(w, qt.QCheckBox):
@@ -771,7 +1160,13 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                             if value is not None:
                                 nested_values.append(value)
                     values[name] = tuple(nested_values)
-        return values
+        # Merge hidden unit sibling values so unit conversion can find the
+        # storage unit and so they round-trip through ``__init__``.
+        for hidden, val in self._hidden_unit_values.items():
+            values.setdefault(hidden, val)
+        # Convert display units back to storage units using the values dict
+        # itself for sibling-unit resolution.
+        return self._convert_values_for_storage(values)
 
     def update_form_from_class(self, instance: Any) -> None:
         """
@@ -781,12 +1176,22 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             instance: An instance of the same class used to create the form.
         """
         values = vars(instance)
+        # Capture hidden unit-sibling values straight from the instance so
+        # the save path round-trips the exact unit string even if it was not
+        # in ``vars(instance)`` (defensive: dataclass attributes are usually
+        # all in __dict__, but this is cheap).
+        for hidden in self._hidden_unit_values:
+            if hasattr(instance, hidden):
+                self._hidden_unit_values[hidden] = getattr(instance, hidden)
         self.update_form_from_values(values)
+        # Ensure dynamic-unit labels reflect the instance's actual sibling values,
+        # in case the values dict was missing some entries.
+        self._refresh_dynamic_unit_labels(instance)
 
     def get_form_as_class(self, post_init: bool = True) -> Any:
         """
         Constructs and returns a new instance of the class using the current form values.
-        
+
         Args:
             post_init (bool): If True (default), runs __post_init__. If False, skips it.
 
@@ -806,11 +1211,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
             callback: Function to call on value change.
         """
         for w in self._field_widgets.values():
-            if isinstance(w, qt.QSpinBox):
-                w.valueChanged.connect(callback)
-            elif isinstance(w, qt.QDoubleSpinBox):
-                w.valueChanged.connect(callback)
-            elif isinstance(w, qt.QLineEdit):
+            if isinstance(w, qt.QLineEdit):
                 w.textChanged.connect(callback)
             elif isinstance(w, qt.QCheckBox):
                 w.stateChanged.connect(callback)
@@ -818,11 +1219,7 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                 w.table.itemChanged.connect(lambda *_: callback())
             elif isinstance(w, qt.QWidget): # assumed to be container for tuple
                 for child in slicer.util.findChildren(w):
-                    if isinstance(child, qt.QSpinBox):
-                        child.valueChanged.connect(callback)
-                    elif isinstance(child, qt.QDoubleSpinBox):
-                        child.valueChanged.connect(callback)
-                    elif isinstance(child, qt.QLineEdit):
+                    if isinstance(child, qt.QLineEdit):
                         child.textChanged.connect(callback)
                     elif isinstance(child, qt.QCheckBox):
                         child.stateChanged.connect(callback)
@@ -830,22 +1227,26 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
     @classmethod
     def modify_widget_spinbox(cls, widget: qt.QWidget, default_value=None, min_value=None, max_value=None, num_decimals=None) -> None:
         """
-        Configures a QSpinBox or QDoubleSpinBox widget with specified default, min/max values, and decimal precision.
+        Reconfigure a numeric form widget (now a ``QLineEdit`` carrying a
+        numeric validator, formerly a ``QSpinBox`` / ``QDoubleSpinBox``) with a
+        new default value, range, and (for floats) decimal precision.
 
-        Args:
-            widget (qt.QWidget): The widget to configure.
-
-        Raises:
-            TypeError: If the widget is not a QSpinBox or QDoubleSpinBox.
+        The name is preserved for backward compatibility with external callers.
         """
-        if isinstance(widget, qt.QSpinBox):
+        kind = _numeric_kind(widget)
+        if kind is None:
+            raise TypeError(
+                f"Expected a numeric line edit, got {type(widget).__name__} instead."
+            )
+
+        if kind == "int":
             if default_value is None:
                 default_value = cls.DEFAULT_INT_VALUE
             if min_value is None:
                 min_value = cls.DEFAULT_INT_RANGE[0]
             if max_value is None:
                 max_value = cls.DEFAULT_INT_RANGE[1]
-        elif isinstance(widget, qt.QDoubleSpinBox):
+        else:  # float
             if default_value is None:
                 default_value = cls.DEFAULT_FLOAT_VALUE
             if min_value is None:
@@ -854,14 +1255,10 @@ class OpenLIFUAbstractDataclassDefinitionFormWidget(qt.QWidget):
                 max_value = cls.DEFAULT_FLOAT_RANGE[1]
             if num_decimals is None:
                 num_decimals = cls.DEFAULT_FLOAT_NUM_DECIMALS
-            widget.setDecimals(num_decimals)
-        else:
-            raise TypeError(
-                f"Expected QSpinBox or QDoubleSpinBox, got {type(widget).__name__} instead."
-            )
+            _apply_numeric_precision(widget, int(num_decimals))
 
-        widget.setRange(min_value, max_value)
-        widget.setValue(default_value)
+        _apply_numeric_range(widget, min_value=min_value, max_value=max_value)
+        _set_numeric_value(widget, default_value)
 
 class OpenLIFUAbstractMultipleABCDefinitionFormWidget(qt.QWidget):
     def __init__(self, cls_list: List[Type[Any]], parent: Optional[qt.QWidget] = None, is_collapsible: bool = True, collapsible_title: Optional[str] = None, custom_abc_title: Optional[str] = None):
