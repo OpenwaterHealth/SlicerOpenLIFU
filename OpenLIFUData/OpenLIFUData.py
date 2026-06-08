@@ -2196,6 +2196,120 @@ def _encode_hwid_b58(raw_hex: str) -> str:
         return raw_hex
 
 
+class _SimulatedTransducerPickerDialog(qt.QDialog):
+    """Modal dialog for picking which transducer the simulated LIFUInterface
+    should mimic.
+
+    Lists every transducer in the currently loaded database and returns the
+    chosen :class:`openlifu.xdc.TransducerArray` (or :class:`Transducer`) via
+    :meth:`exec_and_get_transducer`. The picked object is later passed to
+    :py:meth:`OpenLIFUSonicationControlLogic.connect_simulated_interface` so the
+    simulator's module count and per-module user_configs match the selection.
+    """
+
+    def __init__(self, db: "openlifu.db.Database", parent: Optional[qt.QWidget] = None):
+        super().__init__(slicer.util.mainWindow() if parent is None else parent)
+        self.setWindowTitle("Pick Simulated Transducer")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.db = db
+        self.selected_transducer = None  # openlifu TransducerArray | Transducer | None
+
+        layout = qt.QVBoxLayout(self)
+
+        layout.addWidget(qt.QLabel(
+            "Pick a transducer from the database for the simulated device to mimic.",
+            self,
+        ))
+
+        cols = ["ID", "Name", "Modules"]
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setHighlightSections(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, qt.QHeaderView.Stretch)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+        # Buttons
+        bb = qt.QDialogButtonBox()
+        self.okButton = bb.addButton("Connect", qt.QDialogButtonBox.AcceptRole)
+        self.okButton.setEnabled(False)
+        self.cancelButton = bb.addButton("Cancel", qt.QDialogButtonBox.RejectRole)
+        bb.accepted.connect(self._onAccept)
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        self.table.itemSelectionChanged.connect(
+            lambda: self.okButton.setEnabled(self._selected_id() is not None)
+        )
+        self.table.doubleClicked.connect(self._onAccept)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.30), int(screen.height() * 0.30))
+
+        self._populate()
+
+    def _populate(self) -> None:
+        self.table.setSortingEnabled(False)
+        self.table.clearContents()
+        try:
+            ids = list(self.db.get_transducer_ids() or [])
+        except Exception as e:  # noqa: BLE001
+            logging.warning("Could not list transducer ids: %s", e)
+            ids = []
+        self.table.setRowCount(len(ids))
+        for row, tid in enumerate(ids):
+            try:
+                obj = self.db.load_transducer(tid, convert_array=False)
+                name = getattr(obj, "name", tid) or tid
+                n_mods = len(obj.modules) if hasattr(obj, "modules") else 1
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not load transducer %s for picker: %s", tid, e)
+                name = tid
+                n_mods = 0
+            self.table.setItem(row, 0, qt.QTableWidgetItem(str(tid)))
+            self.table.setItem(row, 1, qt.QTableWidgetItem(str(name)))
+            self.table.setItem(row, 2, qt.QTableWidgetItem(str(n_mods)))
+        self.table.resizeRowsToContents()
+        self.table.setSortingEnabled(True)
+
+    def _selected_id(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        if not items:
+            return None
+        row = items[0].row()
+        idItem = self.table.item(row, 0)
+        return idItem.text() if idItem else None
+
+    def _onAccept(self) -> None:
+        tid = self._selected_id()
+        if not tid:
+            return
+        try:
+            self.selected_transducer = self.db.load_transducer(tid, convert_array=False)
+        except Exception as e:  # noqa: BLE001
+            slicer.util.errorDisplay(
+                f"Failed to load transducer '{tid}':\n\n{e}",
+                parent=self,
+            )
+            return
+        self.accept()
+
+    def exec_and_get_transducer(self):
+        """Show the picker and return the picked transducer object, or ``None``."""
+        if self.exec() == qt.QDialog.Accepted:
+            return self.selected_transducer
+        return None
+
+
 class _DeviceStatusDialog(qt.QDialog):
     """Modal dialog showing the current TX / HV LIFUInterface state.
 
@@ -2336,8 +2450,22 @@ class _DeviceStatusDialog(qt.QDialog):
     def _onSimButtonClicked(self, checked: bool = False) -> None:
         if bool(getattr(self._sc_logic, "is_simulated", False)):
             self._sc_logic.disconnect_simulated_interface()
-        else:
-            self._sc_logic.connect_simulated_interface()
+            self._refresh()
+            return
+
+        db = get_cur_db()
+        if db is None:
+            slicer.util.warningDisplay(
+                "A database must be loaded before connecting a simulated device, "
+                "so a transducer can be picked for the simulator to mimic.",
+                parent=self,
+            )
+            return
+        picker = _SimulatedTransducerPickerDialog(db, parent=self)
+        transducer = picker.exec_and_get_transducer()
+        if transducer is None:
+            return
+        self._sc_logic.connect_simulated_interface(transducer=transducer)
         self._refresh()
 
 
