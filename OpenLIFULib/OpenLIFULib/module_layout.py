@@ -248,8 +248,7 @@ class ModuleHeaderWidget(qt.QWidget):
     def updateStatusButtons(self) -> None:
         """Reflect database / login / device / cloud-sync state in the icon buttons.
 
-        Mirrors :py:meth:`OpenLIFUDataWidget.updateToolbarButtonStates`. Safe
-        to call before any of the sibling modules are instantiated.
+        Safe to call before any of the sibling modules are instantiated.
         """
         from OpenLIFULib import get_cur_db
         from OpenLIFULib.user_account_mode_util import (
@@ -375,13 +374,24 @@ class ModuleHeaderWidget(qt.QWidget):
         except (AttributeError, RuntimeError):
             iface = None
             tx_conn, hv_conn = False, False
+        is_simulated = bool(getattr(iface, "is_simulated", False))
 
         # The Data module owns the device-state log line (it has its own
         # ``_last_device_conn_state`` cache and emits the
         # ``[LIFUInterface]`` info message on transitions). We deliberately
         # do NOT log here, otherwise every module page re-emits the same
         # transition message.
-        if tx_conn and hv_conn:
+        if is_simulated:
+            # Pink outline so the simulated interface is visually
+            # distinct from a real connected device. (Material pink 500.)
+            self.devicePopupButton.setStyleSheet(
+                _outline_style("devicePopupButton", "#ff84f9")
+            )
+            self.devicePopupButton.setToolTip(
+                "Simulated hardware device connected (no real device). "
+                "Click for details."
+            )
+        elif tx_conn and hv_conn:
             self.devicePopupButton.setStyleSheet(
                 _outline_style("devicePopupButton", "#2e7d32")
             )
