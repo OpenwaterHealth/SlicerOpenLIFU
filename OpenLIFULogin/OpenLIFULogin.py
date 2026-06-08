@@ -1055,25 +1055,30 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
                 platform_tools_path = str(selected_dir / "platform-tools")
 
-                # Write to Windows user PATH registry key
+                # Patch the current process's PATH immediately so ADB is usable right away
+                os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + platform_tools_path
+
+                # Write to Windows user PATH registry key for persistence across sessions
                 # User PATH does not require admin permissions
                 import winreg
-                with winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER, "Environment", 0,
-                    winreg.KEY_READ | winreg.KEY_WRITE,
-                ) as reg_key:
-                    try:
-                        current_path, _ = winreg.QueryValueEx(reg_key, "Path")
-                    except FileNotFoundError:
-                        current_path = ""
-                    entries = [p for p in current_path.split(os.pathsep) if p]
-                    if platform_tools_path not in entries:
-                        entries.append(platform_tools_path)
-                        winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
-                                          os.pathsep.join(entries))
-
-                # Patch the current process's PATH so the re-check below works immediately
-                os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + platform_tools_path
+                try:
+                    with winreg.CreateKey(
+                        winreg.HKEY_CURRENT_USER, "Environment",
+                    ) as reg_key:
+                        try:
+                            current_path, _ = winreg.QueryValueEx(reg_key, "Path")
+                        except FileNotFoundError:
+                            current_path = ""
+                        entries = [p for p in current_path.split(os.pathsep) if p]
+                        if platform_tools_path not in entries:
+                            entries.append(platform_tools_path)
+                            winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
+                                              os.pathsep.join(entries))
+                except OSError as e:
+                    slicer.util.warningDisplay(
+                        f"ADB installed, but PATH could not be saved to the registry ({e}). "
+                        f"Add {platform_tools_path} to your user PATH manually to persist after restart."
+                    )
 
         finally:
             if tmp_dir is not None:
