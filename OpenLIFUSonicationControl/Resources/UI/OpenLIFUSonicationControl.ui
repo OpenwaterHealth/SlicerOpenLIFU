@@ -25,19 +25,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="reinitializeLIFUInterfacePushButton">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="text">
-      <string>Reinitialize LIFUInterface in test_mode</string>
-     </property>
-    </widget>
-   </item>
-   <item>
     <widget class="QFrame" name="connectedStateFrame">
      <property name="frameShape">
       <enum>QFrame::Box</enum>

@@ -45,7 +45,7 @@ class UserAccountBanner(qt.QWidget):
     because the toolbar provides the same information in interactive form.
     """
 
-    # Color constants kept in sync with OpenLIFUData.updateToolbarButtonStates
+    # Color constants kept in sync with ModuleHeaderWidget.updateStatusButtons
     _GREEN = "#2e7d32"
     _RED = "#c62828"
 

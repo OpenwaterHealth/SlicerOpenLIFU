@@ -308,7 +308,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
-        self.ui.reinitializeLIFUInterfacePushButton.clicked.connect(self.onReinitializeLIFUInterfacePushButtonClicked)
         self.ui.sendSonicationSolutionToDevicePushButton.clicked.connect(self.onSendSonicationSolutionToDevicePushButtonClicked)
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
@@ -345,7 +344,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Update the state of any buttons that may not yet have been updated
         self.updateAllButtonsEnabled()
-        self.updateAllButtons()
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -416,18 +414,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.updateWorkflowControls()
 
-    def updateReinitializeLIFUInterfacePushButtonEnabled(self):
-
-        if self.logic.running:
-            enabled = False
-            tooltip = "Cannot reinitialize LIFUInterface while a sonication is running."
-        else:
-            enabled = True
-            tooltip = "Reinitialize LIFUInterface, an interface to the connected hardware."
-
-        self.ui.reinitializeLIFUInterfacePushButton.setEnabled(enabled)
-        self.ui.reinitializeLIFUInterfacePushButton.setToolTip(tooltip)
-
     @display_errors
     def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
         if self._cur_device_connected_state != DeviceConnectedState.CONNECTED:
@@ -484,20 +470,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
     def updateAllButtonsEnabled(self):
-        self.updateReinitializeLIFUInterfacePushButtonEnabled()
         self.updateManuallyGetDeviceStatusPushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
-
-    def updateReinitializeLIFUInterfacePushButton(self):
-        if self.logic.cur_lifu_interface._test_mode:
-            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface not in test_mode")
-        else:
-            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface in test_mode")
-
-    def updateAllButtons(self):
-        self.updateReinitializeLIFUInterfacePushButton()
 
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
@@ -543,24 +519,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateVersionLabels()
 
     @display_errors
-    def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
-        logging.debug("onReinitializeLIFUInterfacePushButtonClicked() called")
-
-        slicer.util.warningDisplay(
-            text = f"Reinitializing the LIFUInterface in test mode is not fully supported and may result in unexpected application behavior. If this was a mistake, restart the app and use the real transducer hardware.",
-            windowTitle="Test Mode Not Supported", parent = slicer.util.mainWindow()
-        )
-
-        new_test_mode_state = not self.logic.cur_lifu_interface._test_mode
-        logging.info("Reinitializing LIFUInterface with test_mode = %s", new_test_mode_state)
-        
-        self.logic.reinitialize_lifu_interface(test_mode=new_test_mode_state)
-        self.updateDeviceConnectedStateFromDevice()
-        self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
-        self.updateAllButtons()
-        self.updateAllButtonsEnabled()
-
-    @display_errors
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
         logging.debug("onSendSonicationSolutionToDevicePushButtonClicked() called")
 
@@ -602,7 +560,6 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onRunningChanged(self, new_running_state:bool):
         logging.debug(f" onRunningChanged() called with running={new_running_state}")
-        self.updateReinitializeLIFUInterfacePushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
@@ -935,7 +892,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # ---- LIFU Interface Connection ----
 
         self._create_lifu_interface_bridge()
-        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(run_async=True, TX_test_mode=False, HV_test_mode=False)
+        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(run_async=True)
         # Connect signals before starting the monitor thread to avoid missing early events
         self._connect_owsignals()
 
@@ -973,7 +930,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.qt_signals.signal_data_received.connect(self.on_lifu_data_received)
 
     def _connect_owsignals(self):
-        """Wire the current interface's OWSignals into the bridge. Call from __init__ and reinitialize_lifu_interface."""
+        """Wire the current interface's OWSignals into the bridge. Call from __init__ and after swapping interfaces."""
         for device in (self.cur_lifu_interface.hvcontroller, self.cur_lifu_interface.txdevice):
             device.signal_connected.connect(self.qt_signals.signal_connected.emit)
             device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
@@ -1001,40 +958,90 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 # best-effort and may race, so this is the realistic failure.
                 logging.warning("Error closing monitor loop: %s", e)
 
-    def reinitialize_lifu_interface(self, test_mode: bool = False):
-        """Cleanly shut down and reinitialize the LIFUInterface."""
-        logging.debug("reinitialize_lifu_interface() called with test_mode=%s", test_mode)
+    @property
+    def is_simulated(self) -> bool:
+        """True when ``cur_lifu_interface`` is a SimulatedLIFUInterface."""
+        return bool(getattr(self.cur_lifu_interface, "is_simulated", False))
+
+    def connect_simulated_interface(self) -> None:
+        """Swap in a :class:`SimulatedLIFUInterface` and report it as connected.
+
+        Tears down the real :class:`LIFUInterface`, replaces
+        ``cur_lifu_interface`` with an in-memory simulator from
+        ``openlifu_sdk.ui.simulated_interface``, rewires the bridge
+        signals, and synchronously emits ``signal_connected`` for both
+        the HV controller and the TX device so every observer flips to
+        the connected state. The simulated interface has no USB to
+        poll, so we deliberately do NOT restart the asyncio monitor
+        thread.
+        """
+        if self.is_simulated:
+            logging.debug("connect_simulated_interface(): already simulated; ignoring")
+            return
 
         LIFUError = _lifu_exceptions().LIFUError
         try:
             self.monitoring_timer.stop()
             self.stop_monitoring()
-
-            if self.cur_lifu_interface:
+            if self.cur_lifu_interface is not None:
                 self.cur_lifu_interface.close()
-
         except (LIFUError, RuntimeError, OSError) as e:
-            logging.warning("[LIFU] Error during interface cleanup: %s", e)
+            logging.warning("[LIFU] Error tearing down real interface before sim swap: %s", e)
 
-        # Recreate interface
-        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(
-            run_async=True,
-            TX_test_mode=test_mode,
-            HV_test_mode=test_mode
-        )
-
-        # Connect the bridge to signals from the new interface
+        # Lazy import: keeps PyQt6 (which the SDK's ui submodule prefers)
+        # out of Slicer's import path until the user actually opts in to
+        # the simulator. The simulated_interface module also accepts
+        # Slicer's PythonQt-based ``qt`` module as a fallback Qt backend.
+        import importlib
+        sim_mod = importlib.import_module("openlifu_sdk.ui.simulated_interface")
+        self.cur_lifu_interface = sim_mod.SimulatedLIFUInterface(num_modules=1)
         self._connect_owsignals()
 
-        # Create fresh loop + thread
+        # Emit the connected signals synchronously (we are on the GUI
+        # thread). The simulated interface's ``start_monitoring`` would
+        # do this on a QTimer.singleShot tick, but we don't run it
+        # because we have no USB hot-plug to monitor.
+        self.cur_lifu_interface.hvcontroller.emit_connected()
+        self.cur_lifu_interface.txdevice.emit_connected()
+        logging.info("[LIFU] Connected simulated LIFUInterface")
+
+    def disconnect_simulated_interface(self) -> None:
+        """Tear down the simulator and restore a real (probably unconnected)
+        :class:`LIFUInterface` plus its asyncio monitor loop.
+        """
+        if not self.is_simulated:
+            logging.debug("disconnect_simulated_interface(): not simulated; ignoring")
+            return
+
+        # Emit disconnect signals first so listeners flip state before
+        # the simulator is torn down.
+        try:
+            self.cur_lifu_interface.txdevice.emit_disconnected()
+        except Exception as e:  # noqa: BLE001
+            logging.debug("Error emitting sim TX disconnect: %s", e)
+        try:
+            self.cur_lifu_interface.hvcontroller.emit_disconnected()
+        except Exception as e:  # noqa: BLE001
+            logging.debug("Error emitting sim HV disconnect: %s", e)
+        try:
+            self.cur_lifu_interface.close()
+        except Exception as e:  # noqa: BLE001
+            logging.debug("Error closing simulated interface: %s", e)
+
+        # Recreate a real LIFUInterface and resume USB monitoring.
+        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(
+            run_async=True,
+        )
+        self._connect_owsignals()
+
         self._monitor_loop = asyncio.new_event_loop()
         self._monitor_thread = threading.Thread(
             target=self._run_monitor_loop,
-            daemon=True
+            daemon=True,
         )
         self._monitor_thread.start()
-
         self.monitoring_timer.start()
+        logging.info("[LIFU] Restored real LIFUInterface after simulator")
 
     def __del__(self):
         print("OpenLIFUSonicationControlLogic.__del__ called")
@@ -1223,11 +1230,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # at INFO with a Slicer handler and propagate=False) so this
         # message reaches the terminal regardless of the root level,
         # without crossing thread boundaries to root handlers.
-        self._lifu_logger.info(f"🔌 CONNECTED: {descriptor} on port {port}")
+        self._lifu_logger.info(f"CONNECTED: {descriptor} on port {port}")
         self._dispatch_device_connected()
 
     def on_lifu_device_disconnected(self, descriptor, port):
-        self._lifu_logger.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
+        self._lifu_logger.info(f"DISCONNECTED: {descriptor} from port {port}")
         self._dispatch_device_disconnected()
     
     def on_lifu_data_received(self, descriptor, message):
@@ -1239,7 +1246,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # root logger to keep these high-frequency records off Slicer's
         # root handler, which feeds Qt-backed sinks and risks cross-
         # thread parenting warnings.
-        self._lifu_logger.info(f"📦 DATA [{descriptor}]: {message}")
+        self._lifu_logger.info(f"DATA [{descriptor}]: {message}")
 
         if descriptor == "TX":
             LIFUError = _lifu_exceptions().LIFUError

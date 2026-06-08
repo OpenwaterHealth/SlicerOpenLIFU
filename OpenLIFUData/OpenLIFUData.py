@@ -57,7 +57,7 @@ from OpenLIFULib.class_definition_widgets import (
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
-from OpenLIFULib.module_layout import apply_module_layout
+from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results,
@@ -2174,6 +2174,173 @@ class TransducerManagerDialog(qt.QDialog):
             )
 
 
+def _encode_hwid_b58(raw_hex: str) -> str:
+    """Encode a raw-hex HWID into base58.
+
+    Matches the test app's ``lifu_console.py`` / ``lifu_transmitter.py``
+    pattern: the raw-hex *string* is sliced to ``HW_ID_DATA_LENGTH``
+    (=12) characters before decoding (=> first 6 bytes, ~8 base58
+    chars). The raw hex returned by the SDK is 24 chars (12 bytes), but
+    only the first half is used for the display ID. base58 ships with
+    the openlifu_sdk environment; if for some reason it isn't
+    importable we fall back to the raw hex string instead of failing.
+    """
+    try:
+        import base58
+        from openlifu_sdk.io.LIFUConfig import HW_ID_DATA_LENGTH
+        return base58.b58encode(
+            bytes.fromhex(raw_hex[:HW_ID_DATA_LENGTH])
+        ).decode("utf-8")
+    except Exception as enc_err:  # noqa: BLE001
+        logging.warning("Could not base58-encode HWID %r: %s", raw_hex, enc_err)
+        return raw_hex
+
+
+class _DeviceStatusDialog(qt.QDialog):
+    """Modal dialog showing the current TX / HV LIFUInterface state.
+
+    Also exposes a "Connect Simulated Device" button when nothing is
+    connected, and a "Disconnect Simulated Device" button when the
+    currently active interface is the in-memory
+    :class:`~openlifu_sdk.ui.simulated_interface.SimulatedLIFUInterface`.
+    """
+
+    def __init__(self, sc_logic, parent=None):
+        qt.QDialog.__init__(self, parent or slicer.util.mainWindow())
+        self._sc_logic = sc_logic
+        self.setWindowTitle("Device Status")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.setMinimumWidth(360)
+
+        layout = qt.QVBoxLayout(self)
+
+        # Body label: monospace so HWIDs / firmware versions line up.
+        self._info_label = qt.QLabel(self)
+        self._info_label.setTextInteractionFlags(qt.Qt.TextSelectableByMouse)
+        font = qt.QFont("Courier")
+        font.setStyleHint(qt.QFont.Monospace)
+        self._info_label.setFont(font)
+        layout.addWidget(self._info_label)
+
+        # Button row: simulator action + Close.
+        button_row = qt.QHBoxLayout()
+        self._sim_button = qt.QPushButton(self)
+        self._sim_button.clicked.connect(self._onSimButtonClicked)
+        button_row.addWidget(self._sim_button)
+        button_row.addStretch(1)
+        close_button = qt.QPushButton("Close", self)
+        close_button.clicked.connect(lambda *args: self.accept())
+        button_row.addWidget(close_button)
+        layout.addLayout(button_row)
+
+        self._refresh()
+
+    def _refresh(self) -> None:
+        """Repopulate the info label and update the simulator button text."""
+        iface = getattr(self._sc_logic, "cur_lifu_interface", None)
+        is_simulated = bool(getattr(self._sc_logic, "is_simulated", False))
+
+        try:
+            tx_conn, hv_conn = iface.is_device_connected() if iface else (False, False)
+        except Exception as e:  # noqa: BLE001
+            self._info_label.setText(f"Could not query device connection status:\n{e}")
+            self._sim_button.setVisible(False)
+            return
+
+        if is_simulated:
+            summary = "Simulated hardware device is connected (no real device)."
+        elif tx_conn and hv_conn:
+            summary = "Hardware device is fully connected."
+        elif tx_conn or hv_conn:
+            half = "TX only" if tx_conn else "HV only"
+            summary = f"Hardware device is partially connected ({half})."
+        else:
+            summary = "No hardware device is currently connected."
+
+        lines: List[str] = [summary, ""]
+
+        # ---- Console (HV controller) ----
+        lines.append("Console:")
+        if hv_conn:
+            hv = iface.hvcontroller
+            try:
+                con_hwid = _encode_hwid_b58(hv.get_hardware_id(raw_hex=True))
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not read console HWID: %s", e)
+                con_hwid = "unknown"
+            try:
+                con_ver = hv.get_version()
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not read console firmware version: %s", e)
+                con_ver = "unknown"
+            lines.append(f"  HWID: {con_hwid}")
+            lines.append(f"  Firmware: v{con_ver}")
+        else:
+            lines.append("  (not connected)")
+
+        lines.append("")
+
+        # ---- TX device + per-module info ----
+        lines.append("TX device:")
+        if tx_conn:
+            tx = iface.txdevice
+            try:
+                module_count = tx.get_module_count()
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not read TX module count: %s", e)
+                module_count = 0
+            lines.append(f"  Modules connected: {module_count}")
+            for module_idx in range(module_count):
+                lines.append(f"  Module {module_idx}:")
+                try:
+                    mod_hwid = _encode_hwid_b58(
+                        tx.get_hardware_id(module=module_idx, raw_hex=True)
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logging.warning("Could not read TX module %d HWID: %s", module_idx, e)
+                    mod_hwid = "unknown"
+                try:
+                    mod_ver = tx.get_version(module=module_idx)
+                except Exception as e:  # noqa: BLE001
+                    logging.warning("Could not read TX module %d firmware: %s", module_idx, e)
+                    mod_ver = "unknown"
+                lines.append(f"    HWID: {mod_hwid}")
+                lines.append(f"    Firmware: v{mod_ver}")
+        else:
+            lines.append("  (not connected)")
+
+        self._info_label.setText("\n".join(lines))
+
+        # Show Connect-sim only when no real connection; show
+        # Disconnect-sim whenever the simulator is active.
+        if is_simulated:
+            self._sim_button.setText("Disconnect Simulated Device")
+            self._sim_button.setToolTip(
+                "Tear down the in-memory simulator and restore the real "
+                "LIFUInterface."
+            )
+            self._sim_button.setVisible(True)
+            self._sim_button.setEnabled(not bool(getattr(self._sc_logic, "running", False)))
+        elif not tx_conn and not hv_conn:
+            self._sim_button.setText("Connect Simulated Device")
+            self._sim_button.setToolTip(
+                "Replace the real LIFUInterface with an in-memory simulator "
+                "for development and testing. No actual hardware is touched."
+            )
+            self._sim_button.setVisible(True)
+            self._sim_button.setEnabled(True)
+        else:
+            self._sim_button.setVisible(False)
+
+    @display_errors
+    def _onSimButtonClicked(self, checked: bool = False) -> None:
+        if bool(getattr(self._sc_logic, "is_simulated", False)):
+            self._sc_logic.disconnect_simulated_interface()
+        else:
+            self._sc_logic.connect_simulated_interface()
+        self._refresh()
+
+
 class _ModuleWidgetPopupDialog(qt.QDialog):
     """A modal dialog that presents another Slicer module's widget as a native popup.
 
@@ -3434,6 +3601,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             uiWidget, ui_namespace=self.ui, header_read_only=False
         )
 
+        # Wire all the global-state observers that keep the header's status
+        # buttons and dropdowns in sync (DB, login, device, cloud sync, Home
+        # navigation). Same plumbing every other module uses for its
+        # read-only header. Registration is deferred one event-loop tick
+        # internally; see wire_passive_module_header.
+        wire_passive_module_header(self, self.module_header)
+
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -3554,25 +3728,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateWorkflowControls()
 
         # Sync the navigation dropdown with the current guided-mode state
-        # (Home is safe to touch during setup), then observe Home so external
-        # changes keep the dropdown in sync.
+        # (Home is safe to touch during setup). The shared header's
+        # passive wiring (installed by wire_passive_module_header) also
+        # observes the Home parameter node and keeps the dropdown in sync
+        # on every change, so we don't need a separate observer here.
         self._initDependencyStatus()
-        self.updateNavigationModeComboBox()
-        # Note: do NOT call updateToolbarButtonStates() here. It reads
-        # get_current_user() which routes through getModuleLogic("OpenLIFULogin"),
-        # forcing the Login widget to be instantiated and re-triggering the
-        # cache-walk recursion / ProtocolConfig AttributeError. The toolbar is
-        # styled once the deferred wiring runs (one event-loop tick later).
-        try:
-            home_parameter_node = slicer.util.getModuleLogic("OpenLIFUHome").getParameterNode()
-            self.addObserver(
-                home_parameter_node,
-                vtk.vtkCommand.ModifiedEvent,
-                lambda caller, event: self.updateNavigationModeComboBox(),
-            )
-        except (AttributeError, RuntimeError):
-            # Home logic not ready yet; the dropdown will still sync on enter().
-            pass
+        self.module_header.updateNavigationModeComboBox()
 
         # IMPORTANT: defer ALL OpenLIFULogin interaction out of setup().
         #
@@ -3592,65 +3753,54 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         qt.QTimer.singleShot(0, self._wireDeferredLoginObservers)
 
     def _wireDeferredLoginObservers(self) -> None:
-        """Wire Login-parameter-node observation, active-user callback, and
-        initial Permissions-dropdown sync.
+        """Wire the Data-specific observers that the shared header's passive
+        wiring does not cover: per-section permissions gating and the
+        device-state transition log line.
 
         Must run *after* this widget's setup() returns; see the comment in
         setup() for why we defer it via QTimer.singleShot(0).
         """
+        # Permissions gating (enable/disable section collapsibles) reacts
+        # to the same Login-parameter-node and active-user signals that
+        # drive the header's permissions dropdown. The header itself
+        # doesn't know about page-body sections, so we observe both
+        # signals separately here.
         try:
             login_parameter_node = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
             self.addObserver(
                 login_parameter_node,
                 vtk.vtkCommand.ModifiedEvent,
-                lambda caller, event: (
-                    self.updatePermissionsModeComboBox(),
-                    self.updatePermissionsGating(),
-                ),
+                lambda caller, event: self.updatePermissionsGating(),
             )
         except (AttributeError, RuntimeError):
             return
         try:
             slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
-                lambda _user: (
-                    self.updatePermissionsGating(),
-                    self.updateToolbarButtonStates(),
-                )
+                lambda _user: self.updatePermissionsGating()
             )
         except (AttributeError, RuntimeError):
             pass
 
-        # Subscribe to LIFU device connect / disconnect events so the device
-        # button outline reflects the live (TX, HV) connection state. The
-        # callbacks fire on every TX or HV connection / disconnection; we
-        # just re-paint the toolbar buttons (``updateToolbarButtonStates``
-        # reads ``is_device_connected()`` itself).
+        # Device connect / disconnect: the header's passive wiring already
+        # repaints the device button outline. We only need the additional
+        # ``[LIFUInterface]`` log line on actual transitions (see
+        # _logDeviceStateTransition for why this is polled rather than
+        # signal-driven).
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
             sc_logic.call_on_lifu_device_connected(
-                lambda *_args, **_kwargs: self.updateToolbarButtonStates()
+                lambda *_args, **_kwargs: self._logDeviceStateTransition()
             )
             sc_logic.call_on_lifu_device_disconnected(
-                lambda *_args, **_kwargs: self.updateToolbarButtonStates()
+                lambda *_args, **_kwargs: self._logDeviceStateTransition()
             )
         except (AttributeError, RuntimeError):
             pass
 
-        # Now that Login is fully alive, run the first sync of the Permissions
-        # dropdown, per-section gating, and toolbar-button styling.
-        self.updatePermissionsModeComboBox()
+        # Now that Login is fully alive, run the first sync of per-section
+        # gating and emit the initial device-state log line.
         self.updatePermissionsGating()
-        self.updateToolbarButtonStates()
-
-        # Cloud-sync state changes (login / service running / enabled flag)
-        # need to repaint the database popup button outline + icon overlay.
-        try:
-            from OpenLIFUCloudSync import getCloudSyncLogic
-            getCloudSyncLogic().call_on_state_changed(
-                lambda: self.updateToolbarButtonStates()
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        self._logDeviceStateTransition()
 
         # If a database directory was remembered from a previous session
         # (QSettings("OpenLIFU/databaseDirectory")) and it still looks like a
@@ -3716,7 +3866,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.logic.subject = None
         self.logic.clear_session()
         self.update_loadSubjectButton_enabled()
-        self.updateToolbarButtonStates()
 
     def on_subject_changed(self, subject: Optional["openlifu.db.Subject"] = None):
         self.logic.clear_session()
@@ -4085,21 +4234,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.removeObservers()
 
     def updateNavigationModeComboBox(self) -> None:
-        """Sync the Navigation dropdown with the Home module's guided-mode state."""
-        try:
-            in_guided_mode = bool(get_guided_mode_state())
-        except (AttributeError, RuntimeError):
-            # Home parameter node not yet available very early in startup.
-            return
-        combo = self.ui.navigationModeComboBox
-        target_index = 1 if in_guided_mode else 0
-        if combo.currentIndex == target_index:
-            return
-        was_blocked = combo.blockSignals(True)
-        try:
-            combo.setCurrentIndex(target_index)
-        finally:
-            combo.blockSignals(was_blocked)
+        """Sync the Navigation dropdown with the Home module's guided-mode state.
+
+        Thin pass-through to the shared header so legacy call sites keep
+        working; the real implementation lives on
+        :py:meth:`ModuleHeaderWidget.updateNavigationModeComboBox`.
+        """
+        self.module_header.updateNavigationModeComboBox()
 
     @display_errors
     def onNavigationModeChanged(self, index: int) -> None:
@@ -4111,27 +4252,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         else:
             set_guided_mode_state(False)
         # If start_guided_mode rejected the request, snap the dropdown back.
-        self.updateNavigationModeComboBox()
+        self.module_header.updateNavigationModeComboBox()
 
     def updatePermissionsModeComboBox(self) -> None:
         """Sync the Permissions dropdown with the Login module's user_account_mode state.
 
-        Safe to call before the Login module is instantiated: if the underlying
-        state isn't readable yet we leave the dropdown at its current value.
+        Thin pass-through to the shared header so legacy call sites keep
+        working; the real implementation lives on
+        :py:meth:`ModuleHeaderWidget.updatePermissionsModeComboBox`.
         """
-        try:
-            uam = bool(get_user_account_mode_state())
-        except (AttributeError, RuntimeError):
-            return
-        combo = self.ui.permissionsModeComboBox
-        target_index = 1 if uam else 0
-        if combo.currentIndex == target_index:
-            return
-        was_blocked = combo.blockSignals(True)
-        try:
-            combo.setCurrentIndex(target_index)
-        finally:
-            combo.blockSignals(was_blocked)
+        self.module_header.updatePermissionsModeComboBox()
 
     @display_errors
     def onPermissionsModeChanged(self, index: int) -> None:
@@ -4177,156 +4307,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             else:
                 section.setToolTip("")
 
-    def updateToolbarButtonStates(self) -> None:
-        """Reflect database / login status in the top-toolbar icon buttons.
+    def _logDeviceStateTransition(self) -> None:
+        """Emit a ``[LIFUInterface]`` log line whenever the polled device
+        connection state has changed since the last call.
 
-        - The Database button gets a red outline when no database is loaded,
-          green when a database is connected.
-        - The Login button stays unstyled when no user is signed in, and turns
-          green when a real (non-anonymous, non-default-admin) user is
-          authenticated. It is disabled whenever no database is loaded, since
-          login requires database access to look up users.
+        The shared header's :py:meth:`ModuleHeaderWidget.updateStatusButtons`
+        already paints the device button outline; this method exists only to
+        emit a human-readable log line on transitions.
 
-        Safe to call before the Login module is instantiated.
+        We log here (rather than from the OWSignal ``signal_connected`` /
+        ``signal_disconnected`` callbacks alone) because the OWSignal-driven
+        logs in OpenLIFUSonicationControl only fire on transitions during a
+        running session. The polled state can change without a signal firing
+        -- for example on first render, when the device is already in use
+        by another Slicer instance.
         """
-        # Stylesheet helper: a 2px coloured border around the emoji button
-        # without overriding padding (which would crush the glyph's render
-        # box and make the icon disappear). The selector is scoped to the
-        # specific objectName so it doesn't leak into nested QPushButtons.
-        def _outline_style(object_name: str, hex_color: str) -> str:
-            return (
-                f"QPushButton#{object_name} {{ "
-                f"border: 2px solid {hex_color}; "
-                f"border-radius: 4px; "
-                f"}}"
-            )
-
-        # --- Database ---
-        try:
-            cur_db = get_cur_db()
-        except (AttributeError, RuntimeError):
-            cur_db = None
-        db_connected = cur_db is not None
-
-        # Cloud-sync overlay state. We mirror the database button's icon
-        # text to communicate cloud state when the user has opted into the
-        # service:
-        #   - service disabled       -> "📁"   (plain folder)
-        #   - service enabled, OK    -> "☁📁"  (cloud + folder, green outline)
-        #   - service enabled, broken-> "🌩📁" (cloud-with-bolt + folder,
-        #                                       yellow outline)
-        # The yellow / red / green priority for the outline is:
-        #   no DB                    -> red
-        #   DB + sync disabled       -> green
-        #   DB + sync enabled + OK   -> green
-        #   DB + sync enabled + bad  -> yellow
-        try:
-            from OpenLIFUCloudSync import getCloudSyncLogic
-            cs_logic = getCloudSyncLogic()
-            cs_enabled = cs_logic.is_service_enabled()
-            cs_running = cs_logic.is_service_running()
-            cs_logged_in = cs_logic.is_logged_in()
-            cs_failed = cs_logic.did_service_fail()
-        except Exception:  # noqa: BLE001 - logic optional
-            cs_enabled = cs_running = cs_logged_in = cs_failed = False
-
-        cloud_ok = cs_enabled and cs_running and cs_logged_in and not cs_failed
-        cloud_broken = cs_enabled and not cloud_ok
-
-        if cs_enabled and cloud_ok:
-            self.ui.databasePopupButton.setText("☁📁")
-        elif cloud_broken:
-            self.ui.databasePopupButton.setText("🌩📁")
-        else:
-            self.ui.databasePopupButton.setText("📁")
-
-        if db_connected:
-            outline_color = "#f9a825" if cloud_broken else "#2e7d32"  # yellow / green
-            self.ui.databasePopupButton.setStyleSheet(
-                _outline_style("databasePopupButton", outline_color)
-            )
-            db_path = getattr(cur_db, "path", None) or "(unknown location)"
-            tip = f"Database is connected at:\n{db_path}"
-            if cs_enabled:
-                if cloud_ok:
-                    tip += "\n\nCloud sync: running"
-                elif not cs_logged_in:
-                    tip += "\n\nCloud sync: enabled but not logged in"
-                elif cs_failed or not cs_running:
-                    tip += "\n\nCloud sync: service failed to start"
-            tip += "\n\nClick to view or change."
-            self.ui.databasePopupButton.setToolTip(tip)
-        else:
-            self.ui.databasePopupButton.setStyleSheet(
-                _outline_style("databasePopupButton", "#c62828")
-            )
-            self.ui.databasePopupButton.setToolTip(
-                "No database is connected. Click to choose a database directory."
-            )
-
-        # --- Login ---
-        try:
-            cur_user = get_current_user()
-        except (AttributeError, RuntimeError):
-            cur_user = None
-        try:
-            uam = bool(get_user_account_mode_state())
-        except (AttributeError, RuntimeError):
-            uam = False
-        # Treat "default_admin" and "anonymous" as not-signed-in for display
-        # purposes; both are stand-in users that the Login module assigns
-        # automatically depending on database / admin presence.
-        user_id = getattr(cur_user, "id", None)
-        is_real_user = (
-            cur_user is not None
-            and user_id not in (None, "anonymous", "default_admin")
-        )
-        if is_real_user:
-            self.ui.loginPopupButton.setStyleSheet(
-                _outline_style("loginPopupButton", "#2e7d32")
-            )
-            self.ui.loginPopupButton.setToolTip(
-                f"Signed in as {getattr(cur_user, 'name', '') or user_id}. "
-                f"Click to open Account."
-            )
-        elif uam:
-            # Permissions = "User" but no real user is signed in. Highlight the
-            # button red to nudge the user to log in.
-            self.ui.loginPopupButton.setStyleSheet(
-                _outline_style("loginPopupButton", "#c62828")
-            )
-            self.ui.loginPopupButton.setToolTip(
-                "Permissions is set to 'User'. Click to open Account and log in."
-            )
-        else:
-            self.ui.loginPopupButton.setStyleSheet("")
-            self.ui.loginPopupButton.setToolTip(
-                "Not signed in. Click to open Account."
-            )
-
-        # Login requires a database; disable the button when no database is
-        # loaded (it can't do anything useful in that state).
-        self.ui.loginPopupButton.setEnabled(db_connected)
-        if not db_connected:
-            self.ui.loginPopupButton.setToolTip(
-                "Connect a database first; account features look up users from the database."
-            )
-
-        # --- Device ---
-        #
-        # Reflect TX/HV connectivity in the device button outline:
-        #
-        #   (False, False)          - nothing connected         -> black outline
-        #   (True, False) /         - one half connected (TX    -> yellow outline
-        #   (False, True)             only or HV only)
-        #   (True, True)            - fully connected           -> green outline
-        #
-        # Reads ``is_device_connected()`` from OpenLIFUSonicationControl's
-        # LIFUInterface. If the SonicationControl logic is not yet
-        # instantiated (e.g. before its first navigation), we leave the
-        # button at its current style. The on-connect / on-disconnect
-        # callbacks installed in ``_wireDeferredLoginObservers`` will repaint
-        # whenever the underlying state changes.
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
             iface = getattr(sc_logic, "cur_lifu_interface", None)
@@ -4334,62 +4329,37 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         except (AttributeError, RuntimeError):
             iface = None
             tx_conn, hv_conn = False, False
+        is_simulated = bool(getattr(iface, "is_simulated", False))
 
-        # Log device-connection status whenever the (tx, hv) tuple changes
-        # from the previous call so the user can see what the outline color
-        # actually represents. The OWSignal-driven connect/disconnect logs
-        # in OpenLIFUSonicationControl only fire on transitions during a
-        # running session; this sees the polled state too (e.g. on first
-        # render with the device already in use by another Slicer instance,
-        # where no signal ever fires).
         prev = getattr(self, "_last_device_conn_state", "unset")
-        cur = (bool(tx_conn), bool(hv_conn))
-        if cur != prev:
-            self._last_device_conn_state = cur
-            # Route through the same "LIFUInterface" logger that
-            # OpenLIFUSonicationControl configures (Slicer status bar +
-            # Python Console via stdout StreamHandler). Using the root
-            # logger here would only land in the error-log table.
-            lifu_logger = logging.getLogger("LIFUInterface")
-            if cur == (True, True):
-                lifu_logger.info("Hardware device fully connected (TX + HV).")
-            elif cur == (True, False):
-                lifu_logger.info("Hardware device partially connected (TX only).")
-            elif cur == (False, True):
-                lifu_logger.info("Hardware device partially connected (HV only).")
-            else:
-                if iface is None:
-                    lifu_logger.info(
-                        "Hardware device not connected "
-                        "(SonicationControl interface not yet initialized)."
-                    )
-                else:
-                    lifu_logger.info(
-                        "Hardware device not connected. The COM ports may be "
-                        "in use by another application or no device is plugged in."
-                    )
-        if tx_conn and hv_conn:
-            self.ui.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#2e7d32")  # green
-            )
-            self.ui.devicePopupButton.setToolTip(
-                "Hardware device fully connected (TX + HV). Click for details."
-            )
-        elif tx_conn or hv_conn:
-            self.ui.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#f9a825")  # yellow / amber
-            )
-            half = "TX only" if tx_conn else "HV only"
-            self.ui.devicePopupButton.setToolTip(
-                f"Hardware partially connected ({half}). Click for details."
-            )
+        cur = ("simulated" if is_simulated else (bool(tx_conn), bool(hv_conn)))
+        if cur == prev:
+            return
+        self._last_device_conn_state = cur
+        # Route through the same "LIFUInterface" logger that
+        # OpenLIFUSonicationControl configures (Slicer status bar +
+        # Python Console via stdout StreamHandler). Using the root
+        # logger here would only land in the error-log table.
+        lifu_logger = logging.getLogger("LIFUInterface")
+        if cur == "simulated":
+            lifu_logger.info("Simulated hardware device connected (no real device).")
+        elif cur == (True, True):
+            lifu_logger.info("Hardware device fully connected (TX + HV).")
+        elif cur == (True, False):
+            lifu_logger.info("Hardware device partially connected (TX only).")
+        elif cur == (False, True):
+            lifu_logger.info("Hardware device partially connected (HV only).")
         else:
-            self.ui.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#000000")  # black
-            )
-            self.ui.devicePopupButton.setToolTip(
-                "No hardware device connected. Click for details."
-            )
+            if iface is None:
+                lifu_logger.info(
+                    "Hardware device not connected "
+                    "(SonicationControl interface not yet initialized)."
+                )
+            else:
+                lifu_logger.info(
+                    "Hardware device not connected. The COM ports may be "
+                    "in use by another application or no device is plugged in."
+                )
 
     # ----- Dependency install (moved from OpenLIFULogin) -----
 
@@ -4635,16 +4605,20 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         Queries ``hvcontroller`` and ``txdevice`` on the OpenLIFUSonicationControl
         module's ``LIFUInterface`` for hardware id and firmware version, plus
-        per-TX-module hardware id and firmware version. All I/O calls are
-        defensive: any failure is reported inline as "unknown" rather than
-        aborting the dialog (the SDK raises ``LIFUError`` on bus errors).
+        per-TX-module hardware id and firmware version. The dialog also
+        exposes a "Connect Simulated Device" button when no hardware is
+        connected, and a "Disconnect Simulated Device" button when the
+        currently active interface is the in-memory
+        :class:`~openlifu_sdk.ui.simulated_interface.SimulatedLIFUInterface`.
+        All I/O calls are defensive: any failure is reported inline as
+        "unknown" rather than aborting the dialog (the SDK raises
+        ``LIFUError`` on bus errors).
         """
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
-            iface = getattr(sc_logic, "cur_lifu_interface", None)
         except (AttributeError, RuntimeError):
-            iface = None
-        if iface is None:
+            sc_logic = None
+        if sc_logic is None or getattr(sc_logic, "cur_lifu_interface", None) is None:
             slicer.util.infoDisplay(
                 text=(
                     "The LIFU interface has not been initialized yet.\n\n"
@@ -4654,99 +4628,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 windowTitle="Device Status",
             )
             return
-        try:
-            tx_conn, hv_conn = iface.is_device_connected()
-        except Exception as e:
-            slicer.util.errorDisplay(
-                text=f"Could not query device connection status: {e}",
-                windowTitle="Device Status",
-            )
-            return
 
-        # Connection summary
-        if tx_conn and hv_conn:
-            summary = "Hardware device is fully connected."
-        elif tx_conn or hv_conn:
-            half = "TX only" if tx_conn else "HV only"
-            summary = f"Hardware device is partially connected ({half})."
-        else:
-            summary = "No hardware device is currently connected."
-
-        lines: List[str] = [summary, ""]
-
-        # Helper: encode a raw-hex HWID into base58, matching the test app's
-        # lifu_console.py / lifu_transmitter.py pattern. Important detail:
-        # the test app slices the raw-hex *string* to HW_ID_DATA_LENGTH (=12)
-        # characters before decoding (=> first 6 bytes, ~8 base58 chars). The
-        # raw hex returned by the SDK is 24 chars (12 bytes), but only the
-        # first half is used for the display ID. base58 ships with the
-        # openlifu_sdk environment; if for some reason it isn't importable we
-        # fall back to the raw hex string instead of failing.
-        def _encode_hwid_b58(raw_hex: str) -> str:
-            try:
-                import base58
-                from openlifu_sdk.io.LIFUConfig import HW_ID_DATA_LENGTH
-                return base58.b58encode(
-                    bytes.fromhex(raw_hex[:HW_ID_DATA_LENGTH])
-                ).decode("utf-8")
-            except Exception as enc_err:
-                logging.warning("Could not base58-encode HWID %r: %s", raw_hex, enc_err)
-                return raw_hex
-
-        # ---- Console (HV controller) ----
-        lines.append("Console:")
-        if hv_conn:
-            hv = iface.hvcontroller
-            try:
-                con_hwid_hex = hv.get_hardware_id(raw_hex=True)
-                con_hwid = _encode_hwid_b58(con_hwid_hex)
-            except Exception as e:
-                logging.warning("Could not read console HWID: %s", e)
-                con_hwid = "unknown"
-            try:
-                con_ver = hv.get_version()
-            except Exception as e:
-                logging.warning("Could not read console firmware version: %s", e)
-                con_ver = "unknown"
-            lines.append(f"  HWID: {con_hwid}")
-            lines.append(f"  Firmware: v{con_ver}")
-        else:
-            lines.append("  (not connected)")
-
-        lines.append("")
-
-        # ---- TX device + per-module info ----
-        lines.append("TX device:")
-        if tx_conn:
-            tx = iface.txdevice
-            try:
-                module_count = tx.get_module_count()
-            except Exception as e:
-                logging.warning("Could not read TX module count: %s", e)
-                module_count = 0
-            lines.append(f"  Modules connected: {module_count}")
-            for module_idx in range(module_count):
-                lines.append(f"  Module {module_idx}:")
-                try:
-                    mod_hwid_hex = tx.get_hardware_id(module=module_idx, raw_hex=True)
-                    mod_hwid = _encode_hwid_b58(mod_hwid_hex)
-                except Exception as e:
-                    logging.warning("Could not read TX module %d HWID: %s", module_idx, e)
-                    mod_hwid = "unknown"
-                try:
-                    mod_ver = tx.get_version(module=module_idx)
-                except Exception as e:
-                    logging.warning("Could not read TX module %d firmware: %s", module_idx, e)
-                    mod_ver = "unknown"
-                lines.append(f"    HWID: {mod_hwid}")
-                lines.append(f"    Firmware: v{mod_ver}")
-        else:
-            lines.append("  (not connected)")
-
-        slicer.util.infoDisplay(
-            text="\n".join(lines),
-            windowTitle="Device Status",
-        )
+        dialog = _DeviceStatusDialog(sc_logic, parent=slicer.util.mainWindow())
+        dialog.exec_()
 
     @display_errors
     def onManageTransducersClicked(self, checked: bool = False) -> None:
@@ -4789,10 +4673,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
-        self.updateNavigationModeComboBox()
-        self.updatePermissionsModeComboBox()
+        # The shared header repaints all three indicators (navigation,
+        # permissions, status buttons) in one call.
+        self.module_header.refresh_all()
         self.updatePermissionsGating()
-        self.updateToolbarButtonStates()
+        self._logDeviceStateTransition()
         # If a database directory was remembered but auto-connect did not run
         # at startup (e.g. the Database logic wasn't reachable yet), try again
         # on each entry into the module so the user sees the database loaded.
