@@ -124,6 +124,45 @@ class SolutionOnHardwareState(Enum):
     SENDING=3
     RUN_FAILED=4
 
+
+class DeviceCompatibilitySeverity(Enum):
+    """How well the connected device matches the loaded session's transducer."""
+    OK = "ok"               # match (or nothing to compare against)
+    WARNING = "warning"     # module count agrees, identity (id/name) differs
+    ERROR = "error"         # module count disagrees -- strictly incompatible
+
+
+class DeviceCompatibility:
+    """Result of comparing the connected device against the loaded session's transducer.
+
+    ``severity`` drives UI gating:
+
+    * ``OK``      – allow send.
+    * ``WARNING`` – module count agrees but identity differs; require an
+                    explicit "Send anyway" confirmation (admin-only when
+                    user-account mode is on).
+    * ``ERROR``   – module count differs; refuse to send.
+    """
+
+    def __init__(self,
+                 severity: DeviceCompatibilitySeverity,
+                 message: str = "",
+                 expected_module_count: Optional[int] = None,
+                 actual_module_count: Optional[int] = None,
+                 expected_id: Optional[str] = None,
+                 actual_id: Optional[str] = None,
+                 expected_name: Optional[str] = None,
+                 actual_name: Optional[str] = None) -> None:
+        self.severity = severity
+        self.message = message
+        self.expected_module_count = expected_module_count
+        self.actual_module_count = actual_module_count
+        self.expected_id = expected_id
+        self.actual_id = actual_id
+        self.expected_name = expected_name
+        self.actual_name = actual_name
+
+
 #
 # OpenLIFUSonicationControlParameterNode
 #
@@ -462,8 +501,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             enabled = False
             tooltip = "Cannot send solution while a sonication is running."
         else:
-            enabled = True
-            tooltip = "Send the sonication solution to the connected hardware."
+            compat = self.logic.check_device_compatibility()
+            if compat.severity == DeviceCompatibilitySeverity.ERROR:
+                enabled = False
+                tooltip = compat.message
+            else:
+                enabled = True
+                tooltip = "Send the sonication solution to the connected hardware."
 
         self.ui.sendSonicationSolutionToDevicePushButton.setEnabled(enabled)
         self.ui.sendSonicationSolutionToDevicePushButton.setToolTip(tooltip)
@@ -614,6 +658,22 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         logging.debug("onSendSonicationSolutionToDevicePushButtonClicked() called")
 
         self.ensureLIFUInterfaceForSelectedMode()
+
+        # Compatibility gate: defense in depth. The button-enable logic
+        # already disables on ERROR, but re-check here to defend against
+        # programmatic / keyboard activations.
+        compat = self.logic.check_device_compatibility()
+        if compat.severity == DeviceCompatibilitySeverity.ERROR:
+            slicer.util.errorDisplay(
+                compat.message,
+                windowTitle="Incompatible device",
+                parent=slicer.util.mainWindow(),
+            )
+            return
+        if compat.severity == DeviceCompatibilitySeverity.WARNING:
+            if not self._confirm_send_to_mismatched_device(compat):
+                return
+
         LIFUError = _lifu_exceptions().LIFUError
         # Reflect the in-progress state immediately and flush the event loop so
         # the user gets visual feedback while the (synchronous) device call runs.
@@ -648,6 +708,53 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
                     detail=lifu_error_detail,
                 )
             self.updateWorkflowControls()
+
+    def _confirm_send_to_mismatched_device(self, compat: "DeviceCompatibility") -> bool:
+        """Confirmation dialog for the soft (identity-mismatch) compatibility gate.
+
+        When user-account mode is on, only an admin user is allowed to
+        click "Send anyway"; non-admins are shown the warning with an
+        OK-only dismissal. When user-account mode is off, anyone can
+        click "Send anyway".
+
+        Returns ``True`` if the caller should proceed with the send.
+        """
+        from OpenLIFULib.user_account_mode_util import (
+            get_current_user,
+            get_user_account_mode_state,
+        )
+        try:
+            uam_on = bool(get_user_account_mode_state())
+        except Exception:  # noqa: BLE001
+            uam_on = False
+        try:
+            cur_user = get_current_user()
+        except Exception:  # noqa: BLE001
+            cur_user = None
+        is_admin = bool(cur_user is not None
+                        and 'admin' in (getattr(cur_user, "roles", None) or []))
+        allow_override = (not uam_on) or is_admin
+
+        box = qt.QMessageBox(slicer.util.mainWindow())
+        box.setIcon(qt.QMessageBox.Warning)
+        box.setWindowTitle("Device does not match session")
+        box.setText("The connected device does not match the loaded session's transducer.")
+        body = compat.message
+        if not allow_override:
+            body += (
+                "\n\nOnly an administrator can override this warning and send "
+                "the solution anyway. Sign in as an admin to proceed."
+            )
+        box.setInformativeText(body)
+        if allow_override:
+            send_btn = box.addButton("Send anyway", qt.QMessageBox.AcceptRole)
+            box.addButton("Cancel", qt.QMessageBox.RejectRole)
+            box.setDefaultButton(box.buttons()[-1])  # default to Cancel
+        else:
+            send_btn = None
+            box.addButton("OK", qt.QMessageBox.RejectRole)
+        box.exec_()
+        return allow_override and box.clickedButton() is send_btn
 
     def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
         self.ensureLIFUInterfaceForSelectedMode()
@@ -1106,6 +1213,125 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self._monitor_loop = None
         self._monitor_thread = None
         self.monitoring_timer = None
+
+    def check_device_compatibility(self) -> DeviceCompatibility:
+        """Compare the connected device against the loaded session's transducer.
+
+        Returns a :class:`DeviceCompatibility` whose ``severity`` is:
+
+        * ``ERROR`` when the connected TX module count disagrees with the
+          session's transducer module count -- strictly incompatible, the
+          send button should be disabled.
+        * ``WARNING`` when module counts agree but the connected device's
+          ``device.id`` (read from module 0's user_config) differs from the
+          session transducer's id -- the user is sending to a different
+          physical transducer than the session was planned against, and
+          should be required to confirm.
+        * ``OK`` in every other case (no session loaded, no interface,
+          unable to read the device, identity matches, etc.). When there
+          is no session there is nothing to compare against, so we
+          deliberately fall through to OK rather than block the send.
+        """
+        iface = self.cur_lifu_interface
+        if iface is None:
+            return DeviceCompatibility(DeviceCompatibilitySeverity.OK)
+
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            return DeviceCompatibility(DeviceCompatibilitySeverity.OK)
+
+        # Session-side expectation: load the session's transducer in its
+        # array form (convert_array=False) so we can read the module count
+        # off ``modules`` directly.
+        try:
+            from OpenLIFULib.util import get_cur_db
+            db = get_cur_db()
+        except Exception:  # noqa: BLE001
+            db = None
+        expected_id = loaded_session.get_transducer_id()
+        expected_name: Optional[str] = None
+        expected_module_count: Optional[int] = None
+        if db is not None and expected_id:
+            try:
+                expected_obj = db.load_transducer(expected_id, convert_array=False)
+                expected_name = getattr(expected_obj, "name", None)
+                if hasattr(expected_obj, "modules"):
+                    expected_module_count = len(expected_obj.modules)
+                else:
+                    expected_module_count = 1
+            except Exception as e:  # noqa: BLE001
+                logging.warning("check_device_compatibility: could not load expected transducer '%s': %s", expected_id, e)
+
+        # Device-side actuals.
+        actual_module_count: Optional[int] = None
+        actual_id: Optional[str] = None
+        actual_name: Optional[str] = None
+        try:
+            actual_module_count = int(iface.txdevice.get_module_count())
+        except Exception as e:  # noqa: BLE001
+            logging.warning("check_device_compatibility: could not read TX module count: %s", e)
+        try:
+            cfg = iface.txdevice.read_config(module=0)
+            cfg_dict = cfg.to_dict() if hasattr(cfg, "to_dict") else {}
+            device_block = cfg_dict.get("device") or {}
+            if isinstance(device_block, dict):
+                actual_id = device_block.get("id")
+                actual_name = device_block.get("name")
+        except Exception as e:  # noqa: BLE001
+            logging.warning("check_device_compatibility: could not read device user_config: %s", e)
+
+        # Module count is the strict gate.
+        if (expected_module_count is not None
+                and actual_module_count is not None
+                and expected_module_count != actual_module_count):
+            return DeviceCompatibility(
+                DeviceCompatibilitySeverity.ERROR,
+                message=(
+                    f"Connected device reports {actual_module_count} TX "
+                    f"module(s) but the loaded session's transducer "
+                    f"'{expected_name or expected_id}' expects "
+                    f"{expected_module_count}. Sonication cannot be sent "
+                    f"to an incompatible device."
+                ),
+                expected_module_count=expected_module_count,
+                actual_module_count=actual_module_count,
+                expected_id=expected_id,
+                actual_id=actual_id,
+                expected_name=expected_name,
+                actual_name=actual_name,
+            )
+
+        # Module counts agree (or one side unknown). Identity check is the
+        # soft gate: only fire when both ids are present and disagree.
+        if expected_id and actual_id and expected_id != actual_id:
+            return DeviceCompatibility(
+                DeviceCompatibilitySeverity.WARNING,
+                message=(
+                    f"Connected device identifies as "
+                    f"'{actual_name or actual_id}' (id: {actual_id}) but the "
+                    f"loaded session was planned for "
+                    f"'{expected_name or expected_id}' (id: {expected_id}). "
+                    f"Module counts match, so sending is technically "
+                    f"possible, but the solution was not designed for this "
+                    f"transducer."
+                ),
+                expected_module_count=expected_module_count,
+                actual_module_count=actual_module_count,
+                expected_id=expected_id,
+                actual_id=actual_id,
+                expected_name=expected_name,
+                actual_name=actual_name,
+            )
+
+        return DeviceCompatibility(
+            DeviceCompatibilitySeverity.OK,
+            expected_module_count=expected_module_count,
+            actual_module_count=actual_module_count,
+            expected_id=expected_id,
+            actual_id=actual_id,
+            expected_name=expected_name,
+            actual_name=actual_name,
+        )
 
     def reinitialize_lifu_interface(self, test_mode: bool = False):
         """Cleanly shut down and reinitialize the LIFUInterface."""
