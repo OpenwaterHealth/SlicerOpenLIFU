@@ -354,6 +354,22 @@ class AddNewVolumeDialog(qt.QDialog):
         return (returncode, volume_filepath,volume_name, volume_id)
 
 
+def _format_iso_short(iso_str: Optional[str]) -> str:
+    """Format an ISO-8601 timestamp as ``YYYY-MM-DD HH:MM`` for table display.
+
+    Falls back to the raw input (or empty string) when the value is missing
+    or cannot be parsed; this is the same shape ``Session.from_dict`` would
+    have produced via ``datetime.fromisoformat`` followed by ``strftime``.
+    """
+    if not iso_str:
+        return ""
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(iso_str).strftime('%Y-%m-%d %H:%M')
+    except (TypeError, ValueError):
+        return str(iso_str)
+
+
 class LoadSubjectDialog(qt.QDialog):
     """
     Dialog for selecting and loading a subject from the database.
@@ -561,7 +577,7 @@ class LoadSessionDialog(qt.QDialog):
         self.db = db
         self.subject_id = subject_id
         self.subject = subject
-        self.selected_session = None
+        self.selected_session_id: Optional[str] = None
         self.loaded_session_id = loaded_session_id
 
         self.setup()
@@ -649,66 +665,51 @@ class LoadSessionDialog(qt.QDialog):
         self.table_widget.setRowCount(len(session_ids))
 
         for row, session_id in enumerate(session_ids):
-            # Session info
-            session = self.db.load_session(self.subject, session_id)
-            self.table_widget.setItem(row, 0, qt.QTableWidgetItem(session.name))
-            self.table_widget.setItem(row, 1, qt.QTableWidgetItem(session.id))
-
-            # Protocol, volume, transducer text
-            def safe_call(func, fallback="NA"):
-                try:
-                    return func()
-                except Exception:
-                    return fallback
-
-            protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
-            volume_name = safe_call(lambda: self.db.get_volume_info(self.subject_id, session.volume_id)["name"])
-            transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
-
-            protocol_text = f"{protocol_name} ({session.protocol_id})"
-            volume_text = f"{volume_name} ({session.volume_id})"
-            transducer_text = f"{transducer_name} ({session.transducer_id})"
-
-            self.table_widget.setItem(row, 2, qt.QTableWidgetItem(protocol_text))
-            self.table_widget.setItem(row, 3, qt.QTableWidgetItem(volume_text))
-            self.table_widget.setItem(row, 4, qt.QTableWidgetItem(transducer_text))
-
-            # Date created, modified
-
-            self.table_widget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
-            self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
+            # Session metadata: load the raw JSON dict (not a fully constructed
+            # Session) so populating the table doesn't trigger Database
+            # round-trips like load-time tracking-result sanitization.
+            session_info = self.db.load_session_info(self.subject_id, session_id)
+            self._populate_session_row(row, session_info)
 
         self.table_widget.resizeRowsToContents()
         self.table_widget.setSortingEnabled(True) # turn on sorting after edit
 
-    @display_errors
-    def append_session_to_list(self, session: "openlifu.db.session.Session") -> None:
-        self.table_widget.setSortingEnabled(False) # turn off sorting during edit
-
-        row = self.table_widget.rowCount
-        self.table_widget.insertRow(row)
-
+    def _populate_session_row(self, row: int, session_info: dict) -> None:
+        """Fill a single table row from a session info dict (as returned by
+        :py:meth:`openlifu.db.Database.load_session_info`)."""
         def safe_call(func, fallback="NA"):
             try:
                 return func()
             except Exception:
                 return fallback
 
-        protocol_name = safe_call(lambda: self.db.load_protocol(session.protocol_id).name)
-        volume_name = safe_call(lambda: self.db.get_volume_info(self.subject_id, session.volume_id)["name"])
-        transducer_name = safe_call(lambda: self.db.load_transducer(session.transducer_id).name)
+        protocol_id = session_info.get("protocol_id", "")
+        volume_id = session_info.get("volume_id", "")
+        transducer_id = session_info.get("transducer_id", "")
 
-        protocol_text = f"{protocol_name} ({session.protocol_id})"
-        volume_text = f"{volume_name} ({session.volume_id})"
-        transducer_text = f"{transducer_name} ({session.transducer_id})"
+        protocol_name = safe_call(lambda: self.db.load_protocol(protocol_id).name)
+        volume_name = safe_call(lambda: self.db.get_volume_info(self.subject_id, volume_id)["name"])
+        transducer_name = safe_call(lambda: self.db.load_transducer(transducer_id).name)
 
-        self.table_widget.setItem(row, 0, qt.QTableWidgetItem(session.name))
-        self.table_widget.setItem(row, 1, qt.QTableWidgetItem(session.id))
+        protocol_text = f"{protocol_name} ({protocol_id})"
+        volume_text = f"{volume_name} ({volume_id})"
+        transducer_text = f"{transducer_name} ({transducer_id})"
+
+        self.table_widget.setItem(row, 0, qt.QTableWidgetItem(session_info.get("name", "")))
+        self.table_widget.setItem(row, 1, qt.QTableWidgetItem(session_info.get("id", "")))
         self.table_widget.setItem(row, 2, qt.QTableWidgetItem(protocol_text))
         self.table_widget.setItem(row, 3, qt.QTableWidgetItem(volume_text))
         self.table_widget.setItem(row, 4, qt.QTableWidgetItem(transducer_text))
-        self.table_widget.setItem(row, 5, qt.QTableWidgetItem(session.date_created.strftime('%Y-%m-%d %H:%M')))
-        self.table_widget.setItem(row, 6, qt.QTableWidgetItem(session.date_modified.strftime('%Y-%m-%d %H:%M')))
+        self.table_widget.setItem(row, 5, qt.QTableWidgetItem(_format_iso_short(session_info.get("date_created"))))
+        self.table_widget.setItem(row, 6, qt.QTableWidgetItem(_format_iso_short(session_info.get("date_modified"))))
+
+    @display_errors
+    def append_session_to_list(self, session_info: dict) -> None:
+        self.table_widget.setSortingEnabled(False) # turn off sorting during edit
+
+        row = self.table_widget.rowCount
+        self.table_widget.insertRow(row)
+        self._populate_session_row(row, session_info)
 
         self.table_widget.resizeRowsToContents()
         self.table_widget.setSortingEnabled(True) # turn on sorting after edit
@@ -746,11 +747,11 @@ class LoadSessionDialog(qt.QDialog):
             return
 
         slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
-        new_session = self.db.load_session(self.subject, session_parameters["id"])
-        self.append_session_to_list(new_session)
+        new_session_info = self.db.load_session_info(self.subject_id, session_parameters["id"])
+        self.append_session_to_list(new_session_info)
 
         if load_checked:
-            self.selected_session = new_session
+            self.selected_session_id = new_session_info["id"]
             self.accept()
 
     @display_errors
@@ -766,23 +767,28 @@ class LoadSessionDialog(qt.QDialog):
         row = selected_items[0].row()
         session_id_item = self.table_widget.item(row, 1)  # Column 1 is Session ID
         session_id = session_id_item.text()
+        session_name_item = self.table_widget.item(row, 0)
+        session_name = session_name_item.text() if session_name_item else session_id
 
         # ---- Prevent loading sessions with unallowed protocols ----
-        session = self.db.load_session(self.subject, session_id)
-        protocol = self.db.load_protocol(session.protocol_id)
+        # Use load_session_info (raw JSON) so the permission check doesn't
+        # incur a full Session construction; the actual load happens in the
+        # caller via ``logic.load_session(...)``.
+        session_info = self.db.load_session_info(self.subject_id, session_id)
+        protocol = self.db.load_protocol(session_info["protocol_id"])
 
         if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
             pass  # No enforcement needed
         else:
             if not any(role in protocol.allowed_roles for role in get_current_user().roles):
                 slicer.util.errorDisplay(
-                    f"Could not load the session '{session.name}' ({session_id}) because it uses a protocol "
+                    f"Could not load the session '{session_name}' ({session_id}) because it uses a protocol "
                     f"that does not allow any of the logged-in user's roles."
                 )
                 return
         # -----------------------------------------------------------
 
-        self.selected_session = session
+        self.selected_session_id = session_id
         self.accept()
 
     @display_errors
@@ -813,12 +819,12 @@ class LoadSessionDialog(qt.QDialog):
         if not get_user_account_mode_state() or 'admin' in get_current_user().roles:
             pass  # No enforcement needed
         else:
-            session = self.db.load_session(self.subject, session_id)
-            protocol = self.db.load_protocol(session.protocol_id)
+            session_info = self.db.load_session_info(self.subject_id, session_id)
+            protocol = self.db.load_protocol(session_info["protocol_id"])
 
             if not any(role in protocol.allowed_roles for role in get_current_user().roles):
                 slicer.util.errorDisplay(
-                    f"Could not delete the session '{session.name}' ({session_id}) because it uses a protocol "
+                    f"Could not delete the session '{session_info.get('name', session_id)}' ({session_id}) because it uses a protocol "
                     f"that does not allow any of the logged-in user's roles."
                 )
                 return
@@ -835,12 +841,17 @@ class LoadSessionDialog(qt.QDialog):
             self.table_widget.removeRow(row)
             self.table_widget.resizeRowsToContents()
 
-    def exec_and_get_session(self) -> Optional["openlifu.db.session.Session"]:
+    def exec_and_get_session_id(self) -> Optional[str]:
         """
-        Execute the dialog and return the selected session ID, or None if canceled.
+        Execute the dialog and return the selected session ID, or ``None`` if canceled.
+
+        Only the id is returned; the caller is responsible for actually
+        loading the session (typically via ``logic.load_session(...)``).
+        This avoids redundant ``Database.load_session`` calls during preview
+        and permission checks.
         """
         if self.exec() == qt.QDialog.Accepted:
-            return self.selected_session
+            return self.selected_session_id
         return None
 
     def _enforce_user_permissions(self) -> None:
@@ -4064,13 +4075,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def on_load_session_clicked(self, checked:bool, load_session_dlg = None) -> bool:
         if load_session_dlg is None:
             load_session_dlg = LoadSessionDialog(get_cur_db(), self.logic.subject.id)
-        new_session = load_session_dlg.exec_and_get_session()
+        new_session_id = load_session_dlg.exec_and_get_session_id()
 
-        if not new_session:
+        if not new_session_id:
             return False
 
         self.logic.clear_session(clean_up_scene=True)
-        self.logic.load_session(self.logic.subject.id, new_session.id)
+        self.logic.load_session(self.logic.subject.id, new_session_id)
         return True
 
     @display_errors
