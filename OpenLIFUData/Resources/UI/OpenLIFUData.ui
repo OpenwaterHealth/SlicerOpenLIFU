@@ -295,6 +295,36 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="managePhotoscansPushButton">
+           <property name="toolTip">
+            <string>Open the photoscan manager for the active session</string>
+           </property>
+           <property name="text">
+            <string>Manage Photoscans</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="manageSolutionsPushButton">
+           <property name="toolTip">
+            <string>Open the solution manager for the active session</string>
+           </property>
+           <property name="text">
+            <string>Manage Solutions</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="manageRunsPushButton">
+           <property name="toolTip">
+            <string>Open the run manager for the active session</string>
+           </property>
+           <property name="text">
+            <string>Manage Runs</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QGroupBox" name="sessionStatusGroupBox">
            <property name="title">
             <string>Active session status</string>

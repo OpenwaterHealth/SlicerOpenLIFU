@@ -192,6 +192,16 @@
     </widget>
    </item>
    <item>
+    <widget class="QPushButton" name="viewRunsPushButton">
+     <property name="toolTip">
+      <string>Browse, preview, and export run logs for the active session</string>
+     </property>
+     <property name="text">
+      <string>View Run Logs</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QWidget" name="workflowControlsPlaceholder" native="true">
      <property name="styleSheet">
       <string notr="true">background-color: rgb(128, 0, 128);</string>
