@@ -2,6 +2,7 @@
 from collections import defaultdict
 import io
 import itertools
+import json
 import os
 from pathlib import Path
 import warnings
@@ -11,7 +12,7 @@ import string
 import subprocess
 from subprocess import CalledProcessError
 import tempfile
-from typing import Callable, Optional, Tuple, TYPE_CHECKING, List, Dict, Union
+from typing import Any, Callable, Optional, Tuple, TYPE_CHECKING, List, Dict, Union
 
 # Third-party imports
 import ctk
@@ -1525,65 +1526,146 @@ class TransducerTrackingWizard(qt.QWizard):
             self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(()) 
 
 class PhotoscanPreviewDialog(qt.QDialog):
-    """ Preview Photoscan Dialog """
+    """Two-panel preview of a SlicerOpenLIFUPhotoscan.
+
+    Left panel: a :class:`QTreeWidget` showing the underlying openlifu
+    Photoscan's serialized fields (read-only). Right panel: an isolated 3D
+    view of the photoscan model, displayed in the photoscan's existing
+    view node. The photoscan's prior model visibility and opacity are
+    restored when the dialog closes.
+    """
 
     def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
-        self.setWindowTitle("Photoscan Preview")
+        self.setWindowTitle(f"Photoscan Preview - {photoscan.get_id()}")
         self.setWindowModality(qt.Qt.WindowModal)
         self.photoscan = photoscan
         self.setup()
         self.setupViewNode()
 
-        set_threeD_view_node(self.viewWidget, threeD_view_node = self.photoscan.view_node)
-        # Display the photoscan 
-        self.photoscan.model_node.GetDisplayNode().SetVisibility(True) 
-        # save current opacity
+        set_threeD_view_node(self.viewWidget, threeD_view_node=self.photoscan.view_node)
+        # Display the photoscan in the preview view, remembering the prior settings
+        # so we can restore them when the dialog closes.
+        self.current_photoscan_visibility = self.photoscan.model_node.GetDisplayNode().GetVisibility()
         self.current_photoscan_opacity = self.photoscan.model_node.GetDisplayNode().GetOpacity()
+        self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
         self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
 
         # Reset the camera associated with the view node based on the photoscan model
         reset_view_node_camera(self.photoscan.view_node)
 
     def setup(self):
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.55))
+        self.setMinimumWidth(700)
+        self.setMinimumHeight(450)
 
-        self.setMinimumWidth(400)
-        self.setMinimumHeight(400)
+        outer = qt.QVBoxLayout()
+        self.setLayout(outer)
 
-        boxLayout = qt.QVBoxLayout()
-        self.setLayout(boxLayout)
+        splitter = qt.QSplitter(qt.Qt.Horizontal, self)
+        outer.addWidget(splitter, 1)
 
-        placeholderViewWidget = qt.QWidget()
-        placeholderViewWidget.setObjectName('viewWidgetPlaceholder')
-        boxLayout.addWidget(placeholderViewWidget)
-        self.viewWidget = set_threeD_view_widget(slicer.util.childWidgetVariables(self))
+        # Left panel: native Qt tree showing the openlifu Photoscan's fields
+        self.infoTree = qt.QTreeWidget(splitter)
+        self.infoTree.setColumnCount(2)
+        self.infoTree.setHeaderLabels(["Field", "Value"])
+        self.infoTree.setMinimumWidth(320)
+        self.infoTree.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
+        self.infoTree.setAlternatingRowColors(True)
+        self.infoTree.setRootIsDecorated(True)
+        self.infoTree.setUniformRowHeights(True)
+        self.infoTree.setSelectionMode(qt.QAbstractItemView.NoSelection)
+        header = self.infoTree.header()
+        header.setSectionResizeMode(0, qt.QHeaderView.Interactive)
+        header.setSectionResizeMode(1, qt.QHeaderView.Stretch)
+        header.setStretchLastSection(True)
+        self.infoTree.setColumnWidth(0, 180)
+        try:
+            self._populate_info_tree()
+        except Exception as e:
+            logging.warning("PhotoscanPreviewDialog: failed to populate info tree: %s", e)
+            self.infoTree.clear()
+            err_item = qt.QTreeWidgetItem(["error", str(e)])
+            self.infoTree.addTopLevelItem(err_item)
+        self.infoTree.expandToDepth(0)
+
+        # Right panel: 3D view widget bound to the photoscan's view node
+        self.viewWidget = slicer.qMRMLThreeDWidget(splitter)
+        self.viewWidget.setMRMLScene(slicer.mrmlScene)
+        self.viewWidget.setMinimumHeight(300)
+        self.viewWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+
+        splitter.addWidget(self.infoTree)
+        splitter.addWidget(self.viewWidget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        splitter.setSizes([400, 600])
 
         self.buttonBox = qt.QDialogButtonBox()
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok)
-        boxLayout.addWidget(self.buttonBox)
+        outer.addWidget(self.buttonBox)
         self.buttonBox.accepted.connect(self.onClose)
+
+    def _populate_info_tree(self) -> None:
+        # Navigate parameterPack -> wrapper -> openlifu.Photoscan
+        openlifu_photoscan = self.photoscan.photoscan.photoscan
+        try:
+            data = openlifu_photoscan.to_dict()
+        except Exception as e:
+            data = {"error": f"Could not serialize photoscan: {e}"}
+        root = qt.QTreeWidgetItem(self.infoTree, [self.photoscan.get_id(), ""])
+        self._populate_tree_node(root, data)
+        root.setExpanded(True)
+
+    @classmethod
+    def _populate_tree_node(cls, parent_item: qt.QTreeWidgetItem, value: Any) -> None:
+        if isinstance(value, dict):
+            for k, v in value.items():
+                is_container = isinstance(v, (dict, list))
+                child = qt.QTreeWidgetItem(
+                    parent_item,
+                    [str(k), "" if is_container else cls._format_scalar(v)],
+                )
+                if is_container:
+                    cls._populate_tree_node(child, v)
+        elif isinstance(value, list):
+            for i, v in enumerate(value):
+                is_container = isinstance(v, (dict, list))
+                child = qt.QTreeWidgetItem(
+                    parent_item,
+                    [f"[{i}]", "" if is_container else cls._format_scalar(v)],
+                )
+                if is_container:
+                    cls._populate_tree_node(child, v)
+
+    @staticmethod
+    def _format_scalar(v: Any) -> str:
+        try:
+            return json.dumps(v, default=str)
+        except Exception:
+            return str(v)
 
     def setupViewNode(self):
         """ Returns the view node associated with the photoscan.
         When a new view node is created, the view node centers and fits the displayed photoscan in 3D view."""
-                
+
         # Create a viewNode for displaying the photoscan if it hasn't been created
         photoscan_id = self.photoscan.get_id()
         if self.photoscan.view_node is None:
-            self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
+            self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id=photoscan_id)
 
-            # Update the photoscan stored in the data parameter node 
+            # Update the photoscan stored in the data parameter node
             get_openlifu_data_parameter_node().loaded_photoscans[self.photoscan.get_id()] = self.photoscan
 
         # Set view nodes on the photoscan
         self.photoscan.set_view_nodes([self.photoscan.view_node])
-        
+
         # Hide all displayable nodes in the scene from the wizard view nodes
-        hide_displayable_nodes_from_view(wizard_view_nodes = [self.photoscan.view_node])
-        
+        hide_displayable_nodes_from_view(wizard_view_nodes=[self.photoscan.view_node])
+
     def resetViewNodes(self):
-        
-        self.photoscan.model_node.GetDisplayNode().SetVisibility(False)
+        self.photoscan.model_node.GetDisplayNode().SetVisibility(self.current_photoscan_visibility)
         self.photoscan.model_node.GetDisplayNode().SetOpacity(self.current_photoscan_opacity)
         self.photoscan.set_view_nodes([])
 

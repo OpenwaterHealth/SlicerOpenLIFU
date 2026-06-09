@@ -3697,6 +3697,1012 @@ class ProtocolManagerDialog(qt.QDialog):
         self.refresh()
 
 
+# ---- Per-session: Solution / Photoscan / Run manager dialogs ----
+
+
+class _JsonTreeDialog(qt.QDialog):
+    """Minimal read-only JSON tree viewer used by the per-session manager dialogs."""
+
+    def __init__(self, title: str, data: Dict[str, Any], parent="mainWindow"):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle(title)
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.setWindowFlags(self.windowFlags() & ~qt.Qt.WindowContextHelpButtonHint)
+
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        tree = qt.QTreeWidget()
+        tree.setColumnCount(2)
+        tree.setHeaderLabels(["Key", "Value"])
+        tree.setAlternatingRowColors(True)
+        tree.header().setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)
+        tree.header().setStretchLastSection(True)
+        layout.addWidget(tree, 1)
+
+        for top_key, top_val in data.items():
+            root = qt.QTreeWidgetItem(tree, [str(top_key), ""])
+            ProtocolPreviewDialog._populate_tree_node(root, top_val)
+            root.setExpanded(True)
+
+        bb = qt.QDialogButtonBox()
+        bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.4), int(screen.height() * 0.5))
+
+
+def _make_led_icon(color: str) -> qt.QIcon:
+    """Module-level helper mirroring TransducerManagerDialog._make_led_icon."""
+    pix = qt.QPixmap(16, 16)
+    pix.fill(qt.Qt.transparent)
+    painter = qt.QPainter(pix)
+    try:
+        painter.setRenderHint(qt.QPainter.Antialiasing, True)
+        painter.setPen(qt.QPen(qt.QColor("#444"), 1))
+        painter.setBrush(qt.QBrush(qt.QColor(color)))
+        painter.drawEllipse(2, 2, 12, 12)
+    finally:
+        painter.end()
+    return qt.QIcon(pix)
+
+
+class SolutionManagerDialog(qt.QDialog):
+    """Tabular manager for solutions stored under the active session.
+
+    Columns: ``[LED, ID, Name, Approved, Foci]``. The LED on a row is lit
+    green when the row's ID matches the currently loaded solution. Actions:
+
+    * **Add from File** -- load a ``<id>.json`` solution file (the matching
+      ``<id>.nc`` next to it is loaded automatically) and write it into the
+      active session's solutions tree.
+    * **Preview** -- read-only JSON tree of the solution metadata.
+    * **Export** -- copy ``<id>.json`` and ``<id>.nc`` to a folder of the
+      user's choosing.
+    * **Delete** -- remove the solution directory and drop the id from the
+      session's ``solutions.json`` index.
+    """
+
+    def __init__(
+        self,
+        db: "openlifu.db.Database",
+        subject_id: str,
+        session_id: str,
+        parent="mainWindow",
+    ):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle(f"Manage Solutions - session {session_id}")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.db = db
+        self.subject_id = subject_id
+        self.session_id = session_id
+        self._setup()
+        self.refresh()
+
+    def _setup(self) -> None:
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        cols = ["", "ID", "Name", "Approved", "Foci"]
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setHighlightSections(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 22)
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, qt.QHeaderView.Stretch)
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+        actionRow = qt.QHBoxLayout()
+        self.addFileButton = qt.QPushButton("Add from File")
+        self.addFileButton.setToolTip("Import a solution JSON (and its companion .nc) into this session")
+        self.previewButton = qt.QPushButton("Preview")
+        self.previewButton.setToolTip("Show a read-only JSON view of the selected solution")
+        self.exportButton = qt.QPushButton("Export")
+        self.exportButton.setToolTip("Copy the selected solution's JSON and .nc files to a folder of your choice")
+        self.deleteButton = qt.QPushButton("Delete")
+        self.deleteButton.setToolTip("Remove the selected solution from this session")
+        for b in (self.addFileButton, self.previewButton, self.exportButton, self.deleteButton):
+            b.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            actionRow.addWidget(b)
+        layout.addLayout(actionRow)
+
+        bb = qt.QDialogButtonBox()
+        bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        self.addFileButton.clicked.connect(self.onAddFromFile)
+        self.previewButton.clicked.connect(self.onPreview)
+        self.exportButton.clicked.connect(self.onExport)
+        self.deleteButton.clicked.connect(self.onDelete)
+        self.table.doubleClicked.connect(self.onPreview)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.5), int(screen.height() * 0.4))
+
+    def _loaded_solution_id(self) -> Optional[str]:
+        try:
+            sol = get_openlifu_data_parameter_node().loaded_solution
+            if sol is None:
+                return None
+            return sol.solution.solution.id
+        except Exception:
+            return None
+
+    def _load_solution_metadata(self, sid: str) -> Optional["openlifu.plan.Solution"]:
+        """Load just the solution metadata (no .nc) for listing/preview."""
+        try:
+            json_filepath = self.db.get_solution_filepath(self.subject_id, self.session_id, sid)
+            return openlifu_lz().plan.Solution.from_files(json_filepath)
+        except Exception as e:
+            logging.warning("Could not read solution %s for listing: %s", sid, e)
+            return None
+
+    def refresh(self) -> None:
+        self.table.setSortingEnabled(False)
+        self.table.clearContents()
+        try:
+            ids = list(self.db.get_solution_ids(self.subject_id, self.session_id) or [])
+        except Exception as e:
+            logging.warning("Could not list solution ids: %s", e)
+            ids = []
+        loaded_id = self._loaded_solution_id()
+        on_icon = _make_led_icon("#2ecc71")
+        off_icon = _make_led_icon("#444")
+
+        self.table.setRowCount(len(ids))
+        for row, sid in enumerate(ids):
+            obj = self._load_solution_metadata(sid)
+            if obj is not None:
+                name = getattr(obj, "name", sid)
+                approved = "yes" if bool(getattr(obj, "approved", False)) else "no"
+                try:
+                    foci = len(obj.foci) if getattr(obj, "foci", None) is not None else 0
+                except Exception:
+                    foci = 0
+            else:
+                name = sid
+                approved = "?"
+                foci = 0
+
+            led_item = qt.QTableWidgetItem()
+            is_loaded = loaded_id is not None and sid == loaded_id
+            led_item.setIcon(on_icon if is_loaded else off_icon)
+            led_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
+            led_item.setToolTip("Currently loaded" if is_loaded else "")
+            self.table.setItem(row, 0, led_item)
+            self.table.setItem(row, 1, qt.QTableWidgetItem(str(sid)))
+            self.table.setItem(row, 2, qt.QTableWidgetItem(str(name)))
+            self.table.setItem(row, 3, qt.QTableWidgetItem(approved))
+            self.table.setItem(row, 4, qt.QTableWidgetItem(str(foci)))
+
+        self.table.resizeRowsToContents()
+        self.table.setSortingEnabled(True)
+
+    def _selected_solution_id(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        if not items:
+            return None
+        row = items[0].row()
+        idItem = self.table.item(row, 1)
+        return idItem.text() if idItem else None
+
+    @display_errors
+    def onAddFromFile(self, checked: bool = False) -> None:
+        qsettings = qt.QSettings()
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(),
+            "Import solution",
+            qsettings.value("OpenLIFU/databaseDirectory", "."),
+            "Solutions (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+        json_path = Path(filepath)
+        nc_path = json_path.with_suffix(".nc")
+        if not nc_path.exists():
+            slicer.util.errorDisplay(
+                f"Expected a companion netCDF file at:\n\n{nc_path}\n\nbut it does not exist.",
+                parent=self,
+            )
+            return
+        try:
+            solution = openlifu_lz().plan.Solution.from_files(str(json_path), str(nc_path))
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to read solution file: {e}", parent=self)
+            return
+        try:
+            session = self.db.load_session(self.db.load_subject(self.subject_id), self.session_id)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not load active session for write: {e}", parent=self)
+            return
+        try:
+            self.db.write_solution(session, solution, on_conflict="overwrite")
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write solution to database: {e}", parent=self)
+            return
+        self.refresh()
+
+    @display_errors
+    def onPreview(self, *args) -> None:
+        sid = self._selected_solution_id()
+        if not sid:
+            slicer.util.errorDisplay("Select a solution first.", parent=self)
+            return
+        obj = self._load_solution_metadata(sid)
+        if obj is None:
+            slicer.util.errorDisplay(f"Could not read solution '{sid}'.", parent=self)
+            return
+        try:
+            data = obj.to_dict()
+        except Exception as e:
+            data = {"error": f"Could not serialize solution: {e}"}
+        _JsonTreeDialog(f"Solution {sid}", {sid: data}, parent=self).exec_()
+
+    @display_errors
+    def onExport(self, *args) -> None:
+        sid = self._selected_solution_id()
+        if not sid:
+            slicer.util.errorDisplay("Select a solution first.", parent=self)
+            return
+        out_dir = qt.QFileDialog.getExistingDirectory(
+            self, "Choose folder to export solution into", str(Path.home())
+        )
+        if not out_dir:
+            return
+        try:
+            json_path = Path(self.db.get_solution_filepath(self.subject_id, self.session_id, sid))
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not locate solution '{sid}': {e}", parent=self)
+            return
+        nc_path = json_path.with_suffix(".nc")
+        import shutil
+        try:
+            shutil.copy(json_path, out_dir)
+            if nc_path.exists():
+                shutil.copy(nc_path, out_dir)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to export solution: {e}", parent=self)
+            return
+        slicer.util.infoDisplay(
+            f"Exported solution '{sid}' to:\n\n{out_dir}",
+            windowTitle="Export solution",
+            parent=self,
+        )
+
+    @display_errors
+    def onDelete(self, *args) -> None:
+        sid = self._selected_solution_id()
+        if not sid:
+            slicer.util.errorDisplay("Select a solution first.", parent=self)
+            return
+        if sid == self._loaded_solution_id():
+            slicer.util.errorDisplay(
+                f"Solution '{sid}' is currently loaded; clear it before deleting.",
+                parent=self,
+            )
+            return
+        if not slicer.util.confirmYesNoDisplay(
+            f"Delete solution '{sid}' from this session?",
+            "Delete solution",
+            parent=self,
+        ):
+            return
+        try:
+            self._delete_solution_from_db(sid)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to delete solution '{sid}': {e}", parent=self)
+            return
+        self.refresh()
+
+    def _delete_solution_from_db(self, sid: str) -> None:
+        """Mirror :py:meth:`TransducerManagerDialog._delete_transducer_from_db` for solutions."""
+        import shutil
+        ids = list(self.db.get_solution_ids(self.subject_id, self.session_id) or [])
+        if sid not in ids:
+            return
+        ids = [i for i in ids if i != sid]
+        # write_solution_ids requires a Session; load the active session for that call.
+        session = self.db.load_session(self.db.load_subject(self.subject_id), self.session_id)
+        self.db.write_solution_ids(session, ids)
+        try:
+            solution_dir = Path(self.db.get_solution_filepath(self.subject_id, self.session_id, sid)).parent
+            if solution_dir.is_dir():
+                shutil.rmtree(solution_dir)
+        except Exception as e:
+            logging.warning(
+                "Removed solution '%s' from index but could not remove its directory: %s",
+                sid, e,
+            )
+
+
+class PhotoscanManagerDialog(qt.QDialog):
+    """Tabular manager for photoscans stored under the active session.
+
+    Columns: ``[Loaded, TT, ID, Name, Approved]``. The first LED is lit when
+    the row's photoscan is currently loaded in the Slicer scene. The ``TT``
+    column shows whether the photoscan is referenced by an approved
+    transducer-tracking result on the active session.
+
+    Actions:
+
+    * **Add from File** -- import a photoscan metadata JSON (its model,
+      texture and ``.mtl`` files are auto-discovered relative to the JSON).
+    * **Preview** -- read-only JSON tree of the photoscan metadata.
+    * **Export** -- copy the entire photoscan directory to a folder of the
+      user's choice.
+    * **Delete** -- drop from the session's ``photoscans.json`` index and
+      remove the photoscan directory; warns when the photoscan is referenced
+      by a transducer-tracking result on the active session.
+    """
+
+    def __init__(
+        self,
+        db: "openlifu.db.Database",
+        subject_id: str,
+        session_id: str,
+        loaded_session: "Optional[SlicerOpenLIFUSession]" = None,
+        parent="mainWindow",
+    ):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        self.setWindowTitle(f"Manage Photoscans - session {session_id}")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.db = db
+        self.subject_id = subject_id
+        self.session_id = session_id
+        self._loaded_session = loaded_session
+        self._setup()
+        self.refresh()
+
+    def _setup(self) -> None:
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        cols = ["", "ID", "Approved", "In Scene", "Name"]
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        vh = self.table.verticalHeader()
+        vh.setVisible(False)
+        vh.setSectionResizeMode(qt.QHeaderView.Fixed)
+        vh.setDefaultSectionSize(22)
+        self.table.setIconSize(qt.QSize(16, 16))
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setHighlightSections(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 22)
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, qt.QHeaderView.Stretch)
+        self.table.horizontalHeaderItem(0).setToolTip("Transducer-tracking approval on active session")
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+        actionRow = qt.QHBoxLayout()
+        self.addFileButton = qt.QPushButton("Add from File")
+        self.addFileButton.setToolTip("Import a photoscan JSON (and its companion model/texture/.mtl) into this session")
+        self.previewButton = qt.QPushButton("Preview")
+        self.previewButton.setToolTip("Show a read-only JSON view of the selected photoscan")
+        self.exportButton = qt.QPushButton("Export")
+        self.exportButton.setToolTip("Copy the selected photoscan's directory to a folder of your choice")
+        self.deleteButton = qt.QPushButton("Delete")
+        self.deleteButton.setToolTip("Remove the selected photoscan from this session")
+        for b in (self.addFileButton, self.previewButton, self.exportButton, self.deleteButton):
+            b.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            actionRow.addWidget(b)
+        layout.addLayout(actionRow)
+
+        bb = qt.QDialogButtonBox()
+        bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        self.addFileButton.clicked.connect(self.onAddFromFile)
+        self.previewButton.clicked.connect(self.onPreview)
+        self.exportButton.clicked.connect(self.onExport)
+        self.deleteButton.clicked.connect(self.onDelete)
+        self.table.doubleClicked.connect(self.onPreview)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.5), int(screen.height() * 0.4))
+
+    def _loaded_photoscan_ids(self) -> set:
+        try:
+            return set(get_openlifu_data_parameter_node().loaded_photoscans.keys())
+        except Exception:
+            return set()
+
+    def _tt_approved_ids(self) -> set:
+        if self._loaded_session is None:
+            return set()
+        try:
+            return set(self._loaded_session.get_transducer_tracking_approvals() or [])
+        except Exception:
+            return set()
+
+    def _tt_referenced_ids(self) -> set:
+        """photoscan_ids that appear in the active session's transducer_tracking_results."""
+        if self._loaded_session is None:
+            return set()
+        try:
+            session_openlifu = self._loaded_session.session.session
+            return {r.photoscan_id for r in getattr(session_openlifu, "transducer_tracking_results", []) or []}
+        except Exception:
+            return set()
+
+    def _load_photoscan_metadata(self, pid: str) -> Optional["openlifu.nav.photoscan.Photoscan"]:
+        try:
+            # With load_data=False the database returns the bare Photoscan (no model/texture tuple).
+            return self.db.load_photoscan(self.subject_id, self.session_id, pid, load_data=False)
+        except Exception as e:
+            logging.warning("Could not read photoscan %s for listing: %s", pid, e)
+            return None
+
+    def refresh(self) -> None:
+        self.table.setSortingEnabled(False)
+        self.table.clearContents()
+        try:
+            ids = list(self.db.get_photoscan_ids(self.subject_id, self.session_id) or [])
+        except Exception as e:
+            logging.warning("Could not list photoscan ids: %s", e)
+            ids = []
+        loaded_ids = self._loaded_photoscan_ids()
+        tt_approved = self._tt_approved_ids()
+        tt_referenced = self._tt_referenced_ids()
+        on_icon = _make_led_icon("#2ecc71")
+        off_icon = _make_led_icon("#444")
+
+        self.table.setRowCount(len(ids))
+        for row, pid in enumerate(ids):
+            obj = self._load_photoscan_metadata(pid)
+            if obj is not None:
+                name = getattr(obj, "name", pid)
+                approved = "yes" if bool(getattr(obj, "photoscan_approved", False)) else "no"
+            else:
+                name = pid
+                approved = "?"
+
+            led_item = qt.QTableWidgetItem()
+            if pid in tt_approved:
+                led_item.setIcon(on_icon)
+                led_item.setToolTip("Transducer-tracking approved on active session")
+            else:
+                led_item.setIcon(off_icon)
+                if pid in tt_referenced:
+                    led_item.setToolTip("Referenced by transducer-tracking results but not fully approved")
+                else:
+                    led_item.setToolTip("")
+            led_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
+            self.table.setItem(row, 0, led_item)
+
+            self.table.setItem(row, 1, qt.QTableWidgetItem(str(pid)))
+            self.table.setItem(row, 2, qt.QTableWidgetItem(approved))
+
+            in_scene_item = qt.QTableWidgetItem("yes" if pid in loaded_ids else "no")
+            in_scene_item.setToolTip(
+                "Loaded into the scene (visibility off until previewed or used for tracking)"
+                if pid in loaded_ids else ""
+            )
+            self.table.setItem(row, 3, in_scene_item)
+
+            self.table.setItem(row, 4, qt.QTableWidgetItem(str(name)))
+
+        self.table.setSortingEnabled(True)
+
+    def _selected_photoscan_id(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        if not items:
+            return None
+        row = items[0].row()
+        idItem = self.table.item(row, 1)
+        return idItem.text() if idItem else None
+
+    @display_errors
+    def onAddFromFile(self, checked: bool = False) -> None:
+        qsettings = qt.QSettings()
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(),
+            "Import photoscan",
+            qsettings.value("OpenLIFU/databaseDirectory", "."),
+            "Photoscans (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+        json_path = Path(filepath)
+        try:
+            photoscan = openlifu_lz().nav.photoscan.Photoscan.from_file(str(json_path))
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to read photoscan file: {e}", parent=self)
+            return
+
+        def _maybe_path(relname):
+            if not relname:
+                return None
+            p = json_path.parent / relname
+            return str(p) if p.exists() else None
+
+        model_path = _maybe_path(photoscan.model_filename)
+        texture_path = _maybe_path(photoscan.texture_filename)
+        mtl_path = _maybe_path(photoscan.mtl_filename)
+
+        if model_path is None:
+            slicer.util.errorDisplay(
+                f"Could not find the model file referenced by the photoscan JSON "
+                f"(expected next to it as '{photoscan.model_filename}').",
+                parent=self,
+            )
+            return
+
+        try:
+            self.db.write_photoscan(
+                self.subject_id,
+                self.session_id,
+                photoscan,
+                model_data_filepath=model_path,
+                texture_data_filepath=texture_path,
+                mtl_data_filepath=mtl_path,
+                on_conflict="overwrite",
+            )
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write photoscan to database: {e}", parent=self)
+            return
+        self.refresh()
+
+    @display_errors
+    def onPreview(self, *args) -> None:
+        pid = self._selected_photoscan_id()
+        if not pid:
+            slicer.util.errorDisplay("Select a photoscan first.", parent=self)
+            return
+
+        # The Transducer Localization page already provides a 3D preview dialog with
+        # camera reset, visibility toggling and view-node isolation. Use it here so
+        # the user gets a consistent preview experience across modules.
+        try:
+            from OpenLIFUTransducerLocalization import PhotoscanPreviewDialog
+        except Exception as e:
+            logging.warning("Falling back to JSON preview for photoscan %s: %s", pid, e)
+            self._json_preview(pid)
+            return
+
+        slicer_photoscan = self._loaded_photoscan_object(pid)
+        if slicer_photoscan is None:
+            self._json_preview(pid)
+            return
+
+        with BusyCursor():
+            dialog = PhotoscanPreviewDialog(slicer_photoscan, parent=self)
+        dialog.exec_()
+        dialog.deleteLater()
+        self.refresh()
+
+    def _loaded_photoscan_object(self, pid: str) -> "Optional[SlicerOpenLIFUPhotoscan]":
+        """Return the SlicerOpenLIFUPhotoscan for ``pid``, loading it on demand if needed."""
+        param = get_openlifu_data_parameter_node()
+        if pid in param.loaded_photoscans:
+            return param.loaded_photoscans[pid]
+        # On-demand load. Requires an active session matching this manager.
+        loaded_session = param.loaded_session
+        if loaded_session is None or loaded_session.get_session_id() != self.session_id:
+            return None
+        try:
+            data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+            openlifu_photoscan = self._load_photoscan_metadata(pid)
+            if openlifu_photoscan is None:
+                return None
+            return data_logic.load_photoscan_from_openlifu(
+                openlifu_photoscan,
+                load_from_active_session=True,
+                replace_confirmed=True,
+            )
+        except Exception as e:
+            logging.warning("Could not load photoscan %s into the scene for preview: %s", pid, e)
+            return None
+
+    def _json_preview(self, pid: str) -> None:
+        obj = self._load_photoscan_metadata(pid)
+        if obj is None:
+            slicer.util.errorDisplay(f"Could not read photoscan '{pid}'.", parent=self)
+            return
+        try:
+            data = obj.to_dict()
+        except Exception as e:
+            data = {"error": f"Could not serialize photoscan: {e}"}
+        _JsonTreeDialog(f"Photoscan {pid}", {pid: data}, parent=self).exec_()
+
+    @display_errors
+    def onExport(self, *args) -> None:
+        pid = self._selected_photoscan_id()
+        if not pid:
+            slicer.util.errorDisplay("Select a photoscan first.", parent=self)
+            return
+        try:
+            ph_meta_path = Path(self.db.get_photoscan_metadata_filepath(self.subject_id, self.session_id, pid))
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not locate photoscan '{pid}': {e}", parent=self)
+            return
+        src_dir = ph_meta_path.parent
+        if not src_dir.is_dir():
+            slicer.util.errorDisplay(f"Photoscan directory does not exist:\n\n{src_dir}", parent=self)
+            return
+        out_parent = qt.QFileDialog.getExistingDirectory(
+            self, "Choose folder to export photoscan into", str(Path.home())
+        )
+        if not out_parent:
+            return
+        import shutil
+        dst_dir = Path(out_parent) / src_dir.name
+        try:
+            shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to export photoscan: {e}", parent=self)
+            return
+        slicer.util.infoDisplay(
+            f"Exported photoscan '{pid}' to:\n\n{dst_dir}",
+            windowTitle="Export photoscan",
+            parent=self,
+        )
+
+    @display_errors
+    def onDelete(self, *args) -> None:
+        pid = self._selected_photoscan_id()
+        if not pid:
+            slicer.util.errorDisplay("Select a photoscan first.", parent=self)
+            return
+        if pid in self._loaded_photoscan_ids():
+            slicer.util.errorDisplay(
+                f"Photoscan '{pid}' is currently loaded in the scene; unload it before deleting.",
+                parent=self,
+            )
+            return
+        if pid in self._tt_referenced_ids():
+            if not slicer.util.confirmYesNoDisplay(
+                f"Photoscan '{pid}' is referenced by a transducer-tracking result on the active "
+                "session. Deleting the photoscan will leave a stale reference. Continue?",
+                "Delete photoscan",
+                parent=self,
+            ):
+                return
+        elif not slicer.util.confirmYesNoDisplay(
+            f"Delete photoscan '{pid}' from this session?",
+            "Delete photoscan",
+            parent=self,
+        ):
+            return
+        try:
+            self._delete_photoscan_from_db(pid)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to delete photoscan '{pid}': {e}", parent=self)
+            return
+        self.refresh()
+
+    def _delete_photoscan_from_db(self, pid: str) -> None:
+        import shutil
+        ids = list(self.db.get_photoscan_ids(self.subject_id, self.session_id) or [])
+        if pid not in ids:
+            return
+        ids = [i for i in ids if i != pid]
+        self.db.write_photoscan_ids(self.subject_id, self.session_id, ids)
+        try:
+            ph_dir = Path(self.db.get_photoscan_metadata_filepath(self.subject_id, self.session_id, pid)).parent
+            if ph_dir.is_dir():
+                shutil.rmtree(ph_dir)
+        except Exception as e:
+            logging.warning(
+                "Removed photoscan '%s' from index but could not remove its directory: %s",
+                pid, e,
+            )
+
+
+class RunManagerDialog(qt.QDialog):
+    """Tabular manager for runs stored under the active session.
+
+    Columns: ``[LED, ID, Name, Success, Solution ID, Notes]``. The LED is lit
+    when the row's run is the currently loaded run. Actions:
+
+    * **Preview** -- read-only JSON tree showing the run JSON together with
+      its session and protocol snapshots.
+    * **Export** -- copy the run directory (run JSON + session/protocol
+      snapshots) to a folder of the user's choice.
+    * **Delete** -- drop from the session's ``runs.json`` index and remove
+      the run directory.
+
+    When ``view_only=True`` the Add/Delete actions are hidden; this is how
+    the Sonication Control page surfaces the dialog as a "run log viewer".
+    """
+
+    def __init__(
+        self,
+        db: "openlifu.db.Database",
+        subject_id: str,
+        session_id: str,
+        parent="mainWindow",
+        view_only: bool = False,
+    ):
+        super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
+        title = "View Run Logs" if view_only else "Manage Runs"
+        self.setWindowTitle(f"{title} - session {session_id}")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.db = db
+        self.subject_id = subject_id
+        self.session_id = session_id
+        self.view_only = bool(view_only)
+        self._setup()
+        self.refresh()
+
+    def _setup(self) -> None:
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        cols = ["", "ID", "Name", "Success", "Solution ID", "Notes"]
+        self.table = qt.QTableWidget(self)
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setHighlightSections(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, qt.QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 22)
+        header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, qt.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, qt.QHeaderView.Stretch)
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+        actionRow = qt.QHBoxLayout()
+        self.addFileButton = qt.QPushButton("Add from File")
+        self.addFileButton.setToolTip("Import a run JSON into this session")
+        self.previewButton = qt.QPushButton("Preview")
+        self.previewButton.setToolTip("Show a read-only JSON view of the selected run and its snapshots")
+        self.exportButton = qt.QPushButton("Export")
+        self.exportButton.setToolTip("Copy the selected run's directory to a folder of your choice")
+        self.deleteButton = qt.QPushButton("Delete")
+        self.deleteButton.setToolTip("Remove the selected run from this session")
+        for b in (self.addFileButton, self.previewButton, self.exportButton, self.deleteButton):
+            b.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+            actionRow.addWidget(b)
+        if self.view_only:
+            self.addFileButton.setVisible(False)
+            self.deleteButton.setVisible(False)
+        layout.addLayout(actionRow)
+
+        bb = qt.QDialogButtonBox()
+        bb.addButton("Close", qt.QDialogButtonBox.RejectRole)
+        bb.rejected.connect(self.reject)
+        layout.addWidget(bb)
+
+        self.addFileButton.clicked.connect(self.onAddFromFile)
+        self.previewButton.clicked.connect(self.onPreview)
+        self.exportButton.clicked.connect(self.onExport)
+        self.deleteButton.clicked.connect(self.onDelete)
+        self.table.doubleClicked.connect(self.onPreview)
+
+        screen = qt.QDesktopWidget().screenGeometry()
+        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.4))
+
+    def _loaded_run_id(self) -> Optional[str]:
+        try:
+            run = get_openlifu_data_parameter_node().loaded_run
+            if run is None:
+                return None
+            return run.run.id
+        except Exception:
+            return None
+
+    def _load_run_metadata(self, rid: str) -> Optional["openlifu.plan.Run"]:
+        try:
+            run_filepath = self.db.get_run_filepath(self.subject_id, self.session_id, rid)
+            return openlifu_lz().plan.Run.from_file(run_filepath)
+        except Exception as e:
+            logging.warning("Could not read run %s for listing: %s", rid, e)
+            return None
+
+    def refresh(self) -> None:
+        self.table.setSortingEnabled(False)
+        self.table.clearContents()
+        try:
+            ids = list(self.db.get_run_ids(self.subject_id, self.session_id) or [])
+        except Exception as e:
+            logging.warning("Could not list run ids: %s", e)
+            ids = []
+        loaded_id = self._loaded_run_id()
+        on_icon = _make_led_icon("#2ecc71")
+        off_icon = _make_led_icon("#444")
+
+        self.table.setRowCount(len(ids))
+        for row, rid in enumerate(ids):
+            obj = self._load_run_metadata(rid)
+            if obj is not None:
+                name = getattr(obj, "name", rid)
+                success = "yes" if bool(getattr(obj, "success_flag", False)) else "no"
+                sol_id = getattr(obj, "solution_id", "") or ""
+                note = (getattr(obj, "note", "") or "").splitlines()[0] if getattr(obj, "note", "") else ""
+            else:
+                name = rid
+                success = "?"
+                sol_id = ""
+                note = ""
+
+            led_item = qt.QTableWidgetItem()
+            is_loaded = loaded_id is not None and rid == loaded_id
+            led_item.setIcon(on_icon if is_loaded else off_icon)
+            led_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
+            led_item.setToolTip("Currently loaded" if is_loaded else "")
+            self.table.setItem(row, 0, led_item)
+            self.table.setItem(row, 1, qt.QTableWidgetItem(str(rid)))
+            self.table.setItem(row, 2, qt.QTableWidgetItem(str(name)))
+            self.table.setItem(row, 3, qt.QTableWidgetItem(success))
+            self.table.setItem(row, 4, qt.QTableWidgetItem(str(sol_id)))
+            self.table.setItem(row, 5, qt.QTableWidgetItem(str(note)))
+
+        self.table.resizeRowsToContents()
+        self.table.setSortingEnabled(True)
+
+    def _selected_run_id(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        if not items:
+            return None
+        row = items[0].row()
+        idItem = self.table.item(row, 1)
+        return idItem.text() if idItem else None
+
+    @display_errors
+    def onAddFromFile(self, checked: bool = False) -> None:
+        qsettings = qt.QSettings()
+        filepath: str = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(),
+            "Import run",
+            qsettings.value("OpenLIFU/databaseDirectory", "."),
+            "Runs (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            run = openlifu_lz().plan.Run.from_file(filepath)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to read run file: {e}", parent=self)
+            return
+        try:
+            session = self.db.load_session(self.db.load_subject(self.subject_id), self.session_id)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not load active session for write: {e}", parent=self)
+            return
+        try:
+            self.db.write_run(run, session=session, on_conflict="skip")
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to write run to database: {e}", parent=self)
+            return
+        self.refresh()
+
+    @display_errors
+    def onPreview(self, *args) -> None:
+        rid = self._selected_run_id()
+        if not rid:
+            slicer.util.errorDisplay("Select a run first.", parent=self)
+            return
+        run = self._load_run_metadata(rid)
+        if run is None:
+            slicer.util.errorDisplay(f"Could not read run '{rid}'.", parent=self)
+            return
+        try:
+            run_data = run.to_dict()
+        except Exception as e:
+            run_data = {"error": f"Could not serialize run: {e}"}
+
+        tree_data: Dict[str, Any] = {"run": run_data}
+        try:
+            session_snap = self.db.load_session_snapshot(self.subject_id, self.session_id, rid)
+            tree_data["session_snapshot"] = session_snap.to_dict()
+        except Exception as e:
+            tree_data["session_snapshot"] = {"error": str(e)}
+        try:
+            protocol_snap = self.db.load_protocol_snapshot(self.subject_id, self.session_id, rid)
+            tree_data["protocol_snapshot"] = protocol_snap.to_dict()
+        except Exception as e:
+            tree_data["protocol_snapshot"] = {"error": str(e)}
+
+        _JsonTreeDialog(f"Run {rid}", tree_data, parent=self).exec_()
+
+    @display_errors
+    def onExport(self, *args) -> None:
+        rid = self._selected_run_id()
+        if not rid:
+            slicer.util.errorDisplay("Select a run first.", parent=self)
+            return
+        try:
+            run_dir = Path(self.db.get_run_dir(self.subject_id, self.session_id, rid))
+        except Exception as e:
+            slicer.util.errorDisplay(f"Could not locate run '{rid}': {e}", parent=self)
+            return
+        if not run_dir.is_dir():
+            slicer.util.errorDisplay(f"Run directory does not exist:\n\n{run_dir}", parent=self)
+            return
+        out_parent = qt.QFileDialog.getExistingDirectory(
+            self, "Choose folder to export run into", str(Path.home())
+        )
+        if not out_parent:
+            return
+        import shutil
+        dst_dir = Path(out_parent) / run_dir.name
+        try:
+            shutil.copytree(run_dir, dst_dir, dirs_exist_ok=True)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to export run: {e}", parent=self)
+            return
+        slicer.util.infoDisplay(
+            f"Exported run '{rid}' to:\n\n{dst_dir}",
+            windowTitle="Export run",
+            parent=self,
+        )
+
+    @display_errors
+    def onDelete(self, *args) -> None:
+        rid = self._selected_run_id()
+        if not rid:
+            slicer.util.errorDisplay("Select a run first.", parent=self)
+            return
+        if rid == self._loaded_run_id():
+            slicer.util.errorDisplay(
+                f"Run '{rid}' is currently loaded; clear it before deleting.",
+                parent=self,
+            )
+            return
+        if not slicer.util.confirmYesNoDisplay(
+            f"Delete run '{rid}' from this session? Runs are write-once and "
+            "cannot be recovered after deletion.",
+            "Delete run",
+            parent=self,
+        ):
+            return
+        try:
+            self._delete_run_from_db(rid)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to delete run '{rid}': {e}", parent=self)
+            return
+        self.refresh()
+
+    def _delete_run_from_db(self, rid: str) -> None:
+        import shutil
+        ids = list(self.db.get_run_ids(self.subject_id, self.session_id) or [])
+        if rid not in ids:
+            return
+        ids = [i for i in ids if i != rid]
+        self.db.write_run_ids(self.subject_id, self.session_id, ids)
+        try:
+            run_dir = Path(self.db.get_run_dir(self.subject_id, self.session_id, rid))
+            if run_dir.is_dir():
+                shutil.rmtree(run_dir)
+        except Exception as e:
+            logging.warning(
+                "Removed run '%s' from index but could not remove its directory: %s",
+                rid, e,
+            )
+
+
 #
 # OpenLIFUDataWidget
 #
@@ -3850,6 +4856,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         # Session collapsible section
         self.ui.chooseSessionButton.clicked.connect(self.on_load_session_clicked)
+        self.ui.managePhotoscansPushButton.clicked.connect(self.onManagePhotoscansClicked)
+        self.ui.manageSolutionsPushButton.clicked.connect(self.onManageSolutionsClicked)
+        self.ui.manageRunsPushButton.clicked.connect(self.onManageRunsClicked)
 
         # ---- Issue updates that may not have been triggered yet ---
         
@@ -4042,6 +5051,23 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             subject_has_volumes = len(get_cur_db().get_volume_ids(self.logic.subject.id)) > 0
             self.ui.sessionCollapsibleButton.setChecked(subject_has_volumes)
             self.ui.sessionCollapsibleButton.setEnabled(subject_has_volumes)
+
+        self._update_session_manage_buttons_enabled()
+
+    def _update_session_manage_buttons_enabled(self) -> None:
+        """Enable the per-session Manage buttons only when a session is loaded."""
+        loaded = (
+            self._parameterNode is not None
+            and getattr(self._parameterNode, "loaded_session", None) is not None
+        )
+        tip_off = "Requires a loaded session"
+        for btn, tip_on in (
+            (self.ui.managePhotoscansPushButton, "Open the photoscan manager for the active session"),
+            (self.ui.manageSolutionsPushButton, "Open the solution manager for the active session"),
+            (self.ui.manageRunsPushButton, "Open the run manager for the active session"),
+        ):
+            btn.setEnabled(loaded)
+            btn.setToolTip(tip_on if loaded else tip_off)
 
     @display_errors
     def on_load_subject_clicked(self, checked: bool, load_subject_dlg = None) -> bool:
@@ -4363,6 +5389,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Perform module-level updates
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
+        self._update_session_manage_buttons_enabled()
         self.updateWorkflowControls()
 
     def cleanup(self) -> None:
@@ -4804,6 +5831,71 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         dlg = ProtocolManagerDialog(db=db, parent=slicer.util.mainWindow())
         dlg.exec_()
 
+    def _get_active_session_ids_or_error(self, dialog_title: str) -> Optional[Tuple[str, str]]:
+        """Return (subject_id, session_id) for the active session, or None and show an error."""
+        db = get_cur_db()
+        if db is None:
+            slicer.util.errorDisplay(
+                "A database must be loaded before the manager can be opened.",
+                windowTitle=dialog_title,
+            )
+            return None
+        loaded_session = self._parameterNode.loaded_session if self._parameterNode is not None else None
+        if loaded_session is None:
+            slicer.util.errorDisplay(
+                "An active session is required before the manager can be opened.",
+                windowTitle=dialog_title,
+            )
+            return None
+        return loaded_session.get_subject_id(), loaded_session.get_session_id()
+
+    @display_errors
+    def onManagePhotoscansClicked(self, checked: bool = False) -> None:
+        """Open the Photoscan manager popup for the active session."""
+        ids = self._get_active_session_ids_or_error("Manage Photoscans")
+        if ids is None:
+            return
+        subject_id, session_id = ids
+        loaded_session = self._parameterNode.loaded_session
+        dlg = PhotoscanManagerDialog(
+            db=get_cur_db(),
+            subject_id=subject_id,
+            session_id=session_id,
+            loaded_session=loaded_session,
+            parent=slicer.util.mainWindow(),
+        )
+        dlg.exec_()
+
+    @display_errors
+    def onManageSolutionsClicked(self, checked: bool = False) -> None:
+        """Open the Solution manager popup for the active session."""
+        ids = self._get_active_session_ids_or_error("Manage Solutions")
+        if ids is None:
+            return
+        subject_id, session_id = ids
+        dlg = SolutionManagerDialog(
+            db=get_cur_db(),
+            subject_id=subject_id,
+            session_id=session_id,
+            parent=slicer.util.mainWindow(),
+        )
+        dlg.exec_()
+
+    @display_errors
+    def onManageRunsClicked(self, checked: bool = False) -> None:
+        """Open the Run manager popup for the active session."""
+        ids = self._get_active_session_ids_or_error("Manage Runs")
+        if ids is None:
+            return
+        subject_id, session_id = ids
+        dlg = RunManagerDialog(
+            db=get_cur_db(),
+            subject_id=subject_id,
+            session_id=session_id,
+            parent=slicer.util.mainWindow(),
+        )
+        dlg.exec_()
+
     def enter(self) -> None:
         """Called each time the user opens this module."""
         ensure_python_requirements_for_module_enter()
@@ -5216,11 +6308,32 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         loaded_session = self.getParameterNode().loaded_session
         subject_id = loaded_session.get_subject_id()
         session_id = loaded_session.get_session_id()
-        
+
         # Keep track of any photoscans associated with the session
         affiliated_photoscans = {id:get_cur_db().load_photoscan(subject_id, session_id, id) for id in get_cur_db().get_photoscan_ids(subject_id, session_id)}
         if affiliated_photoscans:
             loaded_session.set_affiliated_photoscans(affiliated_photoscans)
+
+        # Eagerly load each affiliated photoscan into the scene (with visibility off by
+        # default; see SlicerOpenLIFUPhotoscan.set_model_display_settings). This means
+        # downstream consumers -- e.g. the photoscan manager preview, transducer
+        # localization -- can assume an affiliated photoscan is already in
+        # ``loaded_photoscans`` and don't need to lazily load on first click.
+        already_loaded = self.getParameterNode().loaded_photoscans
+        for photoscan_id, photoscan_openlifu in affiliated_photoscans.items():
+            if photoscan_id in already_loaded:
+                continue
+            try:
+                self.load_photoscan_from_openlifu(
+                    photoscan_openlifu,
+                    load_from_active_session=True,
+                    replace_confirmed=True,
+                )
+            except Exception as e:
+                logging.warning(
+                    "Could not eagerly load affiliated photoscan '%s' into the scene: %s",
+                    photoscan_id, e,
+                )
 
     def load_session(self, subject_id, session_id) -> None:
 

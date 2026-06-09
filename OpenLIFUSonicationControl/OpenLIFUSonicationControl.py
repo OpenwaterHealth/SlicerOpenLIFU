@@ -349,6 +349,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
         self.ui.manuallyGetDeviceStatusPushButton.clicked.connect(self.onManuallyGetDeviceStatusPushButtonClicked)
         self.ui.testWithoutHardwareCheckBox.toggled.connect(self.onTestWithoutHardwareCheckBoxToggled)
+        self.ui.viewRunsPushButton.clicked.connect(self.onViewRunsClicked)
         self.logic.call_on_running_changed(self.onRunningChanged)
         self.logic.call_on_sonication_complete(self.onRunCompleted)
         self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
@@ -533,6 +534,19 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateAbortEnabled(self):
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
+    def updateViewRunsEnabled(self):
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            self.ui.viewRunsPushButton.setEnabled(False)
+            self.ui.viewRunsPushButton.setToolTip(
+                "Load a session to browse run logs for that session."
+            )
+        else:
+            self.ui.viewRunsPushButton.setEnabled(True)
+            self.ui.viewRunsPushButton.setToolTip(
+                "Browse, preview, and export run logs for the active session"
+            )
+
     def updateAllButtonsEnabled(self):
         self.updateReinitializeLIFUInterfacePushButtonEnabled()
         self.updateTestWithoutHardwareCheckBoxEnabled()
@@ -540,6 +554,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
+        self.updateViewRunsEnabled()
 
     def updateReinitializeLIFUInterfacePushButton(self):
         if self.logic.cur_lifu_interface is None:
@@ -759,6 +774,35 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
         self.ensureLIFUInterfaceForSelectedMode()
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
+
+    @display_errors
+    def onViewRunsClicked(self, checked: bool = False) -> None:
+        """Open the per-session run viewer (read-only subset of the Run manager)."""
+        from OpenLIFULib.util import get_cur_db
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            slicer.util.errorDisplay(
+                "Load a session before viewing run logs.",
+                windowTitle="View Run Logs",
+            )
+            return
+        db = get_cur_db()
+        if db is None:
+            slicer.util.errorDisplay(
+                "A database must be loaded to view run logs.",
+                windowTitle="View Run Logs",
+            )
+            return
+        # Local import to avoid pulling all of the Data module's symbols at import time.
+        from OpenLIFUData.OpenLIFUData import RunManagerDialog
+        dlg = RunManagerDialog(
+            db=db,
+            subject_id=loaded_session.get_subject_id(),
+            session_id=loaded_session.get_session_id(),
+            parent=slicer.util.mainWindow(),
+            view_only=True,
+        )
+        dlg.exec_()
 
     def onRunningChanged(self, new_running_state:bool):
         logging.debug(f" onRunningChanged() called with running={new_running_state}")
