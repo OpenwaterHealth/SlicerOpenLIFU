@@ -2344,8 +2344,16 @@ class _DeviceStatusDialog(qt.QDialog):
         self._info_label.setFont(font)
         layout.addWidget(self._info_label)
 
-        # Button row: simulator action + Close.
+        # Button row: retry (when locked-out) + simulator action + Close.
         button_row = qt.QHBoxLayout()
+        self._retry_button = qt.QPushButton("Retry", self)
+        self._retry_button.setToolTip(
+            "Retry connecting to the LIFU hardware. Use this after the "
+            "other process holding the hardware has been closed."
+        )
+        self._retry_button.clicked.connect(self._onRetryButtonClicked)
+        self._retry_button.setVisible(False)
+        button_row.addWidget(self._retry_button)
         self._sim_button = qt.QPushButton(self)
         self._sim_button.clicked.connect(self._onSimButtonClicked)
         button_row.addWidget(self._sim_button)
@@ -2361,6 +2369,34 @@ class _DeviceStatusDialog(qt.QDialog):
         """Repopulate the info label and update the simulator button text."""
         iface = getattr(self._sc_logic, "cur_lifu_interface", None)
         is_simulated = bool(getattr(self._sc_logic, "is_simulated", False))
+        in_use_pid = getattr(self._sc_logic, "lifu_hw_in_use_pid", None)
+
+        # Special case: no real interface because another process owns it.
+        if iface is None and in_use_pid is not None:
+            lines = [
+                "The LIFU hardware interface is currently in use by another",
+                f"process (PID {in_use_pid}).",
+                "",
+                "Only one application can talk to the LIFU device at a time.",
+                "Close the other application (or stop the process) and click",
+                "'Retry' to try connecting again.",
+                "",
+                "You can also click 'Connect Simulated Device' to start an",
+                "in-memory simulator (no hardware is touched).",
+            ]
+            self._info_label.setText("\n".join(lines))
+            self._retry_button.setVisible(True)
+            self._sim_button.setText("Connect Simulated Device")
+            self._sim_button.setToolTip(
+                "Replace the (currently unavailable) real LIFUInterface "
+                "with an in-memory simulator for development and testing. "
+                "No actual hardware is touched."
+            )
+            self._sim_button.setVisible(True)
+            self._sim_button.setEnabled(True)
+            return
+
+        self._retry_button.setVisible(False)
 
         try:
             tx_conn, hv_conn = iface.is_device_connected() if iface else (False, False)
@@ -2474,6 +2510,72 @@ class _DeviceStatusDialog(qt.QDialog):
         if transducer is None:
             return
         self._sc_logic.connect_simulated_interface(transducer=transducer)
+        self._refresh()
+
+    @display_errors
+    def _onRetryButtonClicked(self, checked: bool = False) -> None:
+        """Re-attempt to claim the real LIFU hardware interface.
+
+        Delegates to ``OpenLIFUSonicationControlLogic.retry_create_lifu_interface``
+        and refreshes the dialog so the user sees the new state. On success
+        we also restart the monitoring timer (idle while locked out) and
+        push a state refresh into the SonicationControl widget so its own
+        labels and buttons match reality without waiting for the next
+        monitor tick.
+        """
+        new_exc = self._sc_logic.retry_create_lifu_interface()
+        if new_exc is None:
+            timer = getattr(self._sc_logic, "monitoring_timer", None)
+            if timer is not None and not timer.isActive():
+                timer.start()
+            try:
+                sc_widget = slicer.util.getModuleWidget("OpenLIFUSonicationControl")
+            except Exception:  # noqa: BLE001
+                sc_widget = None
+            if sc_widget is not None:
+                for fn_name in (
+                    "updateDeviceConnectedStateFromDevice",
+                    "updateVersionLabels",
+                    "updateAllButtonsEnabled",
+                ):
+                    fn = getattr(sc_widget, fn_name, None)
+                    if callable(fn):
+                        try:
+                            fn()
+                        except Exception:  # noqa: BLE001
+                            logging.warning(
+                                "Failed to call %s on SonicationControl widget after retry",
+                                fn_name,
+                                exc_info=True,
+                            )
+            # Repaint every module header so the device button outline drops
+            # its red "in use" state immediately. Without this nudge the
+            # outline would only refresh on the next OWSignal-driven event,
+            # which never fires when retry succeeds with no hardware actually
+            # plugged in (we'd just sit on red until the user navigates).
+            for module_name in (
+                "OpenLIFUData",
+                "OpenLIFUPrePlanning",
+                "OpenLIFUTransducerLocalization",
+                "OpenLIFUSonicationPlanner",
+                "OpenLIFUSonicationControl",
+                "OpenLIFUProtocolConfig",
+                "OpenLIFUTransducerTracker",
+            ):
+                try:
+                    w = slicer.util.getModuleWidget(module_name)
+                except Exception:  # noqa: BLE001
+                    continue
+                header = getattr(w, "module_header", None)
+                if header is not None:
+                    try:
+                        header.refresh_all()
+                    except Exception:  # noqa: BLE001
+                        logging.warning(
+                            "Failed to refresh module header for %s after retry",
+                            module_name,
+                            exc_info=True,
+                        )
         self._refresh()
 
 
@@ -5773,20 +5875,21 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         connected, and a "Disconnect Simulated Device" button when the
         currently active interface is the in-memory
         :class:`~openlifu_sdk.ui.simulated_interface.SimulatedLIFUInterface`.
-        All I/O calls are defensive: any failure is reported inline as
-        "unknown" rather than aborting the dialog (the SDK raises
-        ``LIFUError`` on bus errors).
+        When the real interface could not be acquired because another
+        process owns it, the dialog reports the offending PID and offers a
+        Retry button. All I/O calls are defensive: any failure is reported
+        inline as "unknown" rather than aborting the dialog (the SDK
+        raises ``LIFUError`` on bus errors).
         """
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
         except (AttributeError, RuntimeError):
             sc_logic = None
-        if sc_logic is None or getattr(sc_logic, "cur_lifu_interface", None) is None:
+        if sc_logic is None:
             slicer.util.infoDisplay(
                 text=(
-                    "The LIFU interface has not been initialized yet.\n\n"
-                    "Open the OpenLIFU Sonication Control module once to "
-                    "initialize the hardware interface."
+                    "The OpenLIFU Sonication Control module is not available, "
+                    "so the LIFU hardware interface cannot be queried."
                 ),
                 windowTitle="Device Status",
             )
