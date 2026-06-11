@@ -86,6 +86,37 @@ def _display_lifu_error(exc: Exception, action_description: str) -> None:
         windowTitle="LIFU Device Error",
     )
 
+
+def _hardware_in_use_message(exc: Exception) -> str:
+    """Build the message shown to the user when the hardware is owned by
+    another process."""
+    pid = getattr(exc, "pid", None)
+    pid_text = f" (PID {pid})" if pid else ""
+    return (
+        "Another process appears to be using the LIFU hardware interface"
+        f"{pid_text}.\n\n"
+        "Only one application can talk to the LIFU device at a time. "
+        "Close the other application (or stop the process) and click "
+        "'Retry' to try connecting again, or click 'OK' to continue "
+        "without a hardware connection."
+    )
+
+
+def _show_hardware_in_use_dialog(exc: Exception) -> bool:
+    """Show a modal dialog reporting that another process owns the LIFU
+    hardware. Returns ``True`` if the user clicked Retry, ``False`` if
+    the user clicked OK (i.e. accept the locked-out state).
+    """
+    box = qt.QMessageBox()
+    box.setIcon(qt.QMessageBox.Warning)
+    box.setWindowTitle("LIFU Hardware In Use")
+    box.setText(_hardware_in_use_message(exc))
+    retry_btn = box.addButton("Retry", qt.QMessageBox.AcceptRole)
+    box.addButton("OK", qt.QMessageBox.RejectRole)
+    box.setDefaultButton(retry_btn)
+    box.exec_()
+    return box.clickedButton() is retry_btn
+
 #
 # OpenLIFUSonicationControl
 #
@@ -385,6 +416,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update the state of any buttons that may not yet have been updated
         self.updateAllButtonsEnabled()
 
+        # If the Logic could not claim the hardware lock at startup
+        # (another process owns it), we deliberately do NOT pop a dialog
+        # in the user's face here. The shared module header paints the
+        # device button red and ``_try_create_real_lifu_interface`` has
+        # already logged a ``[LIFU]`` warning with the offending PID. The
+        # user can click the device button to see the status and retry.
+
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         logging.debug("OpenLIFUSonicationControlWidget.cleanup() called")
@@ -456,7 +494,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     @display_errors
     def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
-        if self._cur_device_connected_state != DeviceConnectedState.CONNECTED:
+        if self.logic is not None and self.logic.lifu_hw_in_use_pid is not None:
+            enabled = True
+            tooltip = (
+                "The LIFU hardware is held by another process. Click to "
+                "see the message and retry."
+            )
+        elif self._cur_device_connected_state != DeviceConnectedState.CONNECTED:
             enabled = False
             tooltip = "The LIFU device must be connected to get its status."
         else:
@@ -677,7 +721,37 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         return allow_override and box.clickedButton() is send_btn
 
     def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
+        if self.logic.lifu_hw_in_use_pid is not None:
+            self.promptHardwareInUse()
+            return
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
+
+    def promptHardwareInUse(self) -> None:
+        """Show the 'hardware in use by another process' dialog and loop on Retry.
+
+        Builds a synthetic exception carrying the most recently seen owner PID
+        so the dialog text matches what the user originally saw at startup.
+        """
+        LIFUHardwareInUseError = _lifu_exceptions().LIFUHardwareInUseError
+        while self.logic.lifu_hw_in_use_pid is not None:
+            exc = LIFUHardwareInUseError(pid=self.logic.lifu_hw_in_use_pid)
+            retry = _show_hardware_in_use_dialog(exc)
+            if not retry:
+                # User accepted the locked-out state.
+                self.updateDeviceConnectedStateFromDevice()
+                self.updateAllButtonsEnabled()
+                return
+            new_exc = self.logic.retry_create_lifu_interface()
+            if new_exc is None:
+                # Hardware is ours now -- start the timer if it isn't already
+                # (it may have been started without a real interface earlier).
+                if not self.logic.monitoring_timer.isActive():
+                    self.logic.monitoring_timer.start()
+                self.updateDeviceConnectedStateFromDevice()
+                self.updateVersionLabels()
+                self.updateAllButtonsEnabled()
+                return
+            # Still locked; loop and re-prompt with the (possibly new) PID.
 
     @display_errors
     def onViewRunsClicked(self, checked: bool = False) -> None:
@@ -838,6 +912,22 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.txVersionLabel.setText("")
 
     def updateDeviceConnectedStateFromDevice(self):
+        if self.logic is not None and self.logic.lifu_hw_in_use_pid is not None:
+            # Hardware is held by another process; surface this in the
+            # connection-status label and skip the normal connect query
+            # (there is no interface to query).
+            self._cur_device_connected_state = DeviceConnectedState.NOT_CONNECTED
+            pid = self.logic.lifu_hw_in_use_pid
+            self.ui.connectedStateLabel.setProperty(
+                "text", f"🔴 LIFU Device (in use by PID {pid})"
+            )
+            self.ui.connectedStateLabel.setProperty(
+                "styleSheet", "color: red;"
+            )
+            self.updateAllButtonsEnabled()
+            return
+        # Reset any locked-state styling that may have been applied earlier.
+        self.ui.connectedStateLabel.setProperty("styleSheet", "")
         if self.logic.get_lifu_device_connected():
             self.updateDeviceConnectedState(DeviceConnectedState.CONNECTED)
         else:
@@ -926,7 +1016,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
 
     def _pumpMonitoringLoop(self):
-        if self._monitor_loop.is_running():
+        if self._monitor_loop is not None and self._monitor_loop.is_running():
             # Harmless tickle: sends a no-op callback into the loop to keep it alive
             self._monitor_loop.call_soon_threadsafe(lambda: None)
 
@@ -1042,21 +1132,25 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # ---- LIFU Interface Connection ----
 
         self._create_lifu_interface_bridge()
-        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(run_async=True)
-        # Connect signals before starting the monitor thread to avoid missing early events
-        self._connect_owsignals()
 
-        # Set up asyncio event loop and monitoring thread
-        self._monitor_loop = asyncio.new_event_loop()
-        self._monitor_thread = threading.Thread(
-            target=self._run_monitor_loop,
-            daemon=True
-        )
-        self._monitor_thread.start()
+        # ``cur_lifu_interface`` is left as ``None`` and ``lifu_hw_in_use_pid``
+        # is set when another process holds the hardware lock; the Widget
+        # surfaces this via the connection-status label and the
+        # "Get Device Status" button.
+        self.cur_lifu_interface = None
+        self.lifu_hw_in_use_pid: Optional[int] = None
+        self._monitor_loop = None
+        self._monitor_thread = None
 
         self.monitoring_timer = qt.QTimer()
         self.monitoring_timer.setInterval(100)
         self.monitoring_timer.timeout.connect(self._pumpMonitoringLoop)
+
+        # First attempt at constructing the real interface. If the
+        # hardware is already claimed by another process, leave
+        # ``cur_lifu_interface`` as None and let the Widget prompt the
+        # user with a retry dialog when it comes up.
+        self._try_create_real_lifu_interface()
         self.monitoring_timer.start()
 
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
@@ -1086,6 +1180,61 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
             device.signal_data_received.connect(self.qt_signals.signal_data_received.emit)
             device.signal_error.connect(self.qt_signals.signal_error.emit)
+
+    def _try_create_real_lifu_interface(self) -> Optional[Exception]:
+        """Attempt to construct the real :class:`LIFUInterface`.
+
+        On success, wires up ``cur_lifu_interface``, attaches OWSignal
+        handlers, starts the asyncio monitor thread, and clears
+        ``lifu_hw_in_use_pid``. Returns ``None``.
+
+        On :class:`LIFUHardwareInUseError`, leaves ``cur_lifu_interface``
+        as ``None``, records the offending PID on
+        ``lifu_hw_in_use_pid``, and returns the exception so the Widget
+        can show a retry dialog.
+
+        Other exceptions are re-raised.
+        """
+        sdk = openlifu_sdk_lz()
+        LIFUHardwareInUseError = _lifu_exceptions().LIFUHardwareInUseError
+        try:
+            interface = sdk.LIFUInterface(run_async=True)
+        except LIFUHardwareInUseError as exc:
+            self.cur_lifu_interface = None
+            self.lifu_hw_in_use_pid = getattr(exc, "pid", None)
+            logging.warning(
+                "[LIFU] Hardware interface is held by another process (PID %s); "
+                "skipping monitor-thread startup.",
+                self.lifu_hw_in_use_pid,
+            )
+            return exc
+
+        self.cur_lifu_interface = interface
+        self.lifu_hw_in_use_pid = None
+        # Connect signals before starting the monitor thread to avoid missing early events
+        self._connect_owsignals()
+
+        # Set up asyncio event loop and monitoring thread
+        self._monitor_loop = asyncio.new_event_loop()
+        self._monitor_thread = threading.Thread(
+            target=self._run_monitor_loop,
+            daemon=True,
+        )
+        self._monitor_thread.start()
+        return None
+
+    def retry_create_lifu_interface(self) -> Optional[Exception]:
+        """Re-attempt construction of the real :class:`LIFUInterface`.
+
+        Intended for use by the Widget's retry dialog. Returns ``None``
+        on success, the :class:`LIFUHardwareInUseError` on continued
+        contention.
+        """
+        if self.cur_lifu_interface is not None:
+            # Already have a real interface; nothing to do.
+            self.lifu_hw_in_use_pid = None
+            return None
+        return self._try_create_real_lifu_interface()
 
     def stop_monitoring(self):
         if self.cur_lifu_interface:
@@ -1269,6 +1418,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         import importlib
         sim_mod = importlib.import_module("openlifu_sdk.ui.simulated_interface")
         self.cur_lifu_interface = sim_mod.SimulatedLIFUInterface(transducer=transducer)
+        # We are now in simulator mode; clear any "hardware locked by
+        # another process" state so the UI stops advertising it.
+        self.lifu_hw_in_use_pid = None
         self._connect_owsignals()
 
         # Emit the connected signals synchronously (we are on the GUI
@@ -1302,21 +1454,22 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         except Exception as e:  # noqa: BLE001
             logging.debug("Error closing simulated interface: %s", e)
 
-        # Recreate a real LIFUInterface and resume USB monitoring.
-        self.cur_lifu_interface = openlifu_sdk_lz().LIFUInterface(
-            run_async=True,
-        )
-        self._connect_owsignals()
-
-        self._monitor_loop = asyncio.new_event_loop()
-        self._monitor_thread = threading.Thread(
-            target=self._run_monitor_loop,
-            daemon=True,
-        )
-        self._monitor_thread.start()
-        self.monitoring_timer.start()
-        logging.info("[LIFU] Restored real LIFUInterface after simulator")
-
+        # Recreate a real LIFUInterface and resume USB monitoring. If
+        # another process has claimed the hardware in the meantime we
+        # leave ``cur_lifu_interface`` as None and surface the locked
+        # state through ``lifu_hw_in_use_pid`` so the Widget can prompt.
+        self.cur_lifu_interface = None
+        self.lifu_hw_in_use_pid = None
+        self._monitor_loop = None
+        self._monitor_thread = None
+        exc = self._try_create_real_lifu_interface()
+        if exc is None:
+            self.monitoring_timer.start()
+            logging.info("[LIFU] Restored real LIFUInterface after simulator")
+        else:
+            logging.warning(
+                "[LIFU] Could not restore real LIFUInterface after simulator: %s", exc,
+            )
     def __del__(self):
         print("OpenLIFUSonicationControlLogic.__del__ called")
 
@@ -1627,6 +1780,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         return run
 
     def get_lifu_device_connected(self) -> bool:
+        if self.cur_lifu_interface is None:
+            return False
         tx_connected = self.cur_lifu_interface.txdevice.is_connected()
         hv_connected = self.cur_lifu_interface.hvcontroller.is_connected()
         logging.debug(f" get_lifu_device_connected(): tx={tx_connected}, hv={hv_connected}")

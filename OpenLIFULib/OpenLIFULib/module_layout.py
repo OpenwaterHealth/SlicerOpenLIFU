@@ -372,16 +372,30 @@ class ModuleHeaderWidget(qt.QWidget):
                 iface.is_device_connected() if iface is not None else (False, False)
             )
         except (AttributeError, RuntimeError):
+            sc_logic = None
             iface = None
             tx_conn, hv_conn = False, False
         is_simulated = bool(getattr(iface, "is_simulated", False))
+        in_use_pid = getattr(sc_logic, "lifu_hw_in_use_pid", None) if sc_logic else None
 
         # The Data module owns the device-state log line (it has its own
         # ``_last_device_conn_state`` cache and emits the
         # ``[LIFUInterface]`` info message on transitions). We deliberately
         # do NOT log here, otherwise every module page re-emits the same
         # transition message.
-        if is_simulated:
+        if iface is None and in_use_pid is not None:
+            # Locked out: another process owns the hardware. Red outline
+            # (Material red 800) and a tooltip pointing the user at the
+            # device popup, where they can read the offending PID and
+            # click Retry once the other application has been closed.
+            self.devicePopupButton.setStyleSheet(
+                _outline_style("devicePopupButton", "#c62828")
+            )
+            self.devicePopupButton.setToolTip(
+                f"LIFU hardware is in use by another process (PID {in_use_pid}). "
+                "Click for details and to retry connecting."
+            )
+        elif is_simulated:
             # Pink outline so the simulated interface is visually
             # distinct from a real connected device. (Material pink 500.)
             self.devicePopupButton.setStyleSheet(
