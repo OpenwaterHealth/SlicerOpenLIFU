@@ -854,8 +854,7 @@ def compute_solution_openlifu(
     solution, simulation_result_aggregated, scaled_solution_analysis = protocol.calc_solution(
         transducer=transducer.transducer.transducer,
         volume=make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol),
-        target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target'),
-        session=session.session.session if session is not None else None,
+        target=fiducial_to_openlifu_point_in_transducer_coords(target_node, transducer, name = 'sonication target')
     )
     return solution, simulation_result_aggregated["p_min"], simulation_result_aggregated["intensity"], scaled_solution_analysis
 
