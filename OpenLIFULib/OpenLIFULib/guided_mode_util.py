@@ -21,6 +21,33 @@ def set_guided_mode_state(new_guided_mode_state: bool):
     openlifu_home_parameter_node.guided_mode = new_guided_mode_state
     home_module_logic.workflow.update_all()
 
+def confirm_exit_session_dialog(
+    message: str = "Save your progress before exiting the session?",
+    window_title: str = "Exit Session",
+) -> str:
+    """Show a Save & Exit / Discard & Exit / Cancel dialog for exiting a session.
+
+    Returns one of:
+        "save":    user chose to save and exit
+        "discard": user chose to discard changes and exit
+        "cancel":  user cancelled; caller should treat as no-op
+    """
+    mb = qt.QMessageBox()
+    mb.setIcon(qt.QMessageBox.Question)
+    mb.setWindowTitle(window_title)
+    mb.setText(message)
+    save_btn = mb.addButton("Save && Exit", qt.QMessageBox.AcceptRole)
+    discard_btn = mb.addButton("Discard && Exit", qt.QMessageBox.DestructiveRole)
+    cancel_btn = mb.addButton("Cancel", qt.QMessageBox.RejectRole)
+    mb.setDefaultButton(cancel_btn)
+    mb.exec_()
+    clicked = mb.clickedButton()
+    if clicked is save_btn:
+        return "save"
+    if clicked is discard_btn:
+        return "discard"
+    return "cancel"
+
 class WorkflowControls(qt.QWidget):
     """ Guided mode workflow controls widget
 
@@ -149,10 +176,10 @@ class WorkflowControls(qt.QWidget):
             slicer.util.errorDisplay("There is no loaded session.")
             return
 
-        if slicer.util.confirmYesNoDisplay("Do you want to save your progress before exiting?", windowTitle="Save Confirmation"):
-            self.close_session(save=True)
-        else:
-            self.close_session(save=False)
+        choice = confirm_exit_session_dialog()
+        if choice == "cancel":
+            return
+        self.close_session(save=(choice == "save"))
 
         home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
         home_module_logic.workflow_jump_ahead()
@@ -184,7 +211,10 @@ class WorkflowControls(qt.QWidget):
             return
         enabled = self.previous_module_name is not None
         self.back_button.setEnabled(enabled)
-        self.back_button.setToolTip(f"Go to the {self.previous_module_name} module.")
+        if enabled:
+            self.back_button.setToolTip(f"Go to the {self.previous_module_name} module.")
+        else:
+            self.back_button.setToolTip("")
 
     def update_status_label(self):
         self.status_label.setText(self.status_text)
