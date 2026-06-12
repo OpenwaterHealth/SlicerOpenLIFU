@@ -39,7 +39,6 @@ from OpenLIFULib import (
     python_requirements_exist,
 )
 from OpenLIFULib.class_definition_widgets import ListTableWidget
-from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node
 
@@ -569,7 +568,7 @@ class ManageAccountsDialog(qt.QDialog):
 # OpenLIFULoginWidget
 #
 
-class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, GuidedWorkflowMixin):
+class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -622,8 +621,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.ui.manageAccountsButton.clicked.connect(self.onManageAccountsButtonclicked)
 
-        self.inject_workflow_controls_into_placeholder()
-
         # ====================================
         self._initDefaultUsers() # This will install openlifu if not installed
 
@@ -639,7 +636,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.onDatabaseChanged() # Call the routine to update from data parameter node
-        self.updateWorkflowControls()
 
     def _initDefaultUsers(self) -> None:
         """Create default User objects. This will prompt the user
@@ -824,17 +820,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         potentially_updated_user = next((u for u in users if u.id == cur_user_id), self._default_anonymous_user)
         self.logic.active_user = potentially_updated_user
 
-    def updateWorkflowControls(self):
-        if not self._parameterNode.user_account_mode:
-            self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "User account mode disabled, proceed to the next step."
-        elif self._cur_login_state in [LoginState.NOT_LOGGED_IN, LoginState.UNSUCCESSFUL_LOGIN]:
-            self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Log in to proceed."
-        else:
-            self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Logged in, proceed to the next step."
-
     def updateLoginLogoutButtonAsLoginButton(self):
 
         # === Multiple things can block the login button ===
@@ -916,7 +901,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.updateLoginLogoutButton()
         self.updateAccountManagementButtons()
         self.enforceUserPermissions()
-        self.updateWorkflowControls()
         self.updateUserInfoLabels()
 
     def updateLoginStateNotificationLabel(self):
