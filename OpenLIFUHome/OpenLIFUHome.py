@@ -1,6 +1,5 @@
 # Standard library imports
-from typing import Optional, TYPE_CHECKING
-import os
+from typing import Optional
 
 # Third-party imports
 import qt
@@ -15,11 +14,11 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
-from OpenLIFULib.util import (
-    get_openlifu_login_parameter_node,
-)
-
+from OpenLIFULib import get_cur_db
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
+from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state
+from OpenLIFULib.util import display_errors
 
 from OpenLIFUCloudSync import getCloudSyncLogic
 
@@ -66,15 +65,18 @@ class OpenLIFUHomeParameterNode:
 
 
 class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
-    """Uses ScriptedLoadableModuleWidget base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """Operator-focused landing page.
+
+    Shows live status for the database, signed-in user, and connected
+    hardware, plus three primary actions (New Session, Load Session, Sign In)
+    and a Data Manager entry point for power users.
     """
 
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
-        self.logic = None
+        self.logic: Optional["OpenLIFUHomeLogic"] = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
@@ -83,20 +85,20 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ScriptedLoadableModuleWidget.setup(self)
 
         # Load widget from .ui file (created by Qt Designer).
-        # Additional widgets can be instantiated manually and added to self.layout.
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUHome.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
-        # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
-        # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
-        # "setMRMLScene(vtkMRMLScene*)" slot.
+        # Shared status header (read-only on Home; the Data Manager owns the
+        # interactive header). Home does not use a workflow-controls footer,
+        # so apply_module_layout simply inserts the header above the body.
+        self.module_header = apply_module_layout(
+            uiWidget, ui_namespace=self.ui, header_read_only=True
+        )
+
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUHomeLogic()
-        # === Connections and UI setup =======
 
         # The standalone OpenLIFUCloudSync module has been deprecated -- its
         # controls live in the Database popup on the Data page. We still
@@ -104,37 +106,35 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # can autostart on boot when the user has it enabled.
         getCloudSyncLogic()
 
+        # Note: we deliberately do NOT force-instantiate the OpenLIFUData
+        # widget here. Doing so during setup() triggers Data's setup,
+        # whose deferred Login wiring eventually calls
+        # ``OpenLIFULoginWidget.cacheAllLoginRelatedWidgets`` which walks
+        # ``getModule("OpenLIFUHome").widgetRepresentation()`` -- if Home's
+        # setup() has not yet returned, that re-enters Home and recurses
+        # without bound. Instead, ``_ensure_data_widget()`` lazily builds
+        # the Data widget the first time a button handler needs it.
+
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-        
-        # Buttons
-        self.ui.guidedModePushButton.connect("clicked()", self.onGuidedModeClicked)
-        self.updateGuidedModeButton()
 
-        # Switch modules
-        # Note: the Database and Login modules are intentionally not surfaced
-        # from the Home page anymore. They are accessed via icon-button popups
-        # at the top of the Data page (their modules are hidden from the module
-        # selector).
-        self.ui.dataPushButton.clicked.connect(lambda : self.switchModule(self.ui.dataPushButton.text))
-        self.ui.prePlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.prePlanningPushButton.text))
-        self.ui.sonicationControlPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationControlPushButton.text))
-        self.ui.sonicationPlanningPushButton.clicked.connect(lambda : self.switchModule(self.ui.sonicationPlanningPushButton.text))
-        self.ui.transducerTrackingPushButton.clicked.connect(lambda : self.switchModule(self.ui.transducerTrackingPushButton.text))
+        # Header status-icon observers (DB / login / device / cloud / nav / perms).
+        wire_passive_module_header(self, self.module_header)
 
-    def switchModule(self, moduleButtonText: str) -> None:
-        moduleButtonText = moduleButtonText.replace(" ", "")
-        moduleButtonText = moduleButtonText.replace("-", "")
+        # Buttons.
+        self.ui.signInPushButton.clicked.connect(self.on_sign_in_clicked)
+        self.ui.newSessionPushButton.clicked.connect(self.on_new_session_clicked)
+        self.ui.loadSessionPushButton.clicked.connect(self.on_load_session_clicked)
+        self.ui.dataManagerPushButton.clicked.connect(self.on_data_manager_clicked)
 
-        # For certain modules, the module name in the GUI doesn't match the programmatic module name
-        # This is due to max path character limits on longer module names
-        if (moduleButtonText == "OpenLIFUSonicationPlanning"):
-            moduleButtonText = moduleButtonText[:-3] + "er"
-
-        slicer.util.selectModule(moduleButtonText)
+        # Status-row observers and initial paint are deferred one tick so the
+        # OpenLIFUDatabase / OpenLIFULogin / OpenLIFUSonicationControl logics
+        # are constructed before we touch them.
+        qt.QTimer.singleShot(0, self._wire_status_row_observers)
+        qt.QTimer.singleShot(0, self._refresh_status_rows)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -151,80 +151,280 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
-        # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        self._refresh_status_rows()
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
-        # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
 
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
-        # Parameter node will be reset, do not use it anymore
         self.setParameterNode(None)
 
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
-        # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+            self._refresh_status_rows()
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
-        # Parameter node stores all user choices in parameter values, node selections, etc.
-        # so that when the scene is saved and reloaded, these settings are restored.
-
         self.setParameterNode(self.logic.getParameterNode())
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFUHomeParameterNode]) -> None:
-        """
-        Set and observe parameter node.
-        Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
-        """
-
+        """Set and observe parameter node."""
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
-            # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
-            # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
-        
-    def onGuidedModeClicked(self):
-        new_guided_mode_state = not self._parameterNode.guided_mode
-        if new_guided_mode_state:
-            self.logic.start_guided_mode()
-        else:
-            set_guided_mode_state(new_guided_mode_state)
-
-    def updateGuidedModeButton(self):
-        if self._parameterNode is None:
-            # This case occurs briefly when trying to close the slicer scene
-            # It is an invalid state (e.g. guided mode is neither on nor off),
-            # but it's momentary until the scene clean up is done.
-            return
-        if self._parameterNode.guided_mode:
-            self.ui.guidedModePushButton.setText("Exit Guided Mode")
-        else:
-            self.ui.guidedModePushButton.setText("Start Guided Mode")
-            self.ui.guidedModePushButton.setToolTip(
-                    "Guided mode will take you step-by-step through the treatment workflow"
-                )
 
     def onParameterNodeModified(self, caller, event) -> None:
-        self.updateGuidedModeButton()
         if self._parameterNode is not None:
             self.logic.workflow.enforceGuidedModeVisibility(self._parameterNode.guided_mode)
 
-        # Update whether transducer localization is enabled/disabled based on guided_mode state
-        transducer_tracking_widget = slicer.util.getModule('OpenLIFUTransducerLocalization').widgetRepresentation()
-        transducer_tracking_widget.self().checkCanRunTracking()
+        # Refresh transducer-localization enable/disable when guided_mode
+        # changes. Only touch the TL widget if it already exists -- forcing
+        # widgetRepresentation() to instantiate it from inside
+        # onParameterNodeModified (which may fire during Home's own setup
+        # via initializeParameterNode/connectGui) can recurse via the
+        # Login cacheAllLoginRelatedWidgets walk.
+        tl_widget = getattr(slicer.modules, "OpenLIFUTransducerLocalizationWidget", None)
+        if tl_widget is not None:
+            try:
+                tl_widget.checkCanRunTracking()
+            except Exception:  # noqa: BLE001
+                pass
 
+    # ------------------------------------------------------------------
+    # Status row wiring + refresh
+    # ------------------------------------------------------------------
 
+    def _wire_status_row_observers(self) -> None:
+        """Hook events that should trigger a status-row refresh."""
+        try:
+            slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(
+                lambda *_a, **_kw: self._refresh_status_rows()
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
+                lambda *_a, **_kw: self._refresh_status_rows()
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            login_pn = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
+            self.addObserver(
+                login_pn,
+                vtk.vtkCommand.ModifiedEvent,
+                lambda caller, event: self._refresh_status_rows(),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic.call_on_lifu_device_connected(
+                lambda *_a, **_kw: self._refresh_status_rows()
+            )
+            sc_logic.call_on_lifu_device_disconnected(
+                lambda *_a, **_kw: self._refresh_status_rows()
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _refresh_status_rows(self) -> None:
+        """Repaint the three status rows and gate the primary buttons."""
+        # ---- Database row ----
+        try:
+            db = get_cur_db()
+        except Exception:  # noqa: BLE001
+            db = None
+        if db is not None:
+            db_path = getattr(db, "path", None) or "(unknown location)"
+            self.ui.databaseStatusValueLabel.setText(f"Connected: {db_path}")
+        else:
+            self.ui.databaseStatusValueLabel.setText("Not connected")
+
+        # ---- User row ----
+        try:
+            cur_user = get_current_user()
+        except Exception:  # noqa: BLE001
+            cur_user = None
+        try:
+            uam = bool(get_user_account_mode_state())
+        except Exception:  # noqa: BLE001
+            uam = False
+        user_id = getattr(cur_user, "id", None)
+        is_real_user = (
+            cur_user is not None
+            and user_id not in (None, "anonymous", "default_admin")
+        )
+        if is_real_user:
+            who = getattr(cur_user, "name", "") or user_id
+            roles = list(getattr(cur_user, "roles", None) or [])
+            role_str = f" ({', '.join(roles)})" if roles else ""
+            self.ui.userStatusValueLabel.setText(f"Signed in as {who}{role_str}")
+            self.ui.signInPushButton.setText("Account")
+        else:
+            self.ui.userStatusValueLabel.setText("Not signed in")
+            self.ui.signInPushButton.setText("Sign In")
+        self.ui.signInPushButton.setEnabled(db is not None)
+        if db is None:
+            self.ui.signInPushButton.setToolTip(
+                "Connect a database in the Data Manager first."
+            )
+        else:
+            self.ui.signInPushButton.setToolTip(
+                "Open the user account panel to sign in or out."
+            )
+
+        # ---- Transducer row ----
+        try:
+            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            iface = getattr(sc_logic, "cur_lifu_interface", None)
+            tx_conn, hv_conn = (
+                iface.is_device_connected() if iface is not None else (False, False)
+            )
+            is_simulated = bool(getattr(iface, "is_simulated", False))
+        except Exception:  # noqa: BLE001
+            iface = None
+            tx_conn = hv_conn = False
+            is_simulated = False
+        if iface is None:
+            self.ui.transducerStatusValueLabel.setText("Not connected")
+        elif is_simulated:
+            self.ui.transducerStatusValueLabel.setText("Simulated (no real device)")
+        elif tx_conn and hv_conn:
+            self.ui.transducerStatusValueLabel.setText("Connected (TX + HV)")
+        elif tx_conn:
+            self.ui.transducerStatusValueLabel.setText("Partially connected (TX only)")
+        elif hv_conn:
+            self.ui.transducerStatusValueLabel.setText("Partially connected (HV only)")
+        else:
+            self.ui.transducerStatusValueLabel.setText("Not connected")
+
+        # ---- Primary buttons gating ----
+        # New / Load Session require a connected database and (if user-account
+        # mode is on) a signed-in real user.
+        sessions_enabled = (db is not None) and (not uam or is_real_user)
+        self.ui.newSessionPushButton.setEnabled(sessions_enabled)
+        self.ui.loadSessionPushButton.setEnabled(sessions_enabled)
+        if db is None:
+            gate_tip = "Connect a database in the Data Manager first."
+        elif uam and not is_real_user:
+            gate_tip = "Sign in to start or load a session."
+        else:
+            gate_tip = None
+        if gate_tip:
+            self.ui.newSessionPushButton.setToolTip(gate_tip)
+            self.ui.loadSessionPushButton.setToolTip(gate_tip)
+        else:
+            self.ui.newSessionPushButton.setToolTip(
+                "Pick or add a subject, then create a new treatment session."
+            )
+            self.ui.loadSessionPushButton.setToolTip(
+                "Pick a subject and load an existing session."
+            )
+
+    # ------------------------------------------------------------------
+    # Button handlers
+    # ------------------------------------------------------------------
+
+    def _ensure_data_widget(self):
+        """Instantiate the OpenLIFUData widget on first use and return it.
+
+        Called from button handlers (never from setup()) so the cascading
+        Data->Login->cacheAllLoginRelatedWidgets walk never re-enters
+        Home's own setup().
+        """
+        slicer.util.getModule("OpenLIFUData").widgetRepresentation()
+        return slicer.modules.OpenLIFUDataWidget
+
+    @display_errors
+    def on_sign_in_clicked(self, checked: bool) -> None:
+        from OpenLIFUData import _ModuleWidgetPopupDialog
+        dlg = _ModuleWidgetPopupDialog(
+            "OpenLIFULogin", "Account", parent=slicer.util.mainWindow()
+        )
+        dlg.exec_()
+        self._refresh_status_rows()
+
+    @display_errors
+    def on_new_session_clicked(self, checked: bool) -> None:
+        db = get_cur_db()
+        if db is None:
+            slicer.util.errorDisplay("Connect a database in the Data Manager first.")
+            return
+
+        # Make sure Data's widget (and therefore its dialog classes) is
+        # available before we pop the subject picker.
+        self._ensure_data_widget()
+
+        # Step 1: subject pick (reuses Data's LoadSubjectDialog, which also
+        # exposes "Add Subject" so the user can create a subject on the fly).
+        from OpenLIFUData import CreateNewSessionDialog, LoadSubjectDialog
+        subject_dlg = LoadSubjectDialog(db)
+        subject = subject_dlg.exec_and_get_subject()
+        if subject is None:
+            return
+        subject_id = subject.id
+
+        # Step 2: protocol-filtered create-session dialog.
+        protocol_ids = db.get_protocol_ids()
+        if get_user_account_mode_state():
+            cur_user = get_current_user()
+            user_roles = list(getattr(cur_user, "roles", None) or [])
+            if "admin" not in user_roles:
+                protocols = db.load_all_protocols()
+                protocol_ids = [
+                    p.id for p in protocols
+                    if any(r in p.allowed_roles for r in user_roles)
+                ]
+
+        sessiondlg = CreateNewSessionDialog(
+            transducer_ids=db.get_transducer_ids(),
+            protocol_ids=protocol_ids,
+            volume_ids=db.get_volume_ids(subject_id),
+        )
+        returncode, session_parameters, load_checked = sessiondlg.customexec_()
+        if not returncode:
+            return
+
+        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic.add_session_to_database(subject_id, session_parameters)
+
+        if load_checked:
+            data_logic.clear_session(clean_up_scene=True)
+            data_logic.load_session(subject_id, session_parameters["id"])
+            set_guided_mode_state(True)
+            slicer.util.selectModule("OpenLIFUSession")
+
+    @display_errors
+    def on_load_session_clicked(self, checked: bool) -> None:
+        db = get_cur_db()
+        if db is None:
+            slicer.util.errorDisplay("Connect a database in the Data Manager first.")
+            return
+
+        # Reuse the Data widget's existing load dialogs so behaviour stays in
+        # lockstep with the Data Manager's own Load buttons.
+        data_widget = self._ensure_data_widget()
+        if not data_widget.on_load_subject_clicked(True):
+            return
+        if not data_widget.on_load_session_clicked(True):
+            return
+        set_guided_mode_state(True)
+        slicer.util.selectModule("OpenLIFUSession")
+
+    @display_errors
+    def on_data_manager_clicked(self, checked: bool) -> None:
+        slicer.util.selectModule("OpenLIFUData")
 
 
 #
@@ -247,7 +447,6 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
         self.workflow = Workflow()
-
 
     def getParameterNode(self):
         return OpenLIFUHomeParameterNode(super().getParameterNode())
