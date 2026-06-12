@@ -250,6 +250,7 @@ class Workflow:
     modules = [
         "OpenLIFUDatabase",
         "OpenLIFUData",
+        "OpenLIFUSession",
         "OpenLIFUPrePlanning",
         "OpenLIFUTransducerLocalization",
         "OpenLIFUSonicationPlanner",
