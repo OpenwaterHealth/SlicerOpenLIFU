@@ -6,104 +6,150 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>298</width>
-    <height>482</height>
+    <width>360</width>
+    <height>560</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_4">
+  <layout class="QVBoxLayout" name="topLayout">
    <item>
-    <widget class="QPushButton" name="guidedModePushButton">
-     <property name="text">
-      <string>Start Guided Mode</string>
-     </property>
-     <property name="autoDefault">
-      <bool>false</bool>
-     </property>
-     <property name="default">
-      <bool>false</bool>
-     </property>
+    <widget class="QWidget" name="userAccountBannerPlaceholder" native="true">
+     <layout class="QHBoxLayout" name="userAccountBannerPlaceholderLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+     </layout>
     </widget>
    </item>
-   <item alignment="Qt::AlignTop">
-    <widget class="ctkCollapsibleButton" name="ModuleNavigatorButton">
-     <property name="text">
-      <string>OpenLIFU module navigator</string>
+   <item>
+    <widget class="QGroupBox" name="statusGroupBox">
+     <property name="title">
+      <string>Status</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_3">
-      <item>
-       <widget class="QGroupBox" name="guidedWorkflowGroupBox">
-        <property name="title">
-         <string>Guided Workflow Modules</string>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_2">
-         <property name="spacing">
-          <number>6</number>
-         </property>
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <property name="rightMargin">
-          <number>0</number>
-         </property>
-         <property name="bottomMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="QPushButton" name="dataPushButton">
-           <property name="text">
-            <string>OpenLIFU Data</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="prePlanningPushButton">
-           <property name="text">
-            <string>OpenLIFU Pre-Planning</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="transducerTrackingPushButton">
-           <property name="text">
-            <string>OpenLIFU Transducer Localization</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="sonicationPlanningPushButton">
-           <property name="text">
-            <string>OpenLIFU Sonication Planning</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="sonicationControlPushButton">
-           <property name="text">
-            <string>OpenLIFU Sonication Control</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+     <layout class="QGridLayout" name="statusGridLayout">
+      <property name="horizontalSpacing"><number>10</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="databaseStatusTitleLabel">
+        <property name="text"><string>Database:</string></property>
        </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="databaseStatusValueLabel">
+        <property name="text"><string>Not connected</string></property>
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <spacer name="databaseStatusButtonSpacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeType"><enum>QSizePolicy::Minimum</enum></property>
+        <property name="sizeHint" stdset="0">
+         <size><width>80</width><height>0</height></size>
+        </property>
+       </spacer>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="userStatusTitleLabel">
+        <property name="text"><string>User:</string></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="userStatusValueLabel">
+        <property name="text"><string>Not signed in</string></property>
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QPushButton" name="signInPushButton">
+        <property name="text"><string>Sign In</string></property>
+        <property name="toolTip"><string>Open the user account panel to sign in or out.</string></property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="transducerStatusTitleLabel">
+        <property name="text"><string>Transducer:</string></property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="transducerStatusValueLabel">
+        <property name="text"><string>Not connected</string></property>
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <spacer name="transducerStatusButtonSpacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeType"><enum>QSizePolicy::Minimum</enum></property>
+        <property name="sizeHint" stdset="0">
+         <size><width>80</width><height>0</height></size>
+        </property>
+       </spacer>
       </item>
      </layout>
     </widget>
    </item>
    <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
+    <spacer name="upperSpacer">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeType"><enum>QSizePolicy::Fixed</enum></property>
      <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
+      <size><width>0</width><height>20</height></size>
      </property>
     </spacer>
+   </item>
+   <item>
+    <widget class="QPushButton" name="newSessionPushButton">
+     <property name="text">
+      <string>New Session</string>
+     </property>
+     <property name="toolTip">
+      <string>Pick or add a subject, then create a new treatment session.</string>
+     </property>
+     <property name="minimumSize">
+      <size><width>0</width><height>56</height></size>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="loadSessionPushButton">
+     <property name="text">
+      <string>Load Session</string>
+     </property>
+     <property name="toolTip">
+      <string>Pick a subject and load an existing session.</string>
+     </property>
+     <property name="minimumSize">
+      <size><width>0</width><height>56</height></size>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0">
+      <size><width>20</width><height>40</height></size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QPushButton" name="dataManagerPushButton">
+     <property name="text">
+      <string>Data Manager</string>
+     </property>
+     <property name="toolTip">
+      <string>Open the Data Manager (power-user view of subjects, sessions, protocols, transducers, and the database).</string>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>
@@ -112,12 +158,6 @@
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ctkCollapsibleButton</class>
-   <extends>QWidget</extends>
-   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
