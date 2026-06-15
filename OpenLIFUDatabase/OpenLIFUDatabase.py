@@ -6,7 +6,6 @@ import sys
 import tempfile
 import time
 import zipfile
-import requests
 from pathlib import Path
 from typing import Optional, List, Callable, TYPE_CHECKING
 
@@ -26,7 +25,7 @@ from slicer.util import VTKObservationMixin
 # OpenLIFULib imports
 from OpenLIFULib import sample_data
 from OpenLIFULib import sample_data_gui
-from OpenLIFULib import openlifu_lz
+from OpenLIFULib import ensure_python_requirements_for_module_enter
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.sample_data_gui import (
     InitializationResult,
@@ -38,8 +37,6 @@ from OpenLIFULib.util import (
     add_slicer_log_handler_for_openlifu_object,
 )
 
-# These imports are deferred at runtime using openlifu_lz, 
-# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu.db
@@ -161,6 +158,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateAll()
@@ -380,7 +378,9 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         Args:
             path: Path to the openlifu database folder on disk.
         """
-        self.db = openlifu_lz().db.Database(path)
+        import openlifu.db
+
+        self.db = openlifu.db.Database(path)
         add_slicer_log_handler_for_openlifu_object(self.db)
     
     @staticmethod
@@ -435,6 +435,8 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
                 os.chmod(path, 0o644 if path.is_file() else 0o755)
 
     def performSync(self):
+        import requests
+
         x= requests.get(f'https://api.nvpsoftware.com/users/{slicer.util.getModuleLogic("OpenLIFULogin").getUserId()}', headers={'Authorization': f'Bearer {slicer.util.getModuleLogic("OpenLIFULogin").getValidToken()}'})
         print(x.json())
 

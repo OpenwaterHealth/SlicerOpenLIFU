@@ -9,7 +9,6 @@ from slicer import (
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.util import get_openlifu_data_parameter_node, BusyCursor
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
-from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
 from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,

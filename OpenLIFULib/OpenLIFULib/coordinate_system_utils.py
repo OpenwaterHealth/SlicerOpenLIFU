@@ -4,7 +4,6 @@ from numpy.typing import NDArray
 import vtk
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
-from OpenLIFULib.lazyimport import openlifu_lz
 
 def numpy_to_vtk_4x4(numpy_array_4x4 : NDArray[Any]) -> vtk.vtkMatrix4x4:
             if numpy_array_4x4.shape != (4, 4):
@@ -30,7 +29,8 @@ def get_xxx2ras_matrix(dims:Sequence[str]) -> NDArray[Any]:
     ]).transpose()
 
 def get_xx2mm_scale_factor(length_unit:str) -> float:
-    openlifu = openlifu_lz()
+    import openlifu.util.units
+
     return openlifu.util.units.getsiscale(length_unit, 'distance') / openlifu.util.units.getsiscale('mm', 'distance')
 
 def linear_to_affine(matrix, translation=None):

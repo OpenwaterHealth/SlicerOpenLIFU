@@ -8,7 +8,6 @@ from OpenLIFULib.transform_conversion import (
     transducer_transform_node_from_openlifu,
     create_openlifu2slicer_matrix
     )
-from OpenLIFULib.lazyimport import openlifu_lz
 import numpy as np
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.util import get_cloned_node
@@ -114,6 +113,7 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
 
     See also the reverse function `add_transducer_tracking_results_from_openlifu_session_format`.
     """
+    import openlifu.db.session
     
     photoscan_ids_for_session = get_photoscan_ids_with_results(session_id)
     transducer_tracking_results_openlifu = []
@@ -129,7 +129,7 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
         # Convert photoscan to volume transform to LPS
         transform_array = slicer.util.arrayFromTransformMatrix(photoscan_volume_node, toWorld=True)
         openlifu2slicer_matrix = create_openlifu2slicer_matrix('mm')
-        photoscan_to_volume_transform_openlifu = openlifu_lz().db.session.ArrayTransform(
+        photoscan_to_volume_transform_openlifu = openlifu.db.session.ArrayTransform(
             matrix = np.linalg.inv(openlifu2slicer_matrix) @ transform_array,
             units = 'mm',
         )
@@ -140,7 +140,7 @@ def get_transducer_tracking_results_in_openlifu_session_format(session_id:str, t
 
         photoscan_id = transducer_volume_node.GetAttribute("TT:photoscanID")
         transducer_tracking_results_openlifu.append(
-            openlifu_lz().db.session.TransducerTrackingResult(
+            openlifu.db.session.TransducerTrackingResult(
                     photoscan_id = photoscan_id,
                     transducer_to_volume_transform = transducer_to_volume_transform_openlifu,
                     photoscan_to_volume_transform = photoscan_to_volume_transform_openlifu,

@@ -15,6 +15,10 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
+from OpenLIFULib import (
+    check_and_install_kwave_binaries,
+    ensure_python_requirements_for_module_enter,
+)
 from OpenLIFULib.util import (
     get_openlifu_login_parameter_node,
 )
@@ -190,6 +194,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
 
@@ -380,10 +385,8 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
     def runTest(self):
         """Run as few or as many tests as needed here."""
         
-        # If testing is enabled, openlifu_lz installs
-        # openlifu if not installed and installs the kwave assets
-        from OpenLIFULib import openlifu_lz
-        openlifu_lz()
+        ensure_python_requirements_for_module_enter()
+        check_and_install_kwave_binaries()
 
         self.setUp()
         

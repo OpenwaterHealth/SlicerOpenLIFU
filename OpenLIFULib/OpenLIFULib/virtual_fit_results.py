@@ -2,7 +2,6 @@ import slicer
 from slicer import vtkMRMLTransformNode
 from typing import Optional, Iterable, List, Tuple, Dict, TYPE_CHECKING, Union
 from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu, transducer_transform_node_from_openlifu
-from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.util import get_cloned_node
 
 if TYPE_CHECKING:

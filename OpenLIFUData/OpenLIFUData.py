@@ -32,9 +32,9 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolution,
     SlicerOpenLIFUTransducer,
     assign_openlifu_metadata_to_volume_node,
+    ensure_python_requirements_for_module_enter,
     get_cur_db,
     get_target_candidates,
-    openlifu_lz,
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
@@ -58,8 +58,6 @@ from OpenLIFULib.virtual_fit_results import (
     clear_virtual_fit_results,
 )
 
-# These imports are deferred at runtime using openlifu_lz, 
-# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu.nav.photoscan
@@ -1491,6 +1489,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
@@ -1736,7 +1735,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         session_openlifu = self.update_underlying_openlifu_session()
 
-        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+        import openlifu.db.database
+
+        OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu.db.database.OnConflictOpts
         get_cur_db().write_session(self.subject,session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
 
         # Write any affiliated photoscan objects
@@ -2123,7 +2124,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
 
     def load_protocol_from_file(self, filepath:str) -> None:
-        protocol = openlifu_lz().plan.Protocol.from_file(filepath)
+        import openlifu.plan
+
+        protocol = openlifu.plan.Protocol.from_file(filepath)
         self.load_protocol_from_openlifu(protocol)
 
     def load_protocol_from_openlifu(self, protocol:"openlifu.plan.Protocol", replace_confirmed: bool = False) -> None:
@@ -2175,7 +2178,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         protocolConfigLogic.delete_protocol_from_cache(protocol_id)
 
     def load_transducer_from_file(self, filepath:str) -> None:
-        transducer = openlifu_lz().xdc.util.load_transducer_from_file(filepath, convert_array=True)
+        import openlifu.xdc.util
+
+        transducer = openlifu.xdc.util.load_transducer_from_file(filepath, convert_array=True)
         transducer_parent_dir = Path(filepath).parent
 
         transducer_abspaths_info = {
@@ -2399,7 +2404,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             subject_id: id of subject to be added (str)
         """
 
-        newOpenLIFUSubject = openlifu_lz().db.subject.Subject(
+        import openlifu.db.database
+        import openlifu.db.subject
+
+        newOpenLIFUSubject = openlifu.db.subject.Subject(
             name = subject_name,
             id = subject_id,
         )
@@ -2413,7 +2421,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        get_cur_db().write_subject(newOpenLIFUSubject, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_subject(newOpenLIFUSubject, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
 
     def get_virtual_fit_approvals_in_session(self) -> List[str]:
         """Get the virtual fit approval state in the current session object, a list of target IDs for which virtual fit
@@ -2510,7 +2518,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # If the user selects a json file,use the photoscan_metadata included in the json file to load the photoscan. 
         elif Path(model_or_json_filepath).suffix == '.json':
-            photoscan_openlifu = openlifu_lz().nav.photoscan.Photoscan.from_file(model_or_json_filepath)
+            import openlifu.nav.photoscan
+
+            photoscan_openlifu = openlifu.nav.photoscan.Photoscan.from_file(model_or_json_filepath)
             return self.load_photoscan_from_openlifu(photoscan_openlifu, parent_dir = str(Path(model_or_json_filepath).parent))
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
@@ -2552,7 +2562,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 loaded_session = self.getParameterNode().loaded_session
                 _, (model_data, texture_data) = get_cur_db().load_photoscan(loaded_session.get_subject_id(),loaded_session.get_session_id(),photoscan_openlifu.id, load_data = True)
             else:
-                model_data, texture_data = openlifu_lz().nav.photoscan.load_data_from_photoscan(photoscan_openlifu,parent_dir = parent_dir)
+                import openlifu.nav.photoscan
+
+                model_data, texture_data = openlifu.nav.photoscan.load_data_from_photoscan(photoscan_openlifu,parent_dir = parent_dir)
 
         newly_loaded_photoscan = SlicerOpenLIFUPhotoscan.initialize_from_openlifu_photoscan(
             photoscan_openlifu,
@@ -2639,7 +2651,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        get_cur_db().write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        import openlifu.db.database
+
+        get_cur_db().write_volume(subject_id, volume_id, volume_name, volume_filepath, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
 
     def add_session_to_database(self, subject_id: str, session_parameters: Dict) -> bool:
         """ Add new session to selected subject in the loaded openlifu database
@@ -2661,7 +2675,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ):
                     return False
 
-        newOpenLIFUSession = openlifu_lz().db.session.Session(
+        import openlifu.db.database
+        import openlifu.db.session
+
+        newOpenLIFUSession = openlifu.db.session.Session(
             name = session_parameters['name'],
             id = session_parameters['id'],
             subject_id = subject_id,
@@ -2669,7 +2686,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             volume_id = session_parameters['volume_id'],
             transducer_id = session_parameters['transducer_id']
         )
-        get_cur_db().write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        get_cur_db().write_session(self.get_subject(subject_id), newOpenLIFUSession, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
         return True
 
     def add_photocollection_to_database(self, subject_id: str, session_id: str, photocollection_parameters: Dict) -> bool:
@@ -2702,9 +2719,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         if photo_abspaths is None:
             raise ValueError("Missing required parameter: 'photo_paths'")
 
+        import openlifu.db.database
+
         get_cur_db().write_photocollection(subject_id, session_id, scan_id,
                                       photo_abspaths, on_conflict =
-                                      openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+                                      openlifu.db.database.OnConflictOpts.OVERWRITE)
         return True
 
     def add_photoscan_to_database(self, subject_id: str, session_id: str, photoscan_parameters: Dict) -> "openlifu.nav.photoscan.Photoscan":
@@ -2726,12 +2745,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         texture_abspath = photoscan_parameters.pop("texture_abspath")
         mtl_abspath = photoscan_parameters.pop("mtl_abspath")
 
-        newOpenLIFUPhotoscan = openlifu_lz().nav.photoscan.Photoscan().from_dict(photoscan_parameters)
+        import openlifu.db.database
+        import openlifu.nav.photoscan
+
+        newOpenLIFUPhotoscan = openlifu.nav.photoscan.Photoscan().from_dict(photoscan_parameters)
         get_cur_db().write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
                                 model_abspath,
                                 texture_abspath,
                                 mtl_abspath,
-                                on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+                                on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
     
         return newOpenLIFUPhotoscan
 
@@ -2752,7 +2774,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             if session.last_generated_solution_id == solution.solution.solution.id:
                 if get_cur_db() is None: # This shouldn't happen
                     raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
-                OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+                import openlifu.db.database
+
+                OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu.db.database.OnConflictOpts
                 get_cur_db().write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
             else:
                 # This can happen if, for example, a solution is generated from a session and then a new session is loaded and the user

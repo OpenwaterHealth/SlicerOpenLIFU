@@ -26,10 +26,9 @@ from OpenLIFULib import (
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
+    ensure_python_requirements_for_module_enter,
     get_openlifu_data_parameter_node,
     get_target_candidates,
-    openlifu_lz,
-    threadpoolctl_lz,
 )
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.events import SlicerOpenLIFUEvents
@@ -244,6 +243,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
@@ -1112,13 +1112,16 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         if skin_mesh_node is None:
             skin_mesh_node = generate_skin_segmentation(volume)
 
-        with threadpoolctl_lz().threadpool_limits(limits=1): # caps BLAS and OpenMP threads
+        import openlifu.seg
+        import threadpoolctl
+
+        with threadpoolctl.threadpool_limits(limits=1): # caps BLAS and OpenMP threads
             # Capping BLAS threads appears to have a performance improvement when running this algorithm in Slicer.
             # This may be because Slicer already occupies BLAS threads with its VTK/ITK stuff and so the virtual fit's many
             # tiny svd calls end up having more overhead than is worth it.
             # For some unknown reason, the improvement is only noticable when we do not use the embree
             # option in virtual fitting, which makes things very fast.
-            vf_transforms = openlifu_lz().seg.run_virtual_fit(
+            vf_transforms = openlifu.seg.run_virtual_fit(
                 units = units,
                 target_RAS = target.GetNthControlPointPosition(0),
                 standoff_transform = transducer_openlifu.get_standoff_transform_in_units(units),

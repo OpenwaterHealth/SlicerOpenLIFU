@@ -21,7 +21,7 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib import (
     BusyCursor,
     check_and_install_kwave_binaries,
-    openlifu_lz,
+    ensure_python_requirements_for_module_enter,
     OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUSolution,
@@ -41,8 +41,6 @@ from OpenLIFULib.util import (
 )
 from OpenLIFULib.notifications import notify
 
-# These imports are deferred at runtime using openlifu_lz,
-# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu.plan
@@ -194,6 +192,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
@@ -665,8 +664,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.globalAnalysisTableView.setMinimumHeight(400)  # adjust as needed
 
         # Populate the model
+        import openlifu.plan.param_constraint
+
         for _, row in df.iterrows():
-            row["Status"] = row["Status"] if row["Status"] else openlifu_lz().plan.param_constraint.PARAM_STATUS_SYMBOLS["ok"]
+            row["Status"] = row["Status"] if row["Status"] else openlifu.plan.param_constraint.PARAM_STATUS_SYMBOLS["ok"]
             items = [create_noneditable_QStandardItem(format_value(cell)) for cell in row]
             self.globalAnalysisTableModel.appendRow(items)#
 

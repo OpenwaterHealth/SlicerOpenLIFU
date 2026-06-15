@@ -10,7 +10,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, TYPE_CHECKING
 import time
-import requests
 
 # Third-party imports
 import qt
@@ -29,12 +28,11 @@ from slicer.util import VTKObservationMixin
 # OpenLIFULib imports
 from OpenLIFULib import (
     BusyCursor,
-    bcrypt_lz,
+    ensure_python_requirements_for_module_enter,
     get_cur_db,
     get_current_user,
     check_and_install_python_requirements,
     get_required_openlifu_version,
-    openlifu_lz,
     openlifu_version_matches,
     python_requirements_exist,
 )
@@ -43,8 +41,6 @@ from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node
 
-# These imports are deferred at runtime using openlifu_lz, 
-# but are done here for IDE and static analysis purposes
 if TYPE_CHECKING:
     import openlifu
     import openlifu.db
@@ -241,14 +237,16 @@ class CreateNewAccountDialog(qt.QDialog):
     def customexec_(self):
         returncode = self.exec_()
         if returncode == qt.QDialog.Accepted:
+            import bcrypt
+
             user_id = self.idField.text
             password_text = self.passwordField.text
             name = self.nameField.text
             description = self.descriptionField.text
             role = self.roleField.currentText
 
-            salt = bcrypt_lz().gensalt()
-            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+            salt = bcrypt.gensalt()
+            password_hash = bcrypt.hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
 
             user_dict = {
                 "id": user_id,
@@ -341,9 +339,11 @@ class ChangePasswordDialog(qt.QDialog):
     def customexec_(self):
         returncode = self.exec_()
         if returncode == qt.QDialog.Accepted:
+            import bcrypt
+
             password_text = self.createPasswordField.text
-            salt = bcrypt_lz().gensalt()
-            password_hash = bcrypt_lz().hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
+            salt = bcrypt.gensalt()
+            password_hash = bcrypt.hashpw(password_text.encode('utf-8'), salt).decode('utf-8')
 
             user_dict = {
                 "id": self.user.id,
@@ -487,8 +487,10 @@ class ManageAccountsDialog(qt.QDialog):
         self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Ok |
                                           qt.QDialogButtonBox.Cancel)
         def on_accept():
+            import openlifu.db.database
+
             user.roles = roles_widget.to_list()
-            self.db.write_user(user, on_conflict=openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+            self.db.write_user(user, on_conflict=openlifu.db.database.OnConflictOpts.OVERWRITE)
             self.updateUsersList()
             dialog.accept()
 
@@ -553,8 +555,11 @@ class ManageAccountsDialog(qt.QDialog):
         if not returncode or user_dict is None:
             return
 
-        modifiedUser = openlifu_lz().db.User.from_dict(user_dict)
-        self.db.write_user(modifiedUser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        import openlifu.db
+        import openlifu.db.database
+
+        modifiedUser = openlifu.db.User.from_dict(user_dict)
+        self.db.write_user(modifiedUser, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
 
         # Update GUI
 
@@ -581,8 +586,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._user_account_banners : List[UserAccountBanner] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self._default_anonymous_user = None  # initialized in setup() 
-        self._default_admin_user = None # initialized in setup()
+        self._default_anonymous_user = None  # initialized after dependency check
+        self._default_admin_user = None  # initialized after dependency check
         self._last_active_user = self._default_anonymous_user
 
     def setup(self) -> None:
@@ -621,9 +626,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         self.inject_workflow_controls_into_placeholder()
 
-        # ====================================
-        self._initDefaultUsers() # This will install openlifu if not installed
-
         # Install dependencies
         self.ui.installPythonRequirementsPushButton.clicked.connect(self.onUpdateOpenLIFUClicked)
         self._checkOpenLIFUVersionStatus()
@@ -634,22 +636,25 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.initializeParameterNode()
         self.cacheAllLoginRelatedWidgets()
 
-        self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.onDatabaseChanged() # Call the routine to update from data parameter node
         self.updateWorkflowControls()
 
     def _initDefaultUsers(self) -> None:
-        """Create default User objects. This will prompt the user
-        to install openlifu if it is not installed. """
-        self._default_anonymous_user = openlifu_lz().db.User(
+        """Create default User objects after dependencies are available."""
+        if self._default_anonymous_user is not None and self._default_admin_user is not None:
+            return
+
+        import openlifu.db
+
+        self._default_anonymous_user = openlifu.db.User(
             id = "anonymous",
             password_hash = "",
             roles = [],
             name = "Anonymous",
             description = "This is the default role set when the app opens, without anyone logged in, with user account mode activated. It has no roles and is therefore the most restricted."
         )
-        self._default_admin_user = openlifu_lz().db.User(
+        self._default_admin_user = openlifu.db.User(
             id = "default_admin",
             password_hash = "default_admin",
             roles = ['admin'],
@@ -664,8 +669,15 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        dependencies_available = ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+        if dependencies_available:
+            self._initDefaultUsers()
+            if self.logic.active_user is None:
+                self.logic.active_user = self._default_anonymous_user
+            self.updateWidgetLoginState(self._cur_login_state)
+            self._checkOpenLIFUVersionStatus()
         self.updateLoginStateNotificationLabel()
 
     def exit(self) -> None:
@@ -735,6 +747,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
     def onUserAccountModeClicked(self):
+        self._initDefaultUsers()
         # toggle and propagate to parameter node
         new_user_account_mode_state = not self._parameterNode.user_account_mode
         set_user_account_mode_state(new_user_account_mode_state)
@@ -753,6 +766,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def logout(self) -> None:
         """Log the user out, setting the current user to be the default anonymous user."""
+        self._initDefaultUsers()
         self.logic.active_user = self._default_anonymous_user
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
     
@@ -765,7 +779,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             return
 
         users = get_cur_db().load_all_users()
-        verify_password = lambda text, _hash: bcrypt_lz().checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
+        import bcrypt
+
+        verify_password = lambda text, _hash: bcrypt.checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
 
         matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
 
@@ -867,6 +883,16 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         if state is None:
             state = self._cur_login_state # if called with None, we reload with prev state
 
+        if self._default_anonymous_user is None or self._default_admin_user is None:
+            self.logic.active_user = None
+            self._cur_login_state = LoginState.NOT_LOGGED_IN
+            self.updateLoginStateNotificationLabel()
+            self.updateLoginLogoutButton()
+            self.updateAccountManagementButtons()
+            self.enforceUserPermissions()
+            self.updateWorkflowControls()
+            return
+
         if get_cur_db() and not any('admin' in u.roles for u in get_cur_db().load_all_users()):
             # if there is a connected db with no admin users in it, set the user to admin
             self.logic.active_user = self._default_admin_user
@@ -937,7 +963,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
         for widget in self._permissions_widgets:
             allowed_roles = widget.property("slicer.openlifu.allowed-roles")
-            user_roles = self.logic.active_user.roles
+            user_roles = self.logic.active_user.roles if self.logic.active_user is not None else []
             widget.setEnabled(any(role in allowed_roles for role in user_roles))
 
     def onActiveUserChanged(self, new_active_user: Optional["openlifu.db.User"]) -> None:
@@ -1183,6 +1209,8 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
             ):
                 return
 
-        newOpenLIFUuser = openlifu_lz().db.User.from_dict(user_parameters)
-        get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+        import openlifu.db
+        import openlifu.db.database
 
+        newOpenLIFUuser = openlifu.db.User.from_dict(user_parameters)
+        get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
