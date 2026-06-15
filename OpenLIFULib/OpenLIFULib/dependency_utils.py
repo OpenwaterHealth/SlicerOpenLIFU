@@ -5,6 +5,7 @@ from OpenLIFULib.install_asset_dialog import InstallAssetDialog
 import slicer
 import importlib
 import qt
+import re
 from OpenLIFULib.util import BusyCursor
 
 _openlifu_version_mismatch_warning_shown = False
@@ -111,11 +112,12 @@ def get_required_openlifu_version() -> "Optional[str]":
     python-requirements.txt, or None."""
     requirements_path = Path(__file__).parent / 'Resources/python-requirements.txt'
     for line in requirements_path.read_text().splitlines():
-        line = line.strip()
-        if line.startswith('#'):
+        line = line.split('#', 1)[0].strip()
+        if not line:
             continue
-        if line.startswith('openlifu=='):
-            return line.split('==', 1)[1].strip()
+        openlifu_pin = re.match(r'^openlifu(?:\[[^\]]+\])?\s*==\s*(\S+)$', line)
+        if openlifu_pin:
+            return openlifu_pin.group(1).strip()
         if 'OpenLIFU-python.git@' in line:
             commit_hash = line.split('@')[-1].strip()
             return f"dev+g{commit_hash[:9]}"
