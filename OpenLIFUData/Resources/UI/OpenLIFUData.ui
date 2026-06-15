@@ -25,6 +25,80 @@
     </widget>
    </item>
    <item>
+    <widget class="ctkCollapsibleButton" name="administrationCollapsibleButton">
+     <property name="text">
+      <string>Administration</string>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+     <property name="collapsed">
+      <bool>false</bool>
+     </property>
+     <property name="slicer.openlifu.allowed-roles" stdset="0">
+      <stringlist>
+       <string>admin</string>
+      </stringlist>
+     </property>
+     <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+      <bool>true</bool>
+     </property>
+     <layout class="QVBoxLayout" name="administrationCollapsibleLayout">
+      <item>
+       <widget class="QWidget" name="administrationStatusFormHost" native="true">
+        <layout class="QFormLayout" name="administrationStatusFormLayout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item row="0" column="0">
+          <widget class="QLabel" name="userModeStatusTitleLabel">
+           <property name="text"><string>User Mode (sign-in + permissions):</string></property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="userModeStatusLabel">
+           <property name="text"><string>OFF</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="guidedModeStatusTitleLabel">
+           <property name="text"><string>Guided Mode:</string></property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="guidedModeStatusLabel">
+           <property name="text"><string>OFF</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="userModeEnvHelpLabel">
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="text">
+         <string>User Mode is set via the OPENLIFU_USER_MODE environment variable on launch and cannot be changed at runtime.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgb(150, 150, 150);</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="manageAccountsButton">
+        <property name="text">
+         <string>Manage Accounts</string>
+        </property>
+        <property name="toolTip">
+         <string>Open the Manage Accounts dialog. Requires a connected database.</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="subjectCollapsibleButton">
      <property name="text">
       <string>Subject</string>

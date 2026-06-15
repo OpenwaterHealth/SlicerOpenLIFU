@@ -111,11 +111,17 @@
        <string>admin</string>
       </stringlist>
      </property>
+     <property name="visible">
+      <bool>false</bool>
+     </property>
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
        <widget class="QPushButton" name="manageAccountsButton">
         <property name="text">
          <string>Manage Accounts</string>
+        </property>
+        <property name="visible">
+         <bool>false</bool>
         </property>
        </widget>
       </item>

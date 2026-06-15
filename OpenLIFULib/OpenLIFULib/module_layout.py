@@ -3,10 +3,8 @@
 Provides:
 
 * :class:`ModuleHeaderWidget` -- a single-row toolbar with the database / login
-  / device popup buttons on the left and Navigation / Permissions mode dropdowns
-  on the right. Knows how to repaint itself from global state
-  (``updateNavigationModeComboBox``, ``updatePermissionsModeComboBox``,
-  ``updateStatusButtons``).
+  / device popup buttons. Knows how to repaint itself from global state
+  (``updateStatusButtons``).
 
 * :func:`apply_module_layout` -- restructure a module's loaded UI so the header
   stays pinned at the top, the workflow-controls placeholder stays pinned at
@@ -14,13 +12,13 @@ Provides:
   :class:`ModuleHeaderWidget`.
 
 * :func:`wire_passive_module_header` -- install the observers needed to keep a
-  read-only :class:`ModuleHeaderWidget` in sync with global state (Home,
-  Login, OpenLIFUSonicationControl, OpenLIFUDatabase, OpenLIFUCloudSync).
+  read-only :class:`ModuleHeaderWidget` in sync with global state (Login,
+  OpenLIFUSonicationControl, OpenLIFUDatabase, OpenLIFUCloudSync).
 
 The Data module owns the *interactive* header (``read_only=False``) and wires
 its own slots; every other workflow module gets a *read-only* header so the
-user can see the same status indicators without being able to switch global
-modes from inside a deep workflow step.
+user can see the same status indicators without being able to change them
+from inside a deep workflow step.
 """
 from __future__ import annotations
 
@@ -69,21 +67,23 @@ class ModuleHeaderWidget(qt.QWidget):
     * ``databasePopupButton``   - QPushButton, opens DB popup (Data) / status (others)
     * ``loginPopupButton``      - QPushButton, opens Account popup (Data) / status (others)
     * ``devicePopupButton``     - QPushButton, opens Device popup (Data) / status (others)
-    * ``navigationModeLabel``   - QLabel "Navigation:"
-    * ``navigationModeComboBox``- QComboBox [Unrestricted, Guided]
-    * ``permissionsModeLabel``  - QLabel "Permissions:"
-    * ``permissionsModeComboBox``- QComboBox [Unrestricted, User]
 
     When ``read_only=True`` (the default for non-Data modules), every control
     is ``setEnabled(False)``: the user can see live status but cannot change
     global state from within a workflow step. The Data page passes
-    ``read_only=False`` and connects its own click / currentIndexChanged
-    slots.
+    ``read_only=False`` and connects its own click slots.
     """
 
-    def __init__(self, *, read_only: bool, parent: Optional[qt.QWidget] = None) -> None:
+    def __init__(
+        self,
+        *,
+        read_only: bool,
+        keep_login_button_active: bool = False,
+        parent: Optional[qt.QWidget] = None,
+    ) -> None:
         super().__init__(parent)
         self.read_only = read_only
+        self._keep_login_button_active = bool(keep_login_button_active)
         # Cache of the previous (tx_conn, hv_conn) tuple so we only log device
         # connection state changes (matches the Data module's behaviour).
         self._last_device_conn_state = "unset"
@@ -144,48 +144,26 @@ class ModuleHeaderWidget(qt.QWidget):
 
         layout.addStretch(1)
 
-        self.navigationModeLabel = qt.QLabel("Navigation:", self)
-        layout.addWidget(self.navigationModeLabel)
-
-        self.navigationModeComboBox = qt.QComboBox(self)
-        self.navigationModeComboBox.setObjectName("navigationModeComboBox")
-        self.navigationModeComboBox.setToolTip(
-            "Unrestricted: free navigation. "
-            "Guided: walk step-by-step through the treatment workflow."
-        )
-        self.navigationModeComboBox.addItem("Unrestricted")
-        self.navigationModeComboBox.addItem("Guided")
-        layout.addWidget(self.navigationModeComboBox)
-
-        self.permissionsModeLabel = qt.QLabel("Permissions:", self)
-        layout.addWidget(self.permissionsModeLabel)
-
-        self.permissionsModeComboBox = qt.QComboBox(self)
-        self.permissionsModeComboBox.setObjectName("permissionsModeComboBox")
-        self.permissionsModeComboBox.setToolTip(
-            "Unrestricted: every control is available. "
-            "User: role-based restrictions are enforced; log in to access controls."
-        )
-        self.permissionsModeComboBox.addItem("Unrestricted")
-        self.permissionsModeComboBox.addItem("User")
-        layout.addWidget(self.permissionsModeComboBox)
-
     def _apply_read_only(self) -> None:
-        # Database / login / mode dropdowns are global state that should not
-        # be changed from inside a workflow step. Disable them, but leave
-        # the device (transducer info) button live - it is purely
-        # informational and useful from any page.
-        for w in (
-            self.databasePopupButton,
-            self.loginPopupButton,
-            self.navigationModeComboBox,
-            self.permissionsModeComboBox,
-        ):
+        # Database / login global state should not be changed from inside
+        # a workflow step. Disable the database button (and the login button,
+        # unless the host opted in to keep it active), but leave the device
+        # (transducer info) button live - it is purely informational and
+        # useful from any page.
+        disabled = [self.databasePopupButton]
+        if not self._keep_login_button_active:
+            disabled.append(self.loginPopupButton)
+        for w in disabled:
             w.setEnabled(False)
 
         # Wire the device-info button to the Data module's popup handler so
         # the same dialog is reachable from every workflow page.
         self.devicePopupButton.clicked.connect(self._open_device_popup_via_data_module)
+
+        # Modules that opt in (e.g. Home) keep the sign-in icon live and
+        # delegate to Data's existing login popup handler.
+        if self._keep_login_button_active:
+            self.loginPopupButton.clicked.connect(self._open_login_popup_via_data_module)
 
     def _open_device_popup_via_data_module(self, _checked: bool = False) -> None:
         """Delegate to ``OpenLIFUDataWidget.onOpenDevicePopup`` (read-only header)."""
@@ -202,48 +180,32 @@ class ModuleHeaderWidget(qt.QWidget):
             return
         handler()
 
+    def _open_login_popup_via_data_module(self, _checked: bool = False) -> None:
+        """Delegate to ``OpenLIFUDataWidget.onOpenLoginPopup`` (read-only header opt-in)."""
+        try:
+            data_widget = slicer.util.getModuleWidget("OpenLIFUData")
+        except Exception as e:  # noqa: BLE001
+            logging.warning("Could not resolve OpenLIFUData widget: %s", e)
+            return
+        handler = getattr(data_widget, "onOpenLoginPopup", None)
+        if handler is None:
+            logging.warning(
+                "OpenLIFUData widget has no onOpenLoginPopup handler."
+            )
+            return
+        handler()
+
     # ------------------------------------------------------------------
     # update methods (display-only; safe to call any time)
     # ------------------------------------------------------------------
 
     def updateNavigationModeComboBox(self) -> None:
-        """Sync the Navigation dropdown with the Home module's guided-mode state."""
-        from OpenLIFULib.guided_mode_util import get_guided_mode_state
-
-        try:
-            in_guided_mode = bool(get_guided_mode_state())
-        except (AttributeError, RuntimeError):
-            return
-        combo = self.navigationModeComboBox
-        target_index = 1 if in_guided_mode else 0
-        if combo.currentIndex == target_index:
-            return
-        was_blocked = combo.blockSignals(True)
-        try:
-            combo.setCurrentIndex(target_index)
-        finally:
-            combo.blockSignals(was_blocked)
+        """Deprecated no-op (the Navigation dropdown was removed)."""
+        return None
 
     def updatePermissionsModeComboBox(self) -> None:
-        """Sync the Permissions dropdown with the Login module's user_account_mode state.
-
-        Safe to call before the Login module is instantiated.
-        """
-        from OpenLIFULib.user_account_mode_util import get_user_account_mode_state
-
-        try:
-            uam = bool(get_user_account_mode_state())
-        except (AttributeError, RuntimeError):
-            return
-        combo = self.permissionsModeComboBox
-        target_index = 1 if uam else 0
-        if combo.currentIndex == target_index:
-            return
-        was_blocked = combo.blockSignals(True)
-        try:
-            combo.setCurrentIndex(target_index)
-        finally:
-            combo.blockSignals(was_blocked)
+        """Deprecated no-op (the Permissions dropdown was removed)."""
+        return None
 
     def updateStatusButtons(self) -> None:
         """Reflect database / login / device / cloud-sync state in the icon buttons.
@@ -354,10 +316,11 @@ class ModuleHeaderWidget(qt.QWidget):
             self.loginPopupButton.setToolTip(
                 "Not signed in. Click to open Account."
             )
-        # Login requires a database to be useful. This still applies even in
-        # the read-only header (the button is already disabled there, but
-        # leaving the tooltip accurate is helpful).
-        if not self.read_only:
+        # Login requires a database to be useful. This applies even in
+        # the read-only header for the opt-in modules (e.g. Home) that keep
+        # the login button live; for fully read-only headers the button is
+        # already disabled so we just leave the tooltip accurate.
+        if not self.read_only or self._keep_login_button_active:
             self.loginPopupButton.setEnabled(db_connected)
         if not db_connected:
             self.loginPopupButton.setToolTip(
@@ -433,21 +396,22 @@ class ModuleHeaderWidget(qt.QWidget):
         # "Click to ..." tooltips that ``updateStatusButtons`` just installed
         # so they reflect that, and tell the user where to go to change
         # those settings. The device button stays interactive on every
-        # page so its tooltip is left untouched.
+        # page so its tooltip is left untouched. When the host module opted
+        # in to keep the login button active (e.g. Home), leave its tooltip
+        # alone too.
         if self.read_only:
             db_tip = self.databasePopupButton.toolTip
             self.databasePopupButton.setToolTip(
                 _strip_click_to(db_tip) + "\n\nChange in the Data module."
             )
-            login_tip = self.loginPopupButton.toolTip
-            self.loginPopupButton.setToolTip(
-                _strip_click_to(login_tip) + "\n\nChange in the Data module."
-            )
+            if not self._keep_login_button_active:
+                login_tip = self.loginPopupButton.toolTip
+                self.loginPopupButton.setToolTip(
+                    _strip_click_to(login_tip) + "\n\nChange in the Data module."
+                )
 
     def refresh_all(self) -> None:
         """Repaint every status indicator from current global state."""
-        self.updateNavigationModeComboBox()
-        self.updatePermissionsModeComboBox()
         self.updateStatusButtons()
 
 
@@ -465,6 +429,7 @@ def apply_module_layout(
     *,
     ui_namespace: object,
     header_read_only: bool,
+    keep_login_button_active: bool = False,
 ) -> ModuleHeaderWidget:
     """Restructure ``top_widget``'s top-level QVBoxLayout into header + body + footer.
 
@@ -486,8 +451,7 @@ def apply_module_layout(
     The header widget's children are exposed on ``ui_namespace`` (typically
     ``self.ui``) under the same names they have inside ``ModuleHeaderWidget``,
     so existing ``self.ui.databasePopupButton`` / ``self.ui.loginPopupButton``
-    / ``self.ui.devicePopupButton`` / ``self.ui.navigationModeComboBox`` /
-    ``self.ui.permissionsModeComboBox`` references continue to work without
+    / ``self.ui.devicePopupButton`` references continue to work without
     modification.
 
     Returns the new :class:`ModuleHeaderWidget`.
@@ -524,7 +488,11 @@ def apply_module_layout(
             body_items.append(it)
 
     # 1) Insert the shared header at the top.
-    header = ModuleHeaderWidget(read_only=header_read_only, parent=top_widget)
+    header = ModuleHeaderWidget(
+        read_only=header_read_only,
+        keep_login_button_active=keep_login_button_active,
+        parent=top_widget,
+    )
     layout.addWidget(header)
 
     # 2) Wrap the body in a vertical-only scroll area.
@@ -559,10 +527,6 @@ def apply_module_layout(
             "databasePopupButton",
             "loginPopupButton",
             "devicePopupButton",
-            "navigationModeLabel",
-            "navigationModeComboBox",
-            "permissionsModeLabel",
-            "permissionsModeComboBox",
         ):
             setattr(ui_namespace, attr, getattr(header, attr))
 
@@ -603,27 +567,13 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
         except Exception:  # noqa: BLE001
             pass
 
-        # --- Home (navigation mode) ---
-        try:
-            home_pn = slicer.util.getModuleLogic("OpenLIFUHome").getParameterNode()
-            widget_owner.addObserver(
-                home_pn,
-                vtk.vtkCommand.ModifiedEvent,
-                lambda caller, event: header.updateNavigationModeComboBox(),
-            )
-        except Exception:  # noqa: BLE001
-            pass
-
-        # --- Login (permissions mode + active user) ---
+        # --- Login (active user only; the permissions dropdown was removed) ---
         try:
             login_pn = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
             widget_owner.addObserver(
                 login_pn,
                 vtk.vtkCommand.ModifiedEvent,
-                lambda caller, event: (
-                    header.updatePermissionsModeComboBox(),
-                    header.updateStatusButtons(),
-                ),
+                lambda caller, event: header.updateStatusButtons(),
             )
         except Exception:  # noqa: BLE001
             pass

@@ -225,6 +225,34 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     @display_errors
     def onLoadDatabaseClicked(self, checked:bool):
+        # If a database is already connected, the button acts as Disconnect.
+        if self.logic.db is not None:
+            if not slicer.util.confirmYesNoDisplay(
+                "Disconnect from the current database?\n\n"
+                "The stored database location will also be cleared so it does not auto-reconnect.",
+                windowTitle="Disconnect Database",
+                parent=slicer.util.mainWindow(),
+            ):
+                return
+            self.logic.db = None
+            # Clear the persisted database path so auto-connect won't fire next time.
+            try:
+                qsettings = qt.QSettings()
+                qsettings.beginGroup("OpenLIFU")
+                qsettings.remove("databaseDirectory")
+                qsettings.endGroup()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                self.ui.databaseDirectoryLineEdit.setCurrentPath("")
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                self.ui.databaseDirectoryLineEdit.findChild(qt.QLineEdit).setStyleSheet("border: none;")
+            except Exception:  # noqa: BLE001
+                pass
+            return
+
         path = Path(self.ui.databaseDirectoryLineEdit.currentPath)
 
         if not self.logic.path_is_openlifu_database_root(path):
@@ -327,7 +355,25 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         else:
             self.ui.databaseConnectedStateLabel.text = "🟢 Database (connected)"
 
+    def updateConnectDatabaseButton(self):
+        """Toggle the connect button between Connect / Disconnect based on db state."""
+        if self.logic.db is None:
+            self.ui.connectDatabaseButton.setText("Connect Database")
+            self.ui.connectDatabaseButton.setToolTip(
+                "Connect to the database at the directory shown above."
+            )
+        else:
+            self.ui.connectDatabaseButton.setText("Disconnect Database")
+            self.ui.connectDatabaseButton.setToolTip(
+                "Disconnect from the currently loaded database."
+            )
+
     def updateWorkflowControls(self):
+        # OpenLIFUDatabase is no longer part of Workflow.modules, so
+        # inject_workflow_controls_into_placeholder hides the placeholder
+        # and leaves self.workflow_controls as None. Nothing to update.
+        if self.workflow_controls is None:
+            return
         if self.logic.db is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Connect a database to proceed."
@@ -337,6 +383,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     def updateAll(self):
         self.updateDatabaseConnectedStateLabel()
+        self.updateConnectDatabaseButton()
         self.updateWorkflowControls()
 
     def on_database_directory_path_changed(self, new_path: str):

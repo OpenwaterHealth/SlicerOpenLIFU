@@ -143,11 +143,14 @@ class OpenLIFUDataParameterNode:
 class CreateNewSessionDialog(qt.QDialog):
     """ Create new session dialog """
 
-    def __init__(self, transducer_ids: List[str], protocol_ids: List[str], volume_ids: List[str], parent="mainWindow"):
+    def __init__(self, transducer_ids: List[str], protocol_ids: List[str], volume_ids: List[str],
+                 subject_id: Optional[str] = None, parent="mainWindow"):
         """ Args:
                 transducer_ids: IDs of the transducers available in the loaded database
                 protocol_ids: IDs of the protocols available in the loaded database
                 volume_ids: IDs of the volumes available for the selected subject in the loaded database
+                subject_id: When provided, an "Add Volume" (+) button appears next to the volume
+                    combo so the user can import a volume into this subject without leaving the dialog.
         """
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
 
@@ -156,6 +159,7 @@ class CreateNewSessionDialog(qt.QDialog):
         self.transducer_ids = transducer_ids
         self.protocol_ids = protocol_ids
         self.volume_ids = volume_ids
+        self._subject_id = subject_id
         self.setup()
 
     def setup(self) -> None:
@@ -177,9 +181,18 @@ class CreateNewSessionDialog(qt.QDialog):
         formLayout.addRow(_("Protocol:"), self.protocol)
         self.add_items_to_combobox(self.protocol, self.protocol_ids, "protocol")
 
+        # Volume row: combo + optional "+" import button.
         self.volume = qt.QComboBox()
-        formLayout.addRow(_("Volume:"), self.volume)
         self.add_items_to_combobox(self.volume, self.volume_ids, "volume")
+        volumeRowLayout = qt.QHBoxLayout()
+        volumeRowLayout.addWidget(self.volume)
+        if self._subject_id is not None:
+            self.addVolumeButton = qt.QPushButton("+")
+            self.addVolumeButton.setToolTip("Import a new volume for this subject.")
+            self.addVolumeButton.setMaximumWidth(30)
+            self.addVolumeButton.clicked.connect(self.on_add_volume_clicked)
+            volumeRowLayout.addWidget(self.addVolumeButton)
+        formLayout.addRow(_("Volume:"), volumeRowLayout)
 
         # Add load checkbox into same row as Ok and Cancel buttons
         buttonLayout = qt.QHBoxLayout()
@@ -206,6 +219,40 @@ class CreateNewSessionDialog(qt.QDialog):
         else:
             for item in itemList:
                 comboBox.addItem(item, item)
+
+    def on_add_volume_clicked(self) -> None:
+        """Open AddNewVolumeDialog, import the volume into this subject, refresh the combo."""
+        if self._subject_id is None:
+            return
+        volumedlg = AddNewVolumeDialog(parent=self)
+        returncode, volume_filepath, volume_name, volume_id = volumedlg.customexec_()
+        if not returncode:
+            return
+        if not (len(volume_filepath) and len(volume_name) and len(volume_id)):
+            slicer.util.errorDisplay("Required fields are missing", parent=self)
+            return
+        slicer.util.getModuleLogic("OpenLIFUData").add_volume_to_database(
+            self._subject_id, volume_id, volume_name, volume_filepath
+        )
+        self._reload_volumes(select_id=volume_id)
+
+    def _reload_volumes(self, select_id: Optional[str] = None) -> None:
+        """Repopulate the volume combo from the database and optionally select an entry."""
+        db = get_cur_db()
+        if db is None or self._subject_id is None:
+            return
+        self.volume_ids = db.get_volume_ids(self._subject_id)
+        was_blocked = self.volume.blockSignals(True)
+        try:
+            self.volume.clear()
+            self.volume.setEnabled(True)
+            self.add_items_to_combobox(self.volume, self.volume_ids, "volume")
+        finally:
+            self.volume.blockSignals(was_blocked)
+        if select_id is not None:
+            idx = self.volume.findData(select_id)
+            if idx >= 0:
+                self.volume.setCurrentIndex(idx)
 
     def validateInputs(self) -> None:
 
@@ -742,7 +789,8 @@ class LoadSessionDialog(qt.QDialog):
         sessiondlg = CreateNewSessionDialog(
             transducer_ids=db_transducer_ids,
             protocol_ids=db_protocol_ids,
-            volume_ids=db_volume_ids
+            volume_ids=db_volume_ids,
+            subject_id=self.subject_id,
         )
         returncode, session_parameters, load_checked = sessiondlg.customexec_()
 
@@ -4842,14 +4890,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Restructure the page into header (interactive on Data) + scrollable
         # body + footer. The header's children are aliased onto self.ui so
         # existing self.ui.databasePopupButton / self.ui.loginPopupButton /
-        # self.ui.devicePopupButton / self.ui.navigationModeComboBox /
-        # self.ui.permissionsModeComboBox references continue to work.
+        # self.ui.devicePopupButton references continue to work.
         self.module_header = apply_module_layout(
             uiWidget, ui_namespace=self.ui, header_read_only=False
         )
 
         # Wire all the global-state observers that keep the header's status
-        # buttons and dropdowns in sync (DB, login, device, cloud sync, Home
+        # buttons in sync (DB, login, device, cloud sync, Home
         # navigation). Same plumbing every other module uses for its
         # read-only header. Registration is deferred one event-loop tick
         # internally; see wire_passive_module_header.
@@ -4880,7 +4927,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
 
         # Inject guided mode workflows
-        self.inject_workflow_controls_into_placeholder()
+        # OpenLIFUData lives *outside* Workflow.modules (Home jumps straight to
+        # OpenLIFUSession). We still want a Back/Next footer so the operator
+        # can return to Home or step forward into Session, so we use the
+        # off-workflow helper instead of the registry-backed one.
+        self.inject_custom_workflow_controls_into_placeholder(
+            previous_module_name="OpenLIFUHome",
+            next_module_name="OpenLIFUSession",
+            include_session_controls=False,
+            enforce_can_proceed_always=True,
+            on_back_override=self._on_data_manager_back,
+        )
 
         # ---- Internal connections and observers ----
         self.logic.call_on_subject_changed(self.on_subject_changed)
@@ -4922,19 +4979,6 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         except Exception as e:
             logging.warning("Could not load device button icon: %s", e)
 
-        # Top toolbar: Navigation (guided mode) and Permissions (user account
-        # mode) dropdowns. Each dropdown drives the corresponding global state
-        # via existing helpers; the comboboxes are kept in sync with those
-        # states through ``updateNavigationModeComboBox`` /
-        # ``updatePermissionsModeComboBox`` (called from observers below and on
-        # enter()).
-        self.ui.navigationModeComboBox.currentIndexChanged.connect(
-            self.onNavigationModeChanged
-        )
-        self.ui.permissionsModeComboBox.currentIndexChanged.connect(
-            self.onPermissionsModeChanged
-        )
-
         # Dependencies collapsible section: status checks + install buttons.
         # These previously lived on the Login page; they are independent of the
         # login state so they belong on the Data page.
@@ -4965,6 +5009,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.manageSolutionsPushButton.clicked.connect(self.onManageSolutionsClicked)
         self.ui.manageRunsPushButton.clicked.connect(self.onManageRunsClicked)
 
+        # Administration collapsible section: admin-only controls. The
+        # collapsible itself is hidden for non-admins via the
+        # ``slicer.openlifu.allowed-roles`` tag wired by Login. ``Manage
+        # Accounts`` is owned by the Login module; we forward the click here
+        # so the same dialog is reachable from the Data page.
+        manage_accounts_btn = getattr(self.ui, "manageAccountsButton", None)
+        if manage_accounts_btn is not None:
+            manage_accounts_btn.clicked.connect(self.onManageAccountsClicked)
+
         # ---- Issue updates that may not have been triggered yet ---
         
         # Make sure parameter node is initialized (needed for module reload)
@@ -4973,17 +5026,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.update_loadSubjectButton_enabled()
+        self.update_db_dependent_sections_enabled()
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_sessionCollapsibleButton_checked_and_enabled()
         self.updateWorkflowControls()
+        self._updateAdministrationStatusLabels()
+        self._updateManageAccountsButton()
 
-        # Sync the navigation dropdown with the current guided-mode state
-        # (Home is safe to touch during setup). The shared header's
-        # passive wiring (installed by wire_passive_module_header) also
-        # observes the Home parameter node and keeps the dropdown in sync
-        # on every change, so we don't need a separate observer here.
         self._initDependencyStatus()
-        self.module_header.updateNavigationModeComboBox()
 
         # IMPORTANT: defer ALL OpenLIFULogin interaction out of setup().
         #
@@ -5116,6 +5166,22 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.logic.subject = None
         self.logic.clear_session()
         self.update_loadSubjectButton_enabled()
+        self.update_db_dependent_sections_enabled()
+        self._updateAdministrationStatusLabels()
+        self._updateManageAccountsButton()
+
+    def update_db_dependent_sections_enabled(self) -> None:
+        """Disable the Subject / Protocols / Transducers sections when no
+        database is connected so the user can't try to expand or interact with
+        them. Re-enables them when a database is loaded."""
+        db_loaded = get_cur_db() is not None
+        for name in ("subjectCollapsibleButton", "protocolsCollapsibleButton", "transducersCollapsibleButton"):
+            collapsible = getattr(self.ui, name, None)
+            if collapsible is None:
+                continue
+            collapsible.setEnabled(db_loaded)
+            if not db_loaded:
+                collapsible.collapsed = True
 
     def on_subject_changed(self, subject: Optional["openlifu.db.Subject"] = None):
         self.logic.clear_session()
@@ -5473,15 +5539,95 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             self.ui.sessionStatusStackedWidget.setCurrentIndex(1)
 
     def updateWorkflowControls(self):
+        if self.workflow_controls is None:
+            return
         if self.logic.subject is None:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Load a subject to proceed."
+            self.workflow_controls.status_text = "Load a subject and session to proceed."
         elif self._parameterNode is None or self._parameterNode.loaded_session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Load a session to proceed."
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Session loaded, proceed to the next step."
+
+    @display_errors
+    def _on_data_manager_back(self) -> None:
+        """Custom Back handler for the off-workflow Data Manager footer.
+
+        If a session is loaded, prompt to save/discard it (same flow as the
+        in-workflow Exit button) before returning to Home. Without this hook,
+        Back would leave the session loaded but jump back to Home, leaving
+        the user in an inconsistent state.
+        """
+        from OpenLIFULib.guided_mode_util import confirm_exit_session_dialog
+        if self._parameterNode is not None and self._parameterNode.loaded_session is not None:
+            choice = confirm_exit_session_dialog()
+            if choice == "cancel":
+                return
+            if choice == "save":
+                self.logic.save_session()
+            self.logic.clear_session(clean_up_scene=True)
+        slicer.util.selectModule("OpenLIFUHome")
+
+    # ------------------------------------------------------------------
+    # Administration section (admin-only)
+    # ------------------------------------------------------------------
+
+    def _updateAdministrationStatusLabels(self) -> None:
+        """Refresh the display-only User Mode / Guided Mode labels in the
+        Administration section. The values are env-driven (single
+        ``OPENLIFU_USER_MODE`` env var) and cannot be changed at runtime."""
+        from OpenLIFULib.kiosk_util import (
+            USER_MODE_ENV_VAR,
+            get_user_mode,
+        )
+        on = bool(get_user_mode())
+        on_off = "ON" if on else "OFF"
+        for name in ("userModeStatusLabel", "guidedModeStatusLabel"):
+            label = getattr(self.ui, name, None)
+            if label is None:
+                continue
+            label.setText(on_off)
+        env_help = getattr(self.ui, "userModeEnvHelpLabel", None)
+        if env_help is not None:
+            env_help.setText(
+                f"User Mode is set via the {USER_MODE_ENV_VAR} environment variable "
+                f"on launch and cannot be changed at runtime. Currently {on_off}."
+            )
+
+    def _updateManageAccountsButton(self) -> None:
+        """Enable/disable the Administration > Manage Accounts button based on
+        whether a database is connected."""
+        btn = getattr(self.ui, "manageAccountsButton", None)
+        if btn is None:
+            return
+        if get_cur_db() is None:
+            btn.setEnabled(False)
+            btn.setToolTip("Connect a database first.")
+        else:
+            btn.setEnabled(True)
+            btn.setToolTip("Open the Manage Accounts dialog.")
+
+    @display_errors
+    def onManageAccountsClicked(self, checked: bool = False) -> None:
+        """Forward the click to OpenLIFULogin's Manage Accounts handler."""
+        try:
+            login_widget = slicer.util.getModuleWidget("OpenLIFULogin")
+        except Exception as exc:  # noqa: BLE001
+            slicer.util.errorDisplay(
+                f"Could not open Manage Accounts: {exc}",
+                parent=slicer.util.mainWindow(),
+            )
+            return
+        handler = getattr(login_widget, "onManageAccountsButtonclicked", None)
+        if handler is None:
+            slicer.util.errorDisplay(
+                "Manage Accounts handler is unavailable.",
+                parent=slicer.util.mainWindow(),
+            )
+            return
+        handler(False)
 
     def onParameterNodeModified(self, caller, event) -> None:
         # Pass any new session onto the home module global workflow object
@@ -5501,41 +5647,29 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
 
-    def updateNavigationModeComboBox(self) -> None:
-        """Sync the Navigation dropdown with the Home module's guided-mode state.
-
-        Thin pass-through to the shared header so legacy call sites keep
-        working; the real implementation lives on
-        :py:meth:`ModuleHeaderWidget.updateNavigationModeComboBox`.
+    def _is_blocked_for_non_admin(self) -> bool:
+        """Return ``True`` when the Data Manager should refuse to open for the
+        current user (user-account-mode is on and the active user is not an
+        admin). When this returns ``True``, ``enter`` bounces the user back
+        to Home with a warning dialog.
         """
-        self.module_header.updateNavigationModeComboBox()
-
-    @display_errors
-    def onNavigationModeChanged(self, index: int) -> None:
-        """Enter or exit guided mode in response to the Navigation dropdown."""
-        if index == 1:
-            # Defer to the Home logic so the same start-of-workflow gating
-            # (login, database selected, etc.) is enforced.
-            slicer.util.getModuleLogic("OpenLIFUHome").start_guided_mode()
-        else:
-            set_guided_mode_state(False)
-        # If start_guided_mode rejected the request, snap the dropdown back.
-        self.module_header.updateNavigationModeComboBox()
-
-    def updatePermissionsModeComboBox(self) -> None:
-        """Sync the Permissions dropdown with the Login module's user_account_mode state.
-
-        Thin pass-through to the shared header so legacy call sites keep
-        working; the real implementation lives on
-        :py:meth:`ModuleHeaderWidget.updatePermissionsModeComboBox`.
-        """
-        self.module_header.updatePermissionsModeComboBox()
-
-    @display_errors
-    def onPermissionsModeChanged(self, index: int) -> None:
-        """Toggle user account mode in response to the Permissions dropdown."""
-        set_user_account_mode_state(index == 1)
-        self.updatePermissionsGating()
+        try:
+            uam = bool(get_user_account_mode_state())
+        except (AttributeError, RuntimeError):
+            uam = False
+        if not uam:
+            return False
+        try:
+            cur_user = get_current_user()
+        except (AttributeError, RuntimeError):
+            cur_user = None
+        user_id = getattr(cur_user, "id", None)
+        is_real_user = (
+            cur_user is not None
+            and user_id not in (None, "anonymous", "default_admin")
+        )
+        user_roles = list(getattr(cur_user, "roles", None) or [])
+        return not (is_real_user and "admin" in user_roles)
 
     def updatePermissionsGating(self) -> None:
         """Gate the body of the Data page when permissions are restricted.
@@ -6004,6 +6138,18 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        # Admin-only when user-account-mode is on: bounce non-admin users
+        # back to Home. This catches navigations via Slicer's stock module
+        # selector toolbar (the Home dashboard button is already disabled
+        # for non-admins in _refresh_status_rows).
+        if self._is_blocked_for_non_admin():
+            slicer.util.warningDisplay(
+                "The Data Manager is restricted to admin users. "
+                "Sign in as an admin to access it.",
+                windowTitle="Admin access required",
+            )
+            qt.QTimer.singleShot(0, lambda: slicer.util.selectModule("OpenLIFUHome"))
+            return
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()

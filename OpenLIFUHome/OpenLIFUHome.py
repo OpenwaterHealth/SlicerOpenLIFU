@@ -16,8 +16,11 @@ from slicer.util import VTKObservationMixin
 # OpenLIFULib imports
 from OpenLIFULib import get_cur_db
 from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
+from OpenLIFULib.kiosk_util import (
+    get_require_login_on_home,
+)
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
-from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state
+from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state, set_user_account_mode_state
 from OpenLIFULib.util import display_errors
 
 from OpenLIFUCloudSync import getCloudSyncLogic
@@ -64,6 +67,27 @@ class OpenLIFUHomeParameterNode:
 #
 
 
+class _StatusLabelClickFilter(qt.QObject):
+    """Event filter that turns a QLabel into a clickable hyperlink-style trigger.
+
+    Used by the Home status rows so the Database / User / Transducer value
+    labels open their respective popup dialogs (same as the header icons).
+    """
+
+    def __init__(self, parent: qt.QObject, callback) -> None:
+        super().__init__(parent)
+        self._callback = callback
+
+    def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+        if event.type() == qt.QEvent.MouseButtonRelease:
+            try:
+                self._callback()
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+        return False
+
+
 class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Operator-focused landing page.
 
@@ -92,8 +116,13 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Shared status header (read-only on Home; the Data Manager owns the
         # interactive header). Home does not use a workflow-controls footer,
         # so apply_module_layout simply inserts the header above the body.
+        # Home opts in to keep the sign-in icon live in the header so the
+        # operator can sign in / out without leaving the landing page.
         self.module_header = apply_module_layout(
-            uiWidget, ui_namespace=self.ui, header_read_only=True
+            uiWidget,
+            ui_namespace=self.ui,
+            header_read_only=True,
+            keep_login_button_active=True,
         )
 
         uiWidget.setMRMLScene(slicer.mrmlScene)
@@ -125,16 +154,24 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         wire_passive_module_header(self, self.module_header)
 
         # Buttons.
-        self.ui.signInPushButton.clicked.connect(self.on_sign_in_clicked)
         self.ui.newSessionPushButton.clicked.connect(self.on_new_session_clicked)
         self.ui.loadSessionPushButton.clicked.connect(self.on_load_session_clicked)
         self.ui.dataManagerPushButton.clicked.connect(self.on_data_manager_clicked)
+
+        # Status rows: clicking on a value label opens the matching popup
+        # (database / sign-in / device) -- same dialogs as the header icons.
+        self._install_status_label_click_handlers()
 
         # Status-row observers and initial paint are deferred one tick so the
         # OpenLIFUDatabase / OpenLIFULogin / OpenLIFUSonicationControl logics
         # are constructed before we touch them.
         qt.QTimer.singleShot(0, self._wire_status_row_observers)
         qt.QTimer.singleShot(0, self._refresh_status_rows)
+
+        # Apply env-var-driven mode locks (OPENLIFU_GUIDED_MODE +
+        # OPENLIFU_REQUIRE_LOGIN implies user-account mode). Deferred so the
+        # Login parameter node exists before we touch it.
+        qt.QTimer.singleShot(0, self._apply_env_locked_modes)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -152,6 +189,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def enter(self) -> None:
         """Called each time the user opens this module."""
         self.initializeParameterNode()
+        self._apply_env_locked_modes()
         self._refresh_status_rows()
 
     def exit(self) -> None:
@@ -238,6 +276,25 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception:  # noqa: BLE001
             pass
 
+    def _apply_env_locked_modes(self) -> None:
+        """Push the env-driven user-mode value into its live parameter nodes.
+
+        ``OPENLIFU_USER_MODE`` (and its legacy aliases) controls all three of
+        require-login / user-account-mode / guided-mode together. Re-runs each
+        time Home is shown (cheap; idempotent) so a transient scene clear
+        cannot leave the modes in an inconsistent state.
+        """
+        from OpenLIFULib.kiosk_util import get_user_mode
+        target = bool(get_user_mode())
+        try:
+            set_guided_mode_state(target)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            set_user_account_mode_state(target)
+        except Exception:  # noqa: BLE001
+            pass
+
     def _refresh_status_rows(self) -> None:
         """Repaint the three status rows and gate the primary buttons."""
         # ---- Database row ----
@@ -270,19 +327,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             roles = list(getattr(cur_user, "roles", None) or [])
             role_str = f" ({', '.join(roles)})" if roles else ""
             self.ui.userStatusValueLabel.setText(f"Signed in as {who}{role_str}")
-            self.ui.signInPushButton.setText("Account")
         else:
             self.ui.userStatusValueLabel.setText("Not signed in")
-            self.ui.signInPushButton.setText("Sign In")
-        self.ui.signInPushButton.setEnabled(db is not None)
-        if db is None:
-            self.ui.signInPushButton.setToolTip(
-                "Connect a database in the Data Manager first."
-            )
-        else:
-            self.ui.signInPushButton.setToolTip(
-                "Open the user account panel to sign in or out."
-            )
 
         # ---- Transducer row ----
         try:
@@ -310,13 +356,24 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.transducerStatusValueLabel.setText("Not connected")
 
         # ---- Primary buttons gating ----
-        # New / Load Session require a connected database and (if user-account
-        # mode is on) a signed-in real user.
-        sessions_enabled = (db is not None) and (not uam or is_real_user)
+        # Soft-kiosk: when "require sign-in on Home" is effective and no real
+        # user is signed in, lock down everything except the Sign In button.
+        require_login = get_require_login_on_home()
+        kiosk_locked = require_login and not is_real_user
+
+        # New / Load Session require a connected database AND (a signed-in
+        # real user when user-account-mode or kiosk lock is in effect).
+        sessions_enabled = (
+            db is not None
+            and (not uam or is_real_user)
+            and not kiosk_locked
+        )
         self.ui.newSessionPushButton.setEnabled(sessions_enabled)
         self.ui.loadSessionPushButton.setEnabled(sessions_enabled)
         if db is None:
             gate_tip = "Connect a database in the Data Manager first."
+        elif kiosk_locked:
+            gate_tip = "Sign in to start or load a session (sign-in is required on this system)."
         elif uam and not is_real_user:
             gate_tip = "Sign in to start or load a session."
         else:
@@ -331,6 +388,31 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.loadSessionPushButton.setToolTip(
                 "Pick a subject and load an existing session."
             )
+
+        # Data Manager is admin-only when user-account-mode is on:
+        # * kiosk-locked (sign-in required but no real user) -> disabled
+        # * UAM on and signed-in user is not an admin -> disabled
+        # * Otherwise -> enabled
+        user_roles = list(getattr(cur_user, "roles", None) or [])
+        is_admin = is_real_user and "admin" in user_roles
+        if kiosk_locked:
+            data_mgr_enabled = False
+            data_mgr_tip = (
+                "Sign in to access the Data Manager (sign-in is required on this system)."
+            )
+        elif uam and not is_admin:
+            data_mgr_enabled = False
+            data_mgr_tip = (
+                "The Data Manager is restricted to admin users. Sign in as an admin to access it."
+            )
+        else:
+            data_mgr_enabled = True
+            data_mgr_tip = (
+                "Open the Data Manager (power-user view of subjects, sessions, "
+                "protocols, transducers, and the database)."
+            )
+        self.ui.dataManagerPushButton.setEnabled(data_mgr_enabled)
+        self.ui.dataManagerPushButton.setToolTip(data_mgr_tip)
 
     # ------------------------------------------------------------------
     # Button handlers
@@ -347,13 +429,55 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         return slicer.modules.OpenLIFUDataWidget
 
     @display_errors
-    def on_sign_in_clicked(self, checked: bool) -> None:
+    def on_sign_in_clicked(self, checked: bool = False) -> None:
         from OpenLIFUData import _ModuleWidgetPopupDialog
         dlg = _ModuleWidgetPopupDialog(
             "OpenLIFULogin", "Account", parent=slicer.util.mainWindow()
         )
         dlg.exec_()
         self._refresh_status_rows()
+
+    @display_errors
+    def on_database_label_clicked(self) -> None:
+        from OpenLIFUData import _ModuleWidgetPopupDialog
+        dlg = _ModuleWidgetPopupDialog(
+            "OpenLIFUDatabase", "Database", parent=slicer.util.mainWindow()
+        )
+        dlg.exec_()
+        self._refresh_status_rows()
+
+    @display_errors
+    def on_transducer_label_clicked(self) -> None:
+        data_widget = self._ensure_data_widget()
+        handler = getattr(data_widget, "onOpenDevicePopup", None)
+        if handler is not None:
+            handler()
+        self._refresh_status_rows()
+
+    def _install_status_label_click_handlers(self) -> None:
+        """Make the three Home status value labels clickable.
+
+        Each label opens the same popup dialog that the corresponding header
+        icon would: Database / Sign-in / Device. Tooltips (set in the .ui)
+        are the only affordance hint; the labels render as plain text.
+        """
+        cursor = qt.QCursor(qt.Qt.PointingHandCursor)
+        self._status_label_click_filters = []
+        targets = [
+            (self.ui.databaseStatusValueLabel, self.on_database_label_clicked),
+            (self.ui.userStatusValueLabel, self.on_sign_in_clicked),
+            (self.ui.transducerStatusValueLabel, self.on_transducer_label_clicked),
+        ]
+        for label, handler in targets:
+            label.setCursor(cursor)
+            f = _StatusLabelClickFilter(label, handler)
+            label.installEventFilter(f)
+            self._status_label_click_filters.append(f)
+
+        grid = getattr(self.ui, "statusGridLayout", None)
+        if grid is not None:
+            grid.setColumnStretch(0, 1)
+            grid.setColumnStretch(1, 4)
 
     @display_errors
     def on_new_session_clicked(self, checked: bool) -> None:
@@ -391,6 +515,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             transducer_ids=db.get_transducer_ids(),
             protocol_ids=protocol_ids,
             volume_ids=db.get_volume_ids(subject_id),
+            subject_id=subject_id,
         )
         returncode, session_parameters, load_checked = sessiondlg.customexec_()
         if not returncode:

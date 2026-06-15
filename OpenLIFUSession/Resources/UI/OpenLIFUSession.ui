@@ -247,33 +247,78 @@
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="photoscansCountLabel">
+       <widget class="ctkCollapsibleButton" name="photoscansCollapsible">
         <property name="text">
          <string>Photoscans (0)</string>
         </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; padding: 6px 4px;</string>
+        <property name="collapsed">
+         <bool>true</bool>
         </property>
+        <layout class="QVBoxLayout" name="photoscansBodyLayout">
+         <item>
+          <widget class="QLabel" name="photoscansListLabel">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="solutionsCountLabel">
+       <widget class="ctkCollapsibleButton" name="solutionsCollapsible">
         <property name="text">
          <string>Solutions (0)</string>
         </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; padding: 6px 4px;</string>
+        <property name="collapsed">
+         <bool>true</bool>
         </property>
+        <layout class="QVBoxLayout" name="solutionsBodyLayout">
+         <item>
+          <widget class="QLabel" name="solutionsListLabel">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="runsCountLabel">
+       <widget class="ctkCollapsibleButton" name="runsCollapsible">
         <property name="text">
          <string>Runs (0)</string>
         </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; padding: 6px 4px;</string>
+        <property name="collapsed">
+         <bool>true</bool>
         </property>
+        <layout class="QVBoxLayout" name="runsBodyLayout">
+         <item>
+          <widget class="QLabel" name="runsListLabel">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
