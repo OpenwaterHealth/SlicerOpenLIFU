@@ -830,7 +830,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         import openlifu.plan.param_constraint
 
         for _, row in df.iterrows():
-            row["Status"] = row["Status"] if row["Status"] else openlifu.plan.param_constraint.PARAM_STATUS_SYMBOLS["ok"]
+            row["Status"] = row["Status"] if row["Status"] else "-"
             items = [create_noneditable_QStandardItem(format_value(cell)) for cell in row]
             self.globalAnalysisTableModel.appendRow(items)#
 
