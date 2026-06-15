@@ -110,10 +110,7 @@ UI is defined in `Resources/UI/<ModuleName>.ui` (Qt Designer XML) and loaded in 
 
 ### OpenLIFULib Key Patterns
 
-**Lazy importing** (`lazyimport.py`): The `openlifu` library and its dependencies are heavy and may not be installed yet. All imports go through lazy-import functions:
-- `openlifu_lz()` — returns the `openlifu` module, installing it first if needed
-- `xarray_lz()`, `bcrypt_lz()`, `threadpoolctl_lz()` — same pattern
-- For IDE type-checking, real imports are guarded under `if TYPE_CHECKING:`
+**Dependency checks** (`dependency_utils.py`): The `openlifu` library and its dependencies are required by the extension but may not be installed yet. Each Slicer module checks/install-prompts from `enter()` via `ensure_python_requirements_for_module_enter()`. Runtime code should use normal local imports such as `import openlifu.plan`, `import xarray`, or `import bcrypt` in the function/method where the dependency is used. Do not add new `_lz()` lazy import helpers. For IDE type-checking, imports may still be guarded under `if TYPE_CHECKING:`.
 
 **Parameter node wrappers** (`parameter_node_utils.py`): Thin wrapper classes (`SlicerOpenLIFUProtocol`, `SlicerOpenLIFUTransducer`, `SlicerOpenLIFUSession`, etc.) exist solely to enable Slicer's `@parameterNodeWrapper` serialization of `openlifu` types without importing `openlifu` at module load time. Each wrapper has a corresponding `@parameterNodeSerializer` class that serializes to/from JSON via the wrapped object's `to_json()`/`from_json()` methods.
 
@@ -157,7 +154,7 @@ Individual module tests create state needed by subsequent tests — they are not
 ## Development Gotchas
 
 ### Adding new pip dependencies
-Adding a package to `python-requirements.txt` is not enough. You must also add an `import` check for it in `python_requirements_exist()` in `lazyimport.py`. Otherwise, users who already have the other deps installed will never trigger a reinstall, and the new package won't be found. Follow the existing `bcrypt`/`threadpoolctl` pattern.
+Adding a package to `python-requirements.txt` is not enough. You must also add an `import` or `find_spec` check for it in `python_requirements_exist()` in `dependency_utils.py`. Otherwise, users who already have the other deps installed will never trigger a reinstall, and the new package won't be found. Follow the existing `bcrypt`/`threadpoolctl` pattern.
 
 ### Updating the pinned openlifu version
 When updating the pinned `openlifu` version in `OpenLIFULib/OpenLIFULib/Resources/python-requirements.txt`, consider whether the sample database tags in `OpenLIFULib/OpenLIFULib/sample_data.py` need to be updated. Remind about this.

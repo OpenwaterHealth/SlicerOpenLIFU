@@ -2,10 +2,10 @@ import qt
 import slicer
 import time
 import os
-import requests
 import signal
 import logging
 from pathlib import Path
+from OpenLIFULib import ensure_python_requirements_for_module_enter
 from OpenLIFULib.util import display_errors
 from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
@@ -66,6 +66,10 @@ class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
         self.logic.statusHelper.statusChanged.connect(
             self.onCloudStatusChanged)
 
+        self.updateGUI()
+
+    def enter(self):
+        ensure_python_requirements_for_module_enter()
         self.updateGUI()
 
     def onCloudStatusChanged(self, message, timestamp):
@@ -239,6 +243,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         return self._cloudTokens.get("idToken") if self._cloudTokens else None
 
     def refreshCloudToken(self):
+        import requests
+
         url = f"https://securetoken.googleapis.com/v1/token?key={self.apiKey}"
         try:
             r = requests.post(url, data={
@@ -257,6 +263,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def login(self, email, password):
         """Authenticates user and saves refresh token."""
+        import requests
+
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
         try:
             r = requests.post(url, json={

@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Optional, TYPE_CHECKING
 
 import qt
@@ -11,11 +12,19 @@ from OpenLIFULib.util import (
 if TYPE_CHECKING:
     import openlifu.db
 
+_restricted_anonymous_user = SimpleNamespace(
+    id="anonymous",
+    password_hash="",
+    roles=[],
+    name="Anonymous",
+    description="Restricted fallback user before OpenLIFU dependencies are available.",
+)
+
 def get_current_user() -> "openlifu.db.User":
     """Get the active openlifu user. If no user is logged in or user account
     mode is off, a default user is returned, with the intention of being the most
     restricted"""
-    return get_openlifu_login_logic().active_user
+    return get_openlifu_login_logic().active_user or _restricted_anonymous_user
 
 def get_user_account_mode_state() -> bool:
     """Get user account mode state from the OpenLIFU Login module's parameter node"""

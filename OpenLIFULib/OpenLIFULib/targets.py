@@ -2,7 +2,6 @@ from typing import List, TYPE_CHECKING, Optional
 import numpy as np
 import slicer
 from slicer import vtkMRMLMarkupsFiducialNode
-from OpenLIFULib.lazyimport import openlifu_lz
 from OpenLIFULib.coordinate_system_utils import get_xx2mm_scale_factor, get_xxx2ras_matrix
 
 if TYPE_CHECKING:
@@ -65,10 +64,12 @@ def fiducial_to_openlifu_point_in_transducer_coords(fiducial_node:vtkMRMLMarkups
     """Given a fiducial node with at least one point, return an openlifu Point in the local coordinates of the given transducer.
     If name is provided then it will be used as the name of the openlifu Point. Otherwise we use the label on the control point.
     """
+    import openlifu.geo
+
     if fiducial_node.GetNumberOfControlPoints() < 1:
         raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
     position = (np.linalg.inv(slicer.util.arrayFromTransformMatrix(transducer.transform_node)) @ np.array([*fiducial_node.GetNthControlPointPosition(0),1]))[:3] # TODO handle 4th coord here actually, would need to unprojectivize
-    return openlifu_lz().geo.Point(
+    return openlifu.geo.Point(
         position=position,
         name = name if name is not None else fiducial_node.GetNthControlPointLabel(0),
         id = f"{fiducial_to_openlifu_point_id(fiducial_node)}-in-transducer-coords",
@@ -81,9 +82,11 @@ def fiducial_to_openlifu_point(fiducial_node:vtkMRMLMarkupsFiducialNode) -> "ope
     This tries to be roughly an inverse operation of `openlifu_point_to_fiducial`, but isn't an inverse when it comes to
     for example the coordinates, and units. The opnenlifu point ID is however preserved between this function and
     `openlifu_point_to_fiducial`, because it is used as the node name."""
+    import openlifu.geo
+
     if fiducial_node.GetNumberOfControlPoints() < 1:
         raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
-    return openlifu_lz().geo.Point(
+    return openlifu.geo.Point(
         position = np.array(fiducial_node.GetNthControlPointPosition(0)),
         name = fiducial_node.GetNthControlPointLabel(0),
         id = fiducial_to_openlifu_point_id(fiducial_node),

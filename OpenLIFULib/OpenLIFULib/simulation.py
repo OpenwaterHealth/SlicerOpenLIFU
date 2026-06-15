@@ -6,7 +6,6 @@ from vtk.util import numpy_support
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
-from OpenLIFULib.lazyimport import xarray_lz
 
 if TYPE_CHECKING:
     import openlifu
@@ -48,6 +47,8 @@ def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolume
     """Convert a volume node into a DataArray in the coordinates of a given transducer.
     See also `make_volume_from_xarray_in_transducer_coords`.
     """
+    import xarray
+
     coords = protocol.sim_setup.get_coords()
     origin = np.array([coord_array[0].item() for coord_array in coords.values()])
     spacing = np.array([np.diff(coord_array)[0].item() for coord_array in coords.values()])
@@ -70,7 +71,7 @@ def make_xarray_in_transducer_coords_from_volume(volume_node:vtkMRMLScalarVolume
         mode = 'nearest', # method of sampling beyond input array boundary
         output_shape = coords_shape,
     )
-    volume_resampled_dataarray = xarray_lz().DataArray(
+    volume_resampled_dataarray = xarray.DataArray(
         volume_resampled_array,
         coords=coords,
         name=volume_node.GetName(),

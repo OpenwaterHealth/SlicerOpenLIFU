@@ -8,7 +8,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/util.py
   OpenLIFULib/guided_mode_util.py
   OpenLIFULib/user_account_mode_util.py
-  OpenLIFULib/lazyimport.py
+  OpenLIFULib/dependency_utils.py
   OpenLIFULib/parameter_node_utils.py
   OpenLIFULib/session.py
   OpenLIFULib/transducer.py

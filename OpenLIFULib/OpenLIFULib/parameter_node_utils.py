@@ -13,10 +13,9 @@ from slicer.parameterNodeWrapper.serializers import createSerializerFromAnnotate
 import zlib
 import io
 import base64
-from OpenLIFULib.lazyimport import openlifu_lz, xarray_lz
 
 if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
+    import openlifu
     import openlifu.db
     import openlifu.geo
     import openlifu.plan
@@ -25,8 +24,8 @@ if TYPE_CHECKING:
     import xarray
 
 
-# This very thin wrapper around openlifu.plan.Protocol is needed to do our lazy importing of openlifu
-# while still providing type annotations that the parameter node wrapper can use.
+# This very thin wrapper around openlifu.plan.Protocol is needed so parameter node
+# wrappers can keep type annotations without importing openlifu at module load time.
 # If we tried to make openlifu.plan.Protocol directly supported as a type by parameter nodes, we would
 # get errors from parameterNodeWrapper as it tries to use typing.get_type_hints. This fails because
 # get_type_hints tries to *evaluate* the type annotations like "openlifu.plan.Protocol" possibly before
@@ -174,8 +173,10 @@ class OpenLIFUProtocolSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIF
         """
         Reads and returns the value with the given name from the parameterNode.
         """
+        import openlifu.plan
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUProtocol(openlifu_lz().plan.Protocol.from_json(json_string))
+        return SlicerOpenLIFUProtocol(openlifu.plan.Protocol.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUTransducerSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUTransducerWrapper)):
@@ -192,8 +193,10 @@ class OpenLIFUTransducerSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenL
         """
         Reads and returns the value with the given name from the parameterNode.
         """
+        import openlifu.xdc
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUTransducerWrapper(openlifu_lz().xdc.Transducer.from_json(json_string))
+        return SlicerOpenLIFUTransducerWrapper(openlifu.xdc.Transducer.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSessionWrapper)):
@@ -204,8 +207,10 @@ class OpenLIFUSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFU
         )
 
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSessionWrapper:
+        import openlifu.db
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUSessionWrapper(openlifu_lz().db.Session.from_json(json_string))
+        return SlicerOpenLIFUSessionWrapper(openlifu.db.Session.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUSolutionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSolutionWrapper)):
@@ -216,8 +221,10 @@ class OpenLIFUSolutionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIF
         )
 
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSolutionWrapper:
+        import openlifu.plan
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUSolutionWrapper(openlifu_lz().plan.Solution.from_json(json_string))
+        return SlicerOpenLIFUSolutionWrapper(openlifu.plan.Solution.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPoint)):
@@ -234,8 +241,10 @@ class OpenLIFUPointSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPo
         """
         Reads and returns the value with the given name from the parameterNode.
         """
+        import openlifu.geo
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUPoint(openlifu_lz().geo.Point.from_json(json_string))
+        return SlicerOpenLIFUPoint(openlifu.geo.Point.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFURunSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFURun)):
@@ -246,8 +255,10 @@ class OpenLIFURunSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFURun)
         )
 
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFURun:
+        import openlifu.plan
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFURun(openlifu_lz().plan.Run.from_json(json_string))
+        return SlicerOpenLIFURun(openlifu.plan.Run.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUSolutionAnalysisSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSolutionAnalysis)):
@@ -258,8 +269,10 @@ class OpenLIFUSolutionAnalysisSerializer(SlicerOpenLIFUSerializerBaseMaker(Slice
         )
 
     def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSolutionAnalysis:
+        import openlifu.plan
+
         json_string = parameterNode.GetParameter(name)
-        return SlicerOpenLIFUSolutionAnalysis(openlifu_lz().plan.SolutionAnalysis.from_json(json_string))
+        return SlicerOpenLIFUSolutionAnalysis(openlifu.plan.SolutionAnalysis.from_json(json_string))
 
 @parameterNodeSerializer
 class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPhotoscanWrapper)):
@@ -276,8 +289,10 @@ class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLI
         """
         Reads and returns the value with the given name from the parameterNode.
         """
+        import openlifu.nav.photoscan
+
         json_string = parameterNode.GetParameter(name)    
-        return SlicerOpenLIFUPhotoscanWrapper(openlifu_lz().nav.photoscan.Photoscan.from_json(json_string))
+        return SlicerOpenLIFUPhotoscanWrapper(openlifu.nav.photoscan.Photoscan.from_json(json_string))
 
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):
@@ -296,8 +311,10 @@ class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXA
         """
         Reads and returns the value with the given name from the parameterNode.
         """
+        import xarray
+
         ds_serialized = parameterNode.GetParameter(name)
-        ds_deserialized = xarray_lz().open_dataset(base64.b64decode(ds_serialized.encode('utf-8')))
+        ds_deserialized = xarray.open_dataset(base64.b64decode(ds_serialized.encode('utf-8')))
         return SlicerOpenLIFUXADataset(ds_deserialized)
 
 @parameterNodeSerializer

@@ -1,12 +1,7 @@
-from OpenLIFULib.lazyimport import (
-    openlifu_lz,
-    openlifu_sdk_lz,
-    xarray_lz,
-    bcrypt_lz,
-    threadpoolctl_lz,
-    segno_lz,
+from OpenLIFULib.dependency_utils import (
     check_and_install_kwave_binaries,
     check_and_install_python_requirements,
+    ensure_python_requirements_for_module_enter,
     install_python_requirements,
     python_requirements_exist,
     get_required_openlifu_version,
@@ -43,12 +38,6 @@ from OpenLIFULib.simulation import (
 from OpenLIFULib.solution import SlicerOpenLIFUSolution
 
 __all__ = [
-    "openlifu_lz",
-    "openlifu_sdk_lz",
-    "xarray_lz",
-    "bcrypt_lz",
-    "threadpoolctl_lz",
-    "segno_lz",
     "SlicerOpenLIFUSolution",
     "SlicerOpenLIFUProtocol",
     "SlicerOpenLIFUTransducer",
@@ -72,6 +61,7 @@ __all__ = [
     "assign_openlifu_metadata_to_volume_node",
     "check_and_install_kwave_binaries",
     "check_and_install_python_requirements",
+    "ensure_python_requirements_for_module_enter",
     "install_python_requirements",
     "python_requirements_exist",
     "get_required_openlifu_version",

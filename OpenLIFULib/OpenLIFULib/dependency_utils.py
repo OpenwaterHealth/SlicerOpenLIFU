@@ -1,16 +1,13 @@
-"""Tools for lazy installing and lazy importing of the extension's python requirements"""
+"""Tools for checking and installing the extension's Python requirements."""
 
-from typing import TYPE_CHECKING
 from pathlib import Path
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
 import slicer
 import importlib
-import sys
 import qt
 from OpenLIFULib.util import BusyCursor
-if TYPE_CHECKING:
-    import openlifu # This import is deferred at runtime, but it is done here for IDE and static analysis purposes
-    import xarray
+
+_openlifu_version_mismatch_warning_shown = False
 
 def install_python_requirements() -> None:
     """Install python requirements"""
@@ -21,12 +18,18 @@ def install_python_requirements() -> None:
 def python_requirements_exist() -> bool:
     """Check and return whether python requirements are installed."""
     try:
-        import threadpoolctl
-        import bcrypt
-        import segno
+        import bcrypt  # noqa: F401
+        import requests  # noqa: F401
+        import segno  # noqa: F401
+        import threadpoolctl  # noqa: F401
+        import xarray  # noqa: F401
     except ModuleNotFoundError:
         return False
-    return importlib.util.find_spec('openlifu') is not None # openlifu import causes a delay so we check for it without actually importing yet
+    # These imports can cause a delay, so check for them without importing.
+    return (
+        importlib.util.find_spec('openlifu') is not None
+        and importlib.util.find_spec('openlifu_sdk') is not None
+    )
 
 def check_and_install_python_requirements(prompt_if_found = False) -> None:
     """Check whether python requirements are installed and at the required version, and prompt to install/update if not.
@@ -63,6 +66,45 @@ def check_and_install_python_requirements(prompt_if_found = False) -> None:
                 text="OpenLIFU python dependencies are still not found. The install may have failed.",
                 windowTitle="Python dependencies still not found"
             )
+
+def ensure_python_requirements_for_module_enter() -> bool:
+    """Check/install Python requirements when a module is entered.
+
+    Returns True when requirements are available after the check. In testing mode,
+    missing requirements are installed automatically. In interactive mode, users are
+    prompted to install missing requirements. Version mismatches are only warned
+    about once per application session.
+    """
+    global _openlifu_version_mismatch_warning_shown
+
+    if slicer.app.testingEnabled():
+        if not python_requirements_exist():
+            install_python_requirements()
+        return python_requirements_exist()
+
+    check_and_install_python_requirements(prompt_if_found=False)
+    requirements_exist = python_requirements_exist()
+    if not requirements_exist:
+        return False
+
+    if not openlifu_version_matches() and not _openlifu_version_mismatch_warning_shown:
+        required = get_required_openlifu_version() or "unknown"
+        try:
+            import importlib.metadata
+            installed = importlib.metadata.version('openlifu')
+        except importlib.metadata.PackageNotFoundError:
+            installed = "unknown"
+        slicer.util.warningDisplay(
+            text=(
+                f"The installed openlifu version ({installed}) does not match "
+                f"the required version ({required}). Use the Login module's "
+                "Python requirements button to update it."
+            ),
+            windowTitle="OpenLIFU version mismatch",
+        )
+        _openlifu_version_mismatch_warning_shown = True
+
+    return True
 
 def get_required_openlifu_version() -> "Optional[str]":
     """Return the required openlifu version pinned in
@@ -106,6 +148,12 @@ def check_and_install_kwave_binaries() -> bool:
     Returns whether they were successfully installed (or just already present).
     This assumes that openlifu can be imported already, so do not call this function until after that is assured.
     """
+    import openlifu.util.assets
+
+    if slicer.app.testingEnabled():
+        openlifu.util.assets.download_and_install_kwave_assets()
+        return True
+
     from openlifu.util.assets import get_kwave_paths
     kwave_paths = get_kwave_paths()
     if all(p.exists() for p,_ in kwave_paths):
@@ -131,73 +179,3 @@ def check_and_install_kwave_binaries() -> bool:
             else:
                 raise RuntimeError("Unrecognized dialog action") # should never happen
     return all(p.exists() for p,_ in kwave_paths)
-
-def openlifu_lz() -> "openlifu":
-    """Import openlifu and return the module, checking that it is installed along the way."""
-    if "openlifu" not in sys.modules:
-        # In testing mode, automatically install missing requirements without prompting
-        if slicer.app.testingEnabled():
-            if not python_requirements_exist():
-                install_python_requirements()
-        else:
-            check_and_install_python_requirements(prompt_if_found=False)
-
-        with BusyCursor():
-            import openlifu
-            import openlifu_sdk
-            import openlifu.bf
-            import openlifu.db
-            import openlifu.geo
-            import openlifu.nav.photoscan
-            import openlifu.plan
-            import openlifu.seg.seg_methods
-            import openlifu.seg.skinseg
-            import openlifu.sim
-            import openlifu.util.assets
-            import openlifu.xdc
-            import openlifu.xdc.util
-
-        if slicer.app.testingEnabled():
-            # Ensure kwave assets are present (no-op if already installed)
-            from openlifu.util.assets import download_and_install_kwave_assets
-            download_and_install_kwave_assets()
-        elif not check_and_install_kwave_binaries():
-            raise RuntimeError("The openlifu library requires kwave binaries to be installed. There may be issues trying to run simulations.")
-
-    return sys.modules["openlifu"]
-
-def xarray_lz() -> "xarray":
-    """Import xarray and return the module, checking that openlifu is installed along the way."""
-    if "openlifu" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
-        import xarray
-    return sys.modules["xarray"]
-
-def bcrypt_lz() -> "bcrypt":
-    """Import bcrypt and return the module, checking that it is installed along the way."""
-    if "bcrypt" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
-        with BusyCursor():
-            import bcrypt
-    return sys.modules["bcrypt"]
-
-def threadpoolctl_lz() -> "threadpoolctl":
-    """Import threadpoolctl and return the module, checking that it is installed along the way."""
-    if "threadpoolctl" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
-        import threadpoolctl
-    return sys.modules["threadpoolctl"]
-
-def segno_lz() -> "segno":
-    """Import segno and return the module, checking that it is installed along the way."""
-    if "segno" not in sys.modules:
-        check_and_install_python_requirements(prompt_if_found=False)
-        import segno
-    return sys.modules["segno"]
-
-def openlifu_sdk_lz() -> "openlifu_sdk":
-    """Import openlifu_sdk and return the module. openlifu_sdk is installed as a dependency
-    of openlifu, so openlifu_lz() must be called first to ensure it is available."""
-    if "openlifu_sdk" not in sys.modules:
-        openlifu_lz()
-    return sys.modules["openlifu_sdk"]
