@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING, Dict
+from typing import Callable, Optional, TYPE_CHECKING, Dict
 import qt
 import slicer
 from OpenLIFULib.util import display_errors, replace_widget
@@ -75,6 +75,8 @@ class WorkflowControls(qt.QWidget):
             previous_module_name:Optional[str],
             next_module_name:Optional[str],
             include_session_controls:bool=False,
+            enforce_can_proceed_always:bool=False,
+            on_back_override:Optional[Callable[[], None]]=None,
         ):
         """Guided mode controls QWidget
 
@@ -90,11 +92,19 @@ class WorkflowControls(qt.QWidget):
                 state based on whether there is a session or whether there is a database, so only include session controls if you know that
                 in the guided workflow there will definitely be a database connection and an active session during the modules in the workflow
                 that this widget is being added to.
+            enforce_can_proceed_always: When True, the Next button is gated on ``can_proceed`` even when the user is
+                not in guided mode. Useful for off-workflow footers (e.g. the Data Manager) where the precondition
+                ("a session must be loaded before navigating into the workflow") is real regardless of guided mode.
+            on_back_override: Optional callable invoked when Back is clicked instead of the default
+                ``selectModule(previous_module_name)``. Lets host modules run cleanup (e.g. close the
+                active session) before navigating away.
         """
         super().__init__(parent)
 
         self._can_proceed:bool = True
         self._status_text:str = ""
+        self._enforce_can_proceed_always:bool = bool(enforce_can_proceed_always)
+        self._on_back_override:Optional[Callable[[], None]] = on_back_override
 
         self.next_module_name = next_module_name
         self.previous_module_name = previous_module_name
@@ -156,6 +166,9 @@ class WorkflowControls(qt.QWidget):
         slicer.util.selectModule(self.next_module_name)
 
     def on_back(self):
+        if self._on_back_override is not None:
+            self._on_back_override()
+            return
         slicer.util.selectModule(self.previous_module_name)
 
     @display_errors
@@ -181,8 +194,9 @@ class WorkflowControls(qt.QWidget):
             return
         self.close_session(save=(choice == "save"))
 
-        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
-        home_module_logic.workflow_jump_ahead()
+        # Always return to Home after exiting a session. (workflow_jump_ahead would land
+        # the user on Session, which is the workflow's starting module post-PR-5.)
+        slicer.util.selectModule("OpenLIFUHome")
 
     def save_session(self):
         data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
@@ -199,7 +213,14 @@ class WorkflowControls(qt.QWidget):
         """Update next button enabledness and tooltip"""
         if not hasattr(self, "next_button"):
             return
-        enabled = (self.can_proceed or not get_guided_mode_state()) and self.next_module_name is not None
+        # NB: ``get_guided_mode_state`` must be evaluated lazily because this
+        # method runs from ``__init__`` (via ``self.update()``) while the
+        # OpenLIFUHome logic / parameter node is itself being constructed.
+        # Look it up only on the branch that needs it.
+        enabled = (
+            self.can_proceed
+            or (not self._enforce_can_proceed_always and not get_guided_mode_state())
+        ) and self.next_module_name is not None
         self.next_button.setEnabled(enabled)
         if enabled:
             self.next_button.setToolTip(f"Go to the {self.next_module_name} module.")
@@ -248,15 +269,19 @@ class Workflow:
     """
 
     modules = [
-        "OpenLIFUDatabase",
-        "OpenLIFUData",
         "OpenLIFUSession",
         "OpenLIFUPrePlanning",
         "OpenLIFUTransducerLocalization",
         "OpenLIFUSonicationPlanner",
         "OpenLIFUSonicationControl",
     ]
-    """Defines the order of the guided workflow."""
+    """Defines the order of the guided workflow.
+
+    OpenLIFUDatabase and OpenLIFUData are deliberately *not* in this list
+    -- they live outside the guided chain (Home jumps straight to Session)
+    and grow their own off-workflow footers via
+    :py:meth:`GuidedWorkflowMixin.inject_custom_workflow_controls_into_placeholder`.
+    """
 
     def __init__(self):
         
@@ -294,7 +319,7 @@ class Workflow:
 
     def starting_module(self) -> str:
         """Get the name of the first module in the guided workflow."""
-        return "OpenLIFUDatabase"
+        return "OpenLIFUSession"
 
     def furthest_module_to_which_can_proceed(self) -> str:
         """Get the name of the furthest module along the workflow to which we `can_proceed`."""
@@ -379,8 +404,46 @@ class GuidedWorkflowMixin:
         """Assuming the ScriptedLoadableModuleWidget UI has a widget named `workflowControlsPlaceholder`,
         replace it by the actual workflow controls widget tracked by the `Workflow` in the OpenLIFUHome module.
         An attribute self.workflow_controls can then be used to conveniently access the `WorkflowControls` widget.
+
+        If the module is not registered in :attr:`Workflow.modules` (e.g. Database / Data after the PR-5
+        restructure) the placeholder is hidden instead and ``self.workflow_controls`` is set to ``None``.
+        Off-workflow modules that still want a footer should call
+        :py:meth:`inject_custom_workflow_controls_into_placeholder` instead.
         """
         home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
-        self.workflow_controls = home_module_logic.workflow.workflow_controls[self.moduleName]
+        controls = home_module_logic.workflow.workflow_controls.get(self.moduleName)
+        if controls is None:
+            self.workflow_controls = None
+            placeholder = getattr(self.ui, "workflowControlsPlaceholder", None)
+            if placeholder is not None:
+                placeholder.hide()
+            return
+        self.workflow_controls = controls
         replace_widget(self.ui.workflowControlsPlaceholder, self.workflow_controls, self.ui)
+
+    def inject_custom_workflow_controls_into_placeholder(
+        self,
+        previous_module_name: Optional[str],
+        next_module_name: Optional[str],
+        include_session_controls: bool = False,
+        enforce_can_proceed_always: bool = False,
+        on_back_override: Optional[Callable[[], None]] = None,
+    ):
+        """Build a standalone :class:`WorkflowControls` for a module that is *not* in
+        :attr:`Workflow.modules`, and inject it into ``workflowControlsPlaceholder``.
+
+        The widget is not tracked by the :class:`Workflow` registry, so the host
+        module owns its lifecycle and is responsible for keeping ``can_proceed``
+        and ``status_text`` up to date.
+        """
+        controls = WorkflowControls(
+            parent=None,
+            previous_module_name=previous_module_name,
+            next_module_name=next_module_name,
+            include_session_controls=include_session_controls,
+            enforce_can_proceed_always=enforce_can_proceed_always,
+            on_back_override=on_back_override,
+        )
+        self.workflow_controls = controls
+        replace_widget(self.ui.workflowControlsPlaceholder, controls, self.ui)
 

@@ -195,12 +195,48 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         self.ui.transducerIdValueLabel.setText(transducer_id)
 
         # --- Counts ---
-        photoscan_count, solution_count, run_count = self._collection_counts(loaded_session)
-        self.ui.photoscansCountLabel.setText(f"Photoscans ({photoscan_count})")
-        self.ui.solutionsCountLabel.setText(f"Solutions ({solution_count})")
-        self.ui.runsCountLabel.setText(f"Runs ({run_count})")
+        photoscans, solutions, runs = self._collection_counts(loaded_session)
+        self._update_count_collapsible(
+            self.ui.photoscansCollapsible,
+            self.ui.photoscansListLabel,
+            "Photoscans",
+            photoscans,
+        )
+        self._update_count_collapsible(
+            self.ui.solutionsCollapsible,
+            self.ui.solutionsListLabel,
+            "Solutions",
+            solutions,
+        )
+        self._update_count_collapsible(
+            self.ui.runsCollapsible,
+            self.ui.runsListLabel,
+            "Runs",
+            runs,
+        )
 
         self._set_workflow_proceedable()
+
+    def _update_count_collapsible(self, collapsible, body_label, title: str, ids) -> None:
+        """Refresh a Photoscans/Solutions/Runs collapsible section.
+
+        - Header text shows ``f"{title} ({len(ids)})"``.
+        - Body lists the IDs, one per line.
+        - When the count is zero, the section is force-collapsed and the
+          button is disabled so the user cannot expand an empty list.
+        """
+        ids = list(ids or [])
+        count = len(ids)
+        collapsible.text = f"{title} ({count})"
+        if count == 0:
+            body_label.setText("-")
+            # ctkCollapsibleButton exposes ``collapsed`` as a Qt property; there
+            # is no ``setCollapsed`` setter in the PythonQt wrapper.
+            collapsible.collapsed = True
+            collapsible.setEnabled(False)
+        else:
+            body_label.setText("\n".join(ids))
+            collapsible.setEnabled(True)
 
     def _subject_display_name(self, loaded_session: "SlicerOpenLIFUSession") -> str:
         subject_id = loaded_session.get_subject_id()
@@ -241,17 +277,31 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         return "-", transducer_id
 
     def _collection_counts(self, loaded_session: "SlicerOpenLIFUSession") -> tuple:
-        photoscan_count = len(loaded_session.get_affiliated_photoscan_ids() or [])
-        solution_count = 0
-        run_count = 0
+        """Return ``(photoscan_ids, solution_ids, run_ids)`` for the session.
+
+        Each element is a list (possibly empty). Callers compute counts via ``len()``.
+        """
+        photoscan_ids = list(loaded_session.get_affiliated_photoscan_ids() or [])
+        solution_ids: list = []
+        run_ids: list = []
         try:
             db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
             if db is not None:
-                solution_count = len(db.get_solution_ids(loaded_session.get_subject_id(), loaded_session.get_session_id()) or [])
-                run_count = len(db.get_run_ids(loaded_session.get_subject_id(), loaded_session.get_session_id()) or [])
+                solution_ids = list(
+                    db.get_solution_ids(
+                        loaded_session.get_subject_id(),
+                        loaded_session.get_session_id(),
+                    ) or []
+                )
+                run_ids = list(
+                    db.get_run_ids(
+                        loaded_session.get_subject_id(),
+                        loaded_session.get_session_id(),
+                    ) or []
+                )
         except Exception:
             pass
-        return photoscan_count, solution_count, run_count
+        return photoscan_ids, solution_ids, run_ids
 
     def _set_workflow_proceedable(self) -> None:
         if not hasattr(self, "workflow_controls"):

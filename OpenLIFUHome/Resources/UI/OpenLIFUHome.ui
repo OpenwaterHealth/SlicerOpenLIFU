@@ -38,19 +38,8 @@
        <widget class="QLabel" name="databaseStatusValueLabel">
         <property name="text"><string>Not connected</string></property>
         <property name="wordWrap"><bool>true</bool></property>
-        <property name="textInteractionFlags">
-         <set>Qt::TextSelectableByMouse</set>
-        </property>
+        <property name="toolTip"><string>Click to open the database panel.</string></property>
        </widget>
-      </item>
-      <item row="0" column="2">
-       <spacer name="databaseStatusButtonSpacer">
-        <property name="orientation"><enum>Qt::Horizontal</enum></property>
-        <property name="sizeType"><enum>QSizePolicy::Minimum</enum></property>
-        <property name="sizeHint" stdset="0">
-         <size><width>80</width><height>0</height></size>
-        </property>
-       </spacer>
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="userStatusTitleLabel">
@@ -61,15 +50,7 @@
        <widget class="QLabel" name="userStatusValueLabel">
         <property name="text"><string>Not signed in</string></property>
         <property name="wordWrap"><bool>true</bool></property>
-        <property name="textInteractionFlags">
-         <set>Qt::TextSelectableByMouse</set>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="QPushButton" name="signInPushButton">
-        <property name="text"><string>Sign In</string></property>
-        <property name="toolTip"><string>Open the user account panel to sign in or out.</string></property>
+        <property name="toolTip"><string>Click to open the sign in / account panel.</string></property>
        </widget>
       </item>
       <item row="2" column="0">
@@ -81,19 +62,8 @@
        <widget class="QLabel" name="transducerStatusValueLabel">
         <property name="text"><string>Not connected</string></property>
         <property name="wordWrap"><bool>true</bool></property>
-        <property name="textInteractionFlags">
-         <set>Qt::TextSelectableByMouse</set>
-        </property>
+        <property name="toolTip"><string>Click to open the device connection panel.</string></property>
        </widget>
-      </item>
-      <item row="2" column="2">
-       <spacer name="transducerStatusButtonSpacer">
-        <property name="orientation"><enum>Qt::Horizontal</enum></property>
-        <property name="sizeType"><enum>QSizePolicy::Minimum</enum></property>
-        <property name="sizeHint" stdset="0">
-         <size><width>80</width><height>0</height></size>
-        </property>
-       </spacer>
       </item>
      </layout>
     </widget>
