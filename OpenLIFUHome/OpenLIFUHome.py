@@ -688,6 +688,10 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         dt = OpenLIFUDataTest()
         dt.load_subject_session()
 
+        from OpenLIFUSession import OpenLIFUSessionTest
+        st = OpenLIFUSessionTest()
+        st.workflow_session_dashboard()
+
         from OpenLIFUPrePlanning import OpenLIFUPrePlanningTest
         pt = OpenLIFUPrePlanningTest()
         pt._workflow_virtual_fit()
