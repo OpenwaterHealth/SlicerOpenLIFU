@@ -46,6 +46,41 @@ def get_openlifu_login_logic() -> "OpenLIFULoginLogic":
     """Get the logic of the OpenLIFU Login module"""
     return slicer.util.getModuleLogic('OpenLIFULogin')
 
+
+def register_module_callback(widget, register_func, remove_func, callback) -> None:
+    """Register ``callback`` via ``register_func`` and remember how to unregister it.
+
+    ``register_func(callback)`` is called immediately. The corresponding
+    ``remove_func`` is recorded on ``widget._registered_module_callbacks`` so
+    :func:`cleanup_module_callbacks` can detach everything when the widget
+    is destroyed (e.g. on Reload Module). Without this, bound-method
+    callbacks on destroyed widgets accumulate inside long-lived module
+    logic singletons and fire against stale Qt references.
+    """
+    register_func(callback)
+    if not hasattr(widget, "_registered_module_callbacks"):
+        widget._registered_module_callbacks = []
+    widget._registered_module_callbacks.append((remove_func, callback))
+
+
+def cleanup_module_callbacks(widget) -> None:
+    """Detach every callback registered via :func:`register_module_callback`.
+
+    Safe to call repeatedly and on widgets that never registered anything.
+    """
+    registered = getattr(widget, "_registered_module_callbacks", None)
+    if not registered:
+        return
+    for remove_func, callback in registered:
+        try:
+            remove_func(callback)
+        except Exception:  # noqa: BLE001
+            # A logic class may have been collected before the widget; the
+            # callbacks are already gone in that case.
+            pass
+    widget._registered_module_callbacks = []
+
+
 def display_errors(f):
     """Decorator to make functions forward their python exceptions along as slicer error displays"""
     def f_with_forwarded_errors(*args, **kwargs):

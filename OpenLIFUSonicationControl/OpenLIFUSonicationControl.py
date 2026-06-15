@@ -29,7 +29,14 @@ from OpenLIFULib import (
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import SlicerLogHandler, add_slicer_log_handler, display_errors, replace_widget
+from OpenLIFULib.util import (
+    SlicerLogHandler,
+    add_slicer_log_handler,
+    cleanup_module_callbacks,
+    display_errors,
+    register_module_callback,
+    replace_widget,
+)
 
 
 if TYPE_CHECKING:
@@ -381,12 +388,42 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.manuallyGetDeviceStatusPushButton.clicked.connect(self.onManuallyGetDeviceStatusPushButtonClicked)
         self.ui.testWithoutHardwareCheckBox.toggled.connect(self.onTestWithoutHardwareCheckBoxToggled)
         self.ui.viewRunsPushButton.clicked.connect(self.onViewRunsClicked)
-        self.logic.call_on_running_changed(self.onRunningChanged)
-        self.logic.call_on_sonication_complete(self.onRunCompleted)
-        self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
-        self.logic.call_on_run_hardware_status_updated(self.updateRunHardwareStatusLabel)
-        self.logic.call_on_lifu_device_connected(self.onDeviceConnected)
-        self.logic.call_on_lifu_device_disconnected(self.onDeviceDisconnected)
+        register_module_callback(
+            self,
+            self.logic.call_on_running_changed,
+            self.logic.remove_callback,
+            self.onRunningChanged,
+        )
+        register_module_callback(
+            self,
+            self.logic.call_on_sonication_complete,
+            self.logic.remove_callback,
+            self.onRunCompleted,
+        )
+        register_module_callback(
+            self,
+            self.logic.call_on_run_progress_updated,
+            self.logic.remove_callback,
+            self.updateRunProgressBar,
+        )
+        register_module_callback(
+            self,
+            self.logic.call_on_run_hardware_status_updated,
+            self.logic.remove_callback,
+            self.updateRunHardwareStatusLabel,
+        )
+        register_module_callback(
+            self,
+            self.logic.call_on_lifu_device_connected,
+            self.logic.remove_callback,
+            self.onDeviceConnected,
+        )
+        register_module_callback(
+            self,
+            self.logic.call_on_lifu_device_disconnected,
+            self.logic.remove_callback,
+            self.onDeviceDisconnected,
+        )
 
         self.logic.qt_signals.runProgressUpdated.connect(self.updateRunProgressBar)
         self.logic.qt_signals.finishScanning.connect(self.onRunCompleted)
@@ -425,6 +462,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         logging.debug("OpenLIFUSonicationControlWidget.cleanup() called")
+        cleanup_module_callbacks(self)
         self.removeObservers()
 
     def enter(self) -> None:
@@ -1559,6 +1597,27 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
     def call_on_lifu_device_data_received(self, f) -> None:
         """Set a function to be called whenever the LIFU device is disconnected. """
         self._on_lifu_device_data_received_callbacks.append(f)
+
+    def remove_callback(self, f) -> None:
+        """Remove ``f`` from any callback list it was registered on.
+
+        A single removal entry point so widget ``cleanup`` doesn't have to
+        track which list a callback ended up on. Silently no-ops if ``f`` is
+        not currently registered.
+        """
+        for callback_list in (
+            self._on_running_changed_callbacks,
+            self._on_sonication_run_complete_changed_callbacks,
+            self._on_run_progress_updated_callbacks,
+            self._on_run_hardware_status_updated_callbacks,
+            self._on_lifu_device_connected_callbacks,
+            self._on_lifu_device_disconnected_callbacks,
+            self._on_lifu_device_data_received_callbacks,
+        ):
+            try:
+                callback_list.remove(f)
+            except ValueError:
+                pass
 
     @property
     def running(self) -> bool:

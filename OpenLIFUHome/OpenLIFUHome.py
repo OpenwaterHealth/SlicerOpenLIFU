@@ -25,7 +25,11 @@ from OpenLIFULib.kiosk_util import (
 )
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state, set_user_account_mode_state
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import (
+    cleanup_module_callbacks,
+    display_errors,
+    register_module_callback,
+)
 
 #
 # OpenLIFUHome
@@ -177,14 +181,16 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        cleanup_module_callbacks(self)
         self.removeObservers()
 
         # Legacy: an older build of this module installed a "CloudSyncToolBar"
         # that navigated to the now-deprecated OpenLIFUCloudSync module.
         # Remove it on cleanup if it is still present from a previous launch.
+        # ``findChild`` raises when the widget is absent, so use the list
+        # variant instead.
         mw = slicer.util.mainWindow()
-        toolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
-        if toolBar:
+        for toolBar in slicer.util.findChildren(mw, "CloudSyncToolBar"):
             mw.removeToolBar(toolBar)
             toolBar.deleteLater()
 
@@ -248,14 +254,22 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def _wire_status_row_observers(self) -> None:
         """Hook events that should trigger a status-row refresh."""
         try:
-            slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(
-                lambda *_a, **_kw: self._refresh_status_rows()
+            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            register_module_callback(
+                self,
+                db_logic.call_on_db_changed,
+                db_logic.remove_db_changed_callback,
+                lambda *_a, **_kw: self._refresh_status_rows(),
             )
         except Exception:  # noqa: BLE001
             pass
         try:
-            slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
-                lambda *_a, **_kw: self._refresh_status_rows()
+            login_logic = slicer.util.getModuleLogic("OpenLIFULogin")
+            register_module_callback(
+                self,
+                login_logic.call_on_active_user_changed,
+                login_logic.remove_active_user_changed_callback,
+                lambda *_a, **_kw: self._refresh_status_rows(),
             )
         except Exception:  # noqa: BLE001
             pass
@@ -270,11 +284,17 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             pass
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
-            sc_logic.call_on_lifu_device_connected(
-                lambda *_a, **_kw: self._refresh_status_rows()
+            register_module_callback(
+                self,
+                sc_logic.call_on_lifu_device_connected,
+                sc_logic.remove_callback,
+                lambda *_a, **_kw: self._refresh_status_rows(),
             )
-            sc_logic.call_on_lifu_device_disconnected(
-                lambda *_a, **_kw: self._refresh_status_rows()
+            register_module_callback(
+                self,
+                sc_logic.call_on_lifu_device_disconnected,
+                sc_logic.remove_callback,
+                lambda *_a, **_kw: self._refresh_status_rows(),
             )
         except Exception:  # noqa: BLE001
             pass
