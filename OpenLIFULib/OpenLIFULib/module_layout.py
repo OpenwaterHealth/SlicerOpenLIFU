@@ -559,10 +559,16 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
     """
 
     def _wire_deferred():
+        from OpenLIFULib.util import register_module_callback
+
         # --- Database ---
         try:
-            slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(
-                lambda *_a, **_kw: header.updateStatusButtons()
+            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            register_module_callback(
+                widget_owner,
+                db_logic.call_on_db_changed,
+                db_logic.remove_db_changed_callback,
+                lambda *_a, **_kw: header.updateStatusButtons(),
             )
         except Exception:  # noqa: BLE001
             pass
@@ -578,8 +584,12 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
         except Exception:  # noqa: BLE001
             pass
         try:
-            slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
-                lambda *_a, **_kw: header.updateStatusButtons()
+            login_logic = slicer.util.getModuleLogic("OpenLIFULogin")
+            register_module_callback(
+                widget_owner,
+                login_logic.call_on_active_user_changed,
+                login_logic.remove_active_user_changed_callback,
+                lambda *_a, **_kw: header.updateStatusButtons(),
             )
         except Exception:  # noqa: BLE001
             pass
@@ -587,11 +597,17 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
         # --- Hardware device connect / disconnect ---
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
-            sc_logic.call_on_lifu_device_connected(
-                lambda *_a, **_kw: header.updateStatusButtons()
+            register_module_callback(
+                widget_owner,
+                sc_logic.call_on_lifu_device_connected,
+                sc_logic.remove_callback,
+                lambda *_a, **_kw: header.updateStatusButtons(),
             )
-            sc_logic.call_on_lifu_device_disconnected(
-                lambda *_a, **_kw: header.updateStatusButtons()
+            register_module_callback(
+                widget_owner,
+                sc_logic.call_on_lifu_device_disconnected,
+                sc_logic.remove_callback,
+                lambda *_a, **_kw: header.updateStatusButtons(),
             )
         except Exception:  # noqa: BLE001
             pass
@@ -599,8 +615,12 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
         # --- Cloud sync state ---
         try:
             from OpenLIFUCloudSync import getCloudSyncLogic
-            getCloudSyncLogic().call_on_state_changed(
-                lambda *_a, **_kw: header.updateStatusButtons()
+            cs_logic = getCloudSyncLogic()
+            register_module_callback(
+                widget_owner,
+                cs_logic.call_on_state_changed,
+                cs_logic.remove_state_changed_callback,
+                lambda *_a, **_kw: header.updateStatusButtons(),
             )
         except Exception:  # noqa: BLE001
             pass

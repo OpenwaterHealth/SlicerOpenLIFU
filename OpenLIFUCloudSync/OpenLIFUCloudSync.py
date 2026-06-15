@@ -198,6 +198,15 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     def call_on_state_changed(self, f: Callable[[], None]) -> None:
         self._state_callbacks.append(f)
 
+    def remove_state_changed_callback(self, f: Callable[[], None]) -> None:
+        """Unregister a callback previously registered via
+        :py:meth:`call_on_state_changed`. Silently no-ops if absent.
+        """
+        try:
+            self._state_callbacks.remove(f)
+        except ValueError:
+            pass
+
     def _notifyStateChanged(self) -> None:
         for f in list(self._state_callbacks):
             try:

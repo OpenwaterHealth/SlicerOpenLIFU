@@ -72,10 +72,12 @@ from OpenLIFULib.user_account_mode_util import (
 )
 from OpenLIFULib.util import (
     BusyCursor,
+    cleanup_module_callbacks,
     create_noneditable_QStandardItem,
     display_errors,
     ensure_list,
     get_openlifu_data_parameter_node,
+    register_module_callback,
     replace_widget,
 )
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
@@ -4940,7 +4942,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         )
 
         # ---- Internal connections and observers ----
-        self.logic.call_on_subject_changed(self.on_subject_changed)
+        register_module_callback(
+            self,
+            self.logic.call_on_subject_changed,
+            self.logic.remove_subject_changed_callback,
+            self.on_subject_changed,
+        )
 
         # ---- External connections and observers ----
 
@@ -4954,7 +4961,13 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
         
         # Connect to the database logic for updates related to database
-        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(self.onDatabaseChanged)
+        db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+        register_module_callback(
+            self,
+            db_logic.call_on_db_changed,
+            db_logic.remove_db_changed_callback,
+            self.onDatabaseChanged,
+        )
 
         # ---- Internal button setup ----
 
@@ -5075,8 +5088,12 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         except (AttributeError, RuntimeError):
             return
         try:
-            slicer.util.getModuleLogic("OpenLIFULogin").call_on_active_user_changed(
-                lambda _user: self.updatePermissionsGating()
+            login_logic = slicer.util.getModuleLogic("OpenLIFULogin")
+            register_module_callback(
+                self,
+                login_logic.call_on_active_user_changed,
+                login_logic.remove_active_user_changed_callback,
+                lambda _user: self.updatePermissionsGating(),
             )
         except (AttributeError, RuntimeError):
             pass
@@ -5088,11 +5105,17 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # signal-driven).
         try:
             sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
-            sc_logic.call_on_lifu_device_connected(
-                lambda *_args, **_kwargs: self._logDeviceStateTransition()
+            register_module_callback(
+                self,
+                sc_logic.call_on_lifu_device_connected,
+                sc_logic.remove_callback,
+                lambda *_args, **_kwargs: self._logDeviceStateTransition(),
             )
-            sc_logic.call_on_lifu_device_disconnected(
-                lambda *_args, **_kwargs: self._logDeviceStateTransition()
+            register_module_callback(
+                self,
+                sc_logic.call_on_lifu_device_disconnected,
+                sc_logic.remove_callback,
+                lambda *_args, **_kwargs: self._logDeviceStateTransition(),
             )
         except (AttributeError, RuntimeError):
             pass
@@ -5645,6 +5668,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        cleanup_module_callbacks(self)
         self.removeObservers()
 
     def _is_blocked_for_non_admin(self) -> bool:
@@ -6328,6 +6352,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         The provided callback should accept a single argument which will be the new loaded subject (or None if cleared).
         """
         self._on_subject_changed_callbacks.append(f)
+
+    def remove_subject_changed_callback(self, f : Callable[[Optional["openlifu.db.Subject"]],None]) -> None:
+        """Unregister a callback previously registered via
+        :py:meth:`call_on_subject_changed`. Silently no-ops if absent.
+        """
+        try:
+            self._on_subject_changed_callbacks.remove(f)
+        except ValueError:
+            pass
 
     @property
     def subject(self) -> Optional["openlifu.db.Subject"]:

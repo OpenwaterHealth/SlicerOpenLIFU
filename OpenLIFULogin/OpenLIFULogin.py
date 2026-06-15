@@ -40,7 +40,12 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
-from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node
+from OpenLIFULib.util import (
+    display_errors,
+    get_openlifu_data_parameter_node,
+    cleanup_module_callbacks,
+    register_module_callback,
+)
 
 # These imports are deferred at runtime using openlifu_lz, 
 # but are done here for IDE and static analysis purposes
@@ -610,12 +615,23 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # === Connections and UI setup =======
 
         # Connect to the database logic for updates related to database
-        slicer.util.getModuleLogic("OpenLIFUDatabase").call_on_db_changed(self.onDatabaseChanged)
+        db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+        register_module_callback(
+            self,
+            db_logic.call_on_db_changed,
+            db_logic.remove_db_changed_callback,
+            self.onDatabaseChanged,
+        )
 
         # Login
 
         self.ui.loginLogoutButton.clicked.connect(self.onLoginLogoutClicked)
-        self.logic.call_on_active_user_changed(self.onActiveUserChanged)
+        register_module_callback(
+            self,
+            self.logic.call_on_active_user_changed,
+            self.logic.remove_active_user_changed_callback,
+            self.onActiveUserChanged,
+        )
 
         # Account management
 
@@ -658,6 +674,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        cleanup_module_callbacks(self)
         self.removeObservers()
 
     def enter(self) -> None:
@@ -722,7 +739,12 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             db_logic = None
         if db_logic is not None:
             try:
-                db_logic.call_on_db_changed(self._onDatabaseChangedForBanners)
+                register_module_callback(
+                    self,
+                    db_logic.call_on_db_changed,
+                    db_logic.remove_db_changed_callback,
+                    self._onDatabaseChangedForBanners,
+                )
                 current_db = getattr(db_logic, "db", None)
                 for widget in self._user_account_banners:
                     widget.change_database_status(current_db)
@@ -1044,6 +1066,15 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
             f: Callback accepting a single argument with the new `active_user` value.
         """
         self._on_active_user_changed_callbacks.append(f)
+
+    def remove_active_user_changed_callback(self, f: Callable[[Optional["openlifu.db.User"]], None]) -> None:
+        """Unregister a callback previously registered via
+        :py:meth:`call_on_active_user_changed`. Silently no-ops if absent.
+        """
+        try:
+            self._on_active_user_changed_callbacks.remove(f)
+        except ValueError:
+            pass
 
     @property
     def active_user(self) -> "openlifu.db.User":

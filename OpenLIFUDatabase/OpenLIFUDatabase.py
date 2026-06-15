@@ -37,6 +37,8 @@ from OpenLIFULib.sample_data_gui import (
 from OpenLIFULib.util import (
     display_errors,
     add_slicer_log_handler_for_openlifu_object,
+    cleanup_module_callbacks,
+    register_module_callback,
 )
 
 # These imports are deferred at runtime using openlifu_lz, 
@@ -124,7 +126,12 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
         # === Connections and UI setup =======
 
-        self.logic.call_on_db_changed(self.onDatabaseChanged)
+        register_module_callback(
+            self,
+            self.logic.call_on_db_changed,
+            self.logic.remove_db_changed_callback,
+            self.onDatabaseChanged,
+        )
         self.sampleDatabaseSetupController = SampleDatabaseSetupController(
             parent=self.parent,
             path_line_edit=self.ui.databaseDirectoryLineEdit,
@@ -187,6 +194,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        cleanup_module_callbacks(self)
         if self.sampleDatabaseSetupController is not None:
             self.sampleDatabaseSetupController.cleanup()
         self.removeObservers()
@@ -623,6 +631,18 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
         The provided callback should accept a single bool argument which will be the new database_is_loaded state.
         """
         self._on_db_changed_callbacks.append(f)
+
+    def remove_db_changed_callback(self, f : Callable[[Optional["openlifu.db.Database"]],None]) -> None:
+        """Unregister a callback previously registered via :py:meth:`call_on_db_changed`.
+
+        Silently no-ops if ``f`` is not registered. Used by widget ``cleanup``
+        so reloads don't accumulate stale bound-method references that fire
+        against destroyed widgets.
+        """
+        try:
+            self._on_db_changed_callbacks.remove(f)
+        except ValueError:
+            pass
 
     @property
     def db(self) -> Optional["openlifu.db.Database"]:
