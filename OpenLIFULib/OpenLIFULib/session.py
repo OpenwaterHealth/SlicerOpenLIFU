@@ -53,11 +53,6 @@ class SlicerOpenLIFUSession:
     any photoscans associated with the session here so that they can be loaded into slicer as a SlicerOpenLIFUPhotoscan during
     transducer localization as required. SlicerOpenLIFUPhotoscanWrapper is a wrapper around an openlifu photoscan."""
 
-    last_generated_solution_id : Optional[str] = None
-    """The solution ID of the last solution that was generated for this session, or None if there isn't one.
-    We remember this so that if the currently active solution (there can only be one loaded at a time) is
-    the one that matches this ID then we can clean it up when unloading this session."""
-
     def get_session_id(self) -> str:
         """Get the ID of the underlying openlifu session"""
         return self.session.session.id
