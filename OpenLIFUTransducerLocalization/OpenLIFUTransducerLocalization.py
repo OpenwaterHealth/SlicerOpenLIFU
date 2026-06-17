@@ -746,13 +746,15 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 distance_array = distance_map.GetPointData().GetArray('Distance')
                 mean_distance = np.mean(distance_array) 
                 max_distance = np.max(distance_array)
-                # rms_distance = np.sqrt((np.square(distance_array).mean()))
+                rms_distance = np.sqrt((np.square(distance_array).mean()))
 
                 self.ui.PVICPRegistrationMetricLabel.text = (
                     f"ICP  metric: {icp_metric:.5f} mm, "
                     f"Iterations: {num_iter}, "
                     f"Mean distance: {mean_distance:.5f} mm, "
-                    f"Max distance: {max_distance:.5f} mm  "
+                    f"Max distance: {max_distance:.5f} mm,  "
+                    f"RMS distance: {rms_distance:.5f} mm  "
+
                 )
 
                 self.photoscan_to_volume_transform_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_icp_transform_node.GetID())
@@ -1042,7 +1044,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                 distance_array = distance_map.GetPointData().GetArray('Distance')
                 mean_distance = np.mean(distance_array)
                 max_distance = np.max(distance_array)
-                # rms_distance = np.sqrt((np.square(distance_array).mean()))
+                rms_distance = np.sqrt((np.square(distance_array).mean()))
                 
                 self._update_distance_map_visibility(
                     visible=True,
@@ -1054,7 +1056,8 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                     f"ICP  metric: {icp_metric:.5f} mm, "
                     f"Iterations: {num_iter}, "
                     f"Mean distance: {mean_distance:.5f} mm, "
-                    f"Max distance: {max_distance:.5f} mm  "
+                    f"Max distance: {max_distance:.5f} mm,  "
+                    f"RMS distance: {rms_distance:.5f} mm  "
                 )
 
                 self.transducer_to_volume_transform_node.SetAndObserveTransformNodeID(self.transducer_to_photoscan_icp_transform_node.GetID())
