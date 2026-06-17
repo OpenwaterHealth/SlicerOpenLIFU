@@ -260,6 +260,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
+        self.ui.testWithoutHardwareCheckBox.setChecked(slicer.app.testingEnabled())
 
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
@@ -295,6 +296,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.runPushButton.clicked.connect(self.onRunClicked)
         self.ui.abortPushButton.clicked.connect(self.onAbortClicked)
         self.ui.manuallyGetDeviceStatusPushButton.clicked.connect(self.onManuallyGetDeviceStatusPushButtonClicked)
+        self.ui.testWithoutHardwareCheckBox.toggled.connect(self.onTestWithoutHardwareCheckBoxToggled)
         self.logic.call_on_running_changed(self.onRunningChanged)
         self.logic.call_on_sonication_complete(self.onRunCompleted)
         self.logic.call_on_run_progress_updated(self.updateRunProgressBar)
@@ -338,8 +340,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Called each time the user opens this module."""
         logging.debug("OpenLIFUSonicationControlWidget.enter() called")
         dependencies_available = ensure_python_requirements_for_module_enter()
-        if dependencies_available:
-            self.logic.initialize_lifu_interface()
+        if dependencies_available and (slicer.app.testingEnabled() or self.logic.cur_lifu_interface is not None):
+            self.ensureLIFUInterfaceForSelectedMode()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateDeviceConnectedStateFromDevice()
@@ -409,10 +411,15 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             tooltip = "Cannot reinitialize LIFUInterface while a sonication is running."
         else:
             enabled = True
-            tooltip = "Reinitialize LIFUInterface, an interface to the connected hardware."
+            action = "Initialize" if self.logic.cur_lifu_interface is None else "Reinitialize"
+            selected_interface = "SimulatedLIFUInterface" if self.testWithoutHardwareSelected() else "real LIFUInterface"
+            tooltip = f"{action} {selected_interface}."
 
         self.ui.reinitializeLIFUInterfacePushButton.setEnabled(enabled)
         self.ui.reinitializeLIFUInterfacePushButton.setToolTip(tooltip)
+
+    def updateTestWithoutHardwareCheckBoxEnabled(self):
+        self.ui.testWithoutHardwareCheckBox.setEnabled(not self.logic.running)
 
     @display_errors
     def updateManuallyGetDeviceStatusPushButtonEnabled(self, checked=False):
@@ -471,6 +478,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def updateAllButtonsEnabled(self):
         self.updateReinitializeLIFUInterfacePushButtonEnabled()
+        self.updateTestWithoutHardwareCheckBoxEnabled()
         self.updateManuallyGetDeviceStatusPushButtonEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
@@ -479,13 +487,44 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateReinitializeLIFUInterfacePushButton(self):
         if self.logic.cur_lifu_interface is None:
             self.ui.reinitializeLIFUInterfacePushButton.setText("Initialize LIFUInterface")
-        elif self.logic.cur_lifu_interface._test_mode:
-            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface not in test_mode")
         else:
-            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface in test_mode")
+            self.ui.reinitializeLIFUInterfacePushButton.setText("Reinitialize LIFUInterface")
 
     def updateAllButtons(self):
         self.updateReinitializeLIFUInterfacePushButton()
+
+    def testWithoutHardwareSelected(self) -> bool:
+        return self.ui.testWithoutHardwareCheckBox.isChecked()
+
+    def ensureLIFUInterfaceForSelectedMode(self) -> bool:
+        """Ensure the active LIFUInterface matches the UI-selected hardware mode.
+
+        The "Test without hardware" checkbox is the source of truth for whether
+        to use SimulatedLIFUInterface or the real hardware interface. This method
+        initializes the interface if none exists, or reinitializes it if the
+        existing interface does not match the selected mode.
+
+        Returns:
+            True if a new interface was initialized or reinitialized; otherwise
+            False when the existing interface already matched the selected mode.
+        """
+        test_mode = self.testWithoutHardwareSelected()
+        changed_interface = False
+        if self.logic.cur_lifu_interface is None:
+            self.logic.initialize_lifu_interface(test_mode=test_mode)
+            changed_interface = True
+        elif self.logic.lifu_interface_is_simulated != test_mode:
+            self.logic.reinitialize_lifu_interface(test_mode=test_mode)
+            changed_interface = True
+
+        if changed_interface:
+            self.updateDeviceConnectedStateFromDevice()
+            self.updateVersionLabels()
+            self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+            self.updateAllButtons()
+            self.updateAllButtonsEnabled()
+
+        return changed_interface
 
     @display_errors
     def onRunCompleted(self, new_sonication_run_complete_state: bool):
@@ -531,20 +570,27 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateVersionLabels()
 
     @display_errors
+    def onTestWithoutHardwareCheckBoxToggled(self, checked=False):
+        logging.debug("onTestWithoutHardwareCheckBoxToggled() called with checked=%s", checked)
+        if self.logic.running:
+            was_blocked = self.ui.testWithoutHardwareCheckBox.blockSignals(True)
+            self.ui.testWithoutHardwareCheckBox.setChecked(self.logic.lifu_interface_is_simulated)
+            self.ui.testWithoutHardwareCheckBox.blockSignals(was_blocked)
+        self.updateAllButtons()
+        self.updateAllButtonsEnabled()
+
+    @display_errors
     def onReinitializeLIFUInterfacePushButtonClicked(self, checked=False):
         logging.debug("onReinitializeLIFUInterfacePushButtonClicked() called")
 
-        self.logic.initialize_lifu_interface()
+        test_mode = self.testWithoutHardwareSelected()
+        if self.logic.cur_lifu_interface is None:
+            logging.info("Initializing LIFUInterface with simulated hardware = %s", test_mode)
+            self.logic.initialize_lifu_interface(test_mode=test_mode)
+        else:
+            logging.info("Reinitializing LIFUInterface with simulated hardware = %s", test_mode)
+            self.logic.reinitialize_lifu_interface(test_mode=test_mode)
 
-        slicer.util.warningDisplay(
-            text = f"Reinitializing the LIFUInterface in test mode is not fully supported and may result in unexpected application behavior. If this was a mistake, restart the app and use the real transducer hardware.",
-            windowTitle="Test Mode Not Supported", parent = slicer.util.mainWindow()
-        )
-
-        new_test_mode_state = not self.logic.cur_lifu_interface._test_mode
-        logging.info("Reinitializing LIFUInterface with test_mode = %s", new_test_mode_state)
-        
-        self.logic.reinitialize_lifu_interface(test_mode=new_test_mode_state)
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         self.updateAllButtons()
@@ -554,7 +600,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
         logging.debug("onSendSonicationSolutionToDevicePushButtonClicked() called")
 
-        self.logic.initialize_lifu_interface()
+        self.ensureLIFUInterfaceForSelectedMode()
         LIFUError = _lifu_exceptions().LIFUError
         # Reflect the in-progress state immediately and flush the event loop so
         # the user gets visual feedback while the (synchronous) device call runs.
@@ -591,18 +637,20 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.updateWorkflowControls()
 
     def onManuallyGetDeviceStatusPushButtonClicked(self, checked=False):
-        self.logic.initialize_lifu_interface()
+        self.ensureLIFUInterfaceForSelectedMode()
         slicer.util.infoDisplay(text=f"{self.logic.cur_lifu_interface.get_status().name}", windowTitle="Device Status")
 
     def onRunningChanged(self, new_running_state:bool):
         logging.debug(f" onRunningChanged() called with running={new_running_state}")
         self.updateReinitializeLIFUInterfacePushButtonEnabled()
+        self.updateTestWithoutHardwareCheckBoxEnabled()
         self.updateSendSonicationSolutionToDevicePushButtonEnabled()
         self.updateRunEnabled()
         self.updateAbortEnabled()
         self.updateRunHardwareStatusLabel()
 
-    def onRunClicked(self):
+    @display_errors
+    def onRunClicked(self, checked=False):
         logging.debug("onRunClicked() called")
         if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
@@ -639,7 +687,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             slicer.app.processEvents()
         self.updateWorkflowControls()
         
-    def onAbortClicked(self):
+    @display_errors
+    def onAbortClicked(self, checked=False):
         logging.debug("onAbortClicked() called")
         LIFUError = _lifu_exceptions().LIFUError
         try:
@@ -825,14 +874,13 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # deliberately: an unhandled exception here would otherwise silently kill
         # the monitor thread. LIFU-specific errors and asyncio/OS errors are the
         # expected failure modes; anything else also gets logged.
-        LIFUError = _lifu_exceptions().LIFUError
         try:
             self._monitor_loop.run_until_complete(
                 self.cur_lifu_interface.start_monitoring(interval=1)
             )
             self._monitor_loop.run_forever()
-        except (LIFUError, OSError, RuntimeError) as e:
-            logging.error(f"[LIFU] Monitor loop error: {e}")
+        except Exception as e:
+            logging.error("[LIFU] Monitor loop error: %s", e, exc_info=True)
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
@@ -877,6 +925,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         self._create_lifu_interface_bridge()
         self.cur_lifu_interface = None
+        self._lifu_interface_is_simulated = False
         self._monitor_loop = None
         self._monitor_thread = None
         self.monitoring_timer = None
@@ -901,25 +950,25 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if self.cur_lifu_interface is None:
             return
         for device in (self.cur_lifu_interface.hvcontroller, self.cur_lifu_interface.txdevice):
+            if device is None:
+                continue
             device.signal_connected.connect(self.qt_signals.signal_connected.emit)
             device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
             device.signal_data_received.connect(self.qt_signals.signal_data_received.emit)
             device.signal_error.connect(self.qt_signals.signal_error.emit)
 
-    def initialize_lifu_interface(self, test_mode: bool = False) -> None:
-        if self.cur_lifu_interface is not None:
-            return
+    @property
+    def lifu_interface_is_simulated(self) -> bool:
+        return self.cur_lifu_interface is not None and self._lifu_interface_is_simulated
 
-        import openlifu_sdk
+    def _get_current_session_transducer(self):
+        data_parameter_node = get_openlifu_data_parameter_node()
+        loaded_session = data_parameter_node.loaded_session
+        if loaded_session is None or not loaded_session.transducer_is_valid():
+            return None
+        return loaded_session.get_transducer().transducer.transducer
 
-        self.cur_lifu_interface = openlifu_sdk.LIFUInterface(
-            run_async=True,
-            TX_test_mode=test_mode,
-            HV_test_mode=test_mode,
-        )
-        # Connect signals before starting the monitor thread to avoid missing early events.
-        self._connect_owsignals()
-
+    def _start_real_hardware_monitoring(self):
         self._monitor_loop = asyncio.new_event_loop()
         self._monitor_thread = threading.Thread(
             target=self._run_monitor_loop,
@@ -931,6 +980,36 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.monitoring_timer.setInterval(100)
         self.monitoring_timer.timeout.connect(self._pumpMonitoringLoop)
         self.monitoring_timer.start()
+
+    def _start_simulated_hardware_monitoring(self):
+        # SimulatedLIFUInterface.start_monitoring creates Qt timers, so it must
+        # run on Slicer's GUI thread rather than the real-hardware asyncio
+        # monitor thread.
+        asyncio.run(self.cur_lifu_interface.start_monitoring(interval=1))
+
+    def initialize_lifu_interface(self, test_mode: bool = False) -> None:
+        if self.cur_lifu_interface is not None:
+            return
+
+        self._lifu_interface_is_simulated = test_mode
+        if test_mode:
+            from openlifu_sdk.ui import SimulatedLIFUInterface
+
+            self.cur_lifu_interface = SimulatedLIFUInterface(
+                transducer=self._get_current_session_transducer(),
+            )
+        else:
+            import openlifu_sdk
+
+            self.cur_lifu_interface = openlifu_sdk.LIFUInterface(run_async=True)
+
+        # Connect signals before starting the monitor thread to avoid missing early events.
+        self._connect_owsignals()
+
+        if test_mode:
+            self._start_simulated_hardware_monitoring()
+        else:
+            self._start_real_hardware_monitoring()
 
     def stop_monitoring(self):
         if self.cur_lifu_interface:
@@ -953,6 +1032,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
                 # best-effort and may race, so this is the realistic failure.
                 logging.warning("Error closing monitor loop: %s", e)
 
+        self._monitor_loop = None
+        self._monitor_thread = None
+        self.monitoring_timer = None
+
     def reinitialize_lifu_interface(self, test_mode: bool = False):
         """Cleanly shut down and reinitialize the LIFUInterface."""
         logging.debug("reinitialize_lifu_interface() called with test_mode=%s", test_mode)
@@ -970,6 +1053,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             logging.warning("[LIFU] Error during interface cleanup: %s", e)
 
         self.cur_lifu_interface = None
+        self._lifu_interface_is_simulated = False
         self.initialize_lifu_interface(test_mode=test_mode)
 
     def __del__(self):
@@ -1308,17 +1392,84 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
+    def _wait_until(self, predicate: Callable[[], bool], timeout_s: float = 10.0, step_s: float = 0.05):
+        import time
+
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            slicer.app.processEvents()
+            if predicate():
+                return
+            time.sleep(step_s)
+
+        slicer.app.processEvents()
+        assert predicate()
+
+    def _accept_run_completed_dialog(self):
+        active_modal_widget = qt.QApplication.activeModalWidget()
+        widgets = [active_modal_widget] if active_modal_widget is not None else []
+        widgets.extend(slicer.app.topLevelWidgets())
+
+        for widget in widgets:
+            if isinstance(widget, OnRunCompletedDialog) and widget.isVisible():
+                widget.successfulCheckBox.setChecked(True)
+                widget.textBox.setPlainText("Simulated hardware test run")
+                widget.validateInputs()
+                return
+
     def _workflow_sonication_control(self):
         
         slicer.util.selectModule("OpenLIFUSonicationControl")
         sc_widget = slicer.modules.OpenLIFUSonicationControlWidget
         sc_logic = sc_widget.logic 
 
-        test_run_parameters = {
-            'success_flag': False,
-            'note': 'example notes for testing',
-        }
+        loaded_solution = get_openlifu_data_parameter_node().loaded_solution
+        assert loaded_solution is not None
+        if not loaded_solution.is_approved():
+            slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
+            slicer.app.processEvents()
+            loaded_solution = get_openlifu_data_parameter_node().loaded_solution
+        assert loaded_solution.is_approved()
+        solution_id = loaded_solution.solution.solution.id
 
-        # Create a run
-        sc_logic.create_openlifu_run(test_run_parameters)
-        assert get_openlifu_data_parameter_node().loaded_run is not None
+        sc_widget.ui.testWithoutHardwareCheckBox.setChecked(True)
+        sc_logic.reinitialize_lifu_interface(test_mode=True)
+        self._wait_until(sc_logic.get_lifu_device_connected, timeout_s=5.0)
+        sc_widget.updateDeviceConnectedStateFromDevice()
+        assert sc_widget._cur_device_connected_state == DeviceConnectedState.CONNECTED
+
+        sc_widget.onSendSonicationSolutionToDevicePushButtonClicked(True)
+        assert sc_widget.cur_solution_on_hardware_state == SolutionOnHardwareState.SUCCESSFUL_SEND
+        assert sc_logic.cur_solution_on_hardware.id == solution_id
+
+        previous_run = get_openlifu_data_parameter_node().loaded_run
+        previous_run_id = previous_run.run.id if previous_run is not None else None
+
+        dialog_timer = qt.QTimer()
+        dialog_timer.setInterval(50)
+        dialog_timer.timeout.connect(self._accept_run_completed_dialog)
+        dialog_timer.start()
+        try:
+            qt.QTimer.singleShot(500, lambda: sc_logic.cur_lifu_interface.stop_sonication())
+            sc_widget.onRunClicked()
+            assert not sc_widget.ui.testWithoutHardwareCheckBox.isEnabled()
+            self._wait_until(
+                lambda: (
+                    get_openlifu_data_parameter_node().loaded_run is not None
+                    and get_openlifu_data_parameter_node().loaded_run.run.id != previous_run_id
+                    and get_openlifu_data_parameter_node().loaded_run.run.solution_id == solution_id
+                ),
+                timeout_s=30.0,
+            )
+        finally:
+            dialog_timer.stop()
+
+        import openlifu_sdk
+
+        saved_run = get_openlifu_data_parameter_node().loaded_run.run
+        assert saved_run.solution_id == solution_id
+        assert saved_run.success_flag is True
+        assert saved_run.note == "Simulated hardware test run"
+        assert sc_logic.running is False
+        assert sc_widget.ui.testWithoutHardwareCheckBox.isEnabled()
+        assert sc_logic.cur_lifu_interface.get_status() == openlifu_sdk.LIFUInterfaceStatus.STATUS_READY

@@ -30,6 +30,7 @@ def python_requirements_exist() -> bool:
     return (
         importlib.util.find_spec('openlifu') is not None
         and importlib.util.find_spec('openlifu_sdk') is not None
+        and importlib.util.find_spec('openlifu_sdk.ui.simulated_interface') is not None
     )
 
 def check_and_install_python_requirements(prompt_if_found = False) -> None:
