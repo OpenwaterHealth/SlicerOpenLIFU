@@ -33,7 +33,17 @@
       </sizepolicy>
      </property>
      <property name="text">
-      <string>Reinitialize LIFUInterface in test_mode</string>
+      <string>Initialize LIFUInterface</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="testWithoutHardwareCheckBox">
+     <property name="toolTip">
+      <string>Use openlifu_sdk.ui.SimulatedLIFUInterface instead of connecting to real OpenLIFU hardware. Intended for software testing without connected hardware.</string>
+     </property>
+     <property name="text">
+      <string>Test without hardware</string>
      </property>
     </widget>
    </item>

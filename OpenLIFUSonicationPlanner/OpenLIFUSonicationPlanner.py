@@ -944,13 +944,21 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
             affine[:3,3] = rng.random(3) # generate a random origin
             return affine
 
+        original_transducer_transform = vtk.vtkMatrix4x4()
+        selected_transducer.transform_node.GetMatrixTransformToParent(original_transducer_transform)
         selected_transducer.update_transform(make_random_matrix())
         slicer.app.processEvents()
         assert get_openlifu_data_parameter_node().loaded_solution is None
 
-        # Sonication control requires a loaded solution. Instead of
-        # re-computing the solution, we store and re-set the loaded solution here
+        # Sonication control requires a loaded solution. Compute a fresh solution
+        # with live volume nodes for the sonication control workflow.
         # Create new solution ID to avoid database conflict
+        selected_transducer.transform_node.SetMatrixTransformToParent(original_transducer_transform)
+        slicer.app.processEvents()
+        solution, analysis = sp_logic.computeSolution(
+            activeData["Volume"], activeData["Target"],
+            activeData["Transducer"], activeData["Protocol"]
+        )
         solution.solution.solution.id = "TestSolutionID"
         slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
         sp_logic.getParameterNode().solution_analysis = analysis
