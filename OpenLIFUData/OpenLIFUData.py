@@ -37,6 +37,7 @@ from OpenLIFULib import (
     SlicerOpenLIFURun,
     SlicerOpenLIFUSession,
     SlicerOpenLIFUSolution,
+    SlicerOpenLIFUSolutionAnalysis,
     SlicerOpenLIFUTransducer,
     assign_openlifu_metadata_to_volume_node,
     BusyCursor,
@@ -2926,26 +2927,25 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             }
             self.inverse_operator_display_map = {v: k for k, v in self.operator_display_map.items()}
 
-            self.parameter_key_map = {
-                "Thermal Index (TIC)": "TIC",
-                "Mechanical Index (MI)": "MI",
-                "Mainlobe PNP (MPa)": "mainlobe_pnp_MPa",
-                "Mainlobe I_SPPA (W/cm^2)": "mainlobe_isppa_Wcm2",
-                "Mainlobe I_SPTA (W/cm^2)": "mainlobe_ispta_Wcm2",
-                "3 dB Lateral Beamwidth (mm)": "beamwidth_lat_3dB_mm",
-                "3 dB Elevational Beamwidth (mm)": "beamwidth_ele_3dB_mm",
-                "3 dB Axial Beamwidth (mm)": "beamwidth_ax_3dB_mm",
-                "6 dB Lateral Beamwidth (mm)": "beamwidth_lat_6dB_mm",
-                "6 dB Elevational Beamwidth (mm)": "beamwidth_ele_6dB_mm",
-                "6 dB Axial Beamwidth (mm)": "beamwidth_ax_6dB_mm",
-                "Sidelobe PNP (MPa)": "sidelobe_pnp_MPa",
-                "Sidelobe I_SPPA (W/cm2)": "sidelobe_isppa_Wcm2",
-                "Global PNP (MPa)": "global_pnp_MPa",
-                "Global I_SPPA (W/cm^2)": "global_isppa_Wcm2",
-                "Global I_SPTA (W/cm^2)": "global_ispta_Wcm2",
-                "Emitted Pressure (MPa)": "p0_MPa",
-                "Emitted Power (W)": "power_W",
-            }
+            # Pull the comprehensive parameter list from openlifu's
+            # solution_analysis.PARAM_FORMATS so this dialog automatically
+            # picks up new analysis parameters as they are added upstream.
+            # Each PARAM_FORMATS entry is
+            # ``[aggregation, format_str, units, display_name]``; we use
+            # ``display_name (units)`` as the user-facing label and the dict
+            # key as the parameter id stored in the constraint.
+            param_formats = openlifu_lz().plan.solution_analysis.PARAM_FORMATS
+            self.parameter_key_map: Dict[str, str] = {}
+            self._parameter_format_map: Dict[str, str] = {}
+            for param_id, fmt in param_formats.items():
+                display_name, units, fmt_str = fmt[3], fmt[2], fmt[1]
+                label = f"{display_name} ({units})" if units else display_name
+                # If two upstream entries collide on a label, fall back to
+                # appending the raw id to keep the combo box unambiguous.
+                if label in self.parameter_key_map:
+                    label = f"{label} [{param_id}]"
+                self.parameter_key_map[label] = param_id
+                self._parameter_format_map[label] = fmt_str
             self.inverse_parameter_key_map = {v: k for k, v in self.parameter_key_map.items()}
 
             self.setup()
@@ -2960,6 +2960,7 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
 
             self.parameter_name_input = qt.QComboBox()
             self.parameter_name_input.addItems(list(self.parameter_key_map.keys()))
+            self.parameter_name_input.currentTextChanged.connect(self._update_spinbox_precision)
             formLayout.addRow(_("Parameter Name:"), self.parameter_name_input)
 
             self.operator_selector = qt.QComboBox()
@@ -3009,6 +3010,25 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             self.error_box_layout.insertWidget(1, self.error_and_label)
 
             self._update_visible_spinboxes(self.operator_selector.currentText)
+            self._update_spinbox_precision(self.parameter_name_input.currentText)
+
+        def _update_spinbox_precision(self, display_label: str) -> None:
+            """Apply the upstream PARAM_FORMATS precision to both spinbox rows.
+
+            ``PARAM_FORMATS`` entries are like ``"0.3f"``; we pull the digit
+            count after the dot and apply it to every spinbox. Falls back to
+            2 decimals if the format string is unparseable.
+            """
+            fmt_str = self._parameter_format_map.get(display_label, "")
+            decimals = 2
+            if "." in fmt_str:
+                try:
+                    decimals = int(fmt_str.split(".", 1)[1].rstrip("f").rstrip())
+                except ValueError:
+                    pass
+            for sb in (*self.warning_spinboxes, *self.error_spinboxes):
+                sb.setDecimals(decimals)
+                sb.setSingleStep(10 ** -decimals if decimals > 0 else 1)
 
         def _update_visible_spinboxes(self, display_operator: str):
             operator = self.inverse_operator_display_map[display_operator]
@@ -6404,9 +6424,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.remove_protocol(loaded_session.get_protocol_id())
             if (
                 self.getParameterNode().loaded_solution is not None
-                and loaded_session.last_generated_solution_id == self.getParameterNode().loaded_solution.solution.solution.id
+                and loaded_session.session.session.solution_id == self.getParameterNode().loaded_solution.solution.solution.id
             ):
-                self.clear_solution(clean_up_scene=True)
+                # Don't clear the persisted session.solution_id link: we want to be able to reload
+                # this session later and restore its Solution.
+                self.clear_solution(clean_up_scene=True, update_session_link=False)
             clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
             for photocollection_id in loaded_session.get_affiliated_photocollection_ids():
                 if photocollection_id in self.getParameterNode().session_photocollections:
@@ -6821,7 +6843,65 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                             reason="The transducer transform does not match the approved localization result."
                         )
 
+        # === Restore previously computed Solution + analysis (if any) ===
+        # session.solution_id is persisted and cleared whenever the array_transform changes, so if it's
+        # set here we know the on-disk Solution is still consistent with the current transducer pose.
+        if session_openlifu.solution_id:
+            self._restore_solution_for_loaded_session(
+                session_openlifu = session_openlifu,
+                transducer = newly_loaded_transducer,
+            )
+
         self.session_loading_unloading_in_progress = False  
+
+    def _restore_solution_for_loaded_session(
+        self,
+        session_openlifu: "openlifu.db.Session",
+        transducer: SlicerOpenLIFUTransducer,
+    ) -> None:
+        """Load the Solution (and analysis) linked to a freshly-loaded session into the scene.
+
+        On any failure (missing files, etc.) we warn but otherwise let session loading proceed; the
+        ``session.solution_id`` is left alone so the user can investigate.
+        """
+        db = get_cur_db()
+        if db is None:
+            return
+        solution_id = session_openlifu.solution_id
+        try:
+            solution_openlifu = db.load_solution(session_openlifu, solution_id)
+        except FileNotFoundError:
+            slicer.util.warningDisplay(
+                f"Session is linked to solution '{solution_id}' but the solution files were not found"
+                " in the database. The session will be loaded without restoring the solution.",
+                "Solution not found",
+            )
+            return
+
+        slicer_solution = SlicerOpenLIFUSolution.initialize_from_loaded_openlifu_solution(
+            solution=solution_openlifu,
+            transducer=transducer,
+        )
+        # Make sure the restored pnp/intensity volumes follow the transducer's transform so they render
+        # in the correct pose (otherwise they sit at the world origin).
+        transducer_transform_id = transducer.transform_node.GetID()
+        slicer_solution.pnp.SetAndObserveTransformNodeID(transducer_transform_id)
+        slicer_solution.intensity.SetAndObserveTransformNodeID(transducer_transform_id)
+        # write_to_db=False: we just loaded the solution from disk, nothing new to write.
+        self.set_solution(slicer_solution, write_to_db=False)
+
+        planner_logic = slicer.util.getModuleLogic('OpenLIFUSonicationPlanner')
+        analysis_openlifu = None
+        try:
+            analysis_openlifu = db.load_solution_analysis(session_openlifu, solution_id)
+        except FileNotFoundError:
+            pass  # Older databases may not have the analysis persisted; recompute below.
+        if analysis_openlifu is not None:
+            slicer_analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
+        else:
+            slicer_analysis = planner_logic.compute_analysis_from_solution(slicer_solution)
+        if slicer_analysis is not None:
+            planner_logic.getParameterNode().solution_analysis = slicer_analysis
 
     # TODO: This should be a widget level function
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
@@ -7047,30 +7127,83 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             self._timer.setSingleShot(True)
             self._timer.start(500) 
 
-    def set_solution(self, solution:SlicerOpenLIFUSolution):
-        """Set a solution to be the currently active solution. If there is an active session, write that solution to the database."""
+    def set_solution(
+        self,
+        solution: SlicerOpenLIFUSolution,
+        analysis: "Optional[SlicerOpenLIFUSolutionAnalysis]" = None,
+        write_to_db: bool = True,
+    ):
+        """Set a solution to be the currently active solution.
+
+        If there is an active session and ``write_to_db`` is True, persist the solution (and analysis, if
+        supplied) to the database and link the session to it by updating ``session.solution_id``. Pass
+        ``write_to_db=False`` when the solution was just loaded from disk and there is nothing new to write.
+
+        Args:
+            solution: The solution to set as active.
+            analysis: Optional analysis to persist alongside the solution. Only written when ``write_to_db``
+                is True and there is an active session.
+            write_to_db: Whether to write the solution (and analysis) and the updated session to the database.
+        """
         self.getParameterNode().loaded_solution = solution
+        if not write_to_db:
+            return
         if self.validate_session():
             if get_cur_db() is None: # This should not happen -- if there is an active session then there should be a database connection as well.
                 raise RuntimeError("Unable to write solution to the session because there is no database connection")
-            session_openlifu = self.getParameterNode().loaded_session.session.session
+            loaded_session = self.getParameterNode().loaded_session
+            session_openlifu = loaded_session.session.session
             solution_openlifu = solution.solution.solution
-            self.getParameterNode().loaded_session.last_generated_solution_id = solution_openlifu.id
+            OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
             get_cur_db().write_solution(session_openlifu, solution_openlifu)
+            if analysis is not None:
+                get_cur_db().write_solution_analysis(
+                    session_openlifu,
+                    solution_openlifu.id,
+                    analysis.analysis,
+                    on_conflict=OnConflictOpts.OVERWRITE,
+                )
+            # Link the session to this solution and persist that link.
+            session_openlifu.solution_id = solution_openlifu.id
+            # Write the pack back so the parameterNode's serialized JSON reflects the new solution_id;
+            # otherwise subsequent reads (save_session, clear_session) would see the stale "".
+            self.getParameterNode().loaded_session = loaded_session
+            get_cur_db().write_session(self.subject, session_openlifu, on_conflict=OnConflictOpts.OVERWRITE)
 
 
-    def clear_solution(self,  clean_up_scene:bool = True) -> None:
+    def clear_solution(self, clean_up_scene: bool = True, update_session_link: bool = True) -> None:
         """Unload the current solution if there is one loaded.
 
         Args:
             clean_up_scene: Whether to remove the solution's affiliated scene content.
                 If False then the scene content is orphaned from its session.
                 If True then the scene content is removed.
+            update_session_link: When True, and the currently active session is linked to the solution
+                being cleared (via ``session.solution_id``), clear that link and persist the session.
+                Pass False when the session itself is being unloaded -- we want the persisted
+                ``solution_id`` to remain on disk so the Solution can be restored next time the session is
+                loaded.
         """
         solution = self.getParameterNode().loaded_solution
         self.getParameterNode().loaded_solution = None
         if solution is None:
             return
+        if update_session_link:
+            loaded_session = self.getParameterNode().loaded_session
+            if (
+                loaded_session is not None
+                and get_cur_db() is not None
+                and loaded_session.session.session.solution_id == solution.solution.solution.id
+            ):
+                OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+                loaded_session.session.session.solution_id = ""
+                # Write the pack back so the in-memory parameterNode JSON reflects the cleared link.
+                self.getParameterNode().loaded_session = loaded_session
+                get_cur_db().write_session(
+                    self.subject,
+                    loaded_session.session.session,
+                    on_conflict=OnConflictOpts.OVERWRITE,
+                )
         if clean_up_scene:
             solution.clear_nodes()
 
@@ -7449,7 +7582,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
         solution.toggle_approval() # apply or revoke approval
         if session is not None:
-            if session.last_generated_solution_id == solution.solution.solution.id:
+            if session.session.session.solution_id == solution.solution.solution.id:
                 if get_cur_db() is None: # This shouldn't happen
                     raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
                 OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts

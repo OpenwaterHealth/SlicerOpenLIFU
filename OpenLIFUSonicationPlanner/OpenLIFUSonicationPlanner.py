@@ -903,7 +903,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             transducer=inputTransducer,
         )
         analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
-        slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
+        slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution, analysis=analysis)
         self.getParameterNode().solution_analysis = analysis
         return solution, analysis
 

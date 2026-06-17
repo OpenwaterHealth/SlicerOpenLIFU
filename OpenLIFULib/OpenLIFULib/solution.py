@@ -60,6 +60,27 @@ class SlicerOpenLIFUSolution:
 
         return SlicerOpenLIFUSolution(SlicerOpenLIFUSolutionWrapper(solution),pnp_volume_node,intensity_volume_node)
 
+    @staticmethod
+    def initialize_from_loaded_openlifu_solution(
+        solution : "openlifu.plan.Solution",
+        transducer : SlicerOpenLIFUTransducer,
+    ) -> "SlicerOpenLIFUSolution":
+        """Create a SlicerOpenLIFUSolution from an openlifu Solution loaded from disk.
+
+        Re-derives the aggregated pnp and intensity data arrays from the Solution's per-focus
+        ``simulation_result`` using the same aggregation that ``Protocol.calc_solution`` originally applied:
+        max over focal points for peak negative pressure, mean over focal points for time-averaged intensity.
+        """
+        sim = solution.simulation_result
+        pnp_datarray = sim['p_min'].max(dim="focal_point_index", keep_attrs=True)
+        intensity_dataarray = sim['intensity'].mean(dim="focal_point_index", keep_attrs=True)
+        return SlicerOpenLIFUSolution.initialize_from_openlifu_data(
+            solution=solution,
+            pnp_datarray=pnp_datarray,
+            intensity_dataarray=intensity_dataarray,
+            transducer=transducer,
+        )
+
     def clear_nodes(self) -> None:
         """Clear associated mrml nodes from the scene. Do this when removing a transducer."""
         slicer.mrmlScene.RemoveNode(self.pnp)

@@ -81,33 +81,41 @@ class SlicerOpenLIFUTransducer:
         shNode.SetItemParent(shNode.GetItemByDataNode(transform_node), parentFolderItem)
         transform_node.SetName(f"{slicer_transducer_name}-matrix")
 
-        #Model nodes
-        model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        model_node.SetName(f"{slicer_transducer_name}-transducer")
-        model_node.SetAndObservePolyData(transducer.get_polydata())
-        model_node.SetAndObserveTransformNodeID(transform_node.GetID())
-        shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
-        model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+        # Pause rendering while we load model files and wire them up to the transducer transform.
+        # slicer.util.loadModel auto-creates display nodes that render immediately at the world
+        # origin; without this, the body/surface models flash at the origin before the
+        # SetAndObserveTransformNodeID call snaps them into place.
+        slicer.app.pauseRender()
+        try:
+            #Model nodes
+            model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+            model_node.SetName(f"{slicer_transducer_name}-transducer")
+            model_node.SetAndObservePolyData(transducer.get_polydata())
+            model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+            shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
+            model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
 
-        if transducer_abspaths_info['transducer_body_abspath'] is not None:
-            if transducer.transducer_body_filename != Path(transducer_abspaths_info['transducer_body_abspath']).name:
-                raise ValueError("The filename provided in 'transducer_body_abspath' does not match the file specified in the Transducer object")
-            body_model_node = slicer.util.loadModel(transducer_abspaths_info['transducer_body_abspath'])
-            body_model_node.SetName(f"{slicer_transducer_name}-body")
-            body_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
-            shNode.SetItemParent(shNode.GetItemByDataNode(body_model_node), parentFolderItem)
-        else:
-            body_model_node = None
+            if transducer_abspaths_info['transducer_body_abspath'] is not None:
+                if transducer.transducer_body_filename != Path(transducer_abspaths_info['transducer_body_abspath']).name:
+                    raise ValueError("The filename provided in 'transducer_body_abspath' does not match the file specified in the Transducer object")
+                body_model_node = slicer.util.loadModel(transducer_abspaths_info['transducer_body_abspath'])
+                body_model_node.SetName(f"{slicer_transducer_name}-body")
+                body_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+                shNode.SetItemParent(shNode.GetItemByDataNode(body_model_node), parentFolderItem)
+            else:
+                body_model_node = None
 
-        if transducer_abspaths_info['registration_surface_abspath'] is not None:
-            if transducer.registration_surface_filename != Path(transducer_abspaths_info['registration_surface_abspath']).name:
-                raise ValueError("The filename provided in 'registration_surface_abspath' does not match the file specified in the Transducer object")
-            surface_model_node = slicer.util.loadModel(transducer_abspaths_info['registration_surface_abspath'])
-            shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
-            surface_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
-            surface_model_node.SetName(f"{slicer_transducer_name}-surface")
-        else:
-            surface_model_node = None
+            if transducer_abspaths_info['registration_surface_abspath'] is not None:
+                if transducer.registration_surface_filename != Path(transducer_abspaths_info['registration_surface_abspath']).name:
+                    raise ValueError("The filename provided in 'registration_surface_abspath' does not match the file specified in the Transducer object")
+                surface_model_node = slicer.util.loadModel(transducer_abspaths_info['registration_surface_abspath'])
+                shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
+                surface_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+                surface_model_node.SetName(f"{slicer_transducer_name}-surface")
+            else:
+                surface_model_node = None
+        finally:
+            slicer.app.resumeRender()
 
         return SlicerOpenLIFUTransducer(slicer_transducer_name,
             SlicerOpenLIFUTransducerWrapper(transducer), model_node, transform_node, body_model_node, surface_model_node
