@@ -126,6 +126,24 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._parameterNodeGuiTag = None
 
         self._vf_interaction_in_progress = False
+        # True while we are programmatically rebuilding the targets table, to suppress itemChanged handlers
+        self._populating_targets_table = False
+        # True while we are programmatically rebuilding the virtual-fit results table
+        self._populating_vf_results_table = False
+        # True while a user edit on the targets table is propagating to the fiducial node, to skip the
+        # echoed PointModifiedEvent / cell repopulation that would otherwise interrupt typing
+        self._target_table_edit_in_progress = False
+        # True while the user is in "edit targets" mode (cells editable, fiducials unlocked)
+        self._targets_in_edit_mode = False
+        # State tracking for the "Add Target" → click-to-place workflow. While placement is in progress,
+        # other controls are disabled and the placement-end observer fires once.
+        self._placement_in_progress = False
+        self._placement_node : Optional[vtkMRMLMarkupsFiducialNode] = None
+        self._placement_observer_tag : Optional[int] = None
+        # Bright yellow glyph color used to indicate a target is currently editable / draggable.
+        self._edit_mode_color = (1.0, 1.0, 0.0)
+        # Attribute name used to stash the original SelectedColor when entering edit mode so it can be restored.
+        self._original_color_attr = "SlicerOpenLIFU.OriginalSelectedColor"
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -190,41 +208,38 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateVirtualFitResultsTable)
 
-        self.ui.targetListWidget.currentItemChanged.connect(self.onTargetListWidgetCurrentItemChanged)
-        self.ui.targetListWidget.itemChanged.connect(self.onTargetListWidgetItemDataChanged)
-
-        position_coordinate_validator = qt.QDoubleValidator(slicer.util.mainWindow())
-        position_coordinate_validator.setNotation(qt.QDoubleValidator.StandardNotation)
-        self.targetPositionInputs = [
-            self.ui.positionRLineEdit,
-            self.ui.positionALineEdit,
-            self.ui.positionSLineEdit,
-        ]
-        for positionLineEdit in self.targetPositionInputs:
-            positionLineEdit.setValidator(position_coordinate_validator)
-            positionLineEdit.editingFinished.connect(self.onTargetPositionEditingFinished)
+        # ---- Targets table ----
+        targets_table = self.ui.targetsTableWidget
+        targets_header = targets_table.horizontalHeader()
+        targets_header.setSectionResizeMode(0, qt.QHeaderView.Stretch)
+        for col in (1, 2, 3):
+            targets_header.setSectionResizeMode(col, qt.QHeaderView.ResizeToContents)
+        targets_header.setSectionResizeMode(4, qt.QHeaderView.ResizeToContents)
+        targets_header.setSectionResizeMode(5, qt.QHeaderView.ResizeToContents)
+        targets_table.itemSelectionChanged.connect(self.onTargetsTableSelectionChanged)
+        targets_table.itemChanged.connect(self.onTargetsTableItemChanged)
 
         # Watch any fiducial nodes that already existed before this module was set up
         for fiducial_node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
             self.watch_fiducial_node(fiducial_node)
 
         self.resetVirtualFitProgressDisplay()
-        self.updateTargetsListView()
+        self.updateTargetsTable()
         self.updateInputOptions()
-        self.updateApprovalStatusLabel()
-        self.updateEditTargetEnabled()
-        self.updateTargetPositionInputs()
-        self.updateLockButtonIcon()
+        self.updateTargetsActionButtonsEnabled()
+        self.updateVirtualFitSectionState()
 
-        self.ui.newTargetButton.clicked.connect(self.onNewTargetClicked)
-        self.ui.removeTargetButton.clicked.connect(self.onremoveTargetClicked)
-        self.ui.lockButton.clicked.connect(self.onLockClicked)
-        self.ui.approveButton.clicked.connect(self.onApproveClicked)
+        self.ui.addTargetButton.clicked.connect(self.onAddTargetClicked)
+        self.ui.removeTargetButton.clicked.connect(self.onRemoveTargetClicked)
+        self.ui.editTargetsButton.toggled.connect(self.onEditTargetsToggled)
         self.ui.virtualfitButton.clicked.connect(self.onRunAutoFitClicked)
 
         # ---- Virtual fit result options ----
-        # self.ui.virtualFitResultTable.itemClicked.connect(self.onVirtualFitResultSelected)
         self.ui.virtualFitResultTable.itemSelectionChanged.connect(self.onVirtualFitResultSelected)
+        self.ui.virtualFitResultTable.itemChanged.connect(self.onVirtualFitResultItemChanged)
+        vf_header = self.ui.virtualFitResultTable.horizontalHeader()
+        vf_header.setSectionResizeMode(0, qt.QHeaderView.Stretch)
+        vf_header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
         self.ui.modifyTransformPushButton.clicked.connect(self.onModifyTransformClicked)
         self.ui.modifyTransformPushButton.setStyleSheet("""
         QPushButton:checked {
@@ -237,7 +252,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.addTransformPushButton.clicked.connect(self.onAddVirtualFitResultClicked)
         self.ui.addTransformPushButton.setToolTip("Create new virtual fit result")
         self.updateVirtualFitResultsTable()
-        slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation() 
+        slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation()
         self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerLocalizationWidget.setVirtualFitResultForTracking)
         # ------------------------------------
 
@@ -303,8 +318,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.watch_fiducial_node(node)
 
-        self.updateTargetsListView()
+        self.updateTargetsTable()
         self.updateInputOptions()
+        self.updateVirtualFitSectionState()
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -323,15 +339,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 self.logic.clear_virtual_fit_results(target = node)
                 self.updateWorkflowControls()
 
-        self.updateTargetsListView()
+        self.updateTargetsTable()
         self.updateInputOptions()
+        self.updateVirtualFitSectionState()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
         self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,partial(self.onPointAddedOrRemoved, node)))
         self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,partial(self.onPointAddedOrRemoved, node)))
         self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent,partial(self.onPointModified, node)))
-        self.node_observations[node.GetID()].append(node.AddObserver(slicer.vtkMRMLMarkupsNode.LockModifiedEvent,self.onLockModified))
         self.node_observations[node.GetID()].append(node.AddObserver(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT,self.onTargetNameModified))
 
     def unwatch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
@@ -342,18 +358,23 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             node.RemoveObserver(tag)
 
     def onPointAddedOrRemoved(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
-        self.updateTargetsListView()
+        self.updateTargetsTable()
         self.updateInputOptions()
         self.updateWorkflowControls()
+        self.updateVirtualFitSectionState()
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
             slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
-                        
+
     def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
-        self.updateTargetPositionInputs()
+        # Refresh the corresponding row's R/A/S cells to reflect the new fiducial position, unless we
+        # ourselves just wrote that position from a cell edit (in which case the cells are already correct
+        # and re-populating would steal focus / cancel an in-progress edit on the next cell).
+        if not self._target_table_edit_in_progress:
+            self._refresh_target_row_for_node(node)
 
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
         if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")._running_wizard:
@@ -361,10 +382,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
             slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
-
-    def onLockModified(self, caller, event):
-        self.updateLockButtonIcon()
-        self.updateEditTargetEnabled()
 
     def clearVirtualFitResultsIfAny(self,target: vtkMRMLMarkupsFiducialNode, reason:str):
         """Clear virtual fit results for the target from the scene if any.
@@ -393,7 +410,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self.logic.get_virtual_fit_approval(target_id):
             self.logic.revoke_virtual_fit_approval(target_id)
             notify(f"Virtual fit approval revoked:\n{reason}")
-            self.updateApprovalStatusLabel()
 
     def revokeVirtualFitApprovalIfAny(self, node: vtkMRMLTransformNode, reason:str):
         """Revoke virtual fit approval for the virtual fit result node if there was an approval, and show a message dialog to that effect.
@@ -407,55 +423,146 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             data_logic.update_underlying_openlifu_session()
             notify(f"Virtual fit approval revoked:\n{reason}")
-            self.updateApprovalStatusLabel()
 
             # Need this because updates to the data parameter node resets the combo box 
             self.setCurrentVirtualFitSelection(node)
             self.updateVirtualfitButtons()
 
-    def updateTargetsListView(self):
-        """Update the list of targets in the target management UI"""
-        currently_selected_row = self.ui.targetListWidget.currentRow
-        
-        self.ui.targetListWidget.clear()
-        for target_node in get_target_candidates():
-            item = qt.QListWidgetItem(target_node.GetName())
-            item.setFlags(item.flags() | qt.Qt.ItemIsEditable) # Make it possible to click and rename items
-            item.setData(qt.Qt.UserRole, target_node)
-            self.ui.targetListWidget.addItem(item)
-        
-        if currently_selected_row == -1:
-            self.ui.targetListWidget.setCurrentRow(0)
-        else:
-            self.ui.targetListWidget.setCurrentRow(currently_selected_row)
+    def updateTargetsTable(self):
+        """Rebuild the targets table from the current set of target candidate fiducials."""
+        table = self.ui.targetsTableWidget
+        currently_selected_row = table.currentRow()
 
-    def getTargetsListViewCurrentSelection(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
-        """Get the fiducial node associated to the currently selected target in the list view;
-        returns None if nothing is selected."""
-        item = self.ui.targetListWidget.currentItem()
+        self._populating_targets_table = True
+        try:
+            table.clearContents()
+            table.setRowCount(0)  # ensures any previous cell widgets (jump buttons) are released
+            target_nodes = get_target_candidates()
+            table.setRowCount(len(target_nodes))
+
+            editable_flags = (
+                qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsEditable
+            ) if self._targets_in_edit_mode else (
+                qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled
+            )
+
+            for row, node in enumerate(target_nodes):
+                # Column 0: display name (control-point label). Editing here only renames; it does not
+                # affect the underlying openlifu Point ID (the node name), so virtual-fit results keyed
+                # off the target ID are preserved.
+                name_item = qt.QTableWidgetItem(node.GetNthControlPointLabel(0))
+                name_item.setData(qt.Qt.UserRole, node)
+                name_item.setFlags(editable_flags)
+                table.setItem(row, 0, name_item)
+
+                # Columns 1-3: R, A, S coordinates.
+                position = node.GetNthControlPointPosition(0)
+                for col, coord_value in enumerate(position, start=1):
+                    coord_item = qt.QTableWidgetItem(f"{coord_value:0.2f}")
+                    coord_item.setFlags(editable_flags)
+                    coord_item.setTextAlignment(qt.Qt.AlignRight | qt.Qt.AlignVCenter)
+                    table.setItem(row, col, coord_item)
+
+                # Column 4: Show checkbox.
+                show_item = qt.QTableWidgetItem()
+                show_item.setFlags(
+                    qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable
+                )
+                display_node = node.GetDisplayNode()
+                visible = bool(display_node and display_node.GetVisibility())
+                show_item.setCheckState(qt.Qt.Checked if visible else qt.Qt.Unchecked)
+                show_item.setTextAlignment(qt.Qt.AlignCenter)
+                table.setItem(row, 4, show_item)
+
+                # Column 5: jump-to-target button. Snaps all slice views to the target's position.
+                jump_button = qt.QPushButton("\u2316")  # position indicator (crosshair) glyph
+                jump_button.setToolTip("Jump slice views to this target's position")
+                jump_button.setFlat(True)
+                jump_button.setFixedSize(qt.QSize(22, 18))
+                jump_button.clicked.connect(partial(self._jump_slices_to_node, node))
+                table.setCellWidget(row, 5, jump_button)
+        finally:
+            self._populating_targets_table = False
+
+        # Restore selection: keep previous row if still valid, otherwise select first row.
+        if table.rowCount > 0:
+            if 0 <= currently_selected_row < table.rowCount:
+                table.selectRow(currently_selected_row)
+            else:
+                table.selectRow(0)
+
+        self.updateTargetsActionButtonsEnabled()
+
+    def _refresh_target_row_for_node(self, node: vtkMRMLMarkupsFiducialNode) -> None:
+        """Refresh the R/A/S cells of the row associated to the given fiducial node, if it is in the table."""
+        table = self.ui.targetsTableWidget
+        self._populating_targets_table = True
+        try:
+            for row in range(table.rowCount):
+                item = table.item(row, 0)
+                if item is not None and item.data(qt.Qt.UserRole) is node:
+                    position = node.GetNthControlPointPosition(0)
+                    for col, coord_value in enumerate(position, start=1):
+                        coord_item = table.item(row, col)
+                        if coord_item is not None:
+                            coord_item.setText(f"{coord_value:0.2f}")
+                    break
+        finally:
+            self._populating_targets_table = False
+
+    def getCurrentSelectedTarget(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
+        """Return the fiducial node associated to the currently selected row, or None."""
+        table = self.ui.targetsTableWidget
+        row = table.currentRow()
+        if row < 0:
+            return None
+        item = table.item(row, 0)
         if item is None:
             return None
         return item.data(qt.Qt.UserRole)
 
-    def selectTargetByID(self, fiducial_node_mrml_id:str):
-        """Set the currently selected target in the targets list widget to the one with the given ID, if it is there.
-        If it is not there then then the selection is unaffected."""
-        for i in range(self.ui.targetListWidget.count):
-            item = self.ui.targetListWidget.item(i)
-            if item.data(qt.Qt.UserRole).GetID() == fiducial_node_mrml_id:
-                self.ui.targetListWidget.setCurrentItem(item)
-                break
+    def onTargetsTableSelectionChanged(self):
+        self.updateTargetsActionButtonsEnabled()
 
-    def onTargetListWidgetCurrentItemChanged(self, current:qt.QListWidgetItem, previous:qt.QListWidgetItem):
-        self.updateEditTargetEnabled()
-        self.updateTargetPositionInputs()
-        self.updateLockButtonIcon()
+    def onTargetsTableItemChanged(self, item: qt.QTableWidgetItem):
+        """Apply user edits in the targets table to the underlying fiducial node."""
+        if self._populating_targets_table:
+            return
+        table = self.ui.targetsTableWidget
+        row = item.row()
+        name_item = table.item(row, 0)
+        if name_item is None:
+            return
+        node : vtkMRMLMarkupsFiducialNode = name_item.data(qt.Qt.UserRole)
+        if node is None:
+            return
 
-    def onTargetListWidgetItemDataChanged(self, item:qt.QListWidgetItem):
-        node : vtkMRMLMarkupsFiducialNode = item.data(qt.Qt.UserRole)
-        node.SetName(item.text().replace(" ", "-")) # This becomes openlifu Point ID
-        node.SetNthControlPointLabel(0, item.text()) # This becomes openlifu Point name
-        node.InvokeEvent(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT)
+        col = item.column()
+        if col == 0:
+            # Display-name edit: only update the control-point label and emit the name-modified event so
+            # other modules can refresh their displays. We deliberately do NOT call node.SetName(), since
+            # the node name is the openlifu Point ID that virtual-fit results are keyed on.
+            new_label = item.text()
+            node.SetNthControlPointLabel(0, new_label)
+            node.InvokeEvent(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT)
+        elif col in (1, 2, 3):
+            try:
+                new_value = float(item.text())
+            except ValueError:
+                # Restore the previous text for that cell from the fiducial node.
+                self._refresh_target_row_for_node(node)
+                return
+            position = list(node.GetNthControlPointPosition(0))
+            position[col - 1] = new_value
+            self._target_table_edit_in_progress = True
+            try:
+                node.SetNthControlPointPosition(0, *position)
+            finally:
+                self._target_table_edit_in_progress = False
+        elif col == 4:
+            display_node = node.GetDisplayNode()
+            if display_node is not None:
+                display_node.SetVisibility(item.checkState() == qt.Qt.Checked)
 
     def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
@@ -466,25 +573,97 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateVirtualFitRelatedLabels()
 
     def updateVirtualFitRelatedLabels(self):
-        """ When virtual fit approval is revoked or toggled, the messages displayed 
-        in the data module, transducer tracking module and pre-planning module need to be updated."""
-        self.updateApprovalStatusLabel()
-        slicer.modules.OpenLIFUDataWidget.updateSessionStatus()  
-        slicer.modules.OpenLIFUTransducerLocalizationWidget.updateVirtualFitStatus() 
+        """When virtual fit approval is revoked or toggled, the messages displayed in the data module
+        and transducer tracking module need to be updated."""
+        slicer.modules.OpenLIFUDataWidget.updateSessionStatus()
+        slicer.modules.OpenLIFUTransducerLocalizationWidget.updateVirtualFitStatus()
 
-    def updateEditTargetEnabled(self):
-        """Update whether the controls that edit targets are enabled"""
-        current_selection = self.getTargetsListViewCurrentSelection()
-        target_position_inputs_enabled = (current_selection is not None) and (not current_selection.GetLocked())
-        target_deletion_and_locking_enabled = current_selection is not None
-        for widget in self.targetPositionInputs:
-            widget.setEnabled(target_position_inputs_enabled)
-        for widget in [self.ui.removeTargetButton, self.ui.lockButton]:
-            widget.setEnabled(target_deletion_and_locking_enabled)
+    def updateTargetsActionButtonsEnabled(self):
+        """Update enabled state and label of the targets action buttons (Add / Edit / Remove)."""
+        current_selection = self.getCurrentSelectedTarget()
+        self.ui.removeTargetButton.setEnabled(current_selection is not None and not self._targets_in_edit_mode)
+        self.ui.addTargetButton.setEnabled(not self._targets_in_edit_mode)
+        # The Edit/Done toggle is always enabled (you can leave edit mode even if no target is selected).
+        self.ui.editTargetsButton.setEnabled(self.ui.targetsTableWidget.rowCount > 0 or self._targets_in_edit_mode)
+        self.ui.editTargetsButton.setText("Done Editing" if self._targets_in_edit_mode else "Edit")
 
-    def onNewTargetClicked(self):
+    def updateVirtualFitSectionState(self):
+        """Collapse the virtual-fit section if there are no targets; disable it while editing targets."""
+        has_targets = self.ui.targetsTableWidget.rowCount > 0
+        if not has_targets:
+            self.ui.virtualfitCollapsible.collapsed = True
+        self.ui.virtualfitCollapsible.setEnabled(not self._targets_in_edit_mode)
+
+    def onEditTargetsToggled(self, checked: bool):
+        self._set_targets_edit_mode(checked)
+
+    def _set_targets_edit_mode(self, enabled: bool) -> None:
+        """Toggle edit mode for the targets table: unlock all fiducials and allow cell editing when on."""
+        self._targets_in_edit_mode = enabled
+        # Lock state on the fiducials mirrors edit mode -- when not editing, all targets are locked so
+        # they cannot be dragged in the 3D view either. We also tint the glyph color to indicate state.
+        for node in get_target_candidates():
+            node.SetLocked(not enabled)
+            self._apply_edit_mode_color(node, editing=enabled)
+        # Toggle table edit triggers so the cells become editable / read-only in sync with the mode.
+        self.ui.targetsTableWidget.setEditTriggers(
+            qt.QAbstractItemView.DoubleClicked | qt.QAbstractItemView.EditKeyPressed | qt.QAbstractItemView.AnyKeyPressed
+            if enabled else qt.QAbstractItemView.NoEditTriggers
+        )
+        # Reapply per-cell editable flags via a rebuild so the change takes effect immediately.
+        self.updateTargetsTable()
+        self.updateVirtualFitSectionState()
+        self.updateWorkflowControls()
+
+    def _apply_edit_mode_color(self, node: vtkMRMLMarkupsFiducialNode, editing: bool) -> None:
+        """Tint the fiducial's selected glyph color to a fixed edit-mode color while editing; restore
+        the originally-assigned color otherwise. The original color is stashed in a node attribute so it
+        survives across edit-mode toggles."""
+        display_node = node.GetDisplayNode()
+        if display_node is None:
+            return
+        if editing:
+            if not node.GetAttribute(self._original_color_attr):
+                r, g, b = display_node.GetSelectedColor()
+                node.SetAttribute(self._original_color_attr, f"{r},{g},{b}")
+            display_node.SetSelectedColor(*self._edit_mode_color)
+        else:
+            saved = node.GetAttribute(self._original_color_attr)
+            if saved:
+                try:
+                    r, g, b = (float(x) for x in saved.split(","))
+                    display_node.SetSelectedColor(r, g, b)
+                except ValueError:
+                    pass
+                node.RemoveAttribute(self._original_color_attr)
+
+    def _jump_slices_to_node(self, node: vtkMRMLMarkupsFiducialNode, *args) -> None:
+        """Snap all slice views to the position of the given target's first control point."""
+        if node is None or node.GetNumberOfControlPoints() < 1:
+            return
+        position = node.GetNthControlPointPosition(0)
+        markups_logic = slicer.modules.markups.logic()
+        # JumpSlicesToLocation(r, a, s, centered) is supported across recent Slicer versions.
+        markups_logic.JumpSlicesToLocation(position[0], position[1], position[2], True)
+
+    def _set_non_placement_controls_enabled(self, enabled: bool) -> None:
+        """Enable/disable the rest of the targets+virtual-fit UI while a target is being placed."""
+        for widget in (
+            self.ui.targetsTableWidget,
+            self.ui.addTargetButton,
+            self.ui.editTargetsButton,
+            self.ui.removeTargetButton,
+            self.ui.virtualfitCollapsible,
+        ):
+            widget.setEnabled(enabled)
+
+    def onAddTargetClicked(self, checked: bool = False):
         # If we are already in point placement mode then do nothing
-        if slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton").GetCurrentInteractionMode() == PLACE_INTERACTION_MODE_ENUM_VALUE:
+        interaction_node = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+        if (
+            self._placement_in_progress
+            or interaction_node.GetCurrentInteractionMode() == PLACE_INTERACTION_MODE_ENUM_VALUE
+        ):
             return
 
         node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
@@ -492,63 +671,69 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         node.SetName(slicer.mrmlScene.GenerateUniqueName("Target"))
         node.SetMarkupLabelFormat("%N")
 
+        self._placement_in_progress = True
+        self._placement_node = node
+        self._set_non_placement_controls_enabled(False)
+
+        # Observe the interaction node so we can detect placement completion or cancellation (escape).
+        self._placement_observer_tag = interaction_node.AddObserver(
+            interaction_node.EndPlacementEvent, self._onPlacementEnded
+        )
+
         slicer.modules.markups.logic().StartPlaceMode(
-            False # "place mode persistence" set to False means we want to place one target and then stop
+            False  # "place mode persistence" set to False means we want to place one target and then stop
         )
 
         self.updateWorkflowControls()
 
-    def onremoveTargetClicked(self):
-        node = self.getTargetsListViewCurrentSelection()
+    def _onPlacementEnded(self, caller, event) -> None:
+        """Called once when the user either places the target or cancels with Escape."""
+        interaction_node = caller
+        if self._placement_observer_tag is not None:
+            interaction_node.RemoveObserver(self._placement_observer_tag)
+            self._placement_observer_tag = None
+
+        node = self._placement_node
+        self._placement_node = None
+        self._placement_in_progress = False
+        self._set_non_placement_controls_enabled(True)
+
+        if node is None or not slicer.mrmlScene.IsNodePresent(node):
+            self.updateWorkflowControls()
+            return
+
+        if node.GetNumberOfControlPoints() < 1:
+            # User cancelled placement (e.g. pressed Escape) — clean up the empty placeholder node.
+            slicer.mrmlScene.RemoveNode(node)
+            self.updateWorkflowControls()
+            return
+
+        # A point was placed: enter edit mode (so the user can fine-tune by dragging) and select the
+        # new target in the table.
+        if not self._targets_in_edit_mode:
+            self.ui.editTargetsButton.setChecked(True)  # triggers onEditTargetsToggled → _set_targets_edit_mode
+        else:
+            # Already in edit mode: just make sure the new node has the edit-mode color applied.
+            self._apply_edit_mode_color(node, editing=True)
+            self.updateTargetsTable()
+
+        # Select the row of the newly-placed target.
+        table = self.ui.targetsTableWidget
+        for row in range(table.rowCount):
+            name_item = table.item(row, 0)
+            if name_item is not None and name_item.data(qt.Qt.UserRole) is node:
+                table.selectRow(row)
+                break
+
+        self.updateWorkflowControls()
+
+    def onRemoveTargetClicked(self, checked: bool = False):
+        node = self.getCurrentSelectedTarget()
         if node is None:
             raise RuntimeError("It should not be possible to click Remove target while there is not a valid target selected.")
         slicer.mrmlScene.RemoveNode(node)
 
         self.updateWorkflowControls()
-
-    def updateTargetPositionInputs(self):
-        node = self.getTargetsListViewCurrentSelection()
-
-        if node is None:
-            for positionLineEdit in self.targetPositionInputs:
-                positionLineEdit.text = ""
-            return
-
-        position_ras = node.GetNthControlPointPosition(0)
-        for coord_value, positionLineEdit in zip(position_ras,self.targetPositionInputs):
-            if not positionLineEdit.hasFocus():
-                # If the RAS coordinates are not being input by the user, round what is displayed for easier reading.
-                # Note that this only affects what is displayed and isn't actually rounding the position of the point.
-                coord_value = f"{coord_value:0.2f}"
-
-            positionLineEdit.text = coord_value
-
-    def onTargetPositionEditingFinished(self):
-        try:
-            new_ras_position = [float(positionLineEdit.text) for positionLineEdit in self.targetPositionInputs]
-        except ValueError: # The text was not convertible float (e.g blank input)
-            return
-        node = self.getTargetsListViewCurrentSelection()
-        node.SetNthControlPointPosition(0,*new_ras_position)
-
-    def updateLockButtonIcon(self):
-        node = self.getTargetsListViewCurrentSelection()
-        if node is None:
-            self.ui.lockButton.setIcon(qt.QIcon())
-            self.ui.lockButton.setToolTip("")
-            return
-        if node.GetLocked():
-            self.ui.lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerLock.png"))
-            self.ui.lockButton.setToolTip("Target locked. Click to unlock moving the target.")
-        else:
-            self.ui.lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerUnlock.png"))
-            self.ui.lockButton.setToolTip("Target unlocked. Click to lock target from being moved.")
-
-    def onLockClicked(self):
-        node = self.getTargetsListViewCurrentSelection()
-        if node is None:
-            raise RuntimeError("It should not be possible to click the lock button with no target selected.")
-        node.SetLocked(not node.GetLocked())
 
     def updateInputOptions(self):
         """Update the algorithm input options"""
@@ -565,7 +750,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not self.algorithm_input_widget.has_valid_selections():
             for button in [
                 self.ui.virtualfitButton,
-                self.ui.approveButton,
                 self.ui.modifyTransformPushButton,
                 self.ui.addTransformPushButton,
             ]:
@@ -579,81 +763,28 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             if currently_interacting:
                 for button in [
                     self.ui.virtualfitButton,
-                    self.ui.approveButton,
                     self.ui.modifyTransformPushButton,
                     self.ui.addTransformPushButton,
                 ]:
                     button.enabled = False
                     button.setToolTip("Finish modifying the transform first")
                 self.ui.modifyTransformPushButton.enabled =True # Enabled because it is a "Finish" button
-            
+
             else:
                 self.ui.virtualfitButton.enabled = True
                 self.ui.virtualfitButton.setToolTip("Run virtual fit algorithm to automatically suggest a transducer positioning." \
                     "Any existing virtual fit results for the selected target will be removed.")
                 self.ui.addTransformPushButton.enabled=True
                 self.ui.addTransformPushButton.setToolTip("Add a new transducer transform to the table, to be manually positioned.")
-                
+
                 self.ui.modifyTransformPushButton.checked = False
 
                 if selected_vf_result is None:
-                    for button in [
-                        self.ui.modifyTransformPushButton,
-                        self.ui.approveButton,
-                    ]:
-                        button.enabled = False
-                        button.setToolTip("Select a virtual fit result on which to do this")
+                    self.ui.modifyTransformPushButton.enabled = False
+                    self.ui.modifyTransformPushButton.setToolTip("Select a virtual fit result on which to do this")
                 else:
                     self.ui.modifyTransformPushButton.enabled = True
                     self.ui.modifyTransformPushButton.setToolTip("Modify the selected transform")
-                    
-                    self.ui.approveButton.enabled = True
-                    approved : bool = get_approval_from_virtual_fit_result_node(selected_vf_result)                
-                    if not approved:
-                        self.ui.approveButton.setText("Approve virtual fit")
-                        self.ui.approveButton.setToolTip("Approve the virtual fit result for the selected target")
-                    else:
-                        self.ui.approveButton.setText("Revoke virtual fit approval")
-                        self.ui.approveButton.setToolTip("Revoke virtual fit approval for the selected target")
-
-    def onApproveClicked(self):
-        
-        selected_vf_result = self.getCurrentVirtualFitSelection()
-        if selected_vf_result is None:
-            raise RuntimeError("No virtual fit result selected")
-        approval_status = self.logic.toggle_virtual_fit_approval(selected_vf_result) # Triggers data parameter node modified
-        if approval_status:
-            self.watchVirtualFit(selected_vf_result)
-        else:
-            self.unwatchVirtualFit(selected_vf_result)
-
-        # Restore the most recent selection if it's still valid
-        self.setCurrentVirtualFitSelection(selected_vf_result)
-        self.updateVirtualfitButtons()
-        self.updateWorkflowControls()
-
-    def updateApprovalStatusLabel(self):
-        approved_target_ids = self.logic.get_approved_target_ids()
-        if len(approved_target_ids) == 0:
-            self.ui.approvalStatusLabel.text = "There are currently no virtual fit approvals."
-        else:
-            # Display the names of the approved VF results alongside each target
-            formatted_targets = []
-            for target_id in approved_target_ids:
-                # Get the virtual fit results
-                approved_results = self.logic.find_approved_virtual_fit_results_for_target(target_id)
-                approved_results_names = [node.GetAttribute("DisplayName") for node in approved_results]
-
-                if not approved_results:
-                    raise RuntimeError("Target cannot be approved without any approved virtual fit result nodes")
-                # Join the results with commas and enclose in parentheses
-                approved_result_name_strings = ", ".join(approved_results_names)
-                formatted_targets.append(f"{target_id} ({approved_result_name_strings})")
-
-            self.ui.approvalStatusLabel.text = (
-                "Virtual fit is approved for the following targets:\n- "
-                + "\n- ".join(formatted_targets)
-            )
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
@@ -696,57 +827,90 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self._input_update_in_progress:
             return
 
-        most_recent_selection = self.ui.virtualFitResultTable.currentRow
-        self.ui.virtualFitResultTable.clearContents()
-        self.ui.virtualFitResultTable.setRowCount(0) # Remove all rows
-
         activeData = self.algorithm_input_widget.get_current_data()
         target = activeData["Target"]
         session = get_openlifu_data_parameter_node().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
+        vf_results = []
+        if target is not None:
+            target_id = fiducial_to_openlifu_point_id(target)
+            vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort=True))
 
-        if not target:
-            self.updateVirtualfitButtons()
-            return
+        most_recent_selection = self.ui.virtualFitResultTable.currentRow()
+        self._populating_vf_results_table = True
+        try:
+            self.ui.virtualFitResultTable.clearContents()
+            self.ui.virtualFitResultTable.setRowCount(len(vf_results))
 
-        target_id = fiducial_to_openlifu_point_id(target)
-        vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
-
-        # Populate the table
-        if vf_results:
-            self.ui.virtualFitResultTable.setRowCount(len(vf_results)) 
-            
             for row_idx, result in enumerate(vf_results):
-
                 result_item = qt.QTableWidgetItem(result.GetAttribute("DisplayName"))
-                self.ui.virtualFitResultTable.setItem(row_idx, 0, result_item)
+                result_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
                 result_item.setData(qt.Qt.UserRole, result)
+                self.ui.virtualFitResultTable.setItem(row_idx, 0, result_item)
 
-                approval_status = "True" if get_approval_from_virtual_fit_result_node(result) else "False"
-                self.ui.virtualFitResultTable.setItem(row_idx, 1, qt.QTableWidgetItem(approval_status))
+                approved_item = qt.QTableWidgetItem()
+                approved_item.setFlags(
+                    qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable
+                )
+                is_approved = get_approval_from_virtual_fit_result_node(result)
+                approved_item.setCheckState(qt.Qt.Checked if is_approved else qt.Qt.Unchecked)
+                approved_item.setTextAlignment(qt.Qt.AlignCenter)
+                self.ui.virtualFitResultTable.setItem(row_idx, 1, approved_item)
 
-            # Restore the most recent selection if it's still valid
-            if 0 <= most_recent_selection < self.ui.virtualFitResultTable.rowCount:
+            if vf_results and 0 <= most_recent_selection < self.ui.virtualFitResultTable.rowCount:
                 self.ui.virtualFitResultTable.selectRow(most_recent_selection)
-            
-            self.ui.virtualFitResultTable.resizeRowsToContents()
+            if vf_results:
+                self.ui.virtualFitResultTable.resizeRowsToContents()
+        finally:
+            self._populating_vf_results_table = False
 
-        # If nothing is selected or no results are available
         if not vf_results:
             self.logic.chosen_virtual_fit = None
-        
+
         self.updateVirtualfitButtons()
 
-        slicer.modules.OpenLIFUTransducerLocalizationWidget.setVirtualFitResultForTracking(self.logic.chosen_virtual_fit)
+        # The TransducerLocalization widget may not yet be constructed/setup when this fires during PrePlanning setup
+        # (Slicer creates module widgets lazily; cross-module attribute access is otherwise unguarded).
+        tl_widget = getattr(slicer.modules, "OpenLIFUTransducerLocalizationWidget", None)
+        if tl_widget is not None and hasattr(tl_widget, "_input_update_in_progress"):
+            tl_widget.setVirtualFitResultForTracking(self.logic.chosen_virtual_fit)
+
+    def onVirtualFitResultItemChanged(self, item: qt.QTableWidgetItem):
+        """Handle in-table edits to a virtual fit result row. Currently only the Approved checkbox is editable."""
+        if self._populating_vf_results_table:
+            return
+        if item.column() != 1:
+            return
+        row = item.row()
+        name_item = self.ui.virtualFitResultTable.item(row, 0)
+        if name_item is None:
+            return
+        vf_node : vtkMRMLTransformNode = name_item.data(qt.Qt.UserRole)
+        if vf_node is None:
+            return
+        desired = (item.checkState() == qt.Qt.Checked)
+        current = get_approval_from_virtual_fit_result_node(vf_node)
+        if desired == current:
+            return
+        new_state = self.logic.toggle_virtual_fit_approval(vf_node)  # triggers data parameter node modified
+        if new_state:
+            self.watchVirtualFit(vf_node)
+        else:
+            self.unwatchVirtualFit(vf_node)
+        self.setCurrentVirtualFitSelection(vf_node)
+        self.updateVirtualfitButtons()
+        self.updateWorkflowControls()
 
     def getCurrentVirtualFitSelection(self):
         """ Returns the virtual fit transform node associated with the current selection."""
 
-        selected_items = self.ui.virtualFitResultTable.selectedItems()
-        if not selected_items:
+        row = self.ui.virtualFitResultTable.currentRow()
+        if row < 0:
             return None
-        selected_item = selected_items[0] # Get the first selected item (usually from col 0 if SelectRows)
-        selected_vf_result = selected_item.data(qt.Qt.UserRole)
+        name_item = self.ui.virtualFitResultTable.item(row, 0)
+        if name_item is None:
+            return None
+        selected_vf_result = name_item.data(qt.Qt.UserRole)
         if selected_vf_result is None:
             raise RuntimeError("No transform node found in association with the selected virtual fit result")
         return selected_vf_result
@@ -800,7 +964,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.showSkin(activeData["Volume"])
         activeData["Transducer"].set_visibility(True)
 
-        self.updateApprovalStatusLabel()
         self.updateWorkflowControls()
 
     def showSkin(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
