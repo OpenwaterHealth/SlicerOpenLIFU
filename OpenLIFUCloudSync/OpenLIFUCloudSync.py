@@ -12,6 +12,14 @@ from slicer.i18n import translate
 logger = logging.getLogger('OpenLIFU.CloudSync')
 
 
+_sharedLogicInstance = None
+def getCloudSyncLogic():
+    global _sharedLogicInstance
+    if _sharedLogicInstance is None:
+        _sharedLogicInstance = OpenLIFUCloudSyncLogic()
+    return _sharedLogicInstance
+
+
 class CloudStatusHelper(qt.QObject):
     # Signal carries: (statusMessage, timestamp)
     statusChanged = qt.Signal(str, str)
@@ -82,15 +90,10 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
         self.syncProcess = None
         self._cloudTokens = None
-<<<<<<< HEAD
         self._last_sync_timestamp = qt.QSettings().value(self._SETTING_LAST_SYNC, "") or ""
         self._last_status_message = ""
         self._service_failed = False
-=======
-        self._isServiceRunning = False
-        self._active_runner = None
         self.previousEnvironment = qt.QSettings().value("OpenLIFU/CloudEnvironment", "prod")
->>>>>>> 8530e1a (Add support for prod and dev envs)
         self.environment = self.getEnvironment()
         self.apiKey = "AIzaSyA45zDuDfjpkgmnszo5SRsoLdL4mJqgA8E" if self.environment == 'dev' else "AIzaSyBzPH2T6Cf17_KGeOSnncauJY2t1Lz4ndY"
 

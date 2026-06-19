@@ -30,6 +30,7 @@ from OpenLIFULib.util import (
     display_errors,
     register_module_callback,
 )
+from OpenLIFUCloudSync import getCloudSyncLogic
 
 #
 # OpenLIFUHome

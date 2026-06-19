@@ -1,6 +1,5 @@
-openlifu[app]==v0.21.0
+openlifu[app]
 bcrypt
 threadpoolctl
 requests
 segno
-git+https://github.com/OpenwaterHealth/OpenLIFU-python.git@add-cloud-dev-prod-environment-support
