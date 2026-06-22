@@ -1343,3 +1343,259 @@ class OpenLIFULoginLogic(ScriptedLoadableModuleLogic):
 
         newOpenLIFUuser = openlifu.db.User.from_dict(user_parameters)
         get_cur_db().write_user(newOpenLIFUuser, on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
+
+
+class OpenLIFULoginTest(ScriptedLoadableModuleTest):
+    """
+    This is the test case for your scripted module.
+    Uses ScriptedLoadableModuleTest base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+
+    def _python_slicer_or_skip(self) -> str:
+        python_slicer = shutil.which("PythonSlicer")
+        if python_slicer is None:
+            self.skipTest("PythonSlicer was not found.")
+        return python_slicer
+
+    def _run_python_slicer_script(self, script_path: Path, args: List[str], timeout_seconds: float = 120.0):
+        proc = slicer.util.launchConsoleProcess(
+            [self._python_slicer_or_skip(), str(script_path), *args],
+            useStartupEnvironment=False,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            self.fail(
+                f"PythonSlicer process timed out after {timeout_seconds} seconds.\n"
+                f"stdout:\n{stdout or ''}\n"
+                f"stderr:\n{stderr or ''}"
+            )
+        return proc.returncode, stdout or "", stderr or ""
+
+    def _process_events_until(self, condition: Callable[[], bool], timeout_seconds: float = 10.0) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            slicer.app.processEvents()
+            if condition():
+                return True
+            qt.QThread.msleep(10)
+        slicer.app.processEvents()
+        return condition()
+
+    def _write_fake_meshroom_zip(self, archive_path: Path, extracted_dir_name: str) -> None:
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr(f"{extracted_dir_name}/meshroom_batch.exe", "fake executable")
+            archive.writestr(f"{extracted_dir_name}/meshroom_batch", "fake executable")
+            archive.writestr(f"{extracted_dir_name}/README.md", "Meshroom")
+
+    def _write_fake_meshroom_tarball(self, archive_path: Path, extracted_dir_name: str) -> None:
+        import tarfile
+        with tarfile.open(archive_path, "w:gz") as archive:
+            import io
+            for name, content in [
+                (f"{extracted_dir_name}/meshroom_batch", "fake executable"),
+                (f"{extracted_dir_name}/README.md", "Meshroom"),
+            ]:
+                data = content.encode("utf-8")
+                info = tarfile.TarInfo(name=name)
+                info.size = len(data)
+                archive.addfile(info, io.BytesIO(data))
+
+    def test_meshroom_install_cli_extracts_zip(self):
+        from OpenLIFULib.meshroom_install_cli import PROGRESS_LINE_PREFIX
+        from OpenLIFULib.meshroom_install_gui import meshroom_install_cli_path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            archive_path = temp_dir_path / "Meshroom-2025.1.0-Windows.zip"
+            destination = temp_dir_path / "destination"
+            destination.mkdir()
+            work_dir = temp_dir_path / "work"
+            work_dir.mkdir()
+
+            self._write_fake_meshroom_zip(archive_path, "Meshroom-2025.1.0")
+
+            returncode, stdout, stderr = self._run_python_slicer_script(
+                meshroom_install_cli_path(),
+                [
+                    "--destination", str(destination),
+                    "--work-dir", str(work_dir),
+                    "--archive-url", archive_path.as_uri(),
+                ],
+            )
+
+            self.assertEqual(
+                0, returncode,
+                msg=f"stdout:\n{stdout}\nstderr:\n{stderr}",
+            )
+            progress_events = [
+                json.loads(line[len(PROGRESS_LINE_PREFIX):])
+                for line in stdout.splitlines()
+                if line.startswith(PROGRESS_LINE_PREFIX)
+            ]
+            self.assertTrue(progress_events)
+            self.assertTrue(progress_events[-1].get("success"))
+            self.assertTrue((destination / "Meshroom-2025.1.0" / "meshroom_batch.exe").exists())
+
+    def test_meshroom_install_cli_extracts_tarball(self):
+        from OpenLIFULib.meshroom_install_cli import PROGRESS_LINE_PREFIX
+        from OpenLIFULib.meshroom_install_gui import meshroom_install_cli_path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            archive_path = temp_dir_path / "Meshroom-2025.1.0-Linux.tar.gz"
+            destination = temp_dir_path / "destination"
+            destination.mkdir()
+            work_dir = temp_dir_path / "work"
+            work_dir.mkdir()
+
+            self._write_fake_meshroom_tarball(archive_path, "Meshroom-2025.1.0")
+
+            returncode, stdout, stderr = self._run_python_slicer_script(
+                meshroom_install_cli_path(),
+                [
+                    "--destination", str(destination),
+                    "--work-dir", str(work_dir),
+                    "--archive-url", archive_path.as_uri(),
+                ],
+            )
+
+            self.assertEqual(
+                0, returncode,
+                msg=f"stdout:\n{stdout}\nstderr:\n{stderr}",
+            )
+            progress_events = [
+                json.loads(line[len(PROGRESS_LINE_PREFIX):])
+                for line in stdout.splitlines()
+                if line.startswith(PROGRESS_LINE_PREFIX)
+            ]
+            self.assertTrue(progress_events)
+            self.assertTrue(progress_events[-1].get("success"))
+            self.assertTrue((destination / "Meshroom-2025.1.0" / "meshroom_batch").exists())
+
+    def test_meshroom_install_cli_cancel(self):
+        from OpenLIFULib.meshroom_install_cli import PROGRESS_LINE_PREFIX
+        from OpenLIFULib.meshroom_install_gui import meshroom_install_cli_path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            destination = temp_dir_path / "destination"
+            destination.mkdir()
+            work_dir = temp_dir_path / "work"
+            work_dir.mkdir()
+            cancel_file = work_dir / "cancel-requested"
+            cancel_file.write_text("cancel\n", encoding="utf-8")
+
+            returncode, stdout, stderr = self._run_python_slicer_script(
+                meshroom_install_cli_path(),
+                [
+                    "--destination", str(destination),
+                    "--work-dir", str(work_dir),
+                    "--archive-url", "file:///nonexistent-archive.zip",
+                    "--cancel-file", str(cancel_file),
+                ],
+            )
+
+            self.assertEqual(2, returncode)
+            progress_events = [
+                json.loads(line[len(PROGRESS_LINE_PREFIX):])
+                for line in stdout.splitlines()
+                if line.startswith(PROGRESS_LINE_PREFIX)
+            ]
+            self.assertTrue(progress_events)
+            self.assertTrue(progress_events[-1].get("canceled"))
+
+    def test_meshroom_install_controller_succeeds_with_local_archive(self):
+        self._python_slicer_or_skip()
+        from OpenLIFULib.meshroom_install_gui import MeshroomInstallController
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            archive_path = temp_dir_path / "Meshroom-2025.1.0-Windows.zip"
+            destination = temp_dir_path / "destination"
+            destination.mkdir()
+
+            self._write_fake_meshroom_zip(archive_path, "Meshroom-2025.1.0")
+
+            result = {}
+            controller = MeshroomInstallController(
+                parent=None,
+                on_finished=lambda succeeded: result.__setitem__("succeeded", succeeded),
+            )
+            try:
+                self.assertTrue(controller.start_install(destination, archive_path.as_uri()))
+                self.assertTrue(
+                    self._process_events_until(lambda: not controller.is_active(), timeout_seconds=30),
+                    "Meshroom install subprocess did not finish.",
+                )
+                self.assertTrue(result.get("succeeded"), "Controller reported failure.")
+                self.assertTrue((destination / "Meshroom-2025.1.0" / "meshroom_batch.exe").exists())
+            finally:
+                controller.cleanup()
+
+    def test_meshroom_install_controller_cancel(self):
+        self._python_slicer_or_skip()
+        from OpenLIFULib.meshroom_install_gui import MeshroomInstallController
+        from OpenLIFULib.meshroom_install_cli import PROGRESS_LINE_PREFIX
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            destination = temp_dir_path / "destination"
+            destination.mkdir()
+
+            slow_cli = temp_dir_path / "slow_meshroom_cli.py"
+            progress_payload = json.dumps({"message": "Waiting...", "value": 0, "maximum": 0})
+            slow_cli.write_text(
+                f"import argparse\n"
+                f"import time\n"
+                f"from pathlib import Path\n"
+                f"parser = argparse.ArgumentParser()\n"
+                f"parser.add_argument('--destination')\n"
+                f"parser.add_argument('--work-dir')\n"
+                f"parser.add_argument('--archive-url')\n"
+                f"parser.add_argument('--cancel-file', default='')\n"
+                f"args = parser.parse_args()\n"
+                f"print({(PROGRESS_LINE_PREFIX + progress_payload)!r}, flush=True)\n"
+                f"deadline = time.monotonic() + 30\n"
+                f"while time.monotonic() < deadline:\n"
+                f"    if args.cancel_file and Path(args.cancel_file).exists():\n"
+                f"        break\n"
+                f"    time.sleep(0.05)\n",
+                encoding="utf-8",
+            )
+
+            result = {}
+            controller = MeshroomInstallController(
+                parent=None,
+                on_finished=lambda succeeded: result.__setitem__("succeeded", succeeded),
+            )
+            try:
+                # Monkey-patch the cli_path to use our slow script
+                import OpenLIFULib.meshroom_install_gui as meshroom_gui
+                original_cli_path = meshroom_gui.meshroom_install_cli_path
+                meshroom_gui.meshroom_install_cli_path = lambda: slow_cli
+                try:
+                    self.assertTrue(controller.start_install(destination, "file:///unused.zip"))
+                finally:
+                    meshroom_gui.meshroom_install_cli_path = original_cli_path
+
+                self.assertTrue(
+                    self._process_events_until(lambda: controller.is_active(), timeout_seconds=10),
+                    "Meshroom install subprocess did not start.",
+                )
+
+                controller.cancel_install()
+                self.assertFalse(controller.is_active())
+                self.assertTrue(
+                    self._process_events_until(
+                        lambda: controller._background_canceled_process is None,
+                        timeout_seconds=10,
+                    ),
+                    "Canceled Meshroom install subprocess did not exit.",
+                )
+                self.assertFalse(result.get("succeeded", True))
+            finally:
+                controller.cleanup()
