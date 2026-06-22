@@ -30,6 +30,8 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/sample_data.py
   OpenLIFULib/sample_data_gui.py
   OpenLIFULib/sample_data_cli.py
+  OpenLIFULib/meshroom_install_gui.py
+  OpenLIFULib/meshroom_install_cli.py
 )
 
 set(MODULE_PYTHON_RESOURCES
