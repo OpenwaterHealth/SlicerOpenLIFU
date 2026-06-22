@@ -35,7 +35,7 @@ def _download_archive(url: str, archive_path: Path, cancel_callback) -> None:
 
     with urllib.request.urlopen(url, timeout=DOWNLOAD_SOCKET_TIMEOUT_SECONDS) as response:
         total_size = int(response.headers.get("Content-Length") or 0)
-        total_mb = max(1, total_size // BYTES_PER_MB) if total_size else 0
+        total_mb = max(1, (total_size + BYTES_PER_MB - 1) // BYTES_PER_MB) if total_size else 0
         downloaded_size = 0
         last_reported_mb = -1
 
