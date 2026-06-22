@@ -1195,7 +1195,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             parent=slicer.util.mainWindow(),
             on_finished=lambda succeeded: self._onMeshroomInstallFinished(succeeded, Path(selected_dir)),
         )
-        self._meshroom_install_controller.start_install(Path(selected_dir), archive_url)
+        if not self._meshroom_install_controller.start_install(Path(selected_dir), archive_url):
+            self._meshroom_install_controller = None
+            self._checkMeshroomStatus()
 
     def _installMeshroomWindows(self) -> None:
         from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_WINDOWS_URL
