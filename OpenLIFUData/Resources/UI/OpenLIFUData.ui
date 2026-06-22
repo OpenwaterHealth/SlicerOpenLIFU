@@ -610,6 +610,23 @@
           </property>
          </widget>
         </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="kwaveStatusIcon">
+          <property name="text">
+           <string>kwaveStatus</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QPushButton" name="installKwaveBinariesPushButton">
+          <property name="toolTip">
+           <string>Download and install the k-Wave binaries used for acoustic simulation. Requires openlifu to be installed first.</string>
+          </property>
+          <property name="text">
+           <string>Install k-Wave Binaries</string>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>

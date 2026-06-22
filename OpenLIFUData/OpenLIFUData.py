@@ -40,11 +40,13 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolutionAnalysis,
     SlicerOpenLIFUTransducer,
     assign_openlifu_metadata_to_volume_node,
+    check_and_install_kwave_binaries,
     check_and_install_python_requirements,
     ensure_python_requirements_for_module_enter,
     get_cur_db,
     get_required_openlifu_version,
     get_target_candidates,
+    kwave_binaries_exist,
     openlifu_version_matches,
     python_requirements_exist,
 )
@@ -88,9 +90,18 @@ from OpenLIFULib.virtual_fit_results import (
 
 if TYPE_CHECKING:
     import openlifu
+    import openlifu.bf
+    import openlifu.bf.apod_methods
+    import openlifu.bf.delay_methods
+    import openlifu.db.database
     import openlifu.nav.photoscan
     import openlifu.plan
+    import openlifu.plan.solution_analysis
+    import openlifu.seg.seg_methods
+    import openlifu.seg.virtual_fit
+    import openlifu.sim
     import openlifu.xdc
+    import openlifu.xdc.util
     from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
 
@@ -1950,7 +1961,8 @@ class TransducerManagerDialog(qt.QDialog):
             # load_transducer_from_file currently returns None; fall back to
             # parsing the file again to get something we can write to the db.
             try:
-                obj = openlifu_lz().xdc.util.load_transducer_from_file(filepath, convert_array=False)
+                import openlifu.xdc.util
+                obj = openlifu.xdc.util.load_transducer_from_file(filepath, convert_array=False)
             except Exception as e:
                 slicer.util.errorDisplay(f"Failed to read transducer file: {e}", parent=self)
                 return
@@ -2052,7 +2064,8 @@ class TransducerManagerDialog(qt.QDialog):
         with _warnings.catch_warnings(record=True) as caught:
             _warnings.simplefilter("always")
             try:
-                arr = openlifu_lz().xdc.TransducerArray.get_connected(
+                import openlifu.xdc
+                arr = openlifu.xdc.TransducerArray.get_connected(
                     interface=iface,
                     db=self.db,
                     arr_id=arr_id,
@@ -2795,7 +2808,8 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
 
 class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
     def __init__(self, parent: Optional[qt.QWidget] = None):
-        super().__init__(openlifu_lz().sim.SimSetup, parent, is_collapsible=True, collapsible_title="Simulation Setup")
+        import openlifu.sim
+        super().__init__(openlifu.sim.SimSetup, parent, is_collapsible=True, collapsible_title="Simulation Setup")
 
         x_ext_hbox = self._field_widgets['x_extent'].layout()
         y_ext_hbox = self._field_widgets['y_extent'].layout()
@@ -2822,7 +2836,8 @@ class OpenLIFUSimSetupDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFo
 
 class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
     def __init__(self):
-        super().__init__([openlifu_lz().bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
+        import openlifu.bf.delay_methods
+        super().__init__([openlifu.bf.delay_methods.Direct], is_collapsible=False, collapsible_title="Delay Method", custom_abc_title="Delay Method")
         self.forms.setCurrentIndex(0)
         direct_definition_form_widget = self.forms.widget(0)
         c0_spinbox = direct_definition_form_widget._field_widgets['c0']
@@ -2831,7 +2846,8 @@ class OpenLIFUAbstractDelayMethodDefinitionFormWidget(OpenLIFUAbstractMultipleAB
 
 class OpenLIFUAbstractApodizationMethodDefinitionFormWidget(OpenLIFUAbstractMultipleABCDefinitionFormWidget):
     def __init__(self):
-        super().__init__([openlifu_lz().bf.apod_methods.MaxAngle, openlifu_lz().bf.apod_methods.PiecewiseLinear, openlifu_lz().bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
+        import openlifu.bf.apod_methods
+        super().__init__([openlifu.bf.apod_methods.MaxAngle, openlifu.bf.apod_methods.PiecewiseLinear, openlifu.bf.apod_methods.Uniform], is_collapsible=False, collapsible_title="Apodization Method", custom_abc_title="Apodization Method")
         # Drive the index change via the selector so the combo box and the
         # stacked widget stay in sync (setting forms.setCurrentIndex directly
         # leaves the combo box at index 0, leading to silent mis-saves).
@@ -2857,7 +2873,8 @@ class OpenLIFUAbstractSegmentationMethodDefinitionFormWidget(OpenLIFUAbstractMul
     ``ref_material`` editing on the UniformWater / UniformTissue forms."""
 
     def __init__(self):
-        cls_list = [openlifu_lz().seg.seg_methods.UniformSegmentation, openlifu_lz().seg.seg_methods.UniformTissue, openlifu_lz().seg.seg_methods.UniformWater]
+        import openlifu.seg.seg_methods
+        cls_list = [openlifu.seg.seg_methods.UniformSegmentation, openlifu.seg.seg_methods.UniformTissue, openlifu.seg.seg_methods.UniformWater]
         is_collapsible = False
         parent: Optional[qt.QWidget] = None
         custom_abc_title = "Segmentation Method"
@@ -2931,7 +2948,8 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             # ``[aggregation, format_str, units, display_name]``; we use
             # ``display_name (units)`` as the user-facing label and the dict
             # key as the parameter id stored in the constraint.
-            param_formats = openlifu_lz().plan.solution_analysis.PARAM_FORMATS
+            import openlifu.plan.solution_analysis
+            param_formats = openlifu.plan.solution_analysis.PARAM_FORMATS
             self.parameter_key_map: Dict[str, str] = {}
             self._parameter_format_map: Dict[str, str] = {}
             for param_id, fmt in param_formats.items():
@@ -3037,6 +3055,7 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
             self.error_and_label.setVisible(use_two_values)
 
         def _get_parameter_constraint_as_class(self) -> "openlifu.plan.ParameterConstraint":
+            import openlifu.plan
             display_operator = self.operator_selector.currentText
             operator = self.inverse_operator_display_map[display_operator]
             is_range_operator = operator in ['within', 'inside', 'outside', 'outside_inclusive']
@@ -3050,7 +3069,7 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
                 if is_range_operator else self.error_spinboxes[0].value
             )
 
-            return openlifu_lz().plan.ParameterConstraint(operator, warning_value, error_value)
+            return openlifu.plan.ParameterConstraint(operator, warning_value, error_value)
 
         def _on_accept(self):
             display_name = self.parameter_name_input.currentText
@@ -3089,7 +3108,8 @@ class OpenLIFUParameterConstraintsWidget(DictTableWidget):
 
 class OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget(OpenLIFUAbstractDataclassDefinitionFormWidget):
     def __init__(self, parent: Optional[qt.QWidget] = None):
-        super().__init__(openlifu_lz().plan.SolutionAnalysisOptions, parent, collapsible_title="Solution Analysis Options")
+        import openlifu.plan
+        super().__init__(openlifu.plan.SolutionAnalysisOptions, parent, collapsible_title="Solution Analysis Options")
 
         old_param_constraints_dicttablewidget = self._field_widgets['param_constraints']
         new_param_constraints_widget = OpenLIFUParameterConstraintsWidget()
@@ -3101,28 +3121,36 @@ class OpenLIFUSolutionAnalysisOptionsDefinitionFormWidget(OpenLIFUAbstractDatacl
 
 def _default_protocol_blueprint() -> Dict[str, Any]:
     """Common keyword args for a freshly-created Protocol (no id/name/description/roles)."""
-    olz = openlifu_lz()
+    import openlifu.bf
+    import openlifu.bf.apod_methods
+    import openlifu.bf.delay_methods
+    import openlifu.bf.focal_patterns
+    import openlifu.plan
+    import openlifu.seg.seg_methods
+    import openlifu.seg.virtual_fit
+    import openlifu.sim
     return dict(
-        pulse=olz.bf.Pulse(),
-        sequence=olz.bf.Sequence(),
-        focal_pattern=olz.bf.focal_patterns.SinglePoint(),
-        sim_setup=olz.sim.SimSetup(),
-        delay_method=olz.bf.delay_methods.Direct(),
-        apod_method=olz.bf.apod_methods.Uniform(),
-        seg_method=olz.seg.seg_methods.UniformWater(),
+        pulse=openlifu.bf.Pulse(),
+        sequence=openlifu.bf.Sequence(),
+        focal_pattern=openlifu.bf.focal_patterns.SinglePoint(),
+        sim_setup=openlifu.sim.SimSetup(),
+        delay_method=openlifu.bf.delay_methods.Direct(),
+        apod_method=openlifu.bf.apod_methods.Uniform(),
+        seg_method=openlifu.seg.seg_methods.UniformWater(),
         param_constraints={},
         target_constraints=[],
-        analysis_options=olz.plan.SolutionAnalysisOptions(),
-        virtual_fit_options=olz.seg.virtual_fit.VirtualFitOptions(),
+        analysis_options=openlifu.plan.SolutionAnalysisOptions(),
+        virtual_fit_options=openlifu.seg.virtual_fit.VirtualFitOptions(),
     )
 
 
 def _build_default_new_protocol() -> "openlifu.plan.Protocol":
     """Return a freshly-created Protocol pre-populated with the current user's
     non-admin roles, used as the starting point for the *New* action."""
+    import openlifu.plan
     user = get_current_user()
     allowed_roles = [r for r in (user.roles if user is not None else []) if r != "admin"]
-    return openlifu_lz().plan.Protocol(
+    return openlifu.plan.Protocol(
         name="New Protocol",
         id="new_protocol",
         description="",
@@ -3184,6 +3212,9 @@ class ProtocolEditDialog(qt.QDialog):
 
     # ---- UI build ----
     def _setup(self) -> None:
+        import openlifu.bf
+        import openlifu.plan
+        import openlifu.seg.virtual_fit
         outer = qt.QVBoxLayout()
         self.setLayout(outer)
 
@@ -3231,21 +3262,21 @@ class ProtocolEditDialog(qt.QDialog):
         self._summary_sections: list[tuple[Any, Any, str]] = []
 
         self.pulse_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
-            cls=openlifu_lz().bf.Pulse, collapsible_title="Parameters for Pulse")
+            cls=openlifu.bf.Pulse, collapsible_title="Parameters for Pulse")
         self.pulse_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.pulse_definition_widget)
         self.pulse_definition_widget.collapsible.collapsed = True
         self._summary_sections.append((self.pulse_definition_widget.collapsible, self.pulse_definition_widget, "Pulse"))
 
         self.sequence_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
-            cls=openlifu_lz().bf.Sequence, collapsible_title="Parameters for Sequence")
+            cls=openlifu.bf.Sequence, collapsible_title="Parameters for Sequence")
         self.sequence_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.sequence_definition_widget)
         self.sequence_definition_widget.collapsible.collapsed = True
         self._summary_sections.append((self.sequence_definition_widget.collapsible, self.sequence_definition_widget, "Sequence"))
 
         self.abstract_focal_pattern_definition_widget = OpenLIFUAbstractMultipleABCDefinitionFormWidget(
-            [openlifu_lz().bf.Wheel, openlifu_lz().bf.SinglePoint],
+            [openlifu.bf.Wheel, openlifu.bf.SinglePoint],
             is_collapsible=False, collapsible_title="Focal Pattern", custom_abc_title="Focal Pattern",
         )
         _fp_collapsible = ctk.ctkCollapsibleButton()
@@ -3300,7 +3331,7 @@ class ProtocolEditDialog(qt.QDialog):
 
         # Target Constraints (collapsible)
         self.target_constraints_widget = ListTableWidget(
-            object_name="Target Constraint", object_type=openlifu_lz().plan.TargetConstraints)
+            object_name="Target Constraint", object_type=openlifu.plan.TargetConstraints)
         self._target_constraints_collapsible = ctk.ctkCollapsibleButton()
         self._target_constraints_collapsible.text = "Target Constraints"
         self._target_constraints_collapsible.collapsed = True
@@ -3321,7 +3352,7 @@ class ProtocolEditDialog(qt.QDialog):
 
         # Virtual Fit Options
         self.virtual_fit_options_definition_widget = OpenLIFUAbstractDataclassDefinitionFormWidget(
-            cls=openlifu_lz().seg.virtual_fit.VirtualFitOptions, collapsible_title="Virtual Fit Options")
+            cls=openlifu.seg.virtual_fit.VirtualFitOptions, collapsible_title="Virtual Fit Options")
         self.virtual_fit_options_definition_widget.layout().setContentsMargins(0, 0, 0, 0)
         bodyLayout.addWidget(self.virtual_fit_options_definition_widget)
         self.virtual_fit_options_definition_widget.collapsible.collapsed = True
@@ -3390,6 +3421,7 @@ class ProtocolEditDialog(qt.QDialog):
         self.virtual_fit_options_definition_widget.update_form_from_class(protocol.virtual_fit_options)
 
     def _build_protocol_from_ui(self, post_init: bool = True) -> "openlifu.plan.Protocol":
+        import openlifu.plan
         fields = dict(
             name=self.nameLineEdit.text,
             id=self.idLineEdit.text,
@@ -3408,8 +3440,8 @@ class ProtocolEditDialog(qt.QDialog):
             virtual_fit_options=self.virtual_fit_options_definition_widget.get_form_as_class(post_init=post_init),
         )
         if post_init:
-            return openlifu_lz().plan.Protocol(**fields)
-        return instantiate_without_post_init(openlifu_lz().plan.Protocol, **fields)
+            return openlifu.plan.Protocol(**fields)
+        return instantiate_without_post_init(openlifu.plan.Protocol, **fields)
 
     def _update_validity_indicator(self) -> None:
         try:
@@ -3467,7 +3499,8 @@ class ProtocolEditDialog(qt.QDialog):
             ):
                 return
         try:
-            self._db.write_protocol(entered, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+            import openlifu.db.database
+            self._db.write_protocol(entered, openlifu.db.database.OnConflictOpts.OVERWRITE)
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to write protocol to database: {e}", parent=self)
             return
@@ -3768,7 +3801,8 @@ class ProtocolManagerDialog(qt.QDialog):
         if not filepath:
             return
         try:
-            protocol = openlifu_lz().plan.Protocol.from_file(filepath)
+            import openlifu.plan
+            protocol = openlifu.plan.Protocol.from_file(filepath)
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to read protocol file: {e}", parent=self)
             return
@@ -3784,7 +3818,8 @@ class ProtocolManagerDialog(qt.QDialog):
             ):
                 return
         try:
-            self.db.write_protocol(protocol, openlifu_lz().db.database.OnConflictOpts.OVERWRITE)
+            import openlifu.db.database
+            self.db.write_protocol(protocol, openlifu.db.database.OnConflictOpts.OVERWRITE)
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to write protocol to database: {e}", parent=self)
             return
@@ -3855,7 +3890,8 @@ class ProtocolManagerDialog(qt.QDialog):
         ):
             return
         try:
-            self.db.delete_protocol(pid, openlifu_lz().db.database.OnConflictOpts.ERROR)
+            import openlifu.db.database
+            self.db.delete_protocol(pid, openlifu.db.database.OnConflictOpts.ERROR)
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to delete protocol from database: {e}", parent=self)
             return
@@ -4017,8 +4053,9 @@ class SolutionManagerDialog(qt.QDialog):
     def _load_solution_metadata(self, sid: str) -> Optional["openlifu.plan.Solution"]:
         """Load just the solution metadata (no .nc) for listing/preview."""
         try:
+            import openlifu.plan
             json_filepath = self.db.get_solution_filepath(self.subject_id, self.session_id, sid)
-            return openlifu_lz().plan.Solution.from_files(json_filepath)
+            return openlifu.plan.Solution.from_files(json_filepath)
         except Exception as e:
             logging.warning("Could not read solution %s for listing: %s", sid, e)
             return None
@@ -4092,7 +4129,8 @@ class SolutionManagerDialog(qt.QDialog):
             )
             return
         try:
-            solution = openlifu_lz().plan.Solution.from_files(str(json_path), str(nc_path))
+            import openlifu.plan
+            solution = openlifu.plan.Solution.from_files(str(json_path), str(nc_path))
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to read solution file: {e}", parent=self)
             return
@@ -4400,7 +4438,8 @@ class PhotoscanManagerDialog(qt.QDialog):
             return
         json_path = Path(filepath)
         try:
-            photoscan = openlifu_lz().nav.photoscan.Photoscan.from_file(str(json_path))
+            import openlifu.nav.photoscan
+            photoscan = openlifu.nav.photoscan.Photoscan.from_file(str(json_path))
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to read photoscan file: {e}", parent=self)
             return
@@ -4687,8 +4726,9 @@ class RunManagerDialog(qt.QDialog):
 
     def _load_run_metadata(self, rid: str) -> Optional["openlifu.plan.Run"]:
         try:
+            import openlifu.plan
             run_filepath = self.db.get_run_filepath(self.subject_id, self.session_id, rid)
-            return openlifu_lz().plan.Run.from_file(run_filepath)
+            return openlifu.plan.Run.from_file(run_filepath)
         except Exception as e:
             logging.warning("Could not read run %s for listing: %s", rid, e)
             return None
@@ -4754,7 +4794,8 @@ class RunManagerDialog(qt.QDialog):
         if not filepath:
             return
         try:
-            run = openlifu_lz().plan.Run.from_file(filepath)
+            import openlifu.plan
+            run = openlifu.plan.Run.from_file(filepath)
         except Exception as e:
             slicer.util.errorDisplay(f"Failed to read run file: {e}", parent=self)
             return
@@ -5014,6 +5055,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # login state so they belong on the Data page.
         self.ui.installPythonRequirementsPushButton.clicked.connect(
             self.onUpdateOpenLIFUClicked
+        )
+        self.ui.installKwaveBinariesPushButton.clicked.connect(
+            self.onInstallKwaveBinariesClicked
         )
         self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
 
@@ -5819,6 +5863,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
           pointed at the "Install/Update Python Requirements" button.
         """
         self._checkOpenLIFUVersionStatus()
+        self._checkKwaveStatus()
         self._checkADBStatus()
 
         # Optional dependencies (ADB) -- always start collapsed.
@@ -5827,13 +5872,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         except AttributeError:
             pass
 
-        # Outer Dependencies section -- expanded only when openlifu is not OK.
+        # Outer Dependencies section -- expanded when openlifu or kwave is not OK.
         openlifu_ok = python_requirements_exist() and openlifu_version_matches()
+        kwave_ok = openlifu_ok and kwave_binaries_exist()
+        all_ok = openlifu_ok and kwave_ok
         try:
-            self.ui.dependenciesCollapsibleButton.collapsed = bool(openlifu_ok)
+            self.ui.dependenciesCollapsibleButton.collapsed = bool(all_ok)
             # ctkCollapsibleButton's ``checked`` mirrors ``not collapsed``
             # in the .ui file; keep them in sync defensively.
-            self.ui.dependenciesCollapsibleButton.setChecked(not openlifu_ok)
+            self.ui.dependenciesCollapsibleButton.setChecked(not all_ok)
         except AttributeError:
             pass
 
@@ -5875,6 +5922,49 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onUpdateOpenLIFUClicked(self, checked: bool = False) -> None:
         check_and_install_python_requirements(prompt_if_found=True)
         self._checkOpenLIFUVersionStatus()
+        self._checkKwaveStatus()
+
+    def _checkKwaveStatus(self) -> None:
+        """Update the k-Wave binaries status indicator and install button.
+
+        k-Wave installation requires openlifu to be importable, so the
+        install button is disabled until python requirements are present.
+        """
+        openlifu_ok = python_requirements_exist()
+        kwave_ok = kwave_binaries_exist() if openlifu_ok else False
+
+        icon_name = (
+            qt.QStyle.SP_DialogApplyButton
+            if kwave_ok
+            else qt.QStyle.SP_DialogCancelButton
+        )
+        pixmap = slicer.app.style().standardIcon(icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.kwaveStatusIcon.setPixmap(pixmap)
+        self.ui.kwaveStatusIcon.setText("")
+
+        if not openlifu_ok:
+            self.ui.installKwaveBinariesPushButton.setEnabled(False)
+            self.ui.installKwaveBinariesPushButton.setText(
+                "Install k-Wave Binaries (install Python requirements first)"
+            )
+        elif kwave_ok:
+            self.ui.installKwaveBinariesPushButton.setEnabled(False)
+            self.ui.installKwaveBinariesPushButton.setText("k-Wave Binaries Installed")
+        else:
+            self.ui.installKwaveBinariesPushButton.setEnabled(True)
+            self.ui.installKwaveBinariesPushButton.setText("Install k-Wave Binaries")
+
+    @display_errors
+    def onInstallKwaveBinariesClicked(self, checked: bool = False) -> None:
+        if not python_requirements_exist():
+            slicer.util.errorDisplay(
+                text="OpenLIFU python dependencies are not installed. Install Python requirements first.",
+                windowTitle="Python requirements missing",
+            )
+            return
+        with BusyCursor():
+            check_and_install_kwave_binaries()
+        self._checkKwaveStatus()
 
     def _checkADBStatus(self) -> None:
         try:
@@ -7158,7 +7248,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             loaded_session = self.getParameterNode().loaded_session
             session_openlifu = loaded_session.session.session
             solution_openlifu = solution.solution.solution
-            OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+            import openlifu.db.database
+            OnConflictOpts = openlifu.db.database.OnConflictOpts
             get_cur_db().write_solution(session_openlifu, solution_openlifu)
             if analysis is not None:
                 get_cur_db().write_solution_analysis(
@@ -7199,7 +7290,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 and get_cur_db() is not None
                 and loaded_session.session.session.solution_id == solution.solution.solution.id
             ):
-                OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu_lz().db.database.OnConflictOpts
+                import openlifu.db.database
+                OnConflictOpts = openlifu.db.database.OnConflictOpts
                 loaded_session.session.session.solution_id = ""
                 # Write the pack back so the in-memory parameterNode JSON reflects the cleared link.
                 self.getParameterNode().loaded_session = loaded_session

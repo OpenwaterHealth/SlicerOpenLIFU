@@ -146,6 +146,17 @@ def openlifu_version_matches() -> bool:
     except importlib.metadata.PackageNotFoundError:
         return False
 
+def kwave_binaries_exist() -> bool:
+    """Return True if all of openlifu's kwave binaries/assets are already
+    installed. Returns False (without prompting) if any are missing or if
+    openlifu is not importable yet.
+    """
+    try:
+        from openlifu.util.assets import get_kwave_paths
+    except ImportError:
+        return False
+    return all(p.exists() for p, _ in get_kwave_paths())
+
 def check_and_install_kwave_binaries() -> bool:
     """Check if the kwave binaries are present, and if not then ask the user how they want to install them.
     Returns whether they were successfully installed (or just already present).

@@ -2832,6 +2832,16 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             # Set the current transducer transform node to the transducer localization result.
             selected_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_transform_node)
             selected_transducer.set_visibility(True)
+
+            # Re-sync the in-memory session so array_transform reflects the post-tracking pose.
+            # `add_transducer_tracking_result` inside the wizard already called update_underlying_openlifu_session,
+            # but at that point the transducer hadn't been moved yet, so array_transform captured the pre-tracking
+            # pose. Without this second sync, the session can be saved with TT approval=True but array_transform
+            # pointing at the prior (e.g. virtual-fit) pose, which causes a "transform does not match" revoke on
+            # next session load.
+            if get_openlifu_data_parameter_node().loaded_session is not None:
+                slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+
             self.updateWorkflowControls()
 
             self.updateDistanceFromVFLabel()
