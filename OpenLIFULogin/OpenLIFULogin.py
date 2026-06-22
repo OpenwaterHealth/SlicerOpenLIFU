@@ -1,6 +1,7 @@
 # Standard library imports
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -589,6 +590,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._default_anonymous_user = None  # initialized after dependency check
         self._default_admin_user = None  # initialized after dependency check
         self._last_active_user = self._default_anonymous_user
+        self._meshroom_install_controller = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -631,6 +633,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self._checkOpenLIFUVersionStatus()
         self.ui.installADBPushButton.clicked.connect(self.onInstallADBClicked)
         self._checkADBStatus()
+        self.ui.installMeshroomPushButton.clicked.connect(self.onInstallMeshroomClicked)
+        self._checkMeshroomStatus()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -678,6 +682,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 self.logic.active_user = self._default_anonymous_user
             self.updateWidgetLoginState(self._cur_login_state)
             self._checkOpenLIFUVersionStatus()
+        self._checkMeshroomStatus()
         self.updateLoginStateNotificationLabel()
 
     def exit(self) -> None:
@@ -1143,6 +1148,130 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
             "    sudo apt install android-tools-adb\n\n"
             "After installing, reopen the application to verify."
         )
+
+    def _checkMeshroomStatus(self) -> None:
+        meshroom_path = shutil.which("meshroom_batch")
+
+        icon_name = qt.QStyle.SP_DialogApplyButton if meshroom_path else qt.QStyle.SP_DialogCancelButton
+        pixmap = slicer.app.style().standardIcon(icon_name).pixmap(qt.QSize(16, 16))
+        self.ui.meshroomStatusIcon.setPixmap(pixmap)
+        self.ui.meshroomStatusIcon.setText("")
+
+        if meshroom_path:
+            meshroom_dir = Path(meshroom_path).parent
+            dir_name = meshroom_dir.name
+            version_str = dir_name[len("Meshroom-"):] if dir_name.startswith("Meshroom-") else "installed"
+            self.ui.installMeshroomPushButton.setEnabled(False)
+            self.ui.installMeshroomPushButton.setText(f"Meshroom {version_str}")
+        else:
+            self.ui.installMeshroomPushButton.setEnabled(True)
+            self.ui.installMeshroomPushButton.setText("Install Meshroom 2025")
+
+    @display_errors
+    def onInstallMeshroomClicked(self, checked: bool = False) -> None:
+        if sys.platform.startswith("win"):
+            self._installMeshroomWindows()
+        elif sys.platform.startswith("linux"):
+            self._installMeshroomLinux()
+        elif sys.platform == "darwin":
+            slicer.util.infoDisplay("Meshroom does not provide macOS binaries.")
+        else:
+            slicer.util.infoDisplay("Meshroom installation is not supported on this platform.")
+
+    def _startMeshroomInstall(self, archive_url: str) -> None:
+        selected_dir = qt.QFileDialog.getExistingDirectory(
+            slicer.util.mainWindow(),
+            "Choose installation directory for Meshroom",
+            str(Path.home()),
+            qt.QFileDialog.ShowDirsOnly,
+        )
+        if not selected_dir:
+            return
+
+        from OpenLIFULib.meshroom_install_gui import MeshroomInstallController
+
+        self.ui.installMeshroomPushButton.setEnabled(False)
+        self._meshroom_install_controller = MeshroomInstallController(
+            parent=slicer.util.mainWindow(),
+            on_finished=lambda succeeded: self._onMeshroomInstallFinished(succeeded, Path(selected_dir)),
+        )
+        self._meshroom_install_controller.start_install(Path(selected_dir), archive_url)
+
+    def _installMeshroomWindows(self) -> None:
+        from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_WINDOWS_URL
+
+        if not slicer.util.confirmYesNoDisplay(
+            f"This will download Meshroom {MESHROOM_VERSION} (~10 GB) from Zenodo "
+            "and add the installation directory to your Windows user PATH. "
+            "This is a large download and may take a while. Continue?"
+        ):
+            return
+
+        self._startMeshroomInstall(MESHROOM_WINDOWS_URL)
+
+    def _installMeshroomLinux(self) -> None:
+        from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_LINUX_URL
+
+        if not slicer.util.confirmYesNoDisplay(
+            f"This will download Meshroom {MESHROOM_VERSION} (~13 GB) from Zenodo "
+            "and extract it to a directory of your choice. "
+            "This is a large download and may take a while. Continue?"
+        ):
+            return
+
+        self._startMeshroomInstall(MESHROOM_LINUX_URL)
+
+    def _onMeshroomInstallFinished(self, succeeded: bool, install_dir: Path) -> None:
+        if succeeded:
+            from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_EXTRACTED_DIR_NAME
+            meshroom_bin_path = str(install_dir / MESHROOM_EXTRACTED_DIR_NAME)
+
+            os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + meshroom_bin_path
+
+            # Write to Windows user PATH registry key for persistence across sessions
+            # User PATH does not require admin permissions
+            if sys.platform.startswith("win"):
+                import winreg
+                try:
+                    with winreg.CreateKey(
+                        winreg.HKEY_CURRENT_USER, "Environment",
+                    ) as reg_key:
+                        try:
+                            current_path, _ = winreg.QueryValueEx(reg_key, "Path")
+                        except FileNotFoundError:
+                            current_path = ""
+                        entries = [p for p in current_path.split(os.pathsep) if p]
+                        if meshroom_bin_path not in entries:
+                            entries.append(meshroom_bin_path)
+                            winreg.SetValueEx(reg_key, "Path", 0, winreg.REG_EXPAND_SZ,
+                                              os.pathsep.join(entries))
+                except OSError as e:
+                    slicer.util.warningDisplay(
+                        f"Meshroom installed, but PATH could not be saved to the registry ({e}). "
+                        f"Add {meshroom_bin_path} to your user PATH manually to persist after restart."
+                    )
+
+                slicer.util.infoDisplay(
+                    f"Meshroom {MESHROOM_VERSION} installed successfully.\n\n"
+                    "To enable GPU acceleration for Meshroom:\n\n"
+                    "1. Open the NVIDIA Control Panel from the Start menu or system tray.\n"
+                    "2. In the left sidebar under '3D Settings', click 'Manage 3D settings'.\n"
+                    "3. Go to the 'Program Settings' tab.\n"
+                    "4. Click 'Add', then browse to and select meshroom_batch.exe\n"
+                    f"   from the folder where Meshroom was installed ({meshroom_bin_path}).\n"
+                    "5. Under 'Select the preferred graphics processor for this program',\n"
+                    "   choose 'High-performance NVIDIA processor'.\n"
+                    "6. Click 'Apply'."
+                )
+            else:
+                slicer.util.infoDisplay(
+                    f"Meshroom {MESHROOM_VERSION} installed successfully.\n\n"
+                    f"To persist across sessions, add the following to your shell profile:\n"
+                    f"    export PATH=\"$PATH:{meshroom_bin_path}\""
+                )
+
+        self._meshroom_install_controller = None
+        self._checkMeshroomStatus()
 
 # OpenLIFULoginLogic
 #
