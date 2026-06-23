@@ -422,10 +422,9 @@ def clear_transducer_tracking_results(
     
 def is_transducer_tracking_result_node(transform_node) -> bool:
     """Returns True if the given node is a transducer localization result node"""
-    if (
-        transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1" 
+    if transform_node is None:
+        return False
+    return (
+        transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME.name}") == "1"
         or transform_node.GetAttribute(f"isTT-{TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME.name}") == "1"
-        ):
-        return True
-    else:
-        False
+    )

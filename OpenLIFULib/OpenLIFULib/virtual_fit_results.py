@@ -354,7 +354,6 @@ def get_target_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> s
 
 def is_virtual_fit_result_node(node: vtkMRMLTransformNode) -> bool:
     """Returns True if the given node is a virtual fit result node"""
-    if node.GetAttribute("isVirtualFitResult") == "1":
-        return True
-    else:
+    if node is None:
         return False
+    return node.GetAttribute("isVirtualFitResult") == "1"

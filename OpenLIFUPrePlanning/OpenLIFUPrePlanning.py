@@ -1011,8 +1011,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onVirtualFitResultSelected(self):
         """Updates the transducer transform to match the currently selected virtual fit result"""
 
+        # selectRow() during a table repopulate would otherwise move the transducer back to the
+        # VF pose -- masquerading as a user click when no click occurred.
+        if self._populating_vf_results_table:
+            return
+
         selected_vf_result = self.getCurrentVirtualFitSelection()
-        
+
         if selected_vf_result is None:
             # TODO: There should be a separate radio button for indicating the 'chosen' result for tracking
             return
