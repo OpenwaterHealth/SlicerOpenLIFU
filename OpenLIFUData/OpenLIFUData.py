@@ -2597,21 +2597,15 @@ class _DeviceStatusDialog(qt.QDialog):
             except Exception:  # noqa: BLE001
                 sc_widget = None
             if sc_widget is not None:
-                for fn_name in (
-                    "updateDeviceConnectedStateFromDevice",
-                    "updateVersionLabels",
-                    "updateAllButtonsEnabled",
-                ):
-                    fn = getattr(sc_widget, fn_name, None)
-                    if callable(fn):
-                        try:
-                            fn()
-                        except Exception:  # noqa: BLE001
-                            logging.warning(
-                                "Failed to call %s on SonicationControl widget after retry",
-                                fn_name,
-                                exc_info=True,
-                            )
+                fn = getattr(sc_widget, "updateAllButtonsEnabled", None)
+                if callable(fn):
+                    try:
+                        fn()
+                    except Exception:  # noqa: BLE001
+                        logging.warning(
+                            "Failed to call updateAllButtonsEnabled on SonicationControl widget after retry",
+                            exc_info=True,
+                        )
             # Repaint every module header so the device button outline drops
             # its red "in use" state immediately. Without this nudge the
             # outline would only refresh on the next OWSignal-driven event,
