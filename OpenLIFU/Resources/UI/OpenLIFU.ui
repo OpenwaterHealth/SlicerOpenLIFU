@@ -86,13 +86,36 @@
        </widget>
       </item>
       <item>
+       <widget class="QWidget" name="hostNextRowContainer" native="true">
+        <layout class="QHBoxLayout" name="hostNextRowLayout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="spacing"><number>0</number></property>
+         <item>
+          <spacer name="hostNextRowSpacer">
+           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="hostNextButton">
+           <property name="text"><string>Next ▶</string></property>
+           <property name="toolTip"><string>Advance to the next step</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
        <widget class="QWidget" name="hostTimelineContainer" native="true">
         <layout class="QHBoxLayout" name="hostTimelineLayout">
          <property name="leftMargin"><number>0</number></property>
          <property name="topMargin"><number>0</number></property>
          <property name="rightMargin"><number>0</number></property>
          <property name="bottomMargin"><number>0</number></property>
-         <property name="spacing"><number>0</number></property>
+         <property name="spacing"><number>4</number></property>
         </layout>
        </widget>
       </item>

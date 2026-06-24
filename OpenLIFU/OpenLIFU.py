@@ -1,7 +1,7 @@
 # Standard library imports
 from __future__ import annotations
 
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 # Third-party imports
 import qt
@@ -93,7 +93,6 @@ class _Page:
         label:       short label shown on the timeline footer.
         on_timeline: True if the page is part of the workflow timeline.
         container:   the QWidget actually inserted into the QStackedWidget.
-        timeline_button: the QPushButton that navigates to this page (or None).
     """
 
     def __init__(self, key: str, label: str, on_timeline: bool) -> None:
@@ -101,7 +100,6 @@ class _Page:
         self.label = label
         self.on_timeline = on_timeline
         self.container: Optional[qt.QWidget] = None
-        self.timeline_button: Optional[qt.QPushButton] = None
 
 
 # Ordered list of pages. Anything `on_timeline=True` appears in the footer
@@ -114,6 +112,247 @@ _PAGE_DEFS: List[_Page] = [
     _Page("OpenLIFUSonicationPlanner",     "Solution",     on_timeline=True),
     _Page("OpenLIFUSonicationControl",     "Control",      on_timeline=True),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Timeline widget (custom-painted "O---O---O---o" progress strip)
+# ---------------------------------------------------------------------------
+
+class _TimelineWidget(qt.QWidget):
+    """Renders a sequence of labelled circles joined by connector lines.
+
+    Each step has three pieces of state pushed in from the host:
+
+    - ``visited``: filled circle (the user has navigated through this step).
+    - ``reachable``: clickable circle (workflow gating allows landing here).
+    - ``current``: the active page — drawn with a second outer ring.
+
+    Connector ``i ↔ i+1`` is drawn "completed" (thicker, colored) iff both
+    endpoint keys are in ``visited``. Once visited, a step never reverts to
+    hollow, so clicking back through completed steps doesn't undo progress.
+    """
+
+    # Geometry constants
+    _R_FILLED = 9       # filled-circle radius
+    _R_HOLLOW = 7       # hollow-circle radius
+    _RING_GAP = 4       # gap between the filled circle and the outer "current" ring
+    _LINE_WIDTH_DONE = 4
+    _LINE_WIDTH_LOCKED = 2
+    _LABEL_GAP = 6      # vertical gap between circle and label
+    _MIN_STEP_PX = 60   # minimum horizontal spacing between circle centers
+
+    def __init__(self, parent: Optional[qt.QWidget] = None) -> None:
+        super().__init__(parent)
+        self._items: List[Tuple[str, str]] = []          # (key, label)
+        self._visited: Set[str] = set()
+        self._reachable: Set[str] = set()
+        self._current_key: Optional[str] = None
+        self._on_click: Optional[Callable[[str], None]] = None
+        self.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Preferred)
+        self.setMouseTracking(True)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def setItems(self, items: List[Tuple[str, str]]) -> None:
+        self._items = list(items)
+        self.updateGeometry()
+        self.update()
+
+    def setState(
+        self,
+        *,
+        visited: Optional[Set[str]] = None,
+        reachable: Optional[Set[str]] = None,
+        current_key: Optional[str] = None,
+    ) -> None:
+        if visited is not None:
+            self._visited = set(visited)
+        if reachable is not None:
+            self._reachable = set(reachable)
+        self._current_key = current_key
+        self.update()
+
+    def setOnClick(self, callback: Callable[[str], None]) -> None:
+        self._on_click = callback
+
+    # ------------------------------------------------------------------
+    # Qt overrides
+    # ------------------------------------------------------------------
+
+    def sizeHint(self) -> qt.QSize:
+        fm = self.fontMetrics()
+        h = 2 * (self._R_FILLED + self._RING_GAP + 2) + self._LABEL_GAP + fm.height() + 6
+        w = max(200, self._MIN_STEP_PX * max(1, len(self._items)))
+        return qt.QSize(w, h)
+
+    def minimumSizeHint(self) -> qt.QSize:
+        fm = self.fontMetrics()
+        h = 2 * (self._R_FILLED + self._RING_GAP + 2) + self._LABEL_GAP + fm.height() + 6
+        return qt.QSize(120, h)
+
+    def paintEvent(self, event) -> None:  # noqa: ARG002
+        if not self._items:
+            return
+        painter = qt.QPainter(self)
+        painter.setRenderHint(qt.QPainter.Antialiasing, True)
+        try:
+            self._paint(painter)
+        finally:
+            painter.end()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() != qt.Qt.LeftButton:
+            return
+        key = self._hit_test(event.pos())
+        if key is not None and key in self._reachable and self._on_click is not None:
+            self._on_click(key)
+
+    def mouseMoveEvent(self, event) -> None:
+        key = self._hit_test(event.pos())
+        if key is not None:
+            if key in self._reachable:
+                self.setCursor(qt.QCursor(qt.Qt.PointingHandCursor))
+            else:
+                self.unsetCursor()
+            label = next((lbl for k, lbl in self._items if k == key), key)
+            if key == self._current_key:
+                tip = f"You are on {label}."
+            elif key in self._reachable:
+                tip = f"Go to {label}."
+            else:
+                tip = f"Complete the earlier step to unlock {label}."
+            self.setToolTip(tip)
+        else:
+            self.unsetCursor()
+            self.setToolTip("")
+
+    # ------------------------------------------------------------------
+    # Geometry / hit-testing
+    # ------------------------------------------------------------------
+
+    def _circle_centers(self) -> List[Tuple[str, str, int, int]]:
+        """Return [(key, label, cx, cy)] for the current widget size."""
+        n = len(self._items)
+        if n == 0:
+            return []
+        # PythonQt exposes Qt's Q_PROPERTYs (``width``, ``height``, ``palette``,
+        # etc.) as auto-resolved attributes, so calling them as methods raises
+        # ``TypeError: 'int' object is not callable``.
+        w = self.width
+        # Reserve enough horizontal margin that the first/last labels fit.
+        fm = self.fontMetrics()
+        # Use width() (compatible across Qt 5.x) rather than horizontalAdvance.
+        first_half = fm.width(self._items[0][1]) // 2
+        last_half = fm.width(self._items[-1][1]) // 2
+        edge = self._R_FILLED + self._RING_GAP + 2
+        left = max(edge, first_half + 4)
+        right = w - max(edge, last_half + 4)
+        if n == 1 or right <= left:
+            xs = [w // 2 for _ in range(n)]
+        else:
+            step = (right - left) / float(n - 1)
+            xs = [int(round(left + i * step)) for i in range(n)]
+        cy = self._R_FILLED + self._RING_GAP + 2
+        return [(self._items[i][0], self._items[i][1], xs[i], cy) for i in range(n)]
+
+    def _hit_test(self, point: qt.QPoint) -> Optional[str]:
+        # Generous hit radius: cover the outer ring and the label below.
+        hit_r2 = (self._R_FILLED + self._RING_GAP + 6) ** 2
+        for key, _, cx, cy in self._circle_centers():
+            dx = point.x() - cx
+            dy = point.y() - cy
+            if dx * dx + dy * dy <= hit_r2:
+                return key
+        return None
+
+    # ------------------------------------------------------------------
+    # Painting
+    # ------------------------------------------------------------------
+
+    def _theme_colors(self) -> Dict[str, qt.QColor]:
+        """Pick colors that contrast in both light and dark palettes."""
+        # PythonQt exposes Qt's Q_PROPERTYs as attributes, so ``palette`` is
+        # already a QPalette object — calling it would raise TypeError.
+        palette = self.palette
+        window = palette.color(qt.QPalette.Window)
+        is_dark = (window.red() + window.green() + window.blue()) // 3 < 128
+        if is_dark:
+            return {
+                "locked": qt.QColor("#b0b6bd"),    # bright enough on dark bg
+                "done": qt.QColor("#5aa9ff"),
+                "current_ring": qt.QColor("#5aa9ff"),
+                "label_done": palette.color(qt.QPalette.WindowText),
+                "label_locked": qt.QColor("#9aa0a6"),
+                "label_current": qt.QColor("#82c1ff"),
+            }
+        return {
+            "locked": qt.QColor("#5f6368"),
+            "done": qt.QColor("#1976d2"),
+            "current_ring": qt.QColor("#1976d2"),
+            "label_done": palette.color(qt.QPalette.WindowText),
+            "label_locked": qt.QColor("#5f6368"),
+            "label_current": qt.QColor("#1565c0"),
+        }
+
+    def _paint(self, p: qt.QPainter) -> None:
+        colors = self._theme_colors()
+        centers = self._circle_centers()
+        if not centers:
+            return
+
+        # 1. Connector lines (drawn first so circles sit on top).
+        for i in range(len(centers) - 1):
+            k1, _, x1, y = centers[i]
+            k2, _, x2, _ = centers[i + 1]
+            completed = (k1 in self._visited and k2 in self._visited)
+            pen = qt.QPen(colors["done"] if completed else colors["locked"])
+            pen.setWidth(self._LINE_WIDTH_DONE if completed else self._LINE_WIDTH_LOCKED)
+            pen.setCapStyle(qt.Qt.RoundCap)
+            p.setPen(pen)
+            # Inset so the line doesn't dive into the circles
+            inset = self._R_FILLED + 1
+            p.drawLine(x1 + inset, y, x2 - inset, y)
+
+        # 2. Circles + labels
+        fm = self.fontMetrics()
+        for key, label, cx, cy in centers:
+            visited = key in self._visited
+            current = (key == self._current_key)
+
+            if visited:
+                # Filled circle
+                p.setBrush(qt.QBrush(colors["done"]))
+                p.setPen(qt.QPen(colors["done"], 2))
+                p.drawEllipse(qt.QPoint(cx, cy), self._R_FILLED, self._R_FILLED)
+            else:
+                # Hollow circle
+                p.setBrush(qt.QBrush(qt.Qt.NoBrush))
+                pen = qt.QPen(colors["locked"])
+                pen.setWidth(2)
+                p.setPen(pen)
+                p.drawEllipse(qt.QPoint(cx, cy), self._R_HOLLOW, self._R_HOLLOW)
+
+            # Outer "double-outline" ring for the current step
+            if current:
+                ring_r = self._R_FILLED + self._RING_GAP
+                pen = qt.QPen(colors["current_ring"])
+                pen.setWidth(2)
+                p.setBrush(qt.QBrush(qt.Qt.NoBrush))
+                p.setPen(pen)
+                p.drawEllipse(qt.QPoint(cx, cy), ring_r, ring_r)
+
+            # Label below circle
+            if current:
+                p.setPen(colors["label_current"])
+            elif visited:
+                p.setPen(colors["label_done"])
+            else:
+                p.setPen(colors["label_locked"])
+            tw = fm.width(label)
+            text_y = cy + self._R_FILLED + self._RING_GAP + 2 + fm.ascent()
+            p.drawText(cx - tw // 2, text_y, label)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +372,11 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._pages: Dict[str, _Page] = {p.key: _Page(p.key, p.label, p.on_timeline) for p in _PAGE_DEFS}
         self._current_page_key: Optional[str] = None
         self._embedding_done: bool = False
+        # Timeline keys the user has navigated to at least once. Persists across
+        # back-navigation so completed steps don't "unfill" when revisited.
+        self._visited_timeline_keys: Set[str] = set()
+        # Custom-painted timeline footer widget; created in _build_timeline_footer.
+        self._timeline_widget: Optional[_TimelineWidget] = None
 
     # ------------------------------------------------------------------
     # Slicer lifecycle
@@ -164,6 +408,9 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # ---- Save / Exit ----
         self.ui.hostSaveButton.clicked.connect(self.onSaveClicked)
         self.ui.hostExitButton.clicked.connect(self.onExitClicked)
+
+        # ---- Next (advance) ----
+        self.ui.hostNextButton.clicked.connect(self.onNextClicked)
 
         # ---- Build the timeline footer ----
         self._build_timeline_footer()
@@ -251,6 +498,9 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self._delegate_exit(self._current_page_key)
         self.ui.pageStack.setCurrentWidget(page.container)
         self._current_page_key = module_name
+        # Mark the page as visited (only timeline pages count; Home is not).
+        if page.on_timeline:
+            self._visited_timeline_keys.add(module_name)
         self._delegate_enter(module_name)
         # QStackedWidget page-switch and the module's enter() can both re-set
         # WState_Hidden on body chrome that embed_module_body_into originally
@@ -346,88 +596,78 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def _build_timeline_footer(self) -> None:
         layout: qt.QHBoxLayout = self.ui.hostTimelineContainer.layout()
-        # Walk pages in order; insert button per timeline page, separator
-        # between consecutive ones.
-        first = True
-        for page_def in _PAGE_DEFS:
-            if not page_def.on_timeline:
-                continue
-            page = self._pages[page_def.key]
-            if not first:
-                sep = qt.QLabel("—", self.ui.hostTimelineContainer)
-                sep.setAlignment(qt.Qt.AlignCenter)
-                sep.setStyleSheet("color: palette(mid);")
-                layout.addWidget(sep, 0)
-            first = False
-
-            btn = qt.QPushButton(page.label, self.ui.hostTimelineContainer)
-            btn.setFlat(True)
-            btn.setCursor(qt.QCursor(qt.Qt.PointingHandCursor))
-            btn.clicked.connect(lambda _checked=False, k=page.key: self._onTimelineClicked(k))
-            page.timeline_button = btn
-            layout.addWidget(btn, 0)
-
-        layout.addStretch(1)
+        self._timeline_widget = _TimelineWidget(self.ui.hostTimelineContainer)
+        items = [(p.key, self._pages[p.key].label) for p in _PAGE_DEFS if p.on_timeline]
+        self._timeline_widget.setItems(items)
+        self._timeline_widget.setOnClick(self._onTimelineClicked)
+        layout.addWidget(self._timeline_widget, 1)
 
     def _onTimelineClicked(self, key: str) -> None:
         page = self._pages.get(key)
-        if page is None or page.timeline_button is None or not page.timeline_button.isEnabled():
+        if page is None:
             return
         self.show_page(key)
 
     def _refresh_timeline_state(self) -> None:
-        """Color the timeline links and gate their enabledness.
+        """Push the current visited / reachable / current state into the
+        custom-painted timeline widget, and update the Next button + status
+        label.
 
-        Gating mirrors the existing ``Workflow.furthest_module_to_which_can_proceed``
-        logic: a page is reachable iff every workflow page strictly before
-        it has ``can_proceed=True``. The current page is bold + colored;
-        completed (reachable + strictly before current) is green; future
-        unreachable is gray.
+        "Reachable" mirrors :py:meth:`Workflow.furthest_module_to_which_can_proceed`:
+        a page is reachable iff every workflow page strictly before it has
+        ``can_proceed=True``. The current page also counts as reachable. The
+        visited set is monotonic across the host lifetime, updated in
+        :py:meth:`show_page`.
         """
         workflow = self._get_workflow()
         if workflow is None:
             return
 
-        # Determine the furthest reachable page index along the timeline.
         timeline_keys = [p.key for p in _PAGE_DEFS if p.on_timeline]
-        reachable_index = 0  # the first workflow page is always reachable
+
+        # Furthest reachable index.
+        reachable_index = 0  # first workflow page is always reachable
         for i, k in enumerate(timeline_keys):
             controls = workflow.workflow_controls.get(k)
             if controls is not None and controls.can_proceed:
                 reachable_index = max(reachable_index, i + 1)
             else:
                 break
+        reachable_keys = {timeline_keys[i] for i in range(min(reachable_index + 1, len(timeline_keys)))}
+        # Visited keys are always reachable (the user got there somehow).
+        reachable_keys |= self._visited_timeline_keys
 
-        current_index = -1
-        if self._current_page_key in timeline_keys:
-            current_index = timeline_keys.index(self._current_page_key)
+        current_key = self._current_page_key if self._current_page_key in timeline_keys else None
 
-        for i, k in enumerate(timeline_keys):
-            page = self._pages[k]
-            btn = page.timeline_button
-            if btn is None:
-                continue
-            enabled = i <= reachable_index
-            btn.setEnabled(enabled)
-            if i == current_index:
-                # current page
-                btn.setStyleSheet(
-                    "QPushButton { font-weight: bold; color: #1976d2; }"
-                )
-            elif i < current_index:
-                # completed
-                btn.setStyleSheet(
-                    "QPushButton { color: #2e7d32; }"
-                )
-            elif enabled:
-                # available but not yet visited
-                btn.setStyleSheet("")
-            else:
-                # locked
-                btn.setStyleSheet(
-                    "QPushButton { color: palette(mid); }"
-                )
-            btn.setToolTip(self._tooltip_for_timeline_page(k, enabled, i == current_index))
+        if self._timeline_widget is not None:
+            self._timeline_widget.setState(
+                visited=self._visited_timeline_keys,
+                reachable=reachable_keys,
+                current_key=current_key,
+            )
+
+        # Next button: enabled when the current page has can_proceed and there
+        # is a next page to advance to. Hidden when not on a timeline page.
+        next_button = self.ui.hostNextButton
+        current_index = timeline_keys.index(current_key) if current_key is not None else -1
+        if current_index < 0 or current_index >= len(timeline_keys) - 1:
+            next_button.setEnabled(False)
+            next_button.setVisible(current_index >= 0)
+            next_button.setToolTip(
+                "You are on the final step." if current_index == len(timeline_keys) - 1
+                else "Advance to the next step"
+            )
+        else:
+            current_controls = workflow.workflow_controls.get(self._current_page_key)
+            can_proceed = bool(current_controls and current_controls.can_proceed)
+            next_button.setVisible(True)
+            next_button.setEnabled(can_proceed)
+            next_page = self._pages.get(timeline_keys[current_index + 1])
+            next_label = next_page.label if next_page is not None else ""
+            next_button.setToolTip(
+                f"Advance to {next_label}." if can_proceed
+                else "Complete the current step to advance."
+            )
 
         # Status label = current page's status text (if any).
         status_text = ""
@@ -449,13 +689,6 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if current:
             return f"You are on {page.label}."
         if not enabled:
-            workflow = self._get_workflow()
-            if workflow is not None:
-                # Surface the gating status text from the first locked page.
-                for p_key in [p.key for p in _PAGE_DEFS if p.on_timeline]:
-                    controls = workflow.workflow_controls.get(p_key)
-                    if controls is not None and not controls.can_proceed:
-                        return controls.status_text or f"Complete the earlier step to unlock {page.label}."
             return f"Complete the earlier step to unlock {page.label}."
         return f"Go to {page.label}."
 
@@ -470,6 +703,22 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.util.errorDisplay("There is no loaded session.")
             return
         data_logic.save_session()
+
+    @display_errors
+    def onNextClicked(self, checked: bool = False) -> None:
+        timeline_keys = [p.key for p in _PAGE_DEFS if p.on_timeline]
+        if self._current_page_key not in timeline_keys:
+            return
+        current_index = timeline_keys.index(self._current_page_key)
+        if current_index >= len(timeline_keys) - 1:
+            return
+        workflow = self._get_workflow()
+        if workflow is None:
+            return
+        current_controls = workflow.workflow_controls.get(self._current_page_key)
+        if current_controls is None or not current_controls.can_proceed:
+            return
+        self.show_page(timeline_keys[current_index + 1])
 
     @display_errors
     def onExitClicked(self, checked: bool = False) -> None:
