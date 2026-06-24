@@ -103,9 +103,12 @@ class _Page:
 
 
 # Ordered list of pages. Anything `on_timeline=True` appears in the footer
-# timeline in the order given here.
+# timeline in the order given here. Pages with `on_timeline=False` are
+# embedded but not shown on the workflow timeline (Home, Data Manager) --
+# they are reachable via the in-module navigation that lives on those pages.
 _PAGE_DEFS: List[_Page] = [
     _Page("OpenLIFUHome",                  "Home",         on_timeline=False),
+    _Page("OpenLIFUData",                  "Data",         on_timeline=False),
     _Page("OpenLIFUSession",               "Session",      on_timeline=True),
     _Page("OpenLIFUPrePlanning",           "Pre-Planning", on_timeline=True),
     _Page("OpenLIFUTransducerLocalization","Localization", on_timeline=True),
@@ -412,6 +415,10 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # ---- Next (advance) ----
         self.ui.hostNextButton.clicked.connect(self.onNextClicked)
 
+        # ---- Back to Home (only shown on non-timeline pages like Data) ----
+        self.ui.hostBackToHomeButton.clicked.connect(self.onBackToHomeClicked)
+        self.ui.hostBackToHomeButton.setVisible(False)
+
         # ---- Build the timeline footer ----
         self._build_timeline_footer()
 
@@ -679,10 +686,20 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 status_text = controls.status_text
         self.ui.hostStatusLabel.setText(status_text)
 
-        # Hide the entire footer when on Home (it's not a workflow page).
-        on_home = self._current_page_key == "OpenLIFUHome"
-        self.ui.hostFooterContainer.setVisible(not on_home)
-        self.ui.hostFooterRule.setVisible(not on_home)
+        # Footer visibility per page:
+        #   * Home:            footer fully hidden
+        #   * Data Manager:    footer visible with only the Back-to-Home button
+        #   * Timeline page:   footer visible with timeline + Next + status
+        on_data = self._current_page_key == "OpenLIFUData"
+        on_timeline_page = current_key is not None
+        footer_visible = on_timeline_page or on_data
+        self.ui.hostFooterContainer.setVisible(footer_visible)
+        self.ui.hostFooterRule.setVisible(footer_visible)
+        self.ui.hostBackToHomeButton.setVisible(on_data)
+        self.ui.hostTimelineContainer.setVisible(on_timeline_page)
+        self.ui.hostStatusLabel.setVisible(on_timeline_page)
+        if on_data:
+            next_button.setVisible(False)
 
     def _tooltip_for_timeline_page(self, key: str, enabled: bool, current: bool) -> str:
         page = self._pages.get(key)
@@ -734,6 +751,20 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if choice == "save":
             data_logic.save_session()
         data_logic.clear_session(clean_up_scene=True)
+        self.show_page("OpenLIFUHome")
+
+    @display_errors
+    def onBackToHomeClicked(self, checked: bool = False) -> None:
+        """Return to the Home page from the Data Manager, prompting to save
+        or discard any loaded session first."""
+        data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFUData")
+        if data_logic.getParameterNode().loaded_session is not None:
+            choice = confirm_exit_session_dialog()
+            if choice == "cancel":
+                return
+            if choice == "save":
+                data_logic.save_session()
+            data_logic.clear_session(clean_up_scene=True)
         self.show_page("OpenLIFUHome")
 
     def _refresh_save_exit_state(self) -> None:

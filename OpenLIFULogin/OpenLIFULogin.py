@@ -846,7 +846,11 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.updateWidgetLoginState() # reload in case an admin user was added when there previously wasn't one
 
         # In case the currently logged in user was edited in the management
-        # dialog, we reload it.
+        # dialog, we reload it. Skip the reload if no user is currently signed in
+        # (anonymous session) — there is nothing to refresh and ``active_user``
+        # would be ``None``.
+        if self.logic.active_user is None:
+            return
         cur_user_id = self.logic.active_user.id
         users = get_cur_db().load_all_users()
         potentially_updated_user = next((u for u in users if u.id == cur_user_id), self._default_anonymous_user)

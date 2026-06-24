@@ -132,6 +132,8 @@ class OpenLIFUData(ScriptedLoadableModule):
             "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
             "and development."
         )
+        # Embedded as a page of the OpenLIFU host module; hide from the modules menu.
+        self.parent.hidden = True
 
 #
 # OpenLIFUDataParameterNode

@@ -766,17 +766,57 @@ def embed_module_body_into(
 _EMBED_HIDES_BY_MODULE: dict = {}
 
 
-def _walk_widget_descendants(ui_widget):
+# Widget classes whose internals (body / content area) are managed by the
+# widget itself based on user interaction (e.g. expand / collapse). The
+# embedding visibility recipe must NOT walk into their subtrees, or it will
+# clobber the widget's own show/hide bookkeeping and leave the content
+# stuck hidden after the user expands the section.
+_OPAQUE_CONTAINER_CLASS_NAMES = ("ctkCollapsibleButton", "ctkCollapsibleGroupBox")
+
+
+def _has_opaque_container_ancestor(widget, ui_widget) -> bool:
+    """Return True if ``widget`` has an ancestor (strictly above it, up to
+    ``ui_widget`` exclusive) whose class is one of
+    :data:`_OPAQUE_CONTAINER_CLASS_NAMES`. The widget itself is not checked.
+    """
+    try:
+        parent = widget.parent()
+    except Exception:  # noqa: BLE001
+        return False
+    while parent is not None and parent is not ui_widget:
+        try:
+            cls_name = parent.metaObject().className()
+        except Exception:  # noqa: BLE001
+            cls_name = ""
+        if cls_name in _OPAQUE_CONTAINER_CLASS_NAMES:
+            return True
+        try:
+            parent = parent.parent()
+        except Exception:  # noqa: BLE001
+            return False
+    return False
+
+
+def _walk_widget_descendants(ui_widget, skip_inside_opaque_containers: bool = False):
     """Yield each widget-like descendant of ``ui_widget``.
 
     PythonQt's ``findChildren(qt.QWidget)`` does NOT include QWidget
     subclasses, and ``isinstance(x, qt.QWidget)`` is unreliable across
     binding versions. Duck-type on ``show`` + ``isHidden`` to identify
     widget-like objects in the QObject child set.
+
+    When ``skip_inside_opaque_containers`` is True, descendants whose
+    parent chain passes through a self-managing container (e.g.
+    ``ctkCollapsibleButton``) are skipped so we don't interfere with the
+    container's own show/hide logic. The container widget itself is still
+    yielded.
     """
     for descendant in ui_widget.findChildren(qt.QObject):
-        if hasattr(descendant, "show") and hasattr(descendant, "isHidden"):
-            yield descendant
+        if not (hasattr(descendant, "show") and hasattr(descendant, "isHidden")):
+            continue
+        if skip_inside_opaque_containers and _has_opaque_container_ancestor(descendant, ui_widget):
+            continue
+        yield descendant
 
 
 def snapshot_hidden_descendants(ui_widget: qt.QWidget) -> list:
@@ -788,7 +828,7 @@ def snapshot_hidden_descendants(ui_widget: qt.QWidget) -> list:
     hidden = []
     if ui_widget is None:
         return hidden
-    for w in _walk_widget_descendants(ui_widget):
+    for w in _walk_widget_descendants(ui_widget, skip_inside_opaque_containers=True):
         try:
             if w.isHidden():
                 hidden.append(w)
@@ -842,9 +882,11 @@ def force_embedded_body_visible(ui_widget: qt.QWidget, module_name: str = None) 
                 pass
 
     # Dynamic snapshot: capture currently-hidden widget-like descendants
-    # BEFORE we start force-showing things.
+    # BEFORE we start force-showing things. Skip descendants inside
+    # self-managing containers (ctkCollapsibleButton, etc.) so we don't
+    # treat their collapsed-state internals as module-managed hides.
     current_hidden = []
-    for d in _walk_widget_descendants(ui_widget):
+    for d in _walk_widget_descendants(ui_widget, skip_inside_opaque_containers=True):
         try:
             if d.isHidden():
                 current_hidden.append(d)
@@ -860,9 +902,11 @@ def force_embedded_body_visible(ui_widget: qt.QWidget, module_name: str = None) 
             current_hidden.append(w)
             seen_ids.add(id(w))
 
-    # Force-show the root and every widget-like descendant.
+    # Force-show the root and every widget-like descendant, again skipping
+    # the subtrees of self-managing containers so they can finish their
+    # own pending show/hide animations correctly.
     _force(ui_widget)
-    for descendant in _walk_widget_descendants(ui_widget):
+    for descendant in _walk_widget_descendants(ui_widget, skip_inside_opaque_containers=True):
         _force(descendant)
 
     # Re-hide whatever the dynamic snapshot + embed hides require.

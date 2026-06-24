@@ -98,6 +98,18 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="hostBackToHomeButton">
+        <property name="text"><string>◀ Back to Home</string></property>
+        <property name="toolTip"><string>Return to the Home page. You will be prompted to save any loaded session.</string></property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QWidget" name="hostTimelineContainer" native="true">
         <layout class="QHBoxLayout" name="hostTimelineLayout">
          <property name="leftMargin"><number>0</number></property>
