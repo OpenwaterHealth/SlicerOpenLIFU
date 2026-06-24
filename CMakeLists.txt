@@ -44,8 +44,9 @@ endif()
 
 #-----------------------------------------------------------------------------
 # Extension modules
-add_subdirectory(OpenLIFUHome)
 add_subdirectory(OpenLIFULib)
+add_subdirectory(OpenLIFU)
+add_subdirectory(OpenLIFUHome)
 add_subdirectory(OpenLIFUDatabase)
 add_subdirectory(OpenLIFUData)
 add_subdirectory(OpenLIFUSession)

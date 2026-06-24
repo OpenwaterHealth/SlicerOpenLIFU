@@ -118,6 +118,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Load widget from .ui file (created by Qt Designer).
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUHome.ui"))
         self.layout.addWidget(uiWidget)
+        self.uiWidget = uiWidget
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
         # Shared status header (read-only on Home; the Data Manager owns the

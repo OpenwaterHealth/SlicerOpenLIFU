@@ -295,6 +295,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Additional widgets can be instantiated manually and added to self.layout.
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUSonicationControl.ui"))
         self.layout.addWidget(uiWidget)
+        self.uiWidget = uiWidget
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
         # Restructure into shared header (read-only) + scrollable body + footer.

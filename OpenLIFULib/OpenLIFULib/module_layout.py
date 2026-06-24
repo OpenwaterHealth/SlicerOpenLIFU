@@ -632,3 +632,233 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
             pass
 
     qt.QTimer.singleShot(0, _wire_deferred)
+
+
+# ----------------------------------------------------------------------
+# Embedding sibling modules into the OpenLIFU host module
+# ----------------------------------------------------------------------
+
+def embed_module_body_into(
+    *,
+    module_name: str,
+    stacked_widget: qt.QStackedWidget,
+) -> qt.QWidget:
+    """Force ``module_name`` to set up and reparent its body into a new page
+    of ``stacked_widget``.
+
+    Returns the page container that was added to ``stacked_widget``.
+
+    Each embedded module must expose ``self.uiWidget`` from its ``setup()``
+    method (the qMRMLWidget loaded via :func:`slicer.util.loadUI`) so the
+    host can take ownership of it. The per-module shared header
+    (:class:`ModuleHeaderWidget`) is hidden, and the per-module workflow
+    controls placeholder is hidden, because the host module provides a
+    single shared header and footer.
+    """
+    slicer.util.getModule(module_name).widgetRepresentation()
+    mw = slicer.util.getModuleWidget(module_name)
+    if mw is None:
+        raise RuntimeError(f"No widget representation for module {module_name!r}")
+    ui_widget = getattr(mw, "uiWidget", None)
+    if ui_widget is None:
+        raise RuntimeError(
+            f"Module {module_name!r} did not expose self.uiWidget; "
+            f"add `self.uiWidget = uiWidget` in its setup() to enable embedding."
+        )
+
+    page = qt.QWidget(stacked_widget)
+    page_layout = qt.QVBoxLayout(page)
+    page_layout.setContentsMargins(0, 0, 0, 0)
+    page_layout.setSpacing(0)
+    page_layout.addWidget(ui_widget)
+    stacked_widget.addWidget(page)
+
+    # Embed-time hides: the per-module shared header and per-module
+    # workflow controls (or placeholder) are replaced by host chrome.
+    # These must stay hidden across all page swaps, so we track them in
+    # a module-level dict and re-apply on every force_embedded_body_visible
+    # call. Module-managed hides (progress bars, conditional sections,
+    # "session loaded" / "no session" toggles) are NOT tracked here -- a
+    # fresh snapshot is taken on each force call so the recipe reflects
+    # the module's most recent intent.
+    embed_hides = []
+
+    # PythonQt's findChildren does not reliably filter by Python subclass
+    # type (returns every QObject descendant), so use the direct reference
+    # the module stored during apply_module_layout().
+    module_header = getattr(mw, "module_header", None)
+    if module_header is not None:
+        module_header.setVisible(False)
+        embed_hides.append(module_header)
+
+    workflow_controls = getattr(mw, "workflow_controls", None)
+    if workflow_controls is not None:
+        workflow_controls.setVisible(False)
+        embed_hides.append(workflow_controls)
+    placeholder = ui_widget.findChild(qt.QWidget, "workflowControlsPlaceholder")
+    if placeholder is not None and workflow_controls is None:
+        # The placeholder is empty (module never injected controls). Hide it
+        # so it does not occupy space in the host page.
+        placeholder.setVisible(False)
+        embed_hides.append(placeholder)
+
+    _EMBED_HIDES_BY_MODULE[module_name] = embed_hides
+
+    logging.info(
+        "[embed_module_body_into] %s: embed_hides=%d",
+        module_name, len(embed_hides),
+    )
+
+    # The qMRMLWidget loaded from the .ui file was never shown by Slicer
+    # before we reparented it into the host stack. Force the subtree
+    # visible now (and again on every page swap via the host) so the
+    # page actually paints. The dynamic snapshot in force_*() will pick
+    # up the module-managed hides already applied by setup().
+    force_embedded_body_visible(ui_widget, module_name=module_name)
+
+    return page
+
+
+# Module-level dict storing the per-module embed-time hides (header,
+# workflow_controls, placeholder). Python attributes set on PythonQt
+# QObject instances do not reliably survive between calls, so a plain
+# dict keyed by module name is the working storage.
+_EMBED_HIDES_BY_MODULE: dict = {}
+
+
+def _walk_widget_descendants(ui_widget):
+    """Yield each widget-like descendant of ``ui_widget``.
+
+    PythonQt's ``findChildren(qt.QWidget)`` does NOT include QWidget
+    subclasses, and ``isinstance(x, qt.QWidget)`` is unreliable across
+    binding versions. Duck-type on ``show`` + ``isHidden`` to identify
+    widget-like objects in the QObject child set.
+    """
+    for descendant in ui_widget.findChildren(qt.QObject):
+        if hasattr(descendant, "show") and hasattr(descendant, "isHidden"):
+            yield descendant
+
+
+def snapshot_hidden_descendants(ui_widget: qt.QWidget) -> list:
+    """Return a list of descendants of ``ui_widget`` currently in the
+    hidden state. Captured for later replay by
+    :func:`force_embedded_body_visible` so that module-managed hides
+    survive QStackedWidget page swaps (which can cascade ``hide()`` calls
+    down a page's subtree)."""
+    hidden = []
+    if ui_widget is None:
+        return hidden
+    for w in _walk_widget_descendants(ui_widget):
+        try:
+            if w.isHidden():
+                hidden.append(w)
+        except Exception:  # noqa: BLE001
+            pass
+    return hidden
+
+
+def force_embedded_body_visible(ui_widget: qt.QWidget, module_name: str = None) -> None:
+    """Restore the intended visibility state of an embedded module body.
+
+    A qMRMLWidget loaded from a .ui file and reparented into a
+    QStackedWidget page can end up with ``WState_Hidden`` set on most of
+    its subtree after subsequent page additions / current-page swaps.
+    Naive show()-based recipes (force-show every descendant, or skip
+    widgets that look "explicitly hidden") both fail in practice: the
+    first leaks module-managed hides (progress bars, conditional
+    sections), and the second permanently traps any widget that was
+    ever explicitly shown/hidden, including header buttons.
+
+    Recipe: capture a *dynamic* snapshot of every descendant currently
+    in the hidden state, force-show every widget-like descendant of
+    ``ui_widget``, then replay the snapshot. Always add the persistent
+    embed-time hides (per-module header, workflow controls, placeholder)
+    as a defensive backstop in case they got accidentally shown.
+
+    The dynamic snapshot reflects the module's most recent intent: any
+    `setVisible(False)` the module applied (in `setup()`, in an observer
+    fired by session-load, etc.) is honored, and any `setVisible(True)`
+    the module applied since the last force call is preserved.
+    """
+    if ui_widget is None:
+        return
+
+    def _force(w):
+        try:
+            w.show()
+        except Exception:  # noqa: BLE001
+            try:
+                w.setVisible(True)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _hide(w):
+        try:
+            w.hide()
+        except Exception:  # noqa: BLE001
+            try:
+                w.setVisible(False)
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Dynamic snapshot: capture currently-hidden widget-like descendants
+    # BEFORE we start force-showing things.
+    current_hidden = []
+    for d in _walk_widget_descendants(ui_widget):
+        try:
+            if d.isHidden():
+                current_hidden.append(d)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Persistent embed-time hides: defensive backstop in case anything
+    # showed them. Append (deduped) to the dynamic snapshot.
+    embed_hides = _EMBED_HIDES_BY_MODULE.get(module_name, []) if module_name else []
+    seen_ids = {id(w) for w in current_hidden}
+    for w in embed_hides:
+        if id(w) not in seen_ids:
+            current_hidden.append(w)
+            seen_ids.add(id(w))
+
+    # Force-show the root and every widget-like descendant.
+    _force(ui_widget)
+    forced = 0
+    for descendant in _walk_widget_descendants(ui_widget):
+        _force(descendant)
+        forced += 1
+
+    # Re-hide whatever the dynamic snapshot + embed hides require.
+    rehid = 0
+    for w in current_hidden:
+        _hide(w)
+        rehid += 1
+
+    logging.info(
+        "[force_embedded_body_visible] %s forced=%d rehid=%d (dynamic=%d embed=%d)",
+        module_name or "?", forced, rehid,
+        rehid - len([w for w in embed_hides if id(w) in seen_ids]),
+        len(embed_hides),
+    )
+
+
+def navigate_to_page(module_name: str) -> None:
+    """Switch the OpenLIFU host module to its embedded page for ``module_name``.
+
+    Drop-in replacement for :func:`slicer.util.selectModule` when navigating
+    between embedded pages. Equivalent to::
+
+        slicer.util.selectModule("OpenLIFU")
+        slicer.util.getModuleWidget("OpenLIFU").show_page(module_name)
+
+    Silently no-ops if the host module is not loaded.
+    """
+    slicer.util.selectModule("OpenLIFU")
+    try:
+        host_widget = slicer.util.getModuleWidget("OpenLIFU")
+    except Exception:  # noqa: BLE001
+        return
+    show_page = getattr(host_widget, "show_page", None)
+    if show_page is None:
+        return
+    show_page(module_name)
+

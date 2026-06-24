@@ -83,6 +83,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUSession.ui"))
         self.layout.addWidget(uiWidget)
+        self.uiWidget = uiWidget
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
         # Shared header (read-only) + scrollable body + footer.

@@ -4939,6 +4939,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # Additional widgets can be instantiated manually and added to self.layout.
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUData.ui"))
         self.layout.addWidget(uiWidget)
+        self.uiWidget = uiWidget
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
         # Restructure the page into header (interactive on Data) + scrollable

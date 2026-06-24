@@ -106,6 +106,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         # Additional widgets can be instantiated manually and added to self.layout.
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/OpenLIFUDatabase.ui"))
         self.layout.addWidget(uiWidget)
+        self.uiWidget = uiWidget
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
