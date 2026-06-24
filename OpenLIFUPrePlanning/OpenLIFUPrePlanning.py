@@ -240,17 +240,19 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         vf_header = self.ui.virtualFitResultTable.horizontalHeader()
         vf_header.setSectionResizeMode(0, qt.QHeaderView.Stretch)
         vf_header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
-        self.ui.modifyTransformPushButton.clicked.connect(self.onModifyTransformClicked)
-        self.ui.modifyTransformPushButton.setStyleSheet("""
+        self.ui.editTransformPushButton.clicked.connect(self.onEditTransformClicked)
+        self.ui.editTransformPushButton.setStyleSheet("""
         QPushButton:checked {
         border: 2px solid green; 
         background-color: lightgray; 
         padding: 4px;
         }
         """)
-        self.ui.modifyTransformPushButton.setToolTip("Modify virtual fit transform")
+        self.ui.editTransformPushButton.setToolTip("Toggle whether the selected virtual fit transform can be interactively edited via the 3D view handles")
         self.ui.addTransformPushButton.clicked.connect(self.onAddVirtualFitResultClicked)
         self.ui.addTransformPushButton.setToolTip("Create new virtual fit result")
+        self.ui.removeTransformPushButton.clicked.connect(self.onRemoveVirtualFitClicked)
+        self.ui.removeTransformPushButton.setToolTip("Remove the selected virtual fit result from the scene")
         self.updateVirtualFitResultsTable()
         slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation()
         self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerLocalizationWidget.setVirtualFitResultForTracking)
@@ -750,12 +752,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not self.algorithm_input_widget.has_valid_selections():
             for button in [
                 self.ui.virtualfitButton,
-                self.ui.modifyTransformPushButton,
+                self.ui.editTransformPushButton,
                 self.ui.addTransformPushButton,
+                self.ui.removeTransformPushButton,
             ]:
                 button.enabled = False
                 button.setToolTip("Specify all required inputs to enable virtual fitting")
-            self.ui.modifyTransformPushButton.checked = False
+            self.ui.editTransformPushButton.checked = False
         else:
             selected_vf_result = self.getCurrentVirtualFitSelection()
             currently_interacting = len(self.get_currently_active_interaction_node()) > 0
@@ -763,12 +766,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             if currently_interacting:
                 for button in [
                     self.ui.virtualfitButton,
-                    self.ui.modifyTransformPushButton,
+                    self.ui.editTransformPushButton,
                     self.ui.addTransformPushButton,
+                    self.ui.removeTransformPushButton,
                 ]:
                     button.enabled = False
-                    button.setToolTip("Finish modifying the transform first")
-                self.ui.modifyTransformPushButton.enabled =True # Enabled because it is a "Finish" button
+                    button.setToolTip("Finish editing the transform first")
+                self.ui.editTransformPushButton.enabled = True  # Enabled because it acts as the "Done Editing" button
 
             else:
                 self.ui.virtualfitButton.enabled = True
@@ -777,14 +781,18 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 self.ui.addTransformPushButton.enabled=True
                 self.ui.addTransformPushButton.setToolTip("Add a new transducer transform to the table, to be manually positioned.")
 
-                self.ui.modifyTransformPushButton.checked = False
+                self.ui.editTransformPushButton.checked = False
 
                 if selected_vf_result is None:
-                    self.ui.modifyTransformPushButton.enabled = False
-                    self.ui.modifyTransformPushButton.setToolTip("Select a virtual fit result on which to do this")
+                    self.ui.editTransformPushButton.enabled = False
+                    self.ui.editTransformPushButton.setToolTip("Select a virtual fit result to edit")
+                    self.ui.removeTransformPushButton.enabled = False
+                    self.ui.removeTransformPushButton.setToolTip("Select a virtual fit result to remove")
                 else:
-                    self.ui.modifyTransformPushButton.enabled = True
-                    self.ui.modifyTransformPushButton.setToolTip("Modify the selected transform")
+                    self.ui.editTransformPushButton.enabled = True
+                    self.ui.editTransformPushButton.setToolTip("Edit the selected transform via interaction handles in the 3D view")
+                    self.ui.removeTransformPushButton.enabled = True
+                    self.ui.removeTransformPushButton.setToolTip("Remove the selected virtual fit result from the scene")
 
     def updateWorkflowControls(self):
         session = get_openlifu_data_parameter_node().loaded_session
@@ -964,6 +972,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.showSkin(activeData["Volume"])
         activeData["Transducer"].set_visibility(True)
 
+        # A manually-added virtual fit starts in editing mode so the user can position it via the
+        # 3D-view interaction handles until they explicitly click "Done Editing".
+        if not auto_fit:
+            self.enable_manual_interaction(transducer, virtual_fit_result)
+
         self.updateWorkflowControls()
 
     def showSkin(self, volume_node : vtkMRMLScalarVolumeNode) -> None:
@@ -1035,11 +1048,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.updateVirtualfitButtons()
 
-    def onModifyTransformClicked(self):
+    def onEditTransformClicked(self):
 
         selected_vf_result = self.getCurrentVirtualFitSelection()
         if selected_vf_result is None:
-            self.ui.modifyTransformPushButton.checked = False
+            self.ui.editTransformPushButton.checked = False
             return
         selected_transducer = self.algorithm_input_widget.get_current_data()["Transducer"]
 
@@ -1047,10 +1060,26 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.enable_manual_interaction(selected_transducer, selected_vf_result)
         else:
             self.disable_manual_interaction(selected_transducer, selected_vf_result)
-    
+
+    def onRemoveVirtualFitClicked(self, checked: bool = False):
+        selected_vf_result = self.getCurrentVirtualFitSelection()
+        if selected_vf_result is None:
+            raise RuntimeError("It should not be possible to click Remove virtual fit while there is not a valid virtual fit result selected.")
+        self.unwatchVirtualFit(selected_vf_result)
+        slicer.mrmlScene.RemoveNode(selected_vf_result)
+
+        # Update the underlying session so persisted virtual fit results stay in sync with the scene.
+        if get_openlifu_data_parameter_node().loaded_session is not None:
+            data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic.update_underlying_openlifu_session()
+
+        self.updateVirtualFitResultsTable()
+        self.updateWorkflowControls()
+
     def enable_manual_interaction(self, transducer: SlicerOpenLIFUTransducer, vf_result_node: vtkMRMLTransformNode):
-        self.ui.modifyTransformPushButton.text = "Finish"
-        self.ui.modifyTransformPushButton.setToolTip("")
+        self.ui.editTransformPushButton.text = "Done Editing"
+        self.ui.editTransformPushButton.checked = True
+        self.ui.editTransformPushButton.setToolTip("")
         
         self._vf_interaction_in_progress = True # Needed to prevent unwanted update routines
 
@@ -1068,8 +1097,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateWorkflowControls()
     
     def disable_manual_interaction(self, transducer: SlicerOpenLIFUTransducer, vf_result_node: vtkMRMLTransformNode):
-        self.ui.modifyTransformPushButton.text = "Modify"
-        self.ui.modifyTransformPushButton.setToolTip("Modify virtual fit transform")
+        self.ui.editTransformPushButton.text = "Edit"
+        self.ui.editTransformPushButton.checked = False
+        self.ui.editTransformPushButton.setToolTip("Edit the selected transform via interaction handles in the 3D view")
         
         self._vf_interaction_in_progress = False # Needed to prevent unwanted update routines
 

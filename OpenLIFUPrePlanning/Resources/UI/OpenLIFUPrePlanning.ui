@@ -299,15 +299,25 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="modifyTransformPushButton">
+            <widget class="QPushButton" name="editTransformPushButton">
              <property name="toolTip">
-              <string>Modify virtual fit transform</string>
+              <string>Toggle whether the selected virtual fit transform can be interactively edited via the 3D view handles</string>
              </property>
              <property name="text">
-              <string>Modify</string>
+              <string>Edit</string>
              </property>
              <property name="checkable">
               <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="removeTransformPushButton">
+             <property name="toolTip">
+              <string>Remove the selected virtual fit result from the scene</string>
+             </property>
+             <property name="text">
+              <string>Remove</string>
              </property>
             </widget>
            </item>
