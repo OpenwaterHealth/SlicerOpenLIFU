@@ -108,6 +108,27 @@ class ModuleHeaderWidget(qt.QWidget):
             btn.setMaximumSize(qt.QSize(48, 32))
             return btn
 
+        # Version-info button: OpenLIFU logo on the far left, click for a
+        # popup listing component versions. Always interactive, including
+        # in read-only headers.
+        self.versionInfoButton = _make_button(
+            "versionInfoButton",
+            "",
+            "Show OpenLIFU component versions",
+        )
+        try:
+            openlifu_module_dir = os.path.dirname(
+                slicer.util.modulePath("OpenLIFU")
+            )
+            icon_path = os.path.join(openlifu_module_dir, "Resources", "Icons", "OpenLIFU.png")
+            if os.path.exists(icon_path):
+                self.versionInfoButton.setIcon(qt.QIcon(icon_path))
+                self.versionInfoButton.setIconSize(qt.QSize(24, 24))
+        except Exception as e:  # noqa: BLE001
+            logging.warning("Could not load version-info button icon: %s", e)
+        self.versionInfoButton.clicked.connect(self._open_version_info_popup)
+        layout.addWidget(self.versionInfoButton)
+
         self.databasePopupButton = _make_button(
             "databasePopupButton",
             "📁",
@@ -194,6 +215,30 @@ class ModuleHeaderWidget(qt.QWidget):
             )
             return
         handler()
+
+    def _open_version_info_popup(self, _checked: bool = False) -> None:
+        """Show a small dialog listing the versions of every OpenLIFU
+        component the application can identify."""
+        import html
+        from OpenLIFULib.dependency_utils import get_openlifu_versions
+        versions = get_openlifu_versions()
+        rows = "".join(
+            f"<tr>"
+            f"<td style='padding-right:12px; white-space:nowrap;'><b>{html.escape(name)}</b></td>"
+            f"<td style='font-family:monospace;'>{html.escape(value)}</td>"
+            f"</tr>"
+            for name, value in versions.items()
+        )
+        text = (
+            "<h3>OpenLIFU component versions</h3>"
+            f"<table cellspacing='4'>{rows}</table>"
+        )
+        box = qt.QMessageBox(self)
+        box.setWindowTitle("OpenLIFU versions")
+        box.setTextFormat(qt.Qt.RichText)
+        box.setText(text)
+        box.setStandardButtons(qt.QMessageBox.Ok)
+        box.exec_()
 
     # ------------------------------------------------------------------
     # update methods (display-only; safe to call any time)

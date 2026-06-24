@@ -146,6 +146,93 @@ def openlifu_version_matches() -> bool:
     except importlib.metadata.PackageNotFoundError:
         return False
 
+def get_openlifu_versions() -> "dict[str, str]":
+    """Return a mapping of component → human-readable version string for the
+    header's version-info popup. Each value is a best-effort lookup with a
+    graceful fallback string so the popup never throws."""
+    import importlib.metadata
+    versions: "dict[str, str]" = {}
+
+    # openlifu (Python core library)
+    try:
+        versions["openlifu (Python library)"] = importlib.metadata.version("openlifu")
+    except importlib.metadata.PackageNotFoundError:
+        versions["openlifu (Python library)"] = "not installed"
+    except Exception:  # noqa: BLE001
+        versions["openlifu (Python library)"] = "unknown"
+
+    # openlifu-sdk (hardware SDK)
+    try:
+        versions["openlifu-sdk"] = importlib.metadata.version("openlifu-sdk")
+    except importlib.metadata.PackageNotFoundError:
+        versions["openlifu-sdk"] = "not installed"
+    except Exception:  # noqa: BLE001
+        versions["openlifu-sdk"] = "unknown"
+
+    # SlicerOpenLIFU extension itself
+    versions["SlicerOpenLIFU extension"] = _get_sliceropenlifu_version()
+
+    # Host application (vanilla Slicer, or the custom OpenLIFU desktop app
+    # whose Slicer_MAIN_PROJECT is set to OpenLIFUApp).
+    try:
+        app_name = slicer.app.mainApplicationName or "Slicer"
+        app_ver = slicer.app.applicationVersion or "unknown"
+        versions[f"{app_name} (host application)"] = app_ver
+    except Exception:  # noqa: BLE001
+        versions["Host application"] = "unknown"
+
+    return versions
+
+def _get_sliceropenlifu_version() -> str:
+    """Best-effort SlicerOpenLIFU revision.
+
+    Prefer ``git describe`` against the source tree this OpenLIFULib was
+    loaded from -- that reflects the code actually running. ``--tags
+    --always --dirty`` yields:
+
+      * exact tag:           ``v0.18.0``
+      * a few commits past:  ``v0.18.0-3-g02a0850``
+      * uncommitted edits:   ``v0.18.0-3-g02a0850-dirty``
+      * no tags at all:      ``02a0850``
+
+    Fall back to the extensions manager's pinned revision (build-time
+    metadata, can lag behind the on-disk tree), then ``"unknown"``."""
+    try:
+        import subprocess
+        # dependency_utils.py → OpenLIFULib (pkg) → OpenLIFULib (dir) → SlicerOpenLIFU
+        repo_dir = Path(__file__).resolve().parents[2]
+        described = subprocess.run(
+            ["git", "describe", "--tags", "--always", "--dirty"],
+            cwd=str(repo_dir), capture_output=True, text=True, timeout=2,
+        )
+        if described.returncode == 0:
+            rev = described.stdout.strip()
+            if rev:
+                return rev
+        short = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(repo_dir), capture_output=True, text=True, timeout=2,
+        )
+        if short.returncode == 0:
+            rev = short.stdout.strip()
+            if rev:
+                return rev
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        ext_model = slicer.app.extensionsManagerModel()
+        meta = ext_model.extensionMetadata("SlicerOpenLIFU") if ext_model is not None else None
+        if meta:
+            for k in ("revision", "scm_revision"):
+                v = meta.get(k) if hasattr(meta, "get") else None
+                if v:
+                    return str(v)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return "unknown"
+
 def kwave_binaries_exist() -> bool:
     """Return True if all of openlifu's kwave binaries/assets are already
     installed. Returns False (without prompting) if any are missing or if
