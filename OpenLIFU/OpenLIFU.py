@@ -653,6 +653,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if current_index < 0 or current_index >= len(timeline_keys) - 1:
             next_button.setEnabled(False)
             next_button.setVisible(current_index >= 0)
+            next_button.setText("Next \u25b6")
             next_button.setToolTip(
                 "You are on the final step." if current_index == len(timeline_keys) - 1
                 else "Advance to the next step"
@@ -664,6 +665,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             next_button.setEnabled(can_proceed)
             next_page = self._pages.get(timeline_keys[current_index + 1])
             next_label = next_page.label if next_page is not None else ""
+            next_button.setText(f"Next: {next_label} \u25b6" if next_label else "Next \u25b6")
             next_button.setToolTip(
                 f"Advance to {next_label}." if can_proceed
                 else "Complete the current step to advance."
