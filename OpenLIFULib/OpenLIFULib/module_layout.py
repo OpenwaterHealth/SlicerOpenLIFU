@@ -704,11 +704,6 @@ def embed_module_body_into(
 
     _EMBED_HIDES_BY_MODULE[module_name] = embed_hides
 
-    logging.info(
-        "[embed_module_body_into] %s: embed_hides=%d",
-        module_name, len(embed_hides),
-    )
-
     # The qMRMLWidget loaded from the .ui file was never shown by Slicer
     # before we reparented it into the host stack. Force the subtree
     # visible now (and again on every page swap via the host) so the
@@ -822,23 +817,12 @@ def force_embedded_body_visible(ui_widget: qt.QWidget, module_name: str = None) 
 
     # Force-show the root and every widget-like descendant.
     _force(ui_widget)
-    forced = 0
     for descendant in _walk_widget_descendants(ui_widget):
         _force(descendant)
-        forced += 1
 
     # Re-hide whatever the dynamic snapshot + embed hides require.
-    rehid = 0
     for w in current_hidden:
         _hide(w)
-        rehid += 1
-
-    logging.info(
-        "[force_embedded_body_visible] %s forced=%d rehid=%d (dynamic=%d embed=%d)",
-        module_name or "?", forced, rehid,
-        rehid - len([w for w in embed_hides if id(w) in seen_ids]),
-        len(embed_hides),
-    )
 
 
 def navigate_to_page(module_name: str) -> None:
