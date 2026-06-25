@@ -116,38 +116,64 @@
         <property name="collapsed">
          <bool>false</bool>
         </property>
-        <layout class="QFormLayout" name="protocolFormLayout">
-         <item row="0" column="0">
-          <widget class="QLabel" name="protocolNameKeyLabel">
-           <property name="text">
-            <string>Name:</string>
-           </property>
+        <layout class="QHBoxLayout" name="protocolBodyLayout">
+         <item>
+          <widget class="QWidget" name="protocolInfoContainer" native="true">
+           <layout class="QFormLayout" name="protocolFormLayout">
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="protocolNameKeyLabel">
+              <property name="text">
+               <string>Name:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="protocolNameValueLabel">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="protocolIdKeyLabel">
+              <property name="text">
+               <string>ID:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="protocolIdValueLabel">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </widget>
          </item>
-         <item row="0" column="1">
-          <widget class="QLabel" name="protocolNameValueLabel">
+         <item>
+          <widget class="QPushButton" name="protocolViewButton">
            <property name="text">
-            <string>-</string>
+            <string>View</string>
            </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
+           <property name="toolTip">
+            <string>Open a preview of this session's protocol.</string>
            </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="protocolIdKeyLabel">
-           <property name="text">
-            <string>ID:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QLabel" name="protocolIdValueLabel">
-           <property name="text">
-            <string>-</string>
-           </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
            </property>
           </widget>
          </item>
@@ -208,38 +234,64 @@
         <property name="collapsed">
          <bool>false</bool>
         </property>
-        <layout class="QFormLayout" name="transducerFormLayout">
-         <item row="0" column="0">
-          <widget class="QLabel" name="transducerNameKeyLabel">
-           <property name="text">
-            <string>Name:</string>
-           </property>
+        <layout class="QHBoxLayout" name="transducerBodyLayout">
+         <item>
+          <widget class="QWidget" name="transducerInfoContainer" native="true">
+           <layout class="QFormLayout" name="transducerFormLayout">
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="transducerNameKeyLabel">
+              <property name="text">
+               <string>Name:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="transducerNameValueLabel">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="transducerIdKeyLabel">
+              <property name="text">
+               <string>ID:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="transducerIdValueLabel">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </widget>
          </item>
-         <item row="0" column="1">
-          <widget class="QLabel" name="transducerNameValueLabel">
+         <item>
+          <widget class="QPushButton" name="transducerViewButton">
            <property name="text">
-            <string>-</string>
+            <string>View</string>
            </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
+           <property name="toolTip">
+            <string>Open a preview of this session's transducer.</string>
            </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="transducerIdKeyLabel">
-           <property name="text">
-            <string>ID:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QLabel" name="transducerIdValueLabel">
-           <property name="text">
-            <string>-</string>
-           </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
            </property>
           </widget>
          </item>
@@ -256,16 +308,23 @@
         </property>
         <layout class="QVBoxLayout" name="photoscansBodyLayout">
          <item>
-          <widget class="QLabel" name="photoscansListLabel">
+          <widget class="QLabel" name="photoscansEmptyLabel">
            <property name="text">
             <string>-</string>
            </property>
            <property name="wordWrap">
             <bool>true</bool>
            </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
-           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="photoscansItemsContainer" native="true">
+           <layout class="QVBoxLayout" name="photoscansItemsLayout">
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+           </layout>
           </widget>
          </item>
         </layout>
@@ -281,16 +340,23 @@
         </property>
         <layout class="QVBoxLayout" name="solutionsBodyLayout">
          <item>
-          <widget class="QLabel" name="solutionsListLabel">
+          <widget class="QLabel" name="solutionsEmptyLabel">
            <property name="text">
             <string>-</string>
            </property>
            <property name="wordWrap">
             <bool>true</bool>
            </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
-           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="solutionsItemsContainer" native="true">
+           <layout class="QVBoxLayout" name="solutionsItemsLayout">
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+           </layout>
           </widget>
          </item>
         </layout>
@@ -306,16 +372,23 @@
         </property>
         <layout class="QVBoxLayout" name="runsBodyLayout">
          <item>
-          <widget class="QLabel" name="runsListLabel">
+          <widget class="QLabel" name="runsEmptyLabel">
            <property name="text">
             <string>-</string>
            </property>
            <property name="wordWrap">
             <bool>true</bool>
            </property>
-           <property name="textInteractionFlags">
-            <set>Qt::TextSelectableByMouse</set>
-           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="runsItemsContainer" native="true">
+           <layout class="QVBoxLayout" name="runsItemsLayout">
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+           </layout>
           </widget>
          </item>
         </layout>

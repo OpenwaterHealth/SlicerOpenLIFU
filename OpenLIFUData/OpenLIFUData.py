@@ -60,6 +60,7 @@ from OpenLIFULib.class_definition_widgets import (
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.transducer_tracking_wizard_utils import hide_displayable_nodes_from_view
 from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
     clear_transducer_tracking_results,
@@ -1393,6 +1394,10 @@ class TransducerPreviewDialog(qt.QDialog):
         self._setup_model_node()
         self._setup_body_model_node()
         self._setup_registration_surface_node()
+        # Restrict every existing displayable node in the scene (volumes, slice
+        # planes, other models, etc.) to the main-window views only, so the
+        # transducer preview view shows just the transducer geometry we add below.
+        hide_displayable_nodes_from_view([self._view_node])
         # Reset the camera to fit the transducer in the preview view
         try:
             view_widget_3d = self.viewWidget.threeDView() if hasattr(self.viewWidget, "threeDView") else None

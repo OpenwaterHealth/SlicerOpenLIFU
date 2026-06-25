@@ -1,4 +1,5 @@
 # Standard library imports
+from functools import partial
 from typing import Optional, TYPE_CHECKING
 
 # Third-party imports
@@ -17,7 +18,7 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib import get_openlifu_data_parameter_node
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import BusyCursor, display_errors
 
 # These imports are done only for IDE and static analysis purposes
 if TYPE_CHECKING:
@@ -121,6 +122,13 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
             self.onDataParameterNodeModified,
         )
 
+        # ---- View buttons: open the same preview popups as the Data Manager.
+        # Protocol/Transducer are 1:1 with the session and get a section-level
+        # View button; photoscans / solutions / runs are 0:N and get one View
+        # button per item, populated dynamically in ``_update_count_collapsible``.
+        self.ui.protocolViewButton.clicked.connect(self.onPreviewProtocol)
+        self.ui.transducerViewButton.clicked.connect(self.onPreviewTransducer)
+
         self.updateSessionDashboard()
 
     def cleanup(self) -> None:
@@ -157,6 +165,138 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
     @display_errors
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         self.updateSessionDashboard()
+
+    # ---- View / preview popups ------------------------------------------
+
+    @display_errors
+    def _on_item_view_clicked(self, preview_callback, item_id, checked: bool = False) -> None:
+        """Common click handler for per-item View buttons (photoscan / solution / run)."""
+        preview_callback(item_id)
+
+    @display_errors
+    def onPreviewProtocol(self, checked: bool = False) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None or not loaded_session.protocol_is_valid():
+            slicer.util.errorDisplay("No protocol is loaded in the current session.")
+            return
+        protocol = loaded_session.get_protocol().protocol
+        from OpenLIFUData import ProtocolPreviewDialog
+        ProtocolPreviewDialog(protocol).exec_()
+
+    @display_errors
+    def onPreviewTransducer(self, checked: bool = False) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None or not loaded_session.transducer_is_valid():
+            slicer.util.errorDisplay("No transducer is loaded in the current session.")
+            return
+        transducer_openlifu = loaded_session.get_transducer().transducer.transducer
+        body_path = None
+        registration_path = None
+        try:
+            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            if db is not None:
+                abspaths = db.get_transducer_absolute_filepaths(transducer_openlifu.id) or {}
+                body_path = abspaths.get("transducer_body_abspath")
+                registration_path = abspaths.get("registration_surface_abspath")
+        except Exception:
+            pass
+        from OpenLIFUData import TransducerPreviewDialog
+        TransducerPreviewDialog(
+            transducer_openlifu,
+            body_abspath=body_path,
+            registration_surface_abspath=registration_path,
+        ).exec_()
+
+    def _preview_photoscan(self, pid: str) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            slicer.util.errorDisplay("No session is loaded.")
+            return
+        subject_id = loaded_session.get_subject_id()
+        session_id = loaded_session.get_session_id()
+        # Prefer the rich 3D preview dialog used by Transducer Localization /
+        # the Photoscan manager; fall back to the JSON tree if loading fails.
+        slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans.get(pid)
+        if slicer_photoscan is None:
+            try:
+                data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+                db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+                openlifu_photoscan = db.load_photoscan(subject_id, session_id, pid)
+                slicer_photoscan = data_logic.load_photoscan_from_openlifu(
+                    openlifu_photoscan,
+                    load_from_active_session=True,
+                )
+            except Exception:
+                slicer_photoscan = None
+        if slicer_photoscan is None:
+            self._json_preview_photoscan(pid, subject_id, session_id)
+            return
+        from OpenLIFUTransducerLocalization import PhotoscanPreviewDialog
+        with BusyCursor():
+            dialog = PhotoscanPreviewDialog(slicer_photoscan)
+        dialog.exec_()
+        dialog.deleteLater()
+
+    def _json_preview_photoscan(self, pid: str, subject_id: str, session_id: str) -> None:
+        from OpenLIFUData import _JsonTreeDialog
+        try:
+            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            obj = db.load_photoscan(subject_id, session_id, pid)
+            data = obj.to_dict()
+        except Exception as e:
+            data = {"error": f"Could not load photoscan {pid}: {e}"}
+        _JsonTreeDialog(f"Photoscan {pid}", {pid: data}).exec_()
+
+    def _preview_solution(self, sid: str) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            slicer.util.errorDisplay("No session is loaded.")
+            return
+        from OpenLIFUData import _JsonTreeDialog
+        try:
+            import openlifu.plan
+            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            json_filepath = db.get_solution_filepath(
+                loaded_session.get_subject_id(),
+                loaded_session.get_session_id(),
+                sid,
+            )
+            obj = openlifu.plan.Solution.from_files(json_filepath)
+            data = obj.to_dict()
+        except Exception as e:
+            data = {"error": f"Could not load solution {sid}: {e}"}
+        _JsonTreeDialog(f"Solution {sid}", {sid: data}).exec_()
+
+    def _preview_run(self, rid: str) -> None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            slicer.util.errorDisplay("No session is loaded.")
+            return
+        subject_id = loaded_session.get_subject_id()
+        session_id = loaded_session.get_session_id()
+        from OpenLIFUData import _JsonTreeDialog
+        tree_data = {}
+        try:
+            import openlifu.plan
+            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            run_filepath = db.get_run_filepath(subject_id, session_id, rid)
+            run = openlifu.plan.Run.from_file(run_filepath)
+            tree_data["run"] = run.to_dict()
+        except Exception as e:
+            tree_data["run"] = {"error": f"Could not load run {rid}: {e}"}
+        try:
+            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            session_snap = db.load_session_snapshot(subject_id, session_id, rid)
+            tree_data["session_snapshot"] = session_snap.to_dict()
+        except Exception as e:
+            tree_data["session_snapshot"] = {"error": str(e)}
+        try:
+            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            protocol_snap = db.load_protocol_snapshot(subject_id, session_id, rid)
+            tree_data["protocol_snapshot"] = protocol_snap.to_dict()
+        except Exception as e:
+            tree_data["protocol_snapshot"] = {"error": str(e)}
+        _JsonTreeDialog(f"Run {rid}", tree_data).exec_()
 
     # ---- Dashboard refresh ------------------------------------------------
 
@@ -201,45 +341,84 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         photoscans, solutions, runs = self._collection_counts(loaded_session)
         self._update_count_collapsible(
             self.ui.photoscansCollapsible,
-            self.ui.photoscansListLabel,
+            self.ui.photoscansEmptyLabel,
+            self.ui.photoscansItemsContainer.layout(),
             "Photoscans",
             photoscans,
+            self._preview_photoscan,
         )
         self._update_count_collapsible(
             self.ui.solutionsCollapsible,
-            self.ui.solutionsListLabel,
+            self.ui.solutionsEmptyLabel,
+            self.ui.solutionsItemsContainer.layout(),
             "Solutions",
             solutions,
+            self._preview_solution,
         )
         self._update_count_collapsible(
             self.ui.runsCollapsible,
-            self.ui.runsListLabel,
+            self.ui.runsEmptyLabel,
+            self.ui.runsItemsContainer.layout(),
             "Runs",
             runs,
+            self._preview_run,
         )
 
         self._set_workflow_proceedable()
 
-    def _update_count_collapsible(self, collapsible, body_label, title: str, ids) -> None:
+    def _update_count_collapsible(
+        self,
+        collapsible,
+        empty_label,
+        items_layout,
+        title: str,
+        ids,
+        preview_callback,
+    ) -> None:
         """Refresh a Photoscans/Solutions/Runs collapsible section.
 
         - Header text shows ``f"{title} ({len(ids)})"``.
-        - Body lists the IDs, one per line.
-        - When the count is zero, the section is force-collapsed and the
-          button is disabled so the user cannot expand an empty list.
+        - When empty, the section is force-collapsed and disabled.
+        - When non-empty, ``items_layout`` is repopulated with one row per ID:
+          a label on the left and a ``View`` button on the right that invokes
+          ``preview_callback(id)``.
         """
         ids = list(ids or [])
         count = len(ids)
         collapsible.text = f"{title} ({count})"
+
+        # Clear any rows from a previous refresh.
+        while items_layout.count():
+            item = items_layout.takeAt(0)
+            child = item.widget() if item is not None else None
+            if child is not None:
+                child.setParent(None)
+                child.deleteLater()
+
         if count == 0:
-            body_label.setText("-")
+            empty_label.setText("-")
+            empty_label.setVisible(True)
             # ctkCollapsibleButton exposes ``collapsed`` as a Qt property; there
             # is no ``setCollapsed`` setter in the PythonQt wrapper.
             collapsible.collapsed = True
             collapsible.setEnabled(False)
-        else:
-            body_label.setText("\n".join(ids))
-            collapsible.setEnabled(True)
+            return
+
+        empty_label.setVisible(False)
+        collapsible.setEnabled(True)
+
+        for item_id in ids:
+            row = qt.QWidget()
+            row_layout = qt.QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            id_label = qt.QLabel(item_id)
+            id_label.setTextInteractionFlags(qt.Qt.TextSelectableByMouse)
+            row_layout.addWidget(id_label, 1)
+            view_button = qt.QPushButton("View")
+            view_button.setToolTip(f"Open a preview of this {title.rstrip('s').lower()}.")
+            view_button.clicked.connect(partial(self._on_item_view_clicked, preview_callback, item_id))
+            row_layout.addWidget(view_button, 0)
+            items_layout.addWidget(row)
 
     def _subject_display_name(self, loaded_session: "SlicerOpenLIFUSession") -> str:
         subject_id = loaded_session.get_subject_id()
