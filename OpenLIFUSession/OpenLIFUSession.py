@@ -524,7 +524,21 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
 
     def runTest(self):
         self.setUp()
+        self.test_preview_dialog_imports()
         self.test_dashboard_with_no_session()
+
+    def test_preview_dialog_imports(self):
+        """Smoke-test that every dialog used by the Session-page View buttons is importable.
+
+        Slicer scripted modules are loaded as flat top-level modules, not
+        packages, so ``from OpenLIFUData.OpenLIFUData import X`` raises
+        ImportError at runtime. This test catches that class of mistake
+        without needing a loaded database or session.
+        """
+        from OpenLIFUData import ProtocolPreviewDialog  # noqa: F401
+        from OpenLIFUData import TransducerPreviewDialog  # noqa: F401
+        from OpenLIFUData import _JsonTreeDialog  # noqa: F401
+        from OpenLIFUTransducerLocalization import PhotoscanPreviewDialog  # noqa: F401
 
     def test_dashboard_with_no_session(self):
         """The dashboard must render gracefully when no session is loaded."""
@@ -539,7 +553,9 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
 
         Called from OpenLIFUHomeTest._OpenLIFU_FullTest1 after a session has
         been loaded by the Data module. Verified counts come from the
-        currently connected database.
+        currently connected database. Also clicks every View button so that
+        broken imports / signal wiring in the preview handlers fail the test
+        instead of slipping through to live UI use.
         """
         slicer.util.selectModule("OpenLIFUSession")
         widget = slicer.modules.OpenLIFUSessionWidget
@@ -557,3 +573,57 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
         assert widget.ui.transducerIdValueLabel.text == transducer_id
         volume_id = loaded_session.get_volume_id() or "-"
         assert widget.ui.volumeIdValueLabel.text == volume_id
+
+        # Per-collection sections: verify one "View" row per id, then exercise each button.
+        photoscan_ids, solution_ids, run_ids = widget._collection_counts(loaded_session)
+        for container_name, ids in (
+            ("photoscansItemsContainer", photoscan_ids),
+            ("solutionsItemsContainer", solution_ids),
+            ("runsItemsContainer", run_ids),
+        ):
+            container = getattr(widget.ui, container_name)
+            view_buttons = [
+                child for child in container.findChildren(qt.QPushButton)
+                if child.text == "View"
+            ]
+            assert len(view_buttons) == len(ids), (
+                f"{container_name}: expected {len(ids)} View buttons, found {len(view_buttons)}"
+            )
+
+        # Click every View button while auto-dismissing each modal it opens.
+        buttons_to_click = []
+        if loaded_session.protocol_is_valid():
+            buttons_to_click.append(widget.ui.protocolViewButton)
+        if loaded_session.transducer_is_valid():
+            buttons_to_click.append(widget.ui.transducerViewButton)
+        for container_name in ("photoscansItemsContainer", "solutionsItemsContainer", "runsItemsContainer"):
+            container = getattr(widget.ui, container_name)
+            buttons_to_click.extend(
+                child for child in container.findChildren(qt.QPushButton) if child.text == "View"
+            )
+        for button in buttons_to_click:
+            self._click_and_dismiss_modal(button)
+
+    @staticmethod
+    def _click_and_dismiss_modal(button) -> None:
+        """Click ``button`` and accept whichever modal dialog it pops up.
+
+        ``QDialog.exec_()`` blocks until the dialog is closed, so we schedule
+        a retrying timer that finds the active modal widget and accepts it.
+        """
+        attempts_left = [10]  # boxed so the nested closure can mutate it
+
+        def attempt():
+            modal = slicer.app.activeModalWidget()
+            if modal is not None:
+                try:
+                    modal.accept()
+                except Exception:
+                    modal.close()
+                return
+            attempts_left[0] -= 1
+            if attempts_left[0] > 0:
+                qt.QTimer.singleShot(50, attempt)
+
+        qt.QTimer.singleShot(50, attempt)
+        button.click()
