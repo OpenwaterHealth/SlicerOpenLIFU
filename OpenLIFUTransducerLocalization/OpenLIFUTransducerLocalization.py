@@ -2346,10 +2346,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # Survives across dialog opens until the user explicitly regenerates it.
         self._shared_scan_id: Optional[str] = None
 
-        # Tracks which session has already had its first-entry section
-        # collapse state applied, so we don't keep overriding the user's
-        # manual expand/collapse on subsequent updates.
-        self._collapse_applied_for_session: Optional[str] = None
+        # Tracks the (session, workflow-stage) pair that the section
+        # collapse state was last applied for, so that we re-apply only
+        # when the relevant data state changes rather than every refresh.
+        self._collapse_applied_for_session: Optional[Tuple[Optional[str], str]] = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -2441,14 +2441,21 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.ui.skinMeshOpacitySlider.valueChanged.connect(self.updateModelRendering)
         self.ui.photoscanOpacitySlider.valueChanged.connect(self.updateModelRendering)
         # ---------------------------------
-        self.ui.runTrackingButton.clicked.connect(self.onRunTrackingClicked)
-        self.ui.previewPhotoscanButton.clicked.connect(self.onPreviewPhotoscanClicked)
+
+        # ---- Localizations manager connections ----
+        self.ui.newTrackingButton.clicked.connect(self.onNewTrackingClicked)
+        self.ui.editTrackingButton.clicked.connect(self.onEditTrackingClicked)
+        self.ui.toggleLocalizationApprovalButton.clicked.connect(self.onToggleLocalizationApprovalClicked)
+        self.ui.deleteLocalizationButton.clicked.connect(self.onDeleteLocalizationClicked)
+        self.ui.localizationsTable.itemSelectionChanged.connect(self._on_localization_row_selected)
+        self.ui.localizationsTable.itemSelectionChanged.connect(self._update_manager_button_states)
+        # -------------------------------------------
 
         # These ui elemeents are not specific to the currently selected input options
         self.updatePhotoscanGenerationButtons()
-        self.updateApprovalStatusLabel()
         self._refresh_photocollections_table()
         self._refresh_photoscans_table()
+        self._refresh_localizations_table()
         self._update_manager_button_states()
         self._apply_initial_section_collapse_state()
         self.updateWorkflowControls()
@@ -2510,9 +2517,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updatePhotoscanGenerationButtons()
-        self.updateApprovalStatusLabel()
         self._refresh_photocollections_table()
         self._refresh_photoscans_table()
+        self._refresh_localizations_table()
         self._update_manager_button_states()
         self._apply_initial_section_collapse_state()
         self.updateInputOptions()
@@ -2582,10 +2589,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         based on the currently selected inputs"""
 
         self.checkCanRunTracking() # Determine whether transducer localization can be run
-        self.checkCanPreviewPhotoscan()
         self.checkCanDisplayVirtualFitResult() # virtual fit rendering checkbox
         self.updateModelRenderingSettings() #model rendering options
-        self.updateDistanceFromVFLabel()
+        self._refresh_localizations_table()
     
     def refreshPhotoscanList(self):
         """ Refreshes the list of photoscans affiliated with the loaded session"""
@@ -2707,31 +2713,179 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         item = table.item(row, 0)
         return item.text() if item is not None else None
 
+    def _get_localization_photoscan_ids(self) -> List[str]:
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        return sorted(get_photoscan_ids_with_results(session_id=session_id, approved_only=False))
+
+    def _get_selected_localization_photoscan_id(self) -> Optional[str]:
+        table = self.ui.localizationsTable
+        row = table.currentRow()
+        if row < 0:
+            return None
+        item = table.item(row, 0)
+        return item.text() if item is not None else None
+
+    def _refresh_localizations_table(self):
+        photoscan_ids = self._get_localization_photoscan_ids()
+        table = self.ui.localizationsTable
+        previously_selected = self._get_selected_localization_photoscan_id()
+
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        vf_node = self._virtual_fit_transform_for_tracking
+        # The current PrePlanning target gives the target ID label for all rows; per-result target ID
+        # is not yet stored on TT result nodes (planned for Phase 3b).
+        current_target = self.get_currently_selected_target_from_preplanning()
+        current_target_id = fiducial_to_openlifu_point_id(current_target) if current_target is not None else "\u2014"
+
+        not_approved_brush = qt.QBrush(qt.QColor("#FFE4B5"))  # tracked-but-not-approved highlight
+
+        table.blockSignals(True)
+        table.setRowCount(len(photoscan_ids))
+        for row, photoscan_id in enumerate(photoscan_ids):
+            tv_node = get_transducer_tracking_result(
+                photoscan_id=photoscan_id,
+                transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+                session_id=session_id)
+            pv_node = get_transducer_tracking_result(
+                photoscan_id=photoscan_id,
+                transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+                session_id=session_id)
+
+            tv_approved = tv_node is not None and get_approval_from_transducer_tracking_result_node(tv_node)
+            pv_approved = pv_node is not None and get_approval_from_transducer_tracking_result_node(pv_node)
+            both_approved = tv_approved and pv_approved
+
+            if vf_node is not None and tv_node is not None:
+                distance = self.logic.calculate_transform_origin_distance(
+                    transform_node1=tv_node, transform_node2=vf_node)
+                distance_text = f"{distance:.2f}"
+            else:
+                distance_text = "\u2014"
+
+            cells = [
+                photoscan_id,
+                distance_text,
+                current_target_id,
+                "Yes" if both_approved else "No",
+            ]
+            for col, text in enumerate(cells):
+                item = qt.QTableWidgetItem(text)
+                item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                if not both_approved:
+                    item.setBackground(not_approved_brush)
+                table.setItem(row, col, item)
+
+            if photoscan_id == previously_selected:
+                table.selectRow(row)
+        table.blockSignals(False)
+        if table.currentRow() < 0 and table.rowCount > 0:
+            table.selectRow(0)
+
+    def _on_localization_row_selected(self):
+        photoscan_id = self._get_selected_localization_photoscan_id()
+        if photoscan_id is None:
+            return
+        loaded_photoscans = get_openlifu_data_parameter_node().loaded_photoscans
+        if photoscan_id not in loaded_photoscans:
+            return
+        photoscan_openlifu = loaded_photoscans[photoscan_id].photoscan.photoscan
+        self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
+        self.ui.photoscanVisibilityCheckBox.checked = True
+
+    @display_errors
+    def onToggleLocalizationApprovalClicked(self, checked: bool = False):
+        photoscan_id = self._get_selected_localization_photoscan_id()
+        if photoscan_id is None:
+            return
+        currently_approved = self.logic.get_transducer_tracking_approval(photoscan_id)
+        if currently_approved:
+            self.logic.revoke_transducer_tracking_approval(photoscan_id=photoscan_id)
+        else:
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id = None if session is None else session.get_session_id()
+            set_transducer_tracking_approval_for_photoscan(
+                approval_state=True, photoscan_id=photoscan_id, session_id=session_id)
+            if session is not None:
+                slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+        self._refresh_localizations_table()
+        self.updateWorkflowControls()
+
+    @display_errors
+    def onDeleteLocalizationClicked(self, checked: bool = False):
+        photoscan_id = self._get_selected_localization_photoscan_id()
+        if photoscan_id is None:
+            return
+        if not slicer.util.confirmYesNoDisplay(
+            text=f"Delete the transducer localization result for photoscan '{photoscan_id}'?",
+            windowTitle="Delete localization result",
+        ):
+            return
+        if self.logic.get_transducer_tracking_approval(photoscan_id):
+            self.logic.revoke_transducer_tracking_approval(photoscan_id=photoscan_id)
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        for transform_type in (
+            TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+            TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+        ):
+            node = get_transducer_tracking_result(
+                photoscan_id=photoscan_id,
+                transform_type=transform_type,
+                session_id=session_id)
+            if node is not None:
+                slicer.mrmlScene.RemoveNode(node)
+        if session is not None:
+            slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+        self._refresh_localizations_table()
+        self.updateWorkflowControls()
+
     def _update_manager_button_states(self):
         self.ui.viewPhotocollectionButton.setEnabled(self._get_selected_photocollection_scan_id() is not None)
         self.ui.viewPhotoscanButton.setEnabled(self._get_selected_photoscan_id() is not None)
+        has_selected_localization = self._get_selected_localization_photoscan_id() is not None
+        self.ui.toggleLocalizationApprovalButton.setEnabled(has_selected_localization)
+        self.ui.deleteLocalizationButton.setEnabled(has_selected_localization)
+        # Edit requires a selected row AND the same inputs the New button needs.
+        self.ui.editTrackingButton.setEnabled(has_selected_localization and self.ui.newTrackingButton.enabled)
+        if not has_selected_localization:
+            self.ui.editTrackingButton.setToolTip("Select a localization row to edit.")
+        else:
+            self.ui.editTrackingButton.setToolTip(self.ui.newTrackingButton.toolTip)
 
     def _apply_initial_section_collapse_state(self):
-        """On first entry for the currently loaded session, expand the
-        relevant collapsibles based on what already exists. Honors the
-        user's subsequent manual expand/collapse by only applying once."""
+        """Re-apply collapse state whenever the workflow stage changes
+        (no data / collection only / scan or TT result available).
+        Cached by (session, stage) so the same stage doesn't repeatedly
+        override manual user expand/collapse within a session."""
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         session_key = None
         if loaded_session is not None:
             session_key = f"{loaded_session.get_subject_id()}|{loaded_session.get_session_id()}"
-        if self._collapse_applied_for_session == session_key:
-            return
-        self._collapse_applied_for_session = session_key
 
         num_collections = len(self._get_photocollection_scan_ids())
         num_scans = len(self._get_photoscan_ids())
+        num_localizations = len(self._get_localization_photoscan_ids())
 
-        if num_scans > 0:
-            # Have a photoscan: focus the user on localization.
+        if num_localizations > 0 or num_scans > 0:
+            stage = "localize"
+        elif num_collections > 0:
+            stage = "generate"
+        else:
+            stage = "capture"
+
+        cache_key = (session_key, stage)
+        if self._collapse_applied_for_session == cache_key:
+            return
+        self._collapse_applied_for_session = cache_key
+
+        if stage == "localize":
+            # Have a photoscan or a TT result: focus the user on localization.
             self.ui.photocollectionsCollapsible.collapsed = True
             self.ui.photoscansCollapsible.collapsed = True
             self.ui.localizationsCollapsible.collapsed = False
-        elif num_collections > 0:
+        elif stage == "generate":
             # Have a collection, no scan yet: focus on generating a photoscan.
             self.ui.photocollectionsCollapsible.collapsed = True
             self.ui.photoscansCollapsible.collapsed = False
@@ -3091,16 +3245,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         previewDialog.deleteLater()
         self.updateModelRendering()
 
-    def checkCanPreviewPhotoscan(self,caller = None, event = None) -> None:
-        # If the photoscan combo box has valid data selected then enable the preview photoscan button
-        current_data = self.algorithm_input_widget.get_current_data()
-        if current_data['Photoscan'] is None:
-            self.ui.previewPhotoscanButton.enabled = False
-            self.ui.previewPhotoscanButton.setToolTip("Please specify a photoscan to preview")
-        else:
-            self.ui.previewPhotoscanButton.enabled = True
-            self.ui.previewPhotoscanButton.setToolTip("Preview and toggle approval of the selected photoscan before registration")
-
     def get_currently_selected_target_from_preplanning(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
         """Returns the currently selected target in the pre-planning module. Returns None if no target is selected"""
         
@@ -3132,17 +3276,19 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 virtual_fit_is_approved = get_approval_from_virtual_fit_result_node(self._virtual_fit_transform_for_tracking)
 
             if transducer.surface_model_node is None or transducer.body_model_node is None: # Check that the selected transducer has an affiliated registration surface model
-                self.ui.runTrackingButton.enabled = False
-                self.ui.runTrackingButton.setToolTip("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
+                self.ui.newTrackingButton.enabled = False
+                self.ui.newTrackingButton.setToolTip("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
             elif get_guided_mode_state() and not virtual_fit_is_approved: # GM: Check that virtual fit is approved for the selected target
-                self.ui.runTrackingButton.enabled = False
-                self.ui.runTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
+                self.ui.newTrackingButton.enabled = False
+                self.ui.newTrackingButton.setToolTip("Virtual fit has not been approved for the selected target.")
             else:
-                self.ui.runTrackingButton.enabled = True
-                self.ui.runTrackingButton.setToolTip("Run transducer localization to align the selected photoscan and transducer registration surface to the MRI volume")
+                self.ui.newTrackingButton.enabled = True
+                self.ui.newTrackingButton.setToolTip("Run transducer localization to align the selected photoscan and transducer registration surface to the MRI volume")
         else:
-            self.ui.runTrackingButton.enabled = False
-            self.ui.runTrackingButton.setToolTip("Please specify the required inputs")
+            self.ui.newTrackingButton.enabled = False
+            self.ui.newTrackingButton.setToolTip("Please specify the required inputs")
+        # Edit button mirrors New, with an additional row-selection requirement.
+        self._update_manager_button_states()
 
     def updateModelRenderingSettings(self):
         """
@@ -3247,11 +3393,32 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                     skin_mesh_node.SetDisplayVisibility(is_visible)
                 skin_mesh_node.GetDisplayNode().SetOpacity(self.ui.skinMeshOpacitySlider.value)
 
-    def onRunTrackingClicked(self):
+    @display_errors
+    def onNewTrackingClicked(self, checked: bool = False):
+        """Launch the wizard for a fresh tracking result. The photoscan combo is
+        left at its current value (whatever the algorithm input widget picked)."""
+        self._run_tracking_wizard()
 
+    @display_errors
+    def onEditTrackingClicked(self, checked: bool = False):
+        """Launch the wizard pre-filled with the selected row's photoscan."""
+        selected_photoscan_id = self._get_selected_localization_photoscan_id()
+        if selected_photoscan_id is not None:
+            loaded_photoscans = get_openlifu_data_parameter_node().loaded_photoscans
+            if selected_photoscan_id in loaded_photoscans:
+                photoscan_openlifu = loaded_photoscans[selected_photoscan_id].photoscan.photoscan
+                self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
+        self._run_tracking_wizard()
+
+    def _run_tracking_wizard(self):
         activeData = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
         selected_transducer = activeData["Transducer"]
+
+        # The wizard's resetViewNodes unconditionally hides the photoscan model on close.
+        # Snapshot the visibility checkbox so we can restore it after cancel, and force-show
+        # on successful approval so the user can immediately see the new registration.
+        pre_wizard_photoscan_visible = self.ui.photoscanVisibilityCheckBox.isChecked()
 
         self._running_wizard = True
         self.wizard = TransducerTrackingWizard(
@@ -3262,6 +3429,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         returncode, photoscan_to_volume_transform_node, transducer_to_volume_transform_node = self.wizard.customexec_()
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
         self._running_wizard = False
+
+        # Restore photoscan visibility (or force-show on successful approval) before the
+        # rendering refresh applies it to the model.
+        self.ui.photoscanVisibilityCheckBox.checked = True if returncode else pre_wizard_photoscan_visible
 
         # Restore previous photoscan/skin segmentation visibility states
         self.updateModelRendering()
@@ -3294,9 +3465,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
             self.updateWorkflowControls()
 
-            self.updateDistanceFromVFLabel()
             self.checkCanDisplayVirtualFitResult()
-            self.updateApprovalStatusLabel()
+            self._refresh_localizations_table()
 
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer localization transform node to revoke approval in case the transform node is approved and then modified."""
@@ -3318,41 +3488,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if self.logic.get_transducer_tracking_approval(photoscan_id):
             notify(f"Tracking approval revoked:\n{reason}")
             self.logic.revoke_transducer_tracking_approval(photoscan_id = photoscan_id)
-            self.updateApprovalStatusLabel()
-            self.updateDistanceFromVFLabel()
-
-    def updateDistanceFromVFLabel(self) -> None:
-
-        # If there is a virtual fit result and tracking result,
-        # compute a quantitative measure comparing it with the tracked result
-        activeData = self.algorithm_input_widget.get_current_data()
-        selected_transducer = activeData["Transducer"]
-        selected_photoscan = activeData["Photoscan"]
-
-        if not selected_photoscan or not selected_transducer:
-            self.ui.quantitativeTransducerTrackingMetricLabel.hide()
-            return
-
-        if not self._virtual_fit_transform_for_tracking:
-            self.ui.quantitativeTransducerTrackingMetricLabel.hide()
-            return
-
-        tracking_approved = self.logic.get_transducer_tracking_approval(selected_photoscan.id)
-        tracking_result = self.logic.get_transducer_tracking_result_node(
-            photoscan_id = selected_photoscan.id,
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
-        if tracking_result and tracking_approved:
-            distance = self.logic.calculate_transform_origin_distance(
-                transform_node1 = tracking_result,
-                transform_node2 = self._virtual_fit_transform_for_tracking)
-            self.ui.quantitativeTransducerTrackingMetricLabel.show()
-            self.ui.quantitativeTransducerTrackingMetricLabel.text = f"Distance from virtual fit (mm): {distance:.2f}"
-            self.ui.quantitativeTransducerTrackingMetricLabel.setToolTip(
-                "Euclidean distance between the virtual fit and tracked transform origins.")
-        
-        else:
-            self.ui.quantitativeTransducerTrackingMetricLabel.hide()
-            return
+            self._refresh_localizations_table()
 
     def updateStartPhotoscanGenerationButton(self):
         button = self.ui.generatePhotoscanFromPhotocollectionButton
@@ -3395,20 +3531,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.updateAddPhotoscanButton()
         self.updateShowQRCodeButton()
 
-    def updateApprovalStatusLabel(self):
-        """ Updates the status message that displays which photoscans have been approved or have
-        transducer localization results that have been approved."""
-
-        photoscan_ids_with_approved_tt_results = self.logic.get_photoscan_ids_with_approved_tt_results()
-        if len(photoscan_ids_with_approved_tt_results ) == 0:
-            tt_approval_status = "There are currently no transducer localization approvals."
-        else:
-            tt_approval_status = (
-                "transducer localization is approved for the following photoscans:\n- "
-                + "\n- ".join(photoscan_ids_with_approved_tt_results)
-            )
-        self.ui.approvalStatusLabel.text = tt_approval_status
-    
     def updateVirtualFitStatus(self):
         """ Updates the status message that warns the user if virtual fit is not 
         approved for the selected target or if the selected photoscan is not

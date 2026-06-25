@@ -274,40 +274,90 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="previewPhotoscanButton">
-        <property name="text">
-         <string>Preview Photoscan</string>
+       <widget class="QTableWidget" name="localizationsTable">
+        <property name="selectionBehavior">
+         <enum>QAbstractItemView::SelectRows</enum>
         </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SingleSelection</enum>
+        </property>
+        <property name="editTriggers">
+         <set>QAbstractItemView::NoEditTriggers</set>
+        </property>
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <attribute name="horizontalHeaderStretchLastSection">
+         <bool>true</bool>
+        </attribute>
+        <attribute name="verticalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>Photoscan ID</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Distance from VF (mm)</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Target ID</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Approved</string>
+         </property>
+        </column>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="runTrackingButton">
-        <property name="text">
-         <string>Run transducer localization</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="quantitativeTransducerTrackingMetricLabel">
-        <property name="font">
-         <font>
-          <italic>true</italic>
-         </font>
-        </property>
-        <property name="toolTip">
-         <string/>
-        </property>
-        <property name="text">
-         <string>Distance from virtual fit (mm):</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="approvalStatusLabel">
-        <property name="text">
-         <string>(approval status label)</string>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="localizationsButtonsLayout">
+        <item>
+         <widget class="QPushButton" name="newTrackingButton">
+          <property name="text">
+           <string>New</string>
+          </property>
+          <property name="toolTip">
+           <string>Launch the transducer localization wizard to create a new tracking result.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="editTrackingButton">
+          <property name="text">
+           <string>Edit</string>
+          </property>
+          <property name="toolTip">
+           <string>Launch the wizard pre-filled with the selected row's photoscan to edit that tracking result.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="toggleLocalizationApprovalButton">
+          <property name="text">
+           <string>Toggle Approval</string>
+          </property>
+          <property name="toolTip">
+           <string>Toggle approval for the selected localization result.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="deleteLocalizationButton">
+          <property name="text">
+           <string>Delete</string>
+          </property>
+          <property name="toolTip">
+           <string>Delete the selected localization result.</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <widget class="ctkCollapsibleButton" name="ModelRenderingOptions">
