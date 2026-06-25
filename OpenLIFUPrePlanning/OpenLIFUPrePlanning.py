@@ -804,21 +804,37 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
+            return
         if self._vf_interaction_in_progress:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Finish modifying the virtual fit transform before proceeding."
-        elif not get_target_candidates():
+            return
+
+        target_nodes = get_target_candidates()
+        if not target_nodes:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Create a target to proceed."
-        elif not list(get_virtual_fit_result_nodes(session_id=session_id)):
+            return
+
+        # Every current target must have an approved virtual fit before proceeding. Targets that have
+        # been deleted from the table no longer count.
+        target_ids = {fiducial_to_openlifu_point_id(n) for n in target_nodes}
+        vf_nodes = list(get_virtual_fit_result_nodes(session_id=session_id))
+        targets_with_any_vf = {n.GetAttribute("VF:targetID") for n in vf_nodes}
+        approved_ids = set(self.logic.get_approved_target_ids())
+
+        missing_vf = target_ids - targets_with_any_vf
+        missing_approval = target_ids - approved_ids
+
+        if missing_vf:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "Run a virtual fit result for a target to proceed."
-        elif not self.logic.get_approved_target_ids():
+            self.workflow_controls.status_text = "Run a virtual fit for every target to proceed."
+        elif missing_approval:
             self.workflow_controls.can_proceed = False
-            self.workflow_controls.status_text = "A virtual fit result needs to be approved for a target to proceed."
+            self.workflow_controls.status_text = "Approve a virtual fit for every target to proceed."
         else:
             self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Approved virtual fit result detected, proceed to the next step."
+            self.workflow_controls.status_text = "All targets have an approved virtual fit, proceed to the next step."
 
     def resetVirtualFitProgressDisplay(self):
         self.ui.virtualFitProgressBar.hide()
@@ -847,6 +863,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             target_id = fiducial_to_openlifu_point_id(target)
             vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort=True))
 
+        # Only one VF per target may be approved: while any row is approved, the unchecked rows have
+        # the checkbox disabled. Users must un-approve the current one before approving another.
+        any_approved = any(get_approval_from_virtual_fit_result_node(r) for r in vf_results)
+
         most_recent_selection = self.ui.virtualFitResultTable.currentRow()
         self._populating_vf_results_table = True
         try:
@@ -859,11 +879,18 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 result_item.setData(qt.Qt.UserRole, result)
                 self.ui.virtualFitResultTable.setItem(row_idx, 0, result_item)
 
-                approved_item = qt.QTableWidgetItem()
-                approved_item.setFlags(
-                    qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable
-                )
                 is_approved = get_approval_from_virtual_fit_result_node(result)
+                approved_item = qt.QTableWidgetItem()
+                # Greyed-out but visible checkbox: keep ItemIsUserCheckable, drop ItemIsEnabled.
+                if any_approved and not is_approved:
+                    approved_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsUserCheckable)
+                    approved_item.setToolTip(
+                        "Un-approve the currently approved virtual fit for this target before approving another."
+                    )
+                else:
+                    approved_item.setFlags(
+                        qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable
+                    )
                 approved_item.setCheckState(qt.Qt.Checked if is_approved else qt.Qt.Unchecked)
                 approved_item.setTextAlignment(qt.Qt.AlignCenter)
                 self.ui.virtualFitResultTable.setItem(row_idx, 1, approved_item)
@@ -1495,3 +1522,66 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
         preplanning_widget.create_virtual_fit_result(auto_fit = False)
         vf_nodes = list(get_virtual_fit_result_nodes(target_id, session_id))
         assert len(vf_nodes) == 1
+
+        # --- One-approved-per-target UI gating ---------------------------------------------------
+        # Run virtual fit again so we have multiple candidates to exercise the disable behavior.
+        preplanning_widget.create_virtual_fit_result(auto_fit = True)
+        vf_nodes = list(get_virtual_fit_result_nodes(target_id, session_id, sort=True))
+        assert len(vf_nodes) >= 2, "Expected multiple VF candidates from auto-fit."
+
+        # No approvals yet -> every Approved cell must be user-checkable.
+        preplanning_widget.updateVirtualFitResultsTable()
+        table = preplanning_widget.ui.virtualFitResultTable
+        for row in range(table.rowCount):
+            flags = int(table.item(row, 1).flags())
+            assert flags & int(qt.Qt.ItemIsEnabled), f"Row {row} approve cell should be enabled when nothing is approved."
+
+        # Approve the first row -> all other rows' Approved cells must lose ItemIsEnabled.
+        preplanning_logic.toggle_virtual_fit_approval(vf_nodes[0])
+        slicer.app.processEvents()
+        approved_row = None
+        for row in range(table.rowCount):
+            item = table.item(row, 1)
+            if item.checkState() == qt.Qt.Checked:
+                approved_row = row
+                break
+        assert approved_row is not None, "Expected one approved row after toggling approval."
+        for row in range(table.rowCount):
+            flags = int(table.item(row, 1).flags())
+            is_enabled = bool(flags & int(qt.Qt.ItemIsEnabled))
+            if row == approved_row:
+                assert is_enabled, "Approved row should remain user-checkable so it can be un-approved."
+            else:
+                assert not is_enabled, f"Row {row} approve cell should be disabled while another row is approved."
+
+        # Un-approving releases the lock -> every cell becomes user-checkable again.
+        preplanning_logic.toggle_virtual_fit_approval(vf_nodes[0])
+        slicer.app.processEvents()
+        for row in range(table.rowCount):
+            flags = int(table.item(row, 1).flags())
+            assert flags & int(qt.Qt.ItemIsEnabled), f"Row {row} approve cell should be enabled after revoking all approvals."
+
+        # --- All-targets-approved proceed gating -------------------------------------------------
+        # Re-approve so the single existing target has an approved VF.
+        preplanning_logic.toggle_virtual_fit_approval(vf_nodes[0])
+        slicer.app.processEvents()
+        preplanning_widget.updateWorkflowControls()
+        assert preplanning_widget.workflow_controls.can_proceed is True, \
+            "Should be proceedable once every (single) target has an approved VF."
+
+        # Add a second target with no VF -> proceed must be blocked with the per-target message.
+        extra_target = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+        extra_target.SetMaximumNumberOfControlPoints(1)
+        extra_target.SetName(slicer.mrmlScene.GenerateUniqueName("Target"))
+        extra_target.SetMarkupLabelFormat("%N")
+        extra_target.AddControlPoint(curr_pos[0] + 5.0, curr_pos[1], curr_pos[2])
+        slicer.app.processEvents()
+        try:
+            preplanning_widget.updateWorkflowControls()
+            assert preplanning_widget.workflow_controls.can_proceed is False, \
+                "Adding an unfit target should block Proceed."
+            assert "every target" in preplanning_widget.workflow_controls.status_text.lower(), \
+                f"Unexpected status text: {preplanning_widget.workflow_controls.status_text!r}"
+        finally:
+            slicer.mrmlScene.RemoveNode(extra_target)
+            preplanning_widget.updateWorkflowControls()
