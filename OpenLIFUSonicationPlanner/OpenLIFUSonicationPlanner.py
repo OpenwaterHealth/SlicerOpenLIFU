@@ -236,6 +236,15 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
+        from OpenLIFULib.view_state import apply_module_view_state, SONICATION_PLANNER
+        apply_module_view_state(SONICATION_PLANNER)
+
+        # Default-on Render PNP whenever a solution is already loaded on entry.
+        if (
+            get_openlifu_data_parameter_node().loaded_solution is not None
+            and not self.ui.renderPNPCheckBox.checked
+        ):
+            self.ui.renderPNPCheckBox.checked = True  # triggers onrenderPNPCheckBoxToggled -> render_pnp
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -464,6 +473,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onrenderPNPCheckBoxToggled(self, checked:bool):
         if checked:
             self.logic.render_pnp()
+            # render_pnp() / volume-rendering node creation can reset the registered
+            # photoscan model's opacity back to 1.0; re-apply the module view state
+            # so it stays at the 25% used in Sonication Planner / Control.
+            from OpenLIFULib.view_state import apply_module_view_state, SONICATION_PLANNER
+            apply_module_view_state(SONICATION_PLANNER)
         else:
             self.logic.hide_pnp()
 

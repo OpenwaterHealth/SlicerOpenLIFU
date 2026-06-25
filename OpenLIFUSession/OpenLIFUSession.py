@@ -140,6 +140,8 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
     def enter(self) -> None:
         self.initializeParameterNode()
         self.updateSessionDashboard()
+        from OpenLIFULib.view_state import apply_module_view_state, SESSION
+        apply_module_view_state(SESSION)
 
     def exit(self) -> None:
         if self._parameterNode:

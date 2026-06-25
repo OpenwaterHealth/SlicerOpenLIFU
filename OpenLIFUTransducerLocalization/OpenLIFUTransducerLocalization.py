@@ -2466,6 +2466,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
+        from OpenLIFULib.view_state import apply_module_view_state, LOCALIZATION
+        apply_module_view_state(LOCALIZATION)
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -3174,9 +3176,16 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 self.ui.photoscanVisibilitySettings.enabled = True
                 self.ui.photoscanVisibilitySettings.setToolTip("")
                 loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
-                self.ui.photoscanVisibilityCheckBox.checked = loaded_slicer_photoscan.model_node.GetDisplayVisibility()
-                self.ui.photoscanOpacitySlider.value = loaded_slicer_photoscan.model_node.GetDisplayNode().GetOpacity()
-        
+                # Sync widget to scene without re-firing updateModelRendering and writing stale widget state back.
+                self.ui.photoscanVisibilityCheckBox.blockSignals(True)
+                self.ui.photoscanOpacitySlider.blockSignals(True)
+                try:
+                    self.ui.photoscanVisibilityCheckBox.checked = loaded_slicer_photoscan.model_node.GetDisplayVisibility()
+                    self.ui.photoscanOpacitySlider.value = loaded_slicer_photoscan.model_node.GetDisplayNode().GetOpacity()
+                finally:
+                    self.ui.photoscanVisibilityCheckBox.blockSignals(False)
+                    self.ui.photoscanOpacitySlider.blockSignals(False)
+
         # Check if the currently selected volume has a generated skin mesh available
         if selected_volume is None:
             self.ui.skinMeshVisibilitySettings.enabled = False
@@ -3189,9 +3198,15 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             elif skin_mesh_node.GetDisplayNode():
                 self.ui.skinMeshVisibilitySettings.enabled = True
                 self.ui.skinMeshVisibilitySettings.setToolTip("")
-                # If already visible in the scene
-                self.ui.skinMeshVisibilityCheckBox.checked = skin_mesh_node.GetDisplayVisibility()
-                self.ui.skinMeshOpacitySlider.value = skin_mesh_node.GetDisplayNode().GetOpacity()
+                # Sync widget to scene without re-firing updateModelRendering and writing stale widget state back.
+                self.ui.skinMeshVisibilityCheckBox.blockSignals(True)
+                self.ui.skinMeshOpacitySlider.blockSignals(True)
+                try:
+                    self.ui.skinMeshVisibilityCheckBox.checked = skin_mesh_node.GetDisplayVisibility()
+                    self.ui.skinMeshOpacitySlider.value = skin_mesh_node.GetDisplayNode().GetOpacity()
+                finally:
+                    self.ui.skinMeshVisibilityCheckBox.blockSignals(False)
+                    self.ui.skinMeshOpacitySlider.blockSignals(False)
 
     def updateModelRendering(self):
         """
@@ -3919,6 +3934,16 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         if session:
             data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             data_logic.update_underlying_openlifu_session()
+        # Clear any cached solution: revoking TT approval invalidates the pose source the
+        # solution was computed against. Solution clearing is now driven by approval changes.
+        try:
+            sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
+        except AttributeError:
+            sp_widget = None
+        if sp_widget is not None:
+            sp_widget.deleteSolutionAndSolutionAnalysisIfAny(
+                reason="Transducer tracking approval was revoked.",
+            )
 
     def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
         """Return whether there is a transducer localization approval for the photoscan. In case there is not even a transducer

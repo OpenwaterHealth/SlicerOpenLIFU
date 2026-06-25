@@ -276,6 +276,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         self.updateWorkflowControls()
+        from OpenLIFULib.view_state import apply_module_view_state, PREPLANNING
+        apply_module_view_state(PREPLANNING)
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
@@ -445,18 +447,35 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         its anchoring VF is approved. We therefore drop every approved TT result whenever any VF
         approval is revoked, rather than relying on transducer-transform observers (which would
         also fire just from the user clicking around different VF results).
+
+        Also clears any computed Solution / SolutionAnalysis here, since the pose source backing
+        the solution has just become invalid. Solution clearing is now driven by approval
+        changes rather than by transducer-transform events.
         """
         try:
             tl_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
         except AttributeError:
-            return
-        tl_logic = getattr(tl_widget, "logic", None)
-        if tl_logic is None:
-            return
-        approved_photoscan_ids = list(tl_logic.get_photoscan_ids_with_approved_tt_results())
-        for photoscan_id in approved_photoscan_ids:
-            tl_widget.revokeTransducerTrackingApprovalIfAny(
-                photoscan_id=photoscan_id,
+            tl_widget = None
+        tl_logic = getattr(tl_widget, "logic", None) if tl_widget is not None else None
+        if tl_logic is not None:
+            approved_photoscan_ids = list(tl_logic.get_photoscan_ids_with_approved_tt_results())
+            for photoscan_id in approved_photoscan_ids:
+                tl_widget.revokeTransducerTrackingApprovalIfAny(
+                    photoscan_id=photoscan_id,
+                    reason=(
+                        "The underlying virtual fit approval was revoked"
+                        + (f": {reason}" if reason else ".")
+                    ),
+                )
+
+        # Clear solution regardless of whether there was a TT to revoke: the VF
+        # revocation alone is enough to invalidate any cached solution.
+        try:
+            sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
+        except AttributeError:
+            sp_widget = None
+        if sp_widget is not None:
+            sp_widget.deleteSolutionAndSolutionAnalysisIfAny(
                 reason=(
                     "The underlying virtual fit approval was revoked"
                     + (f": {reason}" if reason else ".")

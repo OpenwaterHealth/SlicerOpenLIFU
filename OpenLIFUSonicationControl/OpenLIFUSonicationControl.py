@@ -431,6 +431,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.initializeParameterNode()
         self.updateAllButtonsEnabled()
         self.updateWorkflowControls()
+        from OpenLIFULib.view_state import apply_module_view_state, SONICATION_CONTROL
+        apply_module_view_state(SONICATION_CONTROL)
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""

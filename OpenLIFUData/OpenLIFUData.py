@@ -6998,7 +6998,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
     # TODO: This should be a widget level function
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
 
-        slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
+        # Solution invalidation is now driven by VF/TT approval changes, not by transducer-transform
+        # changes (e.g. navigating back from the planner to the localization page no longer wipes
+        # an existing solution).
         slicer.util.getModuleWidget('OpenLIFUTransducerLocalization').checkCanDisplayVirtualFitResult()
 
         # Transducer-tracking approval is no longer auto-revoked when the transducer transform
