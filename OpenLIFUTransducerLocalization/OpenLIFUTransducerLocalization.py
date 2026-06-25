@@ -56,12 +56,18 @@ from OpenLIFULib.transducer import TRANSDUCER_MODEL_COLORS
 from OpenLIFULib.transducer_tracking_results import (
     TransducerTrackingTransformType,
     add_transducer_tracking_result,
+    get_all_transducer_tracking_results,
     get_approval_from_transducer_tracking_result_node,
     get_transform_type_from_transducer_tracking_result_node,
-    get_photoscan_id_from_transducer_tracking_result,
     get_photoscan_ids_with_results,
+    get_result_id_from_transducer_tracking_result_node,
+    get_result_index_from_transducer_tracking_result_node,
+    get_target_id_from_transducer_tracking_result_node,
     get_transducer_tracking_result,
-    set_transducer_tracking_approval_for_photoscan,
+    get_transducer_tracking_result_by_id,
+    reindex_transducer_tracking_results,
+    remove_transducer_tracking_result_by_id,
+    set_transducer_tracking_approval_by_id,
 )
 from OpenLIFULib.transducer_tracking_wizard_utils import (
     create_threeD_photoscan_view_node,
@@ -1114,13 +1120,17 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         return not self.runningRegistration and self.page_locked
 
 class TransducerTrackingWizard(qt.QWizard):
-    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
-                 volume: vtkMRMLScalarVolumeNode, 
+    def __init__(self, photoscan: SlicerOpenLIFUPhotoscan,
+                 volume: vtkMRMLScalarVolumeNode,
                  transducer: SlicerOpenLIFUTransducer,
-                 virtual_fit_result_node: Optional[vtkMRMLTransformNode]):
+                 virtual_fit_result_node: Optional[vtkMRMLTransformNode],
+                 result_id: Optional[str] = None,
+                 target_id: Optional[str] = None):
         super().__init__()
 
         self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerLocalization')
+        self._result_id = result_id  # None = create new on finalize; str = replace this result on finalize
+        self._target_id = target_id
         
         pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
         pluginLogic = pluginHandler.pluginLogic()
@@ -1162,15 +1172,19 @@ class TransducerTrackingWizard(qt.QWizard):
         self.button(qt.QWizard.FinishButton).clicked.connect(self.onFinish)
         self.button(qt.QWizard.CancelButton).clicked.connect(self.onCancel)
 
-        # Check the scene for previously computed tt results for the specified photoscan
+        # Check the scene for previously computed tt results to pre-load. With multi-result, we
+        # only pre-load when the caller specified a particular result_id to edit.
         self._valid_tt_result_exists = False
-        self.photoscan_to_volume_transform_node = self._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.photoscan.get_id(),
-            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
-
-        self.transducer_to_volume_transform_node = self._logic.get_transducer_tracking_result_node(
-            photoscan_id = self.photoscan.get_id(),
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME)
+        if self._result_id is not None:
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id = None if session is None else session.get_session_id()
+            self.photoscan_to_volume_transform_node = get_transducer_tracking_result_by_id(
+                self._result_id, TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME, session_id)
+            self.transducer_to_volume_transform_node = get_transducer_tracking_result_by_id(
+                self._result_id, TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME, session_id)
+        else:
+            self.photoscan_to_volume_transform_node = None
+            self.transducer_to_volume_transform_node = None
         
         self._existing_approval_revoked = False # This flag gets set to True when the user `unlocks` a page to allow editing of a valid tt result. 
         if self.photoscan_to_volume_transform_node and self.transducer_to_volume_transform_node:
@@ -1365,7 +1379,12 @@ class TransducerTrackingWizard(qt.QWizard):
                 transducer_to_volume_transform = self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node,
                 transducer_to_volume_approval_state = True,
                 photoscan_id = self.photoscan.get_id(),
-                transducer = self.transducer)
+                transducer = self.transducer,
+                target_id = self._target_id,
+                result_id = self._result_id)
+            # Cache the stable id of the result just added/replaced so customexec_ can return it.
+            self._result_id = get_result_id_from_transducer_tracking_result_node(
+                self.transducer_to_volume_transform_node)
 
             # Update the approval status of the associated openlifu photoscan object
             self._logic.update_photoscan_approval(
@@ -2718,46 +2737,62 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         session_id = None if session is None else session.get_session_id()
         return sorted(get_photoscan_ids_with_results(session_id=session_id, approved_only=False))
 
-    def _get_selected_localization_photoscan_id(self) -> Optional[str]:
+    def _get_selected_localization_row_info(self) -> Optional[Tuple[str, str, Optional[str], int]]:
+        """Return (result_id, photoscan_id, target_id, index) for the selected localization row, or None."""
         table = self.ui.localizationsTable
         row = table.currentRow()
         if row < 0:
             return None
-        item = table.item(row, 0)
-        return item.text() if item is not None else None
+        index_item = table.item(row, 0)
+        if index_item is None:
+            return None
+        result_id = index_item.data(qt.Qt.UserRole)
+        photoscan_id_item = table.item(row, 1)
+        target_id_item = table.item(row, 3)
+        if result_id is None or photoscan_id_item is None:
+            return None
+        target_id = target_id_item.data(qt.Qt.UserRole) if target_id_item is not None else None
+        try:
+            index = int(index_item.text())
+        except (ValueError, AttributeError):
+            index = -1
+        return (result_id, photoscan_id_item.text(), target_id, index)
+
+    def _get_selected_localization_photoscan_id(self) -> Optional[str]:
+        info = self._get_selected_localization_row_info()
+        return info[1] if info is not None else None
 
     def _refresh_localizations_table(self):
-        photoscan_ids = self._get_localization_photoscan_ids()
         table = self.ui.localizationsTable
-        previously_selected = self._get_selected_localization_photoscan_id()
+        previously_selected = self._get_selected_localization_row_info()
+        previously_selected_result_id = previously_selected[0] if previously_selected else None
 
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
         vf_node = self._virtual_fit_transform_for_tracking
-        # The current PrePlanning target gives the target ID label for all rows; per-result target ID
-        # is not yet stored on TT result nodes (planned for Phase 3b).
         current_target = self.get_currently_selected_target_from_preplanning()
-        current_target_id = fiducial_to_openlifu_point_id(current_target) if current_target is not None else "\u2014"
+        current_target_id = fiducial_to_openlifu_point_id(current_target) if current_target is not None else None
+
+        tt_pairs = get_all_transducer_tracking_results(session_id)
 
         not_approved_brush = qt.QBrush(qt.QColor("#FFE4B5"))  # tracked-but-not-approved highlight
 
         table.blockSignals(True)
-        table.setRowCount(len(photoscan_ids))
-        for row, photoscan_id in enumerate(photoscan_ids):
-            tv_node = get_transducer_tracking_result(
-                photoscan_id=photoscan_id,
-                transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
-                session_id=session_id)
-            pv_node = get_transducer_tracking_result(
-                photoscan_id=photoscan_id,
-                transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-                session_id=session_id)
+        table.setRowCount(len(tt_pairs))
+        row_to_select = -1
+        for row, (tv_node, pv_node) in enumerate(tt_pairs):
+            photoscan_id = tv_node.GetAttribute("TT:photoscanID") or "\u2014"
+            target_id = get_target_id_from_transducer_tracking_result_node(tv_node) or current_target_id
+            result_id = get_result_id_from_transducer_tracking_result_node(tv_node)
+            result_index = get_result_index_from_transducer_tracking_result_node(tv_node)
+            if result_index is None:
+                result_index = row
 
-            tv_approved = tv_node is not None and get_approval_from_transducer_tracking_result_node(tv_node)
-            pv_approved = pv_node is not None and get_approval_from_transducer_tracking_result_node(pv_node)
+            tv_approved = get_approval_from_transducer_tracking_result_node(tv_node)
+            pv_approved = get_approval_from_transducer_tracking_result_node(pv_node)
             both_approved = tv_approved and pv_approved
 
-            if vf_node is not None and tv_node is not None:
+            if vf_node is not None:
                 distance = self.logic.calculate_transform_origin_distance(
                     transform_node1=tv_node, transform_node2=vf_node)
                 distance_text = f"{distance:.2f}"
@@ -2765,9 +2800,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 distance_text = "\u2014"
 
             cells = [
+                str(result_index),
                 photoscan_id,
                 distance_text,
-                current_target_id,
+                target_id if target_id else "\u2014",
                 "Yes" if both_approved else "No",
             ]
             for col, text in enumerate(cells):
@@ -2777,10 +2813,15 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                     item.setBackground(not_approved_brush)
                 table.setItem(row, col, item)
 
-            if photoscan_id == previously_selected:
-                table.selectRow(row)
+            table.item(row, 0).setData(qt.Qt.UserRole, result_id)
+            table.item(row, 3).setData(qt.Qt.UserRole, target_id)
+
+            if result_id is not None and result_id == previously_selected_result_id:
+                row_to_select = row
         table.blockSignals(False)
-        if table.currentRow() < 0 and table.rowCount > 0:
+        if row_to_select >= 0:
+            table.selectRow(row_to_select)
+        elif table.currentRow() < 0 and table.rowCount > 0:
             table.selectRow(0)
 
     def _on_localization_row_selected(self):
@@ -2796,17 +2837,18 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     @display_errors
     def onToggleLocalizationApprovalClicked(self, checked: bool = False):
-        photoscan_id = self._get_selected_localization_photoscan_id()
-        if photoscan_id is None:
+        info = self._get_selected_localization_row_info()
+        if info is None:
             return
-        currently_approved = self.logic.get_transducer_tracking_approval(photoscan_id)
+        result_id, _, _, _ = info
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        currently_approved = self.logic.get_transducer_tracking_approval(result_id=result_id)
         if currently_approved:
-            self.logic.revoke_transducer_tracking_approval(photoscan_id=photoscan_id)
+            self.logic.revoke_transducer_tracking_approval(result_id=result_id)
         else:
-            session = get_openlifu_data_parameter_node().loaded_session
-            session_id = None if session is None else session.get_session_id()
-            set_transducer_tracking_approval_for_photoscan(
-                approval_state=True, photoscan_id=photoscan_id, session_id=session_id)
+            set_transducer_tracking_approval_by_id(
+                approval_state=True, result_id=result_id, session_id=session_id)
             if session is not None:
                 slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
         self._refresh_localizations_table()
@@ -2814,28 +2856,21 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     @display_errors
     def onDeleteLocalizationClicked(self, checked: bool = False):
-        photoscan_id = self._get_selected_localization_photoscan_id()
-        if photoscan_id is None:
+        info = self._get_selected_localization_row_info()
+        if info is None:
             return
+        result_id, photoscan_id, _, index = info
         if not slicer.util.confirmYesNoDisplay(
-            text=f"Delete the transducer localization result for photoscan '{photoscan_id}'?",
+            text=f"Delete localization result #{index} for photoscan '{photoscan_id}'?",
             windowTitle="Delete localization result",
         ):
             return
-        if self.logic.get_transducer_tracking_approval(photoscan_id):
-            self.logic.revoke_transducer_tracking_approval(photoscan_id=photoscan_id)
+        if self.logic.get_transducer_tracking_approval(result_id=result_id):
+            self.logic.revoke_transducer_tracking_approval(result_id=result_id)
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
-        for transform_type in (
-            TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
-            TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-        ):
-            node = get_transducer_tracking_result(
-                photoscan_id=photoscan_id,
-                transform_type=transform_type,
-                session_id=session_id)
-            if node is not None:
-                slicer.mrmlScene.RemoveNode(node)
+        remove_transducer_tracking_result_by_id(result_id=result_id, session_id=session_id)
+        reindex_transducer_tracking_results(session_id=session_id)
         if session is not None:
             slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
         self._refresh_localizations_table()
@@ -3312,24 +3347,29 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.ui.photoscanVisibilitySettings.enabled = False
             self.ui.photoscanVisibilitySettings.setToolTip("Photoscan not loaded. Load with preview or tracking.")
         else:
-            photoscan_to_volume_transform_node = self.logic.get_transducer_tracking_result_node(
-                photoscan_id = selected_photoscan_openlifu.id,
-                transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME)
-            if not photoscan_to_volume_transform_node:
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id = None if session is None else session.get_session_id()
+            has_any_tt_result = any(
+                tv.GetAttribute("TT:photoscanID") == selected_photoscan_openlifu.id
+                for tv, _ in get_all_transducer_tracking_results(session_id)
+            )
+            loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
+            if not has_any_tt_result:
                 self.ui.photoscanVisibilitySettings.enabled = False
                 self.ui.photoscanVisibilitySettings.setToolTip("Run transducer localization to view photoscan in the same space as the volume.")
+                # Force the photoscan model hidden when no TT result is available to register it.
+                if loaded_slicer_photoscan.model_node.GetDisplayVisibility():
+                    loaded_slicer_photoscan.model_node.SetDisplayVisibility(False)
             else:
                 self.ui.photoscanVisibilitySettings.enabled = True
                 self.ui.photoscanVisibilitySettings.setToolTip("")
-                loaded_slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans[selected_photoscan_openlifu.id]
-                # Sync widget to scene without re-firing updateModelRendering and writing stale widget state back.
-                self.ui.photoscanVisibilityCheckBox.blockSignals(True)
+                # Note: photoscanVisibilityCheckBox is intentionally NOT re-synced from scene state here;
+                # the checkbox is the source of truth for user intent and updateModelRendering pushes it
+                # to the scene. Opacity slider stays mirrored to the model for display consistency.
                 self.ui.photoscanOpacitySlider.blockSignals(True)
                 try:
-                    self.ui.photoscanVisibilityCheckBox.checked = loaded_slicer_photoscan.model_node.GetDisplayVisibility()
                     self.ui.photoscanOpacitySlider.value = loaded_slicer_photoscan.model_node.GetDisplayNode().GetOpacity()
                 finally:
-                    self.ui.photoscanVisibilityCheckBox.blockSignals(False)
                     self.ui.photoscanOpacitySlider.blockSignals(False)
 
         # Check if the currently selected volume has a generated skin mesh available
@@ -3395,25 +3435,36 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     @display_errors
     def onNewTrackingClicked(self, checked: bool = False):
-        """Launch the wizard for a fresh tracking result. The photoscan combo is
-        left at its current value (whatever the algorithm input widget picked)."""
-        self._run_tracking_wizard()
+        """Launch the wizard for a fresh tracking result. Result id is generated on finalize
+        and becomes the next available index for its (photoscan, target) pair."""
+        self._run_tracking_wizard(result_id=None)
 
     @display_errors
     def onEditTrackingClicked(self, checked: bool = False):
-        """Launch the wizard pre-filled with the selected row's photoscan."""
-        selected_photoscan_id = self._get_selected_localization_photoscan_id()
-        if selected_photoscan_id is not None:
+        """Launch the wizard pre-filled with the selected row's photoscan. The same result id
+        is reused on finalize so the existing row is replaced rather than a new one appended."""
+        info = self._get_selected_localization_row_info()
+        result_id = None
+        target_id_for_wizard = None
+        if info is not None:
+            result_id, selected_photoscan_id, target_id_for_wizard, _ = info
             loaded_photoscans = get_openlifu_data_parameter_node().loaded_photoscans
             if selected_photoscan_id in loaded_photoscans:
                 photoscan_openlifu = loaded_photoscans[selected_photoscan_id].photoscan.photoscan
                 self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
-        self._run_tracking_wizard()
+        self._run_tracking_wizard(result_id=result_id, target_id_override=target_id_for_wizard)
 
-    def _run_tracking_wizard(self):
+    def _run_tracking_wizard(self, result_id: Optional[str] = None, target_id_override: Optional[str] = None):
         activeData = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
         selected_transducer = activeData["Transducer"]
+
+        current_target = self.get_currently_selected_target_from_preplanning()
+        current_target_id = fiducial_to_openlifu_point_id(current_target) if current_target is not None else None
+        # When editing an existing result with a stored target_id, prefer that target id so the
+        # result keeps its original (photoscan, target) identity even if PrePlanning's selected target
+        # changed in the meantime.
+        target_id_for_wizard = target_id_override if target_id_override is not None else current_target_id
 
         # The wizard's resetViewNodes unconditionally hides the photoscan model on close.
         # Snapshot the visibility checkbox so we can restore it after cancel, and force-show
@@ -3425,7 +3476,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             photoscan = selected_photoscan_openlifu,
             volume = activeData["Volume"],
             transducer = selected_transducer,
-            virtual_fit_result_node = self._virtual_fit_transform_for_tracking)
+            virtual_fit_result_node = self._virtual_fit_transform_for_tracking,
+            result_id = result_id,
+            target_id = target_id_for_wizard)
         returncode, photoscan_to_volume_transform_node, transducer_to_volume_transform_node = self.wizard.customexec_()
         self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
         self._running_wizard = False
@@ -3471,23 +3524,25 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def watchTransducerTrackingNode(self, transducer_tracking_transform_node: vtkMRMLTransformNode):
         """Watch the transducer localization transform node to revoke approval in case the transform node is approved and then modified."""
 
-        photoscan_id = get_photoscan_id_from_transducer_tracking_result(transducer_tracking_transform_node)
+        result_id = get_result_id_from_transducer_tracking_result_node(transducer_tracking_transform_node)
         transform_type = get_transform_type_from_transducer_tracking_result_node(transducer_tracking_transform_node)
         self.addObserver(
             transducer_tracking_transform_node,
             slicer.vtkMRMLTransformNode.TransformModifiedEvent,
             lambda caller, event: self.revokeTransducerTrackingApprovalIfAny(
-                photoscan_id = photoscan_id,
+                result_id = result_id,
                 reason=f"The {transform_type.name} transducer localization transform was modified."),
         )
 
-    def revokeTransducerTrackingApprovalIfAny(self, photoscan_id: str, reason:str):
-        """Revoke transducer localization approval for the transform node if there was an approval,
+    def revokeTransducerTrackingApprovalIfAny(self, result_id: str, reason: str):
+        """Revoke transducer localization approval for the given result if there was an approval,
         and show a message dialog to that effect.
         """
-        if self.logic.get_transducer_tracking_approval(photoscan_id):
+        if result_id is None:
+            return
+        if self.logic.get_transducer_tracking_approval(result_id=result_id):
             notify(f"Tracking approval revoked:\n{reason}")
-            self.logic.revoke_transducer_tracking_approval(photoscan_id = photoscan_id)
+            self.logic.revoke_transducer_tracking_approval(result_id=result_id)
             self._refresh_localizations_table()
 
     def updateStartPhotoscanGenerationButton(self):
@@ -4047,14 +4102,25 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                     session.update_affiliated_photoscan(photoscan_openlifu)
                     break
 
-    def revoke_transducer_tracking_approval(self, photoscan_id: str) -> bool:
-        """Revoke transducer localization approval for the given  photoscan if there was an approval"""
+    def revoke_transducer_tracking_approval(self, result_id: str) -> bool:
+        """Revoke transducer localization approval for the TT result with the given stable id."""
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
-        set_transducer_tracking_approval_for_photoscan(approval_state = False, photoscan_id = photoscan_id, session_id = session_id)
-        self.update_photoscan_approval(photoscan_id = photoscan_id, approval_state = False)
+        set_transducer_tracking_approval_by_id(
+            approval_state=False, result_id=result_id, session_id=session_id)
+
+        # Photoscan-level approval should be revoked only when no remaining result for that
+        # photoscan is still approved.
+        pv = get_transducer_tracking_result_by_id(result_id, TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME, session_id)
+        photoscan_id = pv.GetAttribute("TT:photoscanID") if pv is not None else None
+        if photoscan_id is not None:
+            any_still_approved = photoscan_id in get_photoscan_ids_with_results(
+                session_id=session_id, approved_only=True)
+            if not any_still_approved:
+                self.update_photoscan_approval(photoscan_id=photoscan_id, approval_state=False)
+
         if session:
-            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             data_logic.update_underlying_openlifu_session()
         # Clear any cached solution: revoking TT approval invalidates the pose source the
         # solution was computed against. Solution clearing is now driven by approval changes.
@@ -4067,12 +4133,16 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 reason="Transducer tracking approval was revoked.",
             )
 
-    def get_transducer_tracking_approval(self, photoscan_id : str) -> bool:
-        """Return whether there is a transducer localization approval for the photoscan. In case there is not even a transducer
-        tracking result for the photoscan, this returns False."""
-        
-        approved_photoscan_ids = self.get_photoscan_ids_with_approved_tt_results()
-        return photoscan_id in approved_photoscan_ids
+    def get_transducer_tracking_approval(self, result_id: str) -> bool:
+        """Return whether the TT result with the given stable id is approved on both transform nodes."""
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+        tv = get_transducer_tracking_result_by_id(result_id, TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME, session_id)
+        pv = get_transducer_tracking_result_by_id(result_id, TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME, session_id)
+        if tv is None or pv is None:
+            return False
+        return (get_approval_from_transducer_tracking_result_node(tv)
+                and get_approval_from_transducer_tracking_result_node(pv))
     
     def get_photoscan_ids_with_approved_tt_results(self, approved_photoscans_only = False) -> List[str]:
         """Return a list of photoscan IDs that have approved transducer_tracking, for the currently active session.
@@ -4405,57 +4475,51 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         transducer_to_volume_transform: vtkMRMLTransformNode,
         transducer_to_volume_approval_state: bool,
         photoscan_id: str,
-        transducer: SlicerOpenLIFUTransducer) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
+        transducer: SlicerOpenLIFUTransducer,
+        target_id: Optional[str] = None,
+        result_id: Optional[str] = None) -> Tuple[vtkMRMLTransformNode, vtkMRMLTransformNode]:
         """Adds transducer localization result transform nodes to the scene.
-        Creates and configures 'PHOTOSCAN_TO_VOLUME' and 'TRANSDUCER_TO_VOLUME'
-        transform nodes by cloning the given transform nodes, and associates them
-        with the given photoscan and transducer.
-        The underlying OpenLIFU session, if any, is updated to include the new result.
-        Returns:
-            A tuple containing the created photoscan-to-volume and
-            transducer-to-volume transform nodes.
-        """
-        
-        session = get_openlifu_data_parameter_node().loaded_session
 
-        if session is not None:
-            session_id : Optional[str] = session.get_session_id()
-            # Check if there is already a transducer localization result associated with the session. If there is, revoke approval first
-            approved_photoscan_id = session.get_transducer_tracking_approvals()
-        else:
-            session_id = None
-            approved_photoscan_id = self.get_photoscan_ids_with_approved_tt_results()
-        
-        if len(approved_photoscan_id) > 1:
-            raise RuntimeError("Transudcer tracking is currently approved for more than one photoscan. This should not be possible")
-        
-        if approved_photoscan_id and (photoscan_id != approved_photoscan_id[0]):
-            self.revoke_transducer_tracking_approval(photoscan_id = approved_photoscan_id[0]) # This does not trigger an info box
-            transducer.set_matching_transform(None)
+        Under the multi-result model, each call creates an independent TT result. If ``result_id``
+        is given and an existing result with that id exists in the session, it is replaced in place;
+        otherwise a new result_id is generated and a new pair of nodes is appended.
+
+        Returns: ``(pv_transform_node, tv_transform_node)`` for the new/replaced result.
+        """
+
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id: Optional[str] = session.get_session_id() if session is not None else None
 
         pv_transform_node = add_transducer_tracking_result(
-            transform_node = photoscan_to_volume_transform,
-            transform_type = TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-            photoscan_id = photoscan_id,
-            session_id = session_id, 
-            approval_status = photoscan_to_volume_approval_state,
-            replace = True, 
-            clone_node = True)
+            transform_node=photoscan_to_volume_transform,
+            transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
+            photoscan_id=photoscan_id,
+            session_id=session_id,
+            target_id=target_id,
+            result_id=result_id,
+            approval_status=photoscan_to_volume_approval_state,
+            replace=True,
+            clone_node=True,
+        )
         transducer.move_node_into_transducer_sh_folder(pv_transform_node)
 
         tv_transform_node = add_transducer_tracking_result(
-            transform_node = transducer_to_volume_transform,
-            transform_type = TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
-            photoscan_id = photoscan_id,
-            session_id = session_id, 
-            approval_status = transducer_to_volume_approval_state,
-            replace = True, 
-            clone_node = True)
+            transform_node=transducer_to_volume_transform,
+            transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
+            photoscan_id=photoscan_id,
+            session_id=session_id,
+            target_id=target_id,
+            # Reuse the result id assigned to the PV node so the pair stays linked.
+            result_id=get_result_id_from_transducer_tracking_result_node(pv_transform_node),
+            approval_status=transducer_to_volume_approval_state,
+            replace=True,
+            clone_node=True,
+        )
         transducer.move_node_into_transducer_sh_folder(tv_transform_node)
-    
+
         # This should trigger `onDataParameterNodeModified` which will trigger the approval status update
         if session:
-            data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic: OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
             data_logic.update_underlying_openlifu_session()
 
         return (pv_transform_node, tv_transform_node)
@@ -4599,7 +4663,6 @@ class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
 
         # Check approval status in the scene
         assert tl_logic.get_photoscan_ids_with_approved_tt_results() == []
-        assert tl_logic.get_transducer_tracking_approval(selected_photoscan_openlifu.id) is False
 
         pv_node = self.make_random_transform_node("photoscan_to_volume_test_transform")
         tv_node = self.make_random_transform_node("transducer_to_volume_test_transform")
@@ -4612,6 +4675,10 @@ class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
             photoscan_id = selected_photoscan_openlifu.id,
             transducer = selected_transducer,
         )
+
+        added_result_id = get_result_id_from_transducer_tracking_result_node(added_tv)
+        assert added_result_id is not None
+        assert tl_logic.get_transducer_tracking_approval(result_id=added_result_id) is True
         
         returned_node = tl_logic.get_transducer_tracking_result_node(
             photoscan_id = selected_photoscan_openlifu.id,
@@ -4633,4 +4700,4 @@ class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
         # Check approval
         assert tl_logic.get_photoscan_ids_with_approval() == [selected_photoscan_openlifu.id]
         assert tl_logic.get_photoscan_ids_with_approved_tt_results() == [selected_photoscan_openlifu.id]
-        assert tl_logic.get_transducer_tracking_approval(selected_photoscan_openlifu.id) is True
+        assert tl_logic.get_transducer_tracking_approval(result_id=added_result_id) is True

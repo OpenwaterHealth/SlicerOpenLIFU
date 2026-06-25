@@ -420,7 +420,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self.logic.get_virtual_fit_approval(target_id):
             self.logic.revoke_virtual_fit_approval(target_id)
             notify(f"Virtual fit approval revoked:\n{reason}")
-            self._cascade_revoke_tt_after_vf_unapproval(reason=reason)
+            self._cascade_revoke_tt_after_vf_unapproval(reason=reason, target_id=target_id)
 
     def revokeVirtualFitApprovalIfAny(self, node: vtkMRMLTransformNode, reason:str):
         """Revoke virtual fit approval for the virtual fit result node if there was an approval, and show a message dialog to that effect.
@@ -438,15 +438,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # Need this because updates to the data parameter node resets the combo box 
             self.setCurrentVirtualFitSelection(node)
             self.updateVirtualfitButtons()
-            self._cascade_revoke_tt_after_vf_unapproval(reason=reason)
+            revoked_target_id = node.GetAttribute("VF:targetID")
+            self._cascade_revoke_tt_after_vf_unapproval(reason=reason, target_id=revoked_target_id)
 
-    def _cascade_revoke_tt_after_vf_unapproval(self, reason: str) -> None:
-        """Revoke any approved transducer-tracking results once their underlying virtual fit is gone.
+    def _cascade_revoke_tt_after_vf_unapproval(self, reason: str, target_id: Optional[str] = None) -> None:
+        """Revoke approved TT results that depend on a virtual fit whose approval was just revoked.
 
-        Under the one-approved-VF / one-approved-TT model, a TT approval is only meaningful while
-        its anchoring VF is approved. We therefore drop every approved TT result whenever any VF
-        approval is revoked, rather than relying on transducer-transform observers (which would
-        also fire just from the user clicking around different VF results).
+        Under the multi-result TT model, results are pinned to a target. When a VF approval is
+        revoked for a specific target, only the TT results whose ``TT:targetID`` matches that
+        target are revoked; results targeting other points remain valid.
 
         Also clears any computed Solution / SolutionAnalysis here, since the pose source backing
         the solution has just become invalid. Solution clearing is now driven by approval
@@ -458,10 +458,25 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             tl_widget = None
         tl_logic = getattr(tl_widget, "logic", None) if tl_widget is not None else None
         if tl_logic is not None:
-            approved_photoscan_ids = list(tl_logic.get_photoscan_ids_with_approved_tt_results())
-            for photoscan_id in approved_photoscan_ids:
+            from OpenLIFULib.transducer_tracking_results import (
+                TransducerTrackingTransformType,
+                get_all_transducer_tracking_results,
+                get_approval_from_transducer_tracking_result_node,
+                get_result_id_from_transducer_tracking_result_node,
+                get_target_id_from_transducer_tracking_result_node,
+            )
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id = None if session is None else session.get_session_id()
+            for tv, pv in list(get_all_transducer_tracking_results(session_id)):
+                if not (get_approval_from_transducer_tracking_result_node(tv)
+                        and get_approval_from_transducer_tracking_result_node(pv)):
+                    continue
+                tt_target_id = get_target_id_from_transducer_tracking_result_node(tv)
+                if target_id is not None and tt_target_id is not None and tt_target_id != target_id:
+                    # Different target -- this VF revocation does not affect that TT.
+                    continue
                 tl_widget.revokeTransducerTrackingApprovalIfAny(
-                    photoscan_id=photoscan_id,
+                    result_id=get_result_id_from_transducer_tracking_result_node(tv),
                     reason=(
                         "The underlying virtual fit approval was revoked"
                         + (f": {reason}" if reason else ".")

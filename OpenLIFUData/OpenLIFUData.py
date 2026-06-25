@@ -6914,26 +6914,31 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # If there are any *approved* transducer localization results that we have just loaded in newly_added_tt_result_nodes,
         # then we check to see if any of them match the current transducer transform in terms of matrix values.
-        # If there is a match in matrix values, then the first such matching TT result that we encounter in the loop is 
+        # If there is a match in matrix values, then the first such matching TT result that we encounter in the loop is
         # "officially" linked to the current transform by setting the "matching_transform" attribute, thereby ensuring that
         # TT approval is revoked if the transducer is moved.
         # Additionally, any other transducer localization results whose matrix does not match current transducer get their approval revoked.
         transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
-        approved_photoscan_ids = self.getParameterNode().loaded_session.get_transducer_tracking_approvals()
-        # approved_photoscan_ids is a list of photoscan IDs for which there is an approved TT result in the openlifu session
-        for approved_photoscan_id in approved_photoscan_ids:
-
-            for transducer_to_volume_node, _ in newly_added_tt_result_nodes:
-                current_photoscan_id = get_photoscan_id_from_transducer_tracking_result(transducer_to_volume_node)
-                if current_photoscan_id == approved_photoscan_id:
-                    if newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
-                        newly_loaded_transducer.set_matching_transform(transducer_to_volume_node)
-                        newly_loaded_transducer.set_visibility(True)
-                    else:
-                        transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
-                            photoscan_id=approved_photoscan_id,
-                            reason="The transducer transform does not match the approved localization result."
-                        )
+        from OpenLIFULib.transducer_tracking_results import (
+            get_approval_from_transducer_tracking_result_node,
+            get_result_id_from_transducer_tracking_result_node,
+        )
+        matched_already = False
+        for transducer_to_volume_node, photoscan_to_volume_node in newly_added_tt_result_nodes:
+            tv_approved = get_approval_from_transducer_tracking_result_node(transducer_to_volume_node)
+            pv_approved = get_approval_from_transducer_tracking_result_node(photoscan_to_volume_node)
+            if not (tv_approved and pv_approved):
+                continue
+            result_id = get_result_id_from_transducer_tracking_result_node(transducer_to_volume_node)
+            if not matched_already and newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
+                newly_loaded_transducer.set_matching_transform(transducer_to_volume_node)
+                newly_loaded_transducer.set_visibility(True)
+                matched_already = True
+            else:
+                transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
+                    result_id=result_id,
+                    reason="The transducer transform does not match the approved localization result."
+                )
 
         # === Restore previously computed Solution + analysis (if any) ===
         # session.solution_id is persisted and cleared whenever the array_transform changes, so if it's
