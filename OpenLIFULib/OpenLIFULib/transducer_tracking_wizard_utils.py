@@ -145,7 +145,14 @@ def hide_displayable_nodes_from_view(wizard_view_nodes: List[vtkMRMLViewNode]):
             for view_nodeID in views_mainwindow:
                 slice_node.AddThreeDViewID(view_nodeID)
 
-def reset_view_node_camera(view_node: vtkMRMLViewNode):
+def reset_view_node_camera(view_node: vtkMRMLViewNode, axis_index: int = 3):
+    """Reset the camera for the 3D view whose MRML view node matches ``view_node``.
+
+    ``axis_index`` is forwarded to ``qMRMLThreeDView.rotateToViewAxis``: 0:-X,
+    1:+X, 2:-Y, 3:+Y (RAS anterior, default), 4:-Z, 5:+Z. Callers showing a raw
+    photoscan typically pass ``5`` so the head's face (which is captured in the
+    +Z direction) is visible from the front by default.
+    """
 
     layoutManager = slicer.app.layoutManager()
     for threeDViewIndex in range(layoutManager.threeDViewCount):
@@ -155,6 +162,6 @@ def reset_view_node_camera(view_node: vtkMRMLViewNode):
     
     threeDWidget = layoutManager.threeDWidget(specifiedViewIndex)
     threeDView = threeDWidget.threeDView() 
-    threeDView.rotateToViewAxis(3)  # look from anterior direction
+    threeDView.rotateToViewAxis(axis_index)
     threeDView.resetFocalPoint()  # reset the 3D view cube size and center it
     threeDView.resetCamera()  # reset camera zoom

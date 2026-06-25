@@ -34,198 +34,211 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
-       <widget class="QFrame" name="photoscanGeneratorFrame">
-        <property name="frameShape">
-         <enum>QFrame::StyledPanel</enum>
+       <widget class="ctkCollapsibleButton" name="photocollectionsCollapsible">
+        <property name="text">
+         <string>Photocollections</string>
         </property>
-        <property name="frameShadow">
-         <enum>QFrame::Raised</enum>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_3">
-         <property name="bottomMargin">
-          <number>14</number>
-         </property>
+        <layout class="QVBoxLayout" name="photocollectionsCollapsibleLayout">
          <item>
-          <widget class="QLabel" name="photoscanGeneratorFrameTitle">
-           <property name="text">
-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;Subject Photoscan Creator&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          <widget class="QTableWidget" name="photocollectionsTable">
+           <property name="selectionBehavior">
+            <enum>QAbstractItemView::SelectRows</enum>
            </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
+           <property name="selectionMode">
+            <enum>QAbstractItemView::SingleSelection</enum>
            </property>
-           <property name="margin">
+           <property name="editTriggers">
+            <set>QAbstractItemView::NoEditTriggers</set>
+           </property>
+           <property name="alternatingRowColors">
+            <bool>true</bool>
+           </property>
+           <attribute name="horizontalHeaderStretchLastSection">
+            <bool>true</bool>
+           </attribute>
+           <attribute name="verticalHeaderVisible">
+            <bool>false</bool>
+           </attribute>
+           <column>
+            <property name="text">
+             <string>Scan ID</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="photocollectionsButtonsLayout">
+           <item>
+            <widget class="QPushButton" name="addPhotocollectionFromAppButton">
+             <property name="text">
+              <string>Add from App</string>
+             </property>
+             <property name="toolTip">
+              <string>Capture a new photocollection using the Open Water Android app.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="addPhotocollectionFromDiskButton">
+             <property name="text">
+              <string>📁 Add from Disk</string>
+             </property>
+             <property name="toolTip">
+              <string>Browse for a photocollection on disk.</string>
+             </property>
+             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="viewPhotocollectionButton">
+             <property name="text">
+              <string>View</string>
+             </property>
+             <property name="toolTip">
+              <string>Preview the selected photocollection.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="refreshPhotocollectionsButton">
+             <property name="toolTip">
+              <string>Refresh the list from the database.</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkCollapsibleButton" name="photoscansCollapsible">
+        <property name="text">
+         <string>Photoscans</string>
+        </property>
+        <layout class="QVBoxLayout" name="photoscansCollapsibleLayout">
+         <item>
+          <widget class="QTableWidget" name="photoscansTable">
+           <property name="selectionBehavior">
+            <enum>QAbstractItemView::SelectRows</enum>
+           </property>
+           <property name="selectionMode">
+            <enum>QAbstractItemView::SingleSelection</enum>
+           </property>
+           <property name="editTriggers">
+            <set>QAbstractItemView::NoEditTriggers</set>
+           </property>
+           <property name="alternatingRowColors">
+            <bool>true</bool>
+           </property>
+           <attribute name="horizontalHeaderStretchLastSection">
+            <bool>true</bool>
+           </attribute>
+           <attribute name="verticalHeaderVisible">
+            <bool>false</bool>
+           </attribute>
+           <column>
+            <property name="text">
+             <string>Photoscan ID</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="photoscansButtonsLayout">
+           <item>
+            <widget class="QPushButton" name="addPhotoscanFromAppButton">
+             <property name="text">
+              <string>Add from App</string>
+             </property>
+             <property name="toolTip">
+              <string>Capture a new photoscan (or photocollection) using the Open Water Android app.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="addPhotoscanFromDiskButton">
+             <property name="text">
+              <string>📁 Add from Disk</string>
+             </property>
+             <property name="toolTip">
+              <string>Browse for a photoscan on disk.</string>
+             </property>
+             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="generatePhotoscanFromPhotocollectionButton">
+             <property name="text">
+              <string>Generate from Photocollection</string>
+             </property>
+             <property name="toolTip">
+              <string>Generate a photoscan locally from a photocollection of the subject. This process can take up to 20 minutes.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="viewPhotoscanButton">
+             <property name="text">
+              <string>View</string>
+             </property>
+             <property name="toolTip">
+              <string>Preview the selected photoscan.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="refreshPhotoscansButton">
+             <property name="toolTip">
+              <string>Refresh the list from the database.</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QProgressBar" name="photoscanGeneratorProgressBar">
+           <property name="enabled">
+            <bool>true</bool>
+           </property>
+           <property name="value">
             <number>0</number>
            </property>
+           <property name="textVisible">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item>
-          <widget class="QGroupBox" name="groupBox_2">
-           <property name="title">
-            <string>Import Photo Data</string>
+          <widget class="QLabel" name="photoscanGenerationStatusMessage">
+           <property name="styleSheet">
+            <string notr="true">font-style: italic</string>
            </property>
-           <layout class="QVBoxLayout" name="verticalLayout_8">
-            <item>
-             <layout class="QHBoxLayout" name="photocollectionCaptureLayout">
-              <property name="spacing">
-               <number>12</number>
-              </property>
-              <item>
-               <widget class="QLabel" name="referenceNumberLabel">
-                <property name="text">
-                 <string>Photocollection Scan ID:</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLineEdit" name="referenceNumberLineEdit">
-                <property name="font">
-                 <font>
-                  <family>Courier New</family>
-                 </font>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QToolButton" name="referenceNumberRefreshButton">
-                <property name="toolTip">
-                 <string>Generate a new photocollection Scan ID</string>
-                </property>
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QToolButton" name="showQRCodeButton">
-                <property name="text">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <layout class="QHBoxLayout" name="photocollectionCaptureLayout_2" stretch="4,0,1">
-              <property name="spacing">
-               <number>12</number>
-              </property>
-              <item>
-               <widget class="QPushButton" name="transferPhotocollectionFromAndroidDeviceButton">
-                <property name="toolTip">
-                 <string>Transfer a photocollection from the 3D Open Water app</string>
-                </property>
-                <property name="text">
-                 <string>Transfer from Android App</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="label">
-                <property name="text">
-                 <string>OR</string>
-                </property>
-                <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="loadPhotocollectionButton">
-                <property name="toolTip">
-                 <string>Browse for a photocollection on disk</string>
-                </property>
-                <property name="text">
-                 <string>📁 Browse</string>
-                </property>
-                <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-           </layout>
-          </widget>
-         </item>
-         <item>
-          <widget class="QGroupBox" name="groupBox_3">
-           <property name="title">
-            <string>Generate Photoscan Locally</string>
+           <property name="wordWrap">
+            <bool>true</bool>
            </property>
-           <layout class="QVBoxLayout" name="verticalLayout_9">
-            <item>
-             <layout class="QHBoxLayout" name="photocollectionCaptureLayout_3" stretch="4,0,1">
-              <property name="spacing">
-               <number>12</number>
-              </property>
-              <item>
-               <widget class="QPushButton" name="startPhotoscanGenerationButton">
-                <property name="toolTip">
-                 <string>Start the photoscan generating process (requires photocollection)</string>
-                </property>
-                <property name="text">
-                 <string>Start Photoscan Generation</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="label_2">
-                <property name="text">
-                 <string>OR</string>
-                </property>
-                <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="addPhotoscanButton">
-                <property name="toolTip">
-                 <string>Browse for a photoscan on disk</string>
-                </property>
-                <property name="text">
-                 <string>📁 Browse</string>
-                </property>
-                <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <widget class="QProgressBar" name="photoscanGeneratorProgressBar">
-              <property name="enabled">
-               <bool>true</bool>
-              </property>
-              <property name="value">
-               <number>0</number>
-              </property>
-              <property name="textVisible">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="photoscanGenerationStatusMessage">
-              <property name="styleSheet">
-               <string notr="true">font-style: italic</string>
-              </property>
-              <property name="wordWrap">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-           </layout>
           </widget>
          </item>
         </layout>
        </widget>
       </item>
       <item>
+       <widget class="ctkCollapsibleButton" name="localizationsCollapsible">
+        <property name="text">
+         <string>Localizations</string>
+        </property>
+        <layout class="QVBoxLayout" name="localizationsCollapsibleLayout">
+         <item>
        <widget class="QWidget" name="tempWidget" native="true">
         <layout class="QVBoxLayout" name="verticalLayout_2">
          <item>
@@ -395,6 +408,9 @@
            </property>
           </widget>
          </item>
+        </layout>
+       </widget>
+      </item>
         </layout>
        </widget>
       </item>

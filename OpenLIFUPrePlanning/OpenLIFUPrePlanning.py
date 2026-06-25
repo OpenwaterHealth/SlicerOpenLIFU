@@ -146,6 +146,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._edit_mode_color = (1.0, 1.0, 0.0)
         # Attribute name used to stash the original SelectedColor when entering edit mode so it can be restored.
         self._original_color_attr = "SlicerOpenLIFU.OriginalSelectedColor"
+        # One-shot auto-expand: remember which sessions we've already auto-expanded the
+        # Virtual Fitting section for, so we don't override the user's manual collapse choice.
+        self._vf_auto_expanded_for_session : set = set()
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -415,6 +418,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self.logic.get_virtual_fit_approval(target_id):
             self.logic.revoke_virtual_fit_approval(target_id)
             notify(f"Virtual fit approval revoked:\n{reason}")
+            self._cascade_revoke_tt_after_vf_unapproval(reason=reason)
 
     def revokeVirtualFitApprovalIfAny(self, node: vtkMRMLTransformNode, reason:str):
         """Revoke virtual fit approval for the virtual fit result node if there was an approval, and show a message dialog to that effect.
@@ -432,6 +436,32 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # Need this because updates to the data parameter node resets the combo box 
             self.setCurrentVirtualFitSelection(node)
             self.updateVirtualfitButtons()
+            self._cascade_revoke_tt_after_vf_unapproval(reason=reason)
+
+    def _cascade_revoke_tt_after_vf_unapproval(self, reason: str) -> None:
+        """Revoke any approved transducer-tracking results once their underlying virtual fit is gone.
+
+        Under the one-approved-VF / one-approved-TT model, a TT approval is only meaningful while
+        its anchoring VF is approved. We therefore drop every approved TT result whenever any VF
+        approval is revoked, rather than relying on transducer-transform observers (which would
+        also fire just from the user clicking around different VF results).
+        """
+        try:
+            tl_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
+        except AttributeError:
+            return
+        tl_logic = getattr(tl_widget, "logic", None)
+        if tl_logic is None:
+            return
+        approved_photoscan_ids = list(tl_logic.get_photoscan_ids_with_approved_tt_results())
+        for photoscan_id in approved_photoscan_ids:
+            tl_widget.revokeTransducerTrackingApprovalIfAny(
+                photoscan_id=photoscan_id,
+                reason=(
+                    "The underlying virtual fit approval was revoked"
+                    + (f": {reason}" if reason else ".")
+                ),
+            )
 
     def updateTargetsTable(self):
         """Rebuild the targets table from the current set of target candidate fiducials."""
@@ -598,6 +628,21 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not has_targets:
             self.ui.virtualfitCollapsible.collapsed = True
         self.ui.virtualfitCollapsible.setEnabled(not self._targets_in_edit_mode)
+
+        # One-shot auto-expand per session: when a session is loaded that already has targets,
+        # surface the Virtual Fitting section so the user sees existing VF results without clicking.
+        if has_targets and not self._targets_in_edit_mode:
+            try:
+                session = get_openlifu_data_parameter_node().loaded_session
+                session_key = (
+                    f"{session.get_subject_id()}|{session.get_session_id()}"
+                    if session is not None else None
+                )
+            except Exception:
+                session_key = None
+            if session_key is not None and session_key not in self._vf_auto_expanded_for_session:
+                self.ui.virtualfitCollapsible.collapsed = False
+                self._vf_auto_expanded_for_session.add(session_key)
 
     def onEditTargetsToggled(self, checked: bool):
         self._set_targets_edit_mode(checked)

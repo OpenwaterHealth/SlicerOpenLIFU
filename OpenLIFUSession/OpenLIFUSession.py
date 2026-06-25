@@ -1,6 +1,6 @@
 # Standard library imports
 from functools import partial
-from typing import Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING
 
 # Third-party imports
 import qt
@@ -80,6 +80,9 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         self.logic: Optional[OpenLIFUSessionLogic] = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+        # Per-session bookkeeping so each count collapsible is auto-expanded
+        # at most once per session (on the first entry where it has items).
+        self._auto_expanded_collapsibles_for_session: Dict[str, set] = {}
 
     def setup(self) -> None:
         ScriptedLoadableModuleWidget.setup(self)
@@ -378,14 +381,20 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         """Refresh a Photoscans/Solutions/Runs collapsible section.
 
         - Header text shows ``f"{title} ({len(ids)})"``.
-        - When empty, the section is force-collapsed and disabled.
-        - When non-empty, ``items_layout`` is repopulated with one row per ID:
-          a label on the left and a ``View`` button on the right that invokes
-          ``preview_callback(id)``.
+        - When empty, the section is force-collapsed (but always remains
+          clickable). When non-empty, ``items_layout`` is repopulated with
+          one row per ID: a label on the left and a ``View`` button on the
+          right that invokes ``preview_callback(id)``.
+        - The first time a section becomes non-empty within a given session,
+          it is auto-expanded so the loaded data is immediately visible.
         """
         ids = list(ids or [])
         count = len(ids)
         collapsible.text = f"{title} ({count})"
+
+        # Always keep the collapsible itself clickable; we only manage the
+        # body contents and the collapsed property.
+        collapsible.setEnabled(True)
 
         # Clear any rows from a previous refresh.
         while items_layout.count():
@@ -395,30 +404,59 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
                 child.setParent(None)
                 child.deleteLater()
 
+        items_container = items_layout.parentWidget()
+        if items_container is None:
+            # Fallback: PythonQt sometimes returns None for parentWidget on
+            # nested layouts; resolve via the layout's parent attribute.
+            items_container = items_layout.parent()
+
         if count == 0:
             empty_label.setText("-")
             empty_label.setVisible(True)
-            # ctkCollapsibleButton exposes ``collapsed`` as a Qt property; there
-            # is no ``setCollapsed`` setter in the PythonQt wrapper.
+            if items_container is not None:
+                items_container.setVisible(False)
             collapsible.collapsed = True
-            collapsible.setEnabled(False)
             return
 
         empty_label.setVisible(False)
-        collapsible.setEnabled(True)
+        if items_container is not None:
+            items_container.setVisible(True)
+
+        # One-shot auto-expand per session per section, so the user sees
+        # loaded data without needing to click the header.
+        try:
+            loaded_session = get_openlifu_data_parameter_node().loaded_session
+            session_key = (
+                f"{loaded_session.get_subject_id()}|{loaded_session.get_session_id()}"
+                if loaded_session is not None else None
+            )
+        except Exception:
+            session_key = None
+        if session_key is not None:
+            already = self._auto_expanded_collapsibles_for_session.setdefault(session_key, set())
+            if title not in already:
+                collapsible.collapsed = False
+                already.add(title)
 
         for item_id in ids:
-            row = qt.QWidget()
+            row = qt.QWidget(items_container)
             row_layout = qt.QHBoxLayout(row)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            id_label = qt.QLabel(item_id)
+            id_label = qt.QLabel(item_id, row)
             id_label.setTextInteractionFlags(qt.Qt.TextSelectableByMouse)
             row_layout.addWidget(id_label, 1)
-            view_button = qt.QPushButton("View")
+            view_button = qt.QPushButton("View", row)
             view_button.setToolTip(f"Open a preview of this {title.rstrip('s').lower()}.")
-            view_button.clicked.connect(partial(self._on_item_view_clicked, preview_callback, item_id))
+            # Bind loop vars via default args; ``clicked`` always passes ``checked: bool``.
+            view_button.clicked.connect(
+                lambda checked=False, cb=preview_callback, iid=item_id: self._on_item_view_clicked(cb, iid)
+            )
             row_layout.addWidget(view_button, 0)
             items_layout.addWidget(row)
+            row.show()
+
+        if items_container is not None:
+            items_container.updateGeometry()
 
     def _subject_display_name(self, loaded_session: "SlicerOpenLIFUSession") -> str:
         subject_id = loaded_session.get_subject_id()

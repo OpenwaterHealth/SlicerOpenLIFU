@@ -7001,18 +7001,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason="The transducer was moved.")
         slicer.util.getModuleWidget('OpenLIFUTransducerLocalization').checkCanDisplayVirtualFitResult()
 
+        # Transducer-tracking approval is no longer auto-revoked when the transducer transform
+        # changes. With the one-approved-VF / one-approved-TT model, TT approval is tied to its
+        # underlying VF approval: it is cleared from revokeVirtualFitApprovalIfAny /
+        # revoke_virtual_fit_approval in OpenLIFUPrePlanning. That way, simply clicking around
+        # different virtual fit results in PrePlanning does not invalidate a valid TT approval.
         matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
         if matching_transform_id:
-            # If its a transducer localization node, revoke approval if approved
-            transform_node = slicer.mrmlScene.GetNodeByID(matching_transform_id)
-            if transform_node and is_transducer_tracking_result_node(transform_node):
-                photoscan_id = get_photoscan_id_from_transducer_tracking_result(transform_node)
-                transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
-                transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
-                    photoscan_id = photoscan_id,
-                    reason = "The transducer transform was modified"
-                )
-            
             transducer.set_matching_transform(None)
 
 

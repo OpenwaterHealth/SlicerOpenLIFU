@@ -1245,7 +1245,8 @@ class TransducerTrackingWizard(qt.QWizard):
             if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
                 self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node.GetDisplayNode().SetVisibility(False)
             
-            reset_view_node_camera(self.photoscan.view_node)
+            # Raw photoscan view: look from +Z so the captured face is visible from the front.
+            reset_view_node_camera(self.photoscan.view_node, axis_index=5)
 
         elif isinstance(current_page, SkinSegmentationMarkupPage):
 
@@ -1552,7 +1553,7 @@ class PhotoscanPreviewDialog(qt.QDialog):
         self.photoscan.model_node.GetDisplayNode().SetOpacity(1)
 
         # Reset the camera associated with the view node based on the photoscan model
-        reset_view_node_camera(self.photoscan.view_node)
+        reset_view_node_camera(self.photoscan.view_node, axis_index=5)
 
     def setup(self):
         screen = qt.QDesktopWidget().screenGeometry()
@@ -2099,6 +2100,223 @@ class SessionQRCodeDialog(qt.QDialog):
         button_box.accepted.connect(self.accept)
         layout.addWidget(button_box)
 
+
+class AddFromAppDialog(qt.QDialog):
+    """Unified dialog for capturing a photocollection or photoscan via the
+    Open Water Android app. Shows the current Scan ID (with refresh), a QR
+    code encoding the openlifu:// session URI, instructions, and a
+    Transfer button that runs the existing USB pull. The cloud-transfer
+    line is hidden when not logged into cloud sync."""
+
+    def __init__(self, parent_widget: "OpenLIFUTransducerLocalizationWidget", parent=None):
+        super().__init__(parent or slicer.util.mainWindow())
+        self.parent_widget = parent_widget
+        self.setWindowTitle("Add from App")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.setup()
+
+    def _build_uri(self) -> str:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        scan_id = self.parent_widget.get_or_create_shared_scan_id()
+        if loaded_session is None:
+            return f"openlifu://?|?|{scan_id}"
+        return f"openlifu://{loaded_session.get_subject_id()}|{loaded_session.get_session_id()}|{scan_id}"
+
+    def _render_qr_pixmap(self) -> qt.QPixmap:
+        import segno
+        qr = segno.make(self._build_uri())
+        buf = io.BytesIO()
+        qr.save(buf, kind="png", scale=8, border=2, dark="#000", light="#fff")
+        pixmap = qt.QPixmap()
+        pixmap.loadFromData(buf.getvalue())
+        return pixmap
+
+    def setup(self):
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        # ---- Scan ID row ----
+        scan_id_layout = qt.QHBoxLayout()
+        scan_id_layout.addWidget(qt.QLabel("Scan ID:"))
+        self.scan_id_label = qt.QLabel(self.parent_widget.get_or_create_shared_scan_id())
+        font = qt.QFont("Courier New")
+        font.setBold(True)
+        self.scan_id_label.setFont(font)
+        self.scan_id_label.setAlignment(qt.Qt.AlignCenter)
+        scan_id_layout.addWidget(self.scan_id_label, 1)
+        self.refresh_button = qt.QToolButton()
+        self.refresh_button.setIcon(slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload))
+        self.refresh_button.setToolTip("Generate a new Scan ID")
+        self.refresh_button.clicked.connect(self._on_refresh_clicked)
+        scan_id_layout.addWidget(self.refresh_button)
+        layout.addLayout(scan_id_layout)
+
+        # ---- URI label ----
+        self.uri_label = qt.QLabel(self._build_uri())
+        self.uri_label.setAlignment(qt.Qt.AlignCenter)
+        self.uri_label.setStyleSheet("color: gray;")
+        layout.addWidget(self.uri_label)
+
+        # ---- QR code ----
+        self.qr_label = qt.QLabel()
+        self.qr_label.setAlignment(qt.Qt.AlignCenter)
+        self.qr_label.setPixmap(self._render_qr_pixmap())
+        layout.addWidget(self.qr_label)
+
+        # ---- Instructions ----
+        instructions_box = qt.QGroupBox("Instructions")
+        instructions_layout = qt.QVBoxLayout()
+        instructions_box.setLayout(instructions_layout)
+        intro_label = qt.QLabel(
+            "Please use the Android application to collect a photocollection "
+            "or photoscan, scanning the QR code above to populate the session info."
+        )
+        intro_label.setWordWrap(True)
+        instructions_layout.addWidget(intro_label)
+        self.usb_label = qt.QLabel(
+            "USB transfer: connect the device by USB and click Transfer below once the scan is complete."
+        )
+        self.usb_label.setWordWrap(True)
+        instructions_layout.addWidget(self.usb_label)
+        self.cloud_label = qt.QLabel(
+            "Cloud transfer: transfer is automatic; click Done once the scan is complete."
+        )
+        self.cloud_label.setWordWrap(True)
+        instructions_layout.addWidget(self.cloud_label)
+        self._apply_cloud_visibility()
+        layout.addWidget(instructions_box)
+
+        # ---- Action buttons ----
+        button_layout = qt.QHBoxLayout()
+        self.transfer_button = qt.QPushButton("Transfer from Android App")
+        self.transfer_button.setToolTip("Pull the captured files from the device over USB.")
+        self.transfer_button.clicked.connect(self._on_transfer_clicked)
+        button_layout.addWidget(self.transfer_button)
+        button_layout.addStretch(1)
+        self.done_button = qt.QPushButton("Done")
+        # ``clicked`` always passes a ``checked: bool`` arg; ``accept()`` takes none.
+        self.done_button.clicked.connect(lambda *_: self.accept())
+        button_layout.addWidget(self.done_button)
+        layout.addLayout(button_layout)
+
+    def _apply_cloud_visibility(self):
+        is_logged_in = False
+        try:
+            from OpenLIFUCloudSync import getCloudSyncLogic
+            is_logged_in = bool(getCloudSyncLogic().is_logged_in())
+        except Exception:
+            is_logged_in = False
+        self.cloud_label.setVisible(is_logged_in)
+
+    @display_errors
+    def _on_refresh_clicked(self, checked: bool = False):
+        self.parent_widget.randomize_photocollection_id()
+        self.scan_id_label.text = self.parent_widget.get_or_create_shared_scan_id()
+        self.uri_label.text = self._build_uri()
+        self.qr_label.setPixmap(self._render_qr_pixmap())
+
+    @display_errors
+    def _on_transfer_clicked(self, checked: bool = False):
+        self.parent_widget.on_transfer_photocollection_from_android_device_clicked(False)
+
+
+class PhotocollectionPreviewDialog(qt.QDialog):
+    """Display the images of a photocollection one at a time with Prev/Next
+    and a slider."""
+
+    def __init__(self, scan_id: str, image_paths: List[str], parent=None):
+        super().__init__(parent or slicer.util.mainWindow())
+        self.scan_id = scan_id
+        self.image_paths = list(image_paths)
+        self._current_index = 0
+        self.setWindowTitle(f"Photocollection: {scan_id}")
+        self.setWindowModality(qt.Qt.WindowModal)
+        self.resize(720, 600)
+        self.setup()
+
+    def setup(self):
+        layout = qt.QVBoxLayout()
+        self.setLayout(layout)
+
+        self.image_label = qt.QLabel()
+        self.image_label.setAlignment(qt.Qt.AlignCenter)
+        self.image_label.setMinimumHeight(400)
+        self.image_label.setStyleSheet("background-color: black;")
+        layout.addWidget(self.image_label, 1)
+
+        self.filename_label = qt.QLabel()
+        self.filename_label.setAlignment(qt.Qt.AlignCenter)
+        layout.addWidget(self.filename_label)
+
+        slider_layout = qt.QHBoxLayout()
+        self.prev_button = qt.QPushButton("Prev")
+        self.prev_button.clicked.connect(self._on_prev_clicked)
+        slider_layout.addWidget(self.prev_button)
+        self.slider = qt.QSlider(qt.Qt.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(max(0, len(self.image_paths) - 1))
+        self.slider.valueChanged.connect(self._on_slider_value_changed)
+        slider_layout.addWidget(self.slider, 1)
+        self.next_button = qt.QPushButton("Next")
+        self.next_button.clicked.connect(self._on_next_clicked)
+        slider_layout.addWidget(self.next_button)
+        layout.addLayout(slider_layout)
+
+        button_box = qt.QDialogButtonBox()
+        button_box.setStandardButtons(qt.QDialogButtonBox.Close)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self._display_image(0)
+
+    def _load_pixmap_for_path(self, path: str) -> qt.QPixmap:
+        try:
+            from PIL import Image, ImageOps
+            img = Image.open(path)
+            # Honor EXIF Orientation tag so phone-captured portraits are not rotated.
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail((1280, 1280))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            pix = qt.QPixmap()
+            pix.loadFromData(buf.getvalue())
+            return pix
+        except Exception as e:
+            logging.warning("PhotocollectionPreviewDialog: failed to load %s: %s", path, e)
+            return qt.QPixmap()
+
+    def _display_image(self, index: int):
+        if not self.image_paths:
+            self.filename_label.text = "(no photos)"
+            self.prev_button.setEnabled(False)
+            self.next_button.setEnabled(False)
+            return
+        index = max(0, min(index, len(self.image_paths) - 1))
+        self._current_index = index
+        path = self.image_paths[index]
+        self.filename_label.text = f"{index + 1} / {len(self.image_paths)}  —  {os.path.basename(path)}"
+        pix = self._load_pixmap_for_path(path)
+        if not pix.isNull():
+            scaled = pix.scaled(self.image_label.size, qt.Qt.KeepAspectRatio, qt.Qt.SmoothTransformation)
+            self.image_label.setPixmap(scaled)
+        else:
+            self.image_label.setText("(failed to load image)")
+        self.prev_button.setEnabled(index > 0)
+        self.next_button.setEnabled(index < len(self.image_paths) - 1)
+        if self.slider.value != index:
+            self.slider.blockSignals(True)
+            self.slider.setValue(index)
+            self.slider.blockSignals(False)
+
+    def _on_prev_clicked(self, checked: bool = False):
+        self._display_image(self._current_index - 1)
+
+    def _on_next_clicked(self, checked: bool = False):
+        self._display_image(self._current_index + 1)
+
+    def _on_slider_value_changed(self, value: int):
+        self._display_image(value)
+
 #
 # OpenLIFUTransducerLocalizationWidget
 #
@@ -2123,6 +2341,15 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self._running_wizard = False
 
         self._virtual_fit_transform_for_tracking = None
+
+        # Shared photocollection Scan ID (used by the Add-from-App dialog).
+        # Survives across dialog opens until the user explicitly regenerates it.
+        self._shared_scan_id: Optional[str] = None
+
+        # Tracks which session has already had its first-entry section
+        # collapse state applied, so we don't keep overriding the user's
+        # manual expand/collapse on subsequent updates.
+        self._collapse_applied_for_session: Optional[str] = None
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -2178,22 +2405,25 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
-        # ---- Photoscan generation connections ----
-        self.ui.referenceNumberRefreshButton.setIcon(slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload))
-        self.ui.referenceNumberRefreshButton.clicked.connect(self.on_scan_id_refresh_clicked)
-        self.ui.showQRCodeButton.setIcon(qt.QIcon(self.resourcePath("Icons/qrcode.png")))
-        self.ui.showQRCodeButton.clicked.connect(self.onShowQRCodeButtonClicked)
-        self.ui.transferPhotocollectionFromAndroidDeviceButton.clicked.connect(self.on_transfer_photocollection_from_android_device_clicked)
-        self.ui.loadPhotocollectionButton.clicked.connect(self.onLoadPhotocollectionPressed)
-        self.ui.startPhotoscanGenerationButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
-        self.ui.addPhotoscanButton.clicked.connect(self.onAddPhotoscanPressed)
-        self.resetPhotoscanGeneratorProgressDisplay()
+        # ---- Photocollections / Photoscans manager connections ----
+        refresh_icon = slicer.app.style().standardIcon(qt.QStyle.SP_BrowserReload)
+        self.ui.refreshPhotocollectionsButton.setIcon(refresh_icon)
+        self.ui.refreshPhotoscansButton.setIcon(refresh_icon)
 
-        # Restrict Scan ID line edit to alphanumeric. Useful tip:
-        # The validator should be set in 'self' or else it is removed by the
-        # gc and the validator doesn't work
-        self.alphanumericValidator = qt.QRegExpValidator(qt.QRegExp(r"[A-Za-z0-9]+"))
-        self.ui.referenceNumberLineEdit.setValidator(self.alphanumericValidator)
+        self.ui.addPhotocollectionFromAppButton.clicked.connect(self.onAddPhotocollectionFromAppClicked)
+        self.ui.addPhotocollectionFromDiskButton.clicked.connect(self.onLoadPhotocollectionPressed)
+        self.ui.viewPhotocollectionButton.clicked.connect(self.onViewPhotocollectionClicked)
+        self.ui.refreshPhotocollectionsButton.clicked.connect(self.onRefreshPhotocollectionsClicked)
+        self.ui.photocollectionsTable.itemSelectionChanged.connect(self._update_manager_button_states)
+
+        self.ui.addPhotoscanFromAppButton.clicked.connect(self.onAddPhotocollectionFromAppClicked)
+        self.ui.addPhotoscanFromDiskButton.clicked.connect(self.onAddPhotoscanPressed)
+        self.ui.generatePhotoscanFromPhotocollectionButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
+        self.ui.viewPhotoscanButton.clicked.connect(self.onViewPhotoscanClicked)
+        self.ui.refreshPhotoscansButton.clicked.connect(self.onRefreshPhotoscansClicked)
+        self.ui.photoscansTable.itemSelectionChanged.connect(self._update_manager_button_states)
+
+        self.resetPhotoscanGeneratorProgressDisplay()
         # ------------------------------------------
 
         # Replace the placeholder algorithm input widget by the actual one
@@ -2217,6 +2447,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # These ui elemeents are not specific to the currently selected input options
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
+        self._refresh_photocollections_table()
+        self._refresh_photoscans_table()
+        self._update_manager_button_states()
+        self._apply_initial_section_collapse_state()
         self.updateWorkflowControls()
 
         # Start with randomized photocollection Scan ID
@@ -2275,6 +2509,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def onDataParameterNodeModified(self, caller, event) -> None:
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
+        self._refresh_photocollections_table()
+        self._refresh_photoscans_table()
+        self._update_manager_button_states()
+        self._apply_initial_section_collapse_state()
         self.updateInputOptions()
         self.updateWorkflowControls()
         
@@ -2372,11 +2610,19 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.ui.photoscanGenerationStatusMessage.show()
 
     def randomize_photocollection_id(self):
-        """Randomize the Scan ID displayed in the photocollection Scan ID
-        line edit"""
+        """Generate a new random Scan ID and store it as the widget's shared
+        photocollection Scan ID. Returns the new ID."""
         # alphanumeric
         new_scan_id = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
-        self.ui.referenceNumberLineEdit.text = new_scan_id
+        self._shared_scan_id = new_scan_id
+        return new_scan_id
+
+    def get_or_create_shared_scan_id(self) -> str:
+        """Return the current shared photocollection Scan ID, generating one if
+        none has been set yet."""
+        if not self._shared_scan_id:
+            self.randomize_photocollection_id()
+        return self._shared_scan_id
 
     @display_errors
     def on_scan_id_refresh_clicked(self, checked:bool):
@@ -2390,13 +2636,187 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         dialog = SessionQRCodeDialog(
             subject_id=loaded_session.get_subject_id(),
             session_id=loaded_session.get_session_id(),
-            photocollection_id=self.ui.referenceNumberLineEdit.text,
+            photocollection_id=self.get_or_create_shared_scan_id(),
         )
         dialog.exec_()
 
+    # ---- Manager (photocollections/photoscans) helpers ----
+
+    def _get_photocollection_scan_ids(self) -> List[str]:
+        data_parameter_node = get_openlifu_data_parameter_node()
+        return list(data_parameter_node.session_photocollections or [])
+
+    def _get_photoscan_ids(self) -> List[str]:
+        data_parameter_node = get_openlifu_data_parameter_node()
+        loaded_session = data_parameter_node.loaded_session
+        if loaded_session is None:
+            return []
+        photoscans = getattr(loaded_session, "affiliated_photoscans", None) or {}
+        try:
+            return sorted(photoscans.keys())
+        except AttributeError:
+            return list(photoscans)
+
+    def _refresh_photocollections_table(self):
+        scan_ids = self._get_photocollection_scan_ids()
+        table = self.ui.photocollectionsTable
+        previously_selected = self._get_selected_photocollection_scan_id()
+        table.blockSignals(True)
+        table.setRowCount(len(scan_ids))
+        for row, scan_id in enumerate(scan_ids):
+            item = qt.QTableWidgetItem(scan_id)
+            item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+            table.setItem(row, 0, item)
+            if scan_id == previously_selected:
+                table.selectRow(row)
+        table.blockSignals(False)
+        if table.currentRow() < 0 and table.rowCount > 0:
+            table.selectRow(0)
+
+    def _refresh_photoscans_table(self):
+        photoscan_ids = self._get_photoscan_ids()
+        table = self.ui.photoscansTable
+        previously_selected = self._get_selected_photoscan_id()
+        table.blockSignals(True)
+        table.setRowCount(len(photoscan_ids))
+        for row, photoscan_id in enumerate(photoscan_ids):
+            item = qt.QTableWidgetItem(photoscan_id)
+            item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+            table.setItem(row, 0, item)
+            if photoscan_id == previously_selected:
+                table.selectRow(row)
+        table.blockSignals(False)
+        if table.currentRow() < 0 and table.rowCount > 0:
+            table.selectRow(0)
+
+    def _get_selected_photocollection_scan_id(self) -> Optional[str]:
+        table = self.ui.photocollectionsTable
+        row = table.currentRow()
+        if row < 0:
+            return None
+        item = table.item(row, 0)
+        return item.text() if item is not None else None
+
+    def _get_selected_photoscan_id(self) -> Optional[str]:
+        table = self.ui.photoscansTable
+        row = table.currentRow()
+        if row < 0:
+            return None
+        item = table.item(row, 0)
+        return item.text() if item is not None else None
+
+    def _update_manager_button_states(self):
+        self.ui.viewPhotocollectionButton.setEnabled(self._get_selected_photocollection_scan_id() is not None)
+        self.ui.viewPhotoscanButton.setEnabled(self._get_selected_photoscan_id() is not None)
+
+    def _apply_initial_section_collapse_state(self):
+        """On first entry for the currently loaded session, expand the
+        relevant collapsibles based on what already exists. Honors the
+        user's subsequent manual expand/collapse by only applying once."""
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        session_key = None
+        if loaded_session is not None:
+            session_key = f"{loaded_session.get_subject_id()}|{loaded_session.get_session_id()}"
+        if self._collapse_applied_for_session == session_key:
+            return
+        self._collapse_applied_for_session = session_key
+
+        num_collections = len(self._get_photocollection_scan_ids())
+        num_scans = len(self._get_photoscan_ids())
+
+        if num_scans > 0:
+            # Have a photoscan: focus the user on localization.
+            self.ui.photocollectionsCollapsible.collapsed = True
+            self.ui.photoscansCollapsible.collapsed = True
+            self.ui.localizationsCollapsible.collapsed = False
+        elif num_collections > 0:
+            # Have a collection, no scan yet: focus on generating a photoscan.
+            self.ui.photocollectionsCollapsible.collapsed = True
+            self.ui.photoscansCollapsible.collapsed = False
+            self.ui.localizationsCollapsible.collapsed = True
+        else:
+            # Nothing yet: invite the user to capture data.
+            self.ui.photocollectionsCollapsible.collapsed = False
+            self.ui.photoscansCollapsible.collapsed = False
+            self.ui.localizationsCollapsible.collapsed = True
+
+    @display_errors
+    def onAddPhotocollectionFromAppClicked(self, checked: bool = False):
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot capture from app because a session is not loaded.")
+        dialog = AddFromAppDialog(self)
+        dialog.exec_()
+        dialog.deleteLater()
+        self._refresh_photocollections_table()
+        self._refresh_photoscans_table()
+        self._update_manager_button_states()
+        self.updatePhotoscanGenerationButtons()
+
+    @display_errors
+    def onViewPhotocollectionClicked(self, checked: bool = False):
+        scan_id = self._get_selected_photocollection_scan_id()
+        if scan_id is None:
+            return
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None or get_cur_db() is None:
+            return
+        image_paths = get_cur_db().get_photocollection_absolute_filepaths(
+            subject_id=loaded_session.get_subject_id(),
+            session_id=loaded_session.get_session_id(),
+            reference_number=scan_id,
+        ) or []
+        if not image_paths:
+            slicer.util.infoDisplay(
+                text=f"No images found for photocollection '{scan_id}'.",
+                windowTitle="Empty Photocollection",
+            )
+            return
+        preview = PhotocollectionPreviewDialog(scan_id, image_paths)
+        preview.exec_()
+        preview.deleteLater()
+
+    @display_errors
+    def onRefreshPhotocollectionsClicked(self, checked: bool = False):
+        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        if get_openlifu_data_parameter_node().loaded_session is not None:
+            data_logic.update_photocollections_affiliated_with_loaded_session()
+        self._refresh_photocollections_table()
+        self._update_manager_button_states()
+        self.updatePhotoscanGenerationButtons()
+
+    @display_errors
+    def onViewPhotoscanClicked(self, checked: bool = False):
+        photoscan_id = self._get_selected_photoscan_id()
+        if photoscan_id is None:
+            return
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            return
+        photoscans = getattr(loaded_session, "affiliated_photoscans", None) or {}
+        wrapper = photoscans.get(photoscan_id) if hasattr(photoscans, "get") else None
+        if wrapper is None:
+            slicer.util.errorDisplay(
+                text=f"Could not find photoscan '{photoscan_id}' on the loaded session.",
+                windowTitle="Photoscan Not Found",
+            )
+            return
+        # Unwrap to the openlifu Photoscan, then drive the existing preview flow.
+        photoscan_openlifu = getattr(wrapper, "photoscan", wrapper)
+        self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
+        self.onPreviewPhotoscanClicked(checked=True)
+
+    @display_errors
+    def onRefreshPhotoscansClicked(self, checked: bool = False):
+        self.refreshPhotoscanList()
+        self._refresh_photoscans_table()
+        self._update_manager_button_states()
+
+    # ---- end Manager helpers ----
+
     @display_errors
     def on_transfer_photocollection_from_android_device_clicked(self, checked:bool):
-        cur_scan_id = self.ui.referenceNumberLineEdit.text
+        cur_scan_id = self.get_or_create_shared_scan_id()
         if len(cur_scan_id) < 1:
             slicer.util.errorDisplay(
                 text="Error: Scan ID cannot be empty.",
@@ -2450,6 +2870,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
             self.updateInputOptions()
             self.updateWorkflowControls()
+            self._refresh_photoscans_table()
+            self._update_manager_button_states()
 
             slicer.util.infoDisplay(
                 text=f"Photoscan '{cur_scan_id}' has been successfully imported from the Android device. You do not need to generate a photoscan locally.",
@@ -2486,6 +2908,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             if photocollection_dict["scan_id"] not in data_parameter_node.session_photocollections:
                 data_parameter_node.session_photocollections.append(photocollection_dict["scan_id"]) # automatically load as well
             data_logic.update_photocollections_affiliated_with_loaded_session()
+            self._refresh_photocollections_table()
+            self._update_manager_button_states()
+            self.updatePhotoscanGenerationButtons()
 
             slicer.util.infoDisplay(
                 text=f"Photo collection successfully imported ({len(imported_filepaths)} photos). You will need to generate a photoscan locally.",
@@ -2517,6 +2942,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if photocollection_dict["scan_id"] not in data_parameter_node.session_photocollections:
             data_parameter_node.session_photocollections.append(photocollection_dict["scan_id"]) # automatically load as well
         data_logic.update_photocollections_affiliated_with_loaded_session()
+        self._refresh_photocollections_table()
+        self._update_manager_button_states()
+        self.updatePhotoscanGenerationButtons()
 
     @display_errors
     def onAddPhotoscanPressed(self, checked:bool) -> bool:
@@ -2543,6 +2971,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         self.updateInputOptions()
         self.updateWorkflowControls()
+        self._refresh_photoscans_table()
+        self._update_manager_button_states()
 
         slicer.app.processEvents() # Ensure the input options are updated
         self.algorithm_input_widget.set_photoscan_selection(new_photoscan)
@@ -2637,6 +3067,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
         self.updateWorkflowControls()
+        self._refresh_photoscans_table()
+        self._update_manager_button_states()
 
         # Preview the generated photoscan
         if  photoscan_openlifu:
@@ -2908,31 +3340,40 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             return
 
     def updateStartPhotoscanGenerationButton(self):
+        button = self.ui.generatePhotoscanFromPhotocollectionButton
         if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.startPhotoscanGenerationButton.setEnabled(False)
-            self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires an active session.")
+            button.setEnabled(False)
+            button.setToolTip("Generating a photoscan requires an active session.")
         elif len(get_openlifu_data_parameter_node().session_photocollections) == 0:
-            self.ui.startPhotoscanGenerationButton.setEnabled(False)
-            self.ui.startPhotoscanGenerationButton.setToolTip("Generating a photoscan requires at least one photocollection.")
+            button.setEnabled(False)
+            button.setToolTip("Generating a photoscan requires at least one photocollection.")
         else:
-            self.ui.startPhotoscanGenerationButton.setEnabled(True)
-            self.ui.startPhotoscanGenerationButton.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
+            button.setEnabled(True)
+            button.setToolTip("Click to begin photoscan generation from a photocollection of the subject. This process can take up to 20 minutes.")
 
     def updateAddPhotoscanButton(self):
-        if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.addPhotoscanButton.setEnabled(False)
-            self.ui.addPhotoscanButton.setToolTip("Adding a photoscan requires an active session.")
-        else:
-            self.ui.addPhotoscanButton.setEnabled(True)
-            self.ui.addPhotoscanButton.setToolTip("Browse for a photoscan on disk.")
+        session_loaded = get_openlifu_data_parameter_node().loaded_session is not None
+        for btn, tip_disabled, tip_enabled in [
+            (self.ui.addPhotocollectionFromAppButton,
+                "Capturing a photocollection requires an active session.",
+                "Capture a new photocollection using the Open Water Android app."),
+            (self.ui.addPhotocollectionFromDiskButton,
+                "Adding a photocollection requires an active session.",
+                "Browse for a photocollection on disk."),
+            (self.ui.addPhotoscanFromAppButton,
+                "Capturing a photoscan requires an active session.",
+                "Capture a new photoscan (or photocollection) using the Open Water Android app."),
+            (self.ui.addPhotoscanFromDiskButton,
+                "Adding a photoscan requires an active session.",
+                "Browse for a photoscan on disk."),
+        ]:
+            btn.setEnabled(session_loaded)
+            btn.setToolTip(tip_enabled if session_loaded else tip_disabled)
 
     def updateShowQRCodeButton(self):
-        if get_openlifu_data_parameter_node().loaded_session is None:
-            self.ui.showQRCodeButton.setEnabled(False)
-            self.ui.showQRCodeButton.setToolTip("Showing a session QR code requires an active session.")
-        else:
-            self.ui.showQRCodeButton.setEnabled(True)
-            self.ui.showQRCodeButton.setToolTip("Show QR code to pass session info to the OpenLIFU Android app.")
+        # The standalone QR-code button has been merged into the
+        # AddFromAppDialog (Add from App). Nothing to update here.
+        return
 
     def updatePhotoscanGenerationButtons(self):
         self.updateStartPhotoscanGenerationButton()
@@ -3970,6 +4411,40 @@ class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
         slicer.util.selectModule("OpenLIFUTransducerLocalization")
         tl_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
         tl_logic = tl_widget.logic
+
+        # ---- Phase 2 manager smoke-tests ----
+        # Verify the three new collapsibles exist.
+        assert tl_widget.ui.photocollectionsCollapsible is not None
+        assert tl_widget.ui.photoscansCollapsible is not None
+        assert tl_widget.ui.localizationsCollapsible is not None
+
+        # Tables should reflect what the loaded session has at this point.
+        tl_widget._refresh_photocollections_table()
+        tl_widget._refresh_photoscans_table()
+        assert tl_widget.ui.photoscansTable.rowCount >= 1, (
+            "Expected at least one photoscan in the manager table by this point."
+        )
+
+        # Shared Scan ID round-trip: initial value exists and refresh produces a new one.
+        first_id = tl_widget.get_or_create_shared_scan_id()
+        assert isinstance(first_id, str) and len(first_id) == 8
+        tl_widget.randomize_photocollection_id()
+        second_id = tl_widget.get_or_create_shared_scan_id()
+        assert second_id != first_id
+
+        # Construct (but do not exec) the new dialogs to catch import/widget errors.
+        from_app_dialog = AddFromAppDialog(tl_widget)
+        try:
+            assert from_app_dialog.scan_id_label.text == tl_widget.get_or_create_shared_scan_id()
+        finally:
+            from_app_dialog.deleteLater()
+
+        preview_dialog = PhotocollectionPreviewDialog("smoketest", [])
+        try:
+            assert preview_dialog.filename_label.text == "(no photos)"
+        finally:
+            preview_dialog.deleteLater()
+        # ---- end Phase 2 smoke-tests ----
 
         activeData = tl_widget.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
