@@ -251,13 +251,16 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyPlacingIndex, position)
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
         self.facial_landmarks_fiducial_node.SetLocked(False)
-        self.exitPlaceFiducialMode()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
-            self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
-            slicer.mrmlScene.RemoveNode(self.currently_placing_node)
-        self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
-        
+        self.exitPlaceFiducialMode()  # already removes the PointPositionDefinedEvent observer
+
+        # Defer the scene removal out of this VTK observer callback. Removing the temp
+        # markup node mid-callback triggers cascading display-node cleanup with a transiently
+        # null scene context, which prints noisy (benign) SH-plugin warnings.
+        node_to_remove = self.currently_placing_node
+        self.temp_markup_fiducials[node_to_remove.GetName()] = None
+        self.currently_placing_node = None
+        qt.QTimer.singleShot(0, lambda n=node_to_remove: slicer.mrmlScene.RemoveNode(n))
+
         if self._checkAllLandmarksDefined():
             self.updateLandmarkPlacementStatus()
 
@@ -299,10 +302,12 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             self.wizard()._existing_approval_revoked = True
         self.wizard().photoscanVolumeTrackingPage.resetScalingTransform()
         # Clear downstream nodes. In PR-only mode there is no TT page; skip the TT branch.
-        slicer.mrmlScene.RemoveNode(self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
-        self.wizard().photoscanVolumeTrackingPage.photoscan_to_volume_transform_node = None
+        pv_page = self.wizard().photoscanVolumeTrackingPage
+        if pv_page.photoscan_to_volume_transform_node is not None:
+            slicer.mrmlScene.RemoveNode(pv_page.photoscan_to_volume_transform_node)
+            pv_page.photoscan_to_volume_transform_node = None
         tt_page = getattr(self.wizard(), "transducerPhotoscanTrackingPage", None)
-        if tt_page is not None:
+        if tt_page is not None and tt_page.transducer_to_volume_transform_node is not None:
             slicer.mrmlScene.RemoveNode(tt_page.transducer_to_volume_transform_node)
             tt_page.transducer_to_volume_transform_node = None
 
