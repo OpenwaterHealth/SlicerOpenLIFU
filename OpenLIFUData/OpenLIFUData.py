@@ -6543,6 +6543,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """Save the current session to the openlifu database.
         This first writes the transducer and target information into the in-memory openlifu Session object,
         and then it writes that Session object and any affiliated Photoscan objects to the database.
+        Any photoscans or photocollections that are present in the database but no longer
+        affiliated with the in-memory session are deleted from the database.
         """
 
         if get_cur_db() is None:
@@ -6562,8 +6564,68 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         get_cur_db().write_session(self.subject,session_openlifu,on_conflict=OnConflictOpts.OVERWRITE)
 
         # Write any affiliated photoscan objects
-        for photoscan in self.getParameterNode().loaded_session.get_affiliated_photoscans():
+        loaded_session = self.getParameterNode().loaded_session
+        for photoscan in loaded_session.get_affiliated_photoscans():
             get_cur_db().write_photoscan(session_openlifu.subject_id, session_openlifu.id, photoscan, on_conflict=OnConflictOpts.OVERWRITE)
+
+        # Clean up the database of photoscans/photocollections that the user removed from
+        # the in-memory session since it was last loaded.
+        self._cleanup_orphaned_photoscans_and_photocollections_in_db(
+            session_openlifu.subject_id, session_openlifu.id, loaded_session,
+        )
+
+    def _cleanup_orphaned_photoscans_and_photocollections_in_db(
+        self,
+        subject_id: str,
+        session_id: str,
+        loaded_session: "SlicerOpenLIFUSession",
+    ) -> None:
+        """Remove from the database any photoscans/photocollections not in the affiliated lists."""
+        import shutil
+        db = get_cur_db()
+
+        # Photoscans: trim the index file and delete each orphaned photoscan directory.
+        affiliated_photoscan_ids = set(loaded_session.get_affiliated_photoscan_ids())
+        try:
+            db_photoscan_ids = list(db.get_photoscan_ids(subject_id, session_id) or [])
+        except Exception:
+            db_photoscan_ids = []
+        orphan_photoscans = [pid for pid in db_photoscan_ids if pid not in affiliated_photoscan_ids]
+        if orphan_photoscans:
+            db.write_photoscan_ids(
+                subject_id, session_id,
+                [pid for pid in db_photoscan_ids if pid in affiliated_photoscan_ids],
+            )
+            for pid in orphan_photoscans:
+                ph_dir = Path(db.get_photoscan_metadata_filepath(subject_id, session_id, pid)).parent
+                if ph_dir.is_dir():
+                    try:
+                        shutil.rmtree(ph_dir)
+                    except OSError as e:
+                        logging.warning("Could not remove photoscan dir %s: %s", ph_dir, e)
+
+        # Photocollections: same pattern using reference_numbers.
+        affiliated_photocollection_ids = set(loaded_session.get_affiliated_photocollection_ids() or [])
+        try:
+            db_photocollection_ids = list(db.get_photocollection_reference_numbers(subject_id, session_id) or [])
+        except Exception:
+            db_photocollection_ids = []
+        orphan_photocollections = [
+            rid for rid in db_photocollection_ids if rid not in affiliated_photocollection_ids
+        ]
+        if orphan_photocollections:
+            db.write_reference_numbers(
+                subject_id, session_id,
+                [rid for rid in db_photocollection_ids if rid in affiliated_photocollection_ids],
+            )
+            session_dir = db.get_session_dir(subject_id, session_id)
+            for rid in orphan_photocollections:
+                pc_dir = Path(session_dir) / 'photocollections' / rid
+                if pc_dir.is_dir():
+                    try:
+                        shutil.rmtree(pc_dir)
+                    except OSError as e:
+                        logging.warning("Could not remove photocollection dir %s: %s", pc_dir, e)
 
     def update_underlying_openlifu_session(self) -> "openlifu.db.Session":
         """Update the underlying openlifu session of the currently loaded session, if there is one.

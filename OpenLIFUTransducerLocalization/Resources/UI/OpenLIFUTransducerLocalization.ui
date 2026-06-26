@@ -69,25 +69,12 @@
          <item>
           <layout class="QHBoxLayout" name="photocollectionsButtonsLayout">
            <item>
-            <widget class="QPushButton" name="addPhotocollectionFromAppButton">
+            <widget class="QPushButton" name="addPhotocollectionButton">
              <property name="text">
-              <string>Add from App</string>
+              <string>Add</string>
              </property>
              <property name="toolTip">
-              <string>Capture a new photocollection using the Open Water Android app.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="addPhotocollectionFromDiskButton">
-             <property name="text">
-              <string>📁 Add from Disk</string>
-             </property>
-             <property name="toolTip">
-              <string>Browse for a photocollection on disk.</string>
-             </property>
-             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-              <bool>true</bool>
+              <string>Add a photocollection from the Open Water Android app or from disk.</string>
              </property>
             </widget>
            </item>
@@ -98,6 +85,16 @@
              </property>
              <property name="toolTip">
               <string>Preview the selected photocollection.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="deletePhotocollectionButton">
+             <property name="text">
+              <string>Delete</string>
+             </property>
+             <property name="toolTip">
+              <string>Remove the selected photocollection from the session. It will be deleted from the database when the session is saved.</string>
              </property>
             </widget>
            </item>
@@ -157,25 +154,12 @@
          <item>
           <layout class="QHBoxLayout" name="photoscansButtonsLayout">
            <item>
-            <widget class="QPushButton" name="addPhotoscanFromAppButton">
+            <widget class="QPushButton" name="addPhotoscanButton">
              <property name="text">
-              <string>Add from App</string>
+              <string>Add</string>
              </property>
              <property name="toolTip">
-              <string>Capture a new photoscan (or photocollection) using the Open Water Android app.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="addPhotoscanFromDiskButton">
-             <property name="text">
-              <string>📁 Add from Disk</string>
-             </property>
-             <property name="toolTip">
-              <string>Browse for a photoscan on disk.</string>
-             </property>
-             <property name="slicer.openlifu.hide-in-guided-mode" stdset="0">
-              <bool>true</bool>
+              <string>Add a photoscan from the Open Water Android app or from disk.</string>
              </property>
             </widget>
            </item>
@@ -216,6 +200,16 @@
              </property>
              <property name="toolTip">
               <string>Toggle the approval of the selected photoscan's registration. Revoking approval cascades to any localization results that reference it.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="deletePhotoscanButton">
+             <property name="text">
+              <string>Delete</string>
+             </property>
+             <property name="toolTip">
+              <string>Remove the selected photoscan from the session. It will be deleted from the database when the session is saved.</string>
              </property>
             </widget>
            </item>

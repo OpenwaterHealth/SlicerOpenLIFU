@@ -78,6 +78,8 @@ from OpenLIFULib.photoscan_registrations import (
     get_photoscan_registration_by_id,
     get_photoscan_registration_nodes_in_scene,
     get_registration_id_from_photoscan_registration_node,
+    reindex_photoscan_registrations,
+    remove_photoscan_registration_by_id,
     set_photoscan_registration_approval_by_id,
 )
 from OpenLIFULib.transducer_tracking_wizard_utils import (
@@ -2567,10 +2569,15 @@ class AddFromAppDialog(qt.QDialog):
     Transfer button that runs the existing USB pull. The cloud-transfer
     line is hidden when not logged into cloud sync."""
 
-    def __init__(self, parent_widget: "OpenLIFUTransducerLocalizationWidget", parent=None):
+    def __init__(self, parent_widget: "OpenLIFUTransducerLocalizationWidget", parent=None, mode: str = "photoscan"):
+        """``mode`` is ``"photoscan"`` or ``"photocollection"`` and determines what the
+        Load-from-Disk button imports."""
+        if mode not in ("photoscan", "photocollection"):
+            raise ValueError(f"AddFromAppDialog mode must be 'photoscan' or 'photocollection', got {mode!r}")
         super().__init__(parent or slicer.util.mainWindow())
         self.parent_widget = parent_widget
-        self.setWindowTitle("Add from App")
+        self.mode = mode
+        self.setWindowTitle("Add Photoscan" if mode == "photoscan" else "Add Photocollection")
         self.setWindowModality(qt.Qt.WindowModal)
         self.setup()
 
@@ -2651,6 +2658,15 @@ class AddFromAppDialog(qt.QDialog):
         self.transfer_button.setToolTip("Pull the captured files from the device over USB.")
         self.transfer_button.clicked.connect(self._on_transfer_clicked)
         button_layout.addWidget(self.transfer_button)
+        self.load_from_disk_button = qt.QPushButton(
+            "Load Photoscan from Disk" if self.mode == "photoscan" else "Load Photocollection from Disk"
+        )
+        self.load_from_disk_button.setToolTip(
+            "Browse for a photoscan on disk." if self.mode == "photoscan"
+            else "Browse for a photocollection on disk."
+        )
+        self.load_from_disk_button.clicked.connect(self._on_load_from_disk_clicked)
+        button_layout.addWidget(self.load_from_disk_button)
         button_layout.addStretch(1)
         self.done_button = qt.QPushButton("Done")
         # ``clicked`` always passes a ``checked: bool`` arg; ``accept()`` takes none.
@@ -2677,6 +2693,13 @@ class AddFromAppDialog(qt.QDialog):
     @display_errors
     def _on_transfer_clicked(self, checked: bool = False):
         self.parent_widget.on_transfer_photocollection_from_android_device_clicked(False)
+
+    @display_errors
+    def _on_load_from_disk_clicked(self, checked: bool = False):
+        if self.mode == "photoscan":
+            self.parent_widget.onAddPhotoscanPressed(False)
+        else:
+            self.parent_widget.onLoadPhotocollectionPressed(False)
 
 
 class PhotocollectionPreviewDialog(qt.QDialog):
@@ -2875,18 +2898,18 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.ui.refreshPhotocollectionsButton.setIcon(refresh_icon)
         self.ui.refreshPhotoscansButton.setIcon(refresh_icon)
 
-        self.ui.addPhotocollectionFromAppButton.clicked.connect(self.onAddPhotocollectionFromAppClicked)
-        self.ui.addPhotocollectionFromDiskButton.clicked.connect(self.onLoadPhotocollectionPressed)
+        self.ui.addPhotocollectionButton.clicked.connect(self.onAddPhotocollectionClicked)
         self.ui.viewPhotocollectionButton.clicked.connect(self.onViewPhotocollectionClicked)
+        self.ui.deletePhotocollectionButton.clicked.connect(self.onDeletePhotocollectionClicked)
         self.ui.refreshPhotocollectionsButton.clicked.connect(self.onRefreshPhotocollectionsClicked)
         self.ui.photocollectionsTable.itemSelectionChanged.connect(self._update_manager_button_states)
 
-        self.ui.addPhotoscanFromAppButton.clicked.connect(self.onAddPhotocollectionFromAppClicked)
-        self.ui.addPhotoscanFromDiskButton.clicked.connect(self.onAddPhotoscanPressed)
+        self.ui.addPhotoscanButton.clicked.connect(self.onAddPhotoscanClicked)
         self.ui.generatePhotoscanFromPhotocollectionButton.clicked.connect(self.onStartPhotoscanGenerationButtonClicked)
         self.ui.viewPhotoscanButton.clicked.connect(self.onViewPhotoscanClicked)
         self.ui.registerPhotoscanToVolumeButton.clicked.connect(self.onRegisterPhotoscanToVolumeClicked)
         self.ui.togglePhotoscanRegistrationApprovalButton.clicked.connect(self.onTogglePhotoscanRegistrationApprovalClicked)
+        self.ui.deletePhotoscanButton.clicked.connect(self.onDeletePhotoscanClicked)
         self.ui.refreshPhotoscansButton.clicked.connect(self.onRefreshPhotoscansClicked)
         self.ui.photoscansTable.itemSelectionChanged.connect(self._update_manager_button_states)
 
@@ -3389,10 +3412,13 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.updateWorkflowControls()
 
     def _update_manager_button_states(self):
-        self.ui.viewPhotocollectionButton.setEnabled(self._get_selected_photocollection_scan_id() is not None)
+        selected_photocollection_id = self._get_selected_photocollection_scan_id()
+        self.ui.viewPhotocollectionButton.setEnabled(selected_photocollection_id is not None)
+        self.ui.deletePhotocollectionButton.setEnabled(selected_photocollection_id is not None)
         selected_photoscan_id = self._get_selected_photoscan_id()
         self.ui.viewPhotoscanButton.setEnabled(selected_photoscan_id is not None)
         self.ui.registerPhotoscanToVolumeButton.setEnabled(selected_photoscan_id is not None)
+        self.ui.deletePhotoscanButton.setEnabled(selected_photoscan_id is not None)
 
         # Toggle Approval button: label flips with current PR approval state; disabled when no PR.
         pr_node = self._get_selected_photoscan_registration_node()
@@ -3489,14 +3515,24 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.ui.localizationsCollapsible.collapsed = True
 
     @display_errors
-    def onAddPhotocollectionFromAppClicked(self, checked: bool = False):
+    def onAddPhotocollectionClicked(self, checked: bool = False):
         loaded_session = get_openlifu_data_parameter_node().loaded_session
         if loaded_session is None:
-            raise RuntimeError("Cannot capture from app because a session is not loaded.")
-        dialog = AddFromAppDialog(self)
+            raise RuntimeError("Cannot add a photocollection because a session is not loaded.")
+        dialog = AddFromAppDialog(self, mode="photocollection")
         dialog.exec_()
         dialog.deleteLater()
         self._refresh_photocollections_table()
+
+    @display_errors
+    def onAddPhotoscanClicked(self, checked: bool = False):
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot add a photoscan because a session is not loaded.")
+        dialog = AddFromAppDialog(self, mode="photoscan")
+        dialog.exec_()
+        dialog.deleteLater()
+        self._refresh_photoscans_table()
         self._refresh_photoscans_table()
         self._update_manager_button_states()
         self.updatePhotoscanGenerationButtons()
@@ -3680,6 +3716,101 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if deleted:
             reindex_transducer_tracking_results(session_id=session_id)
         return deleted
+
+    @display_errors
+    def onDeletePhotocollectionClicked(self, checked: bool = False):
+        scan_id = self._get_selected_photocollection_scan_id()
+        if scan_id is None:
+            return
+        if not slicer.util.confirmYesNoDisplay(
+            text=(
+                f"Remove photocollection '{scan_id}' from the session?\n\n"
+                "It will be deleted from the database when the session is saved."
+            ),
+            windowTitle="Delete photocollection",
+        ):
+            return
+        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic.remove_photocollection(scan_id)
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is not None and scan_id in loaded_session.affiliated_photocollections:
+            loaded_session.affiliated_photocollections = [
+                s for s in loaded_session.affiliated_photocollections if s != scan_id
+            ]
+        self._refresh_photocollections_table()
+        self._update_manager_button_states()
+        self.updatePhotoscanGenerationButtons()
+
+    @display_errors
+    def onDeletePhotoscanClicked(self, checked: bool = False):
+        photoscan_id = self._get_selected_photoscan_id()
+        if photoscan_id is None:
+            return
+        session = get_openlifu_data_parameter_node().loaded_session
+        session_id = None if session is None else session.get_session_id()
+
+        # Count any downstream registrations / localizations so the user knows what they
+        # are about to lose.
+        pr_nodes = get_photoscan_registration_nodes_in_scene(
+            photoscan_id=photoscan_id, session_id=session_id,
+        )
+        tt_nodes = get_transducer_tracking_result_nodes_in_scene(
+            photoscan_id=photoscan_id, session_id=session_id,
+        )
+        cascade_parts = []
+        if pr_nodes:
+            cascade_parts.append(
+                f"{len(pr_nodes)} registration{'s' if len(pr_nodes) != 1 else ''}"
+            )
+        if tt_nodes:
+            cascade_parts.append(
+                f"{len(tt_nodes)} localization result{'s' if len(tt_nodes) != 1 else ''}"
+            )
+        cascade_msg = ""
+        if cascade_parts:
+            cascade_msg = (
+                "\n\nThe following dependent items will also be deleted: "
+                + " and ".join(cascade_parts) + "."
+            )
+
+        if not slicer.util.confirmYesNoDisplay(
+            text=(
+                f"Remove photoscan '{photoscan_id}' from the session?\n\n"
+                "It will be deleted from the database when the session is saved."
+                + cascade_msg
+            ),
+            windowTitle="Delete photoscan",
+        ):
+            return
+
+        # Cascade-delete TTs first, then PRs (TT carries a back-ref to PR).
+        for tt_node in tt_nodes:
+            result_id = get_result_id_from_transducer_tracking_result_node(tt_node)
+            if result_id is not None:
+                remove_transducer_tracking_result_by_id(result_id=result_id, session_id=session_id)
+        if tt_nodes:
+            reindex_transducer_tracking_results(session_id=session_id)
+        for pr_node in pr_nodes:
+            registration_id = get_registration_id_from_photoscan_registration_node(pr_node)
+            if registration_id is not None:
+                remove_photoscan_registration_by_id(registration_id=registration_id, session_id=session_id)
+        if pr_nodes:
+            reindex_photoscan_registrations(session_id=session_id)
+
+        # Unload the photoscan from the scene and from the session-affiliated list.
+        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        if photoscan_id in get_openlifu_data_parameter_node().loaded_photoscans:
+            data_logic.remove_photoscan(photoscan_id, clean_up_scene=True)
+        if session is not None and photoscan_id in session.affiliated_photoscans:
+            del session.affiliated_photoscans[photoscan_id]
+
+        if session is not None:
+            data_logic.update_underlying_openlifu_session()
+        self._refresh_photoscans_table()
+        self._refresh_localizations_table()
+        self._update_manager_button_states()
+        self.checkCanRunTracking()
+        self.updateWorkflowControls()
 
     @display_errors
     def onRefreshPhotoscansClicked(self, checked: bool = False):
@@ -4345,18 +4476,12 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def updateAddPhotoscanButton(self):
         session_loaded = get_openlifu_data_parameter_node().loaded_session is not None
         for btn, tip_disabled, tip_enabled in [
-            (self.ui.addPhotocollectionFromAppButton,
-                "Capturing a photocollection requires an active session.",
-                "Capture a new photocollection using the Open Water Android app."),
-            (self.ui.addPhotocollectionFromDiskButton,
+            (self.ui.addPhotocollectionButton,
                 "Adding a photocollection requires an active session.",
-                "Browse for a photocollection on disk."),
-            (self.ui.addPhotoscanFromAppButton,
-                "Capturing a photoscan requires an active session.",
-                "Capture a new photoscan (or photocollection) using the Open Water Android app."),
-            (self.ui.addPhotoscanFromDiskButton,
+                "Add a photocollection from the Open Water Android app or from disk."),
+            (self.ui.addPhotoscanButton,
                 "Adding a photoscan requires an active session.",
-                "Browse for a photoscan on disk."),
+                "Add a photoscan from the Open Water Android app or from disk."),
         ]:
             btn.setEnabled(session_loaded)
             btn.setToolTip(tip_enabled if session_loaded else tip_disabled)
@@ -5523,11 +5648,13 @@ class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
         assert second_id != first_id
 
         # Construct (but do not exec) the new dialogs to catch import/widget errors.
-        from_app_dialog = AddFromAppDialog(tl_widget)
-        try:
-            assert from_app_dialog.scan_id_label.text == tl_widget.get_or_create_shared_scan_id()
-        finally:
-            from_app_dialog.deleteLater()
+        for mode in ("photoscan", "photocollection"):
+            from_app_dialog = AddFromAppDialog(tl_widget, mode=mode)
+            try:
+                assert from_app_dialog.scan_id_label.text == tl_widget.get_or_create_shared_scan_id()
+                assert from_app_dialog.load_from_disk_button is not None
+            finally:
+                from_app_dialog.deleteLater()
 
         preview_dialog = PhotocollectionPreviewDialog("smoketest", [])
         try:
