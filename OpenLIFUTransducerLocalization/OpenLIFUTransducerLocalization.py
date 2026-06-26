@@ -3220,6 +3220,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         # These ui elemeents are not specific to the currently selected input options
         self.updatePhotoscanGenerationButtons()
+        self._configure_manager_table_column_widths()
         self._refresh_photocollections_table()
         self._refresh_photoscans_table()
         self._refresh_localizations_table()
@@ -3432,6 +3433,45 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         except AttributeError:
             return list(photoscans)
 
+    def _configure_manager_table_column_widths(self):
+        """One-time header configuration for the three manager tables.
+
+        The .ui has ``horizontalHeaderStretchLastSection: true`` which would stretch
+        the Approved/checkbox column; instead we want the data column (Scan Name /
+        Distance from VF) to stretch and keep the Approved column narrow.
+        Also enables text elision on the Scan Name column.
+        """
+        QHeaderView = qt.QHeaderView
+
+        # Photocollections: Scan ID (stretch) | # of Photos (resize-to-contents)
+        pc_table = self.ui.photocollectionsTable
+        pc_header = pc_table.horizontalHeader()
+        pc_header.setStretchLastSection(False)
+        pc_header.setSectionResizeMode(0, QHeaderView.Stretch)
+        pc_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+
+        # Photoscans: Scan ID | Scan Name (stretch) | Registration | Approved (narrow)
+        ph_table = self.ui.photoscansTable
+        ph_table.setTextElideMode(qt.Qt.ElideRight)
+        ph_header = ph_table.horizontalHeader()
+        ph_header.setStretchLastSection(False)
+        ph_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        ph_header.setSectionResizeMode(1, QHeaderView.Stretch)
+        ph_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        ph_header.setSectionResizeMode(3, QHeaderView.Fixed)
+        ph_table.setColumnWidth(3, 80)
+
+        # Localizations: # | Photoscan ID | Target ID | Distance from VF (stretch) | Approved (narrow)
+        loc_table = self.ui.localizationsTable
+        loc_header = loc_table.horizontalHeader()
+        loc_header.setStretchLastSection(False)
+        loc_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        loc_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        loc_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        loc_header.setSectionResizeMode(3, QHeaderView.Stretch)
+        loc_header.setSectionResizeMode(4, QHeaderView.Fixed)
+        loc_table.setColumnWidth(4, 80)
+
     def _refresh_photocollections_table(self):
         scan_ids = self._get_photocollection_scan_ids()
         table = self.ui.photocollectionsTable
@@ -3486,7 +3526,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             table.setItem(row, 0, id_item)
 
             ph_obj = affiliated_photoscans.get(photoscan_id)
-            scan_name = (getattr(ph_obj, "name", None) or photoscan_id) if ph_obj is not None else photoscan_id
+            # ``affiliated_photoscans`` maps photoscan_id -> SlicerOpenLIFUPhotoscanWrapper;
+            # the openlifu Photoscan (which carries the ``name`` field) is one level deeper.
+            ph_openlifu = getattr(ph_obj, "photoscan", None) if ph_obj is not None else None
+            scan_name = (getattr(ph_openlifu, "name", None) or photoscan_id)
             name_item = qt.QTableWidgetItem(scan_name)
             name_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
             name_item.setToolTip(scan_name)

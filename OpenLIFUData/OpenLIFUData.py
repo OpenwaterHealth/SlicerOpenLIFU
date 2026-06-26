@@ -6569,32 +6569,38 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             get_cur_db().write_photoscan(session_openlifu.subject_id, session_openlifu.id, photoscan, on_conflict=OnConflictOpts.OVERWRITE)
 
         # Clean up the database of photoscans/photocollections that the user removed from
-        # the in-memory session since it was last loaded.
+        # the in-memory session since it was last loaded. The authoritative lists live on
+        # ``session_openlifu.photoscans`` / ``session_openlifu.photocollections``, which
+        # ``update_underlying_openlifu_session`` just synced from the in-memory state.
         self._cleanup_orphaned_photoscans_and_photocollections_in_db(
-            session_openlifu.subject_id, session_openlifu.id, loaded_session,
+            session_openlifu.subject_id,
+            session_openlifu.id,
+            session_openlifu.photoscans,
+            session_openlifu.photocollections,
         )
 
     def _cleanup_orphaned_photoscans_and_photocollections_in_db(
         self,
         subject_id: str,
         session_id: str,
-        loaded_session: "SlicerOpenLIFUSession",
+        affiliated_photoscan_ids: List[str],
+        affiliated_photocollection_ids: List[str],
     ) -> None:
         """Remove from the database any photoscans/photocollections not in the affiliated lists."""
         import shutil
         db = get_cur_db()
 
         # Photoscans: trim the index file and delete each orphaned photoscan directory.
-        affiliated_photoscan_ids = set(loaded_session.get_affiliated_photoscan_ids())
+        affiliated_photoscan_id_set = set(affiliated_photoscan_ids or [])
         try:
             db_photoscan_ids = list(db.get_photoscan_ids(subject_id, session_id) or [])
         except Exception:
             db_photoscan_ids = []
-        orphan_photoscans = [pid for pid in db_photoscan_ids if pid not in affiliated_photoscan_ids]
+        orphan_photoscans = [pid for pid in db_photoscan_ids if pid not in affiliated_photoscan_id_set]
         if orphan_photoscans:
             db.write_photoscan_ids(
                 subject_id, session_id,
-                [pid for pid in db_photoscan_ids if pid in affiliated_photoscan_ids],
+                [pid for pid in db_photoscan_ids if pid in affiliated_photoscan_id_set],
             )
             for pid in orphan_photoscans:
                 ph_dir = Path(db.get_photoscan_metadata_filepath(subject_id, session_id, pid)).parent
@@ -6605,18 +6611,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                         logging.warning("Could not remove photoscan dir %s: %s", ph_dir, e)
 
         # Photocollections: same pattern using reference_numbers.
-        affiliated_photocollection_ids = set(loaded_session.get_affiliated_photocollection_ids() or [])
+        affiliated_photocollection_id_set = set(affiliated_photocollection_ids or [])
         try:
             db_photocollection_ids = list(db.get_photocollection_reference_numbers(subject_id, session_id) or [])
         except Exception:
             db_photocollection_ids = []
         orphan_photocollections = [
-            rid for rid in db_photocollection_ids if rid not in affiliated_photocollection_ids
+            rid for rid in db_photocollection_ids if rid not in affiliated_photocollection_id_set
         ]
         if orphan_photocollections:
             db.write_reference_numbers(
                 subject_id, session_id,
-                [rid for rid in db_photocollection_ids if rid in affiliated_photocollection_ids],
+                [rid for rid in db_photocollection_ids if rid in affiliated_photocollection_id_set],
             )
             session_dir = db.get_session_dir(subject_id, session_id)
             for rid in orphan_photocollections:
@@ -6641,6 +6647,14 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # TODO: I think instead of getting all 1-point fiducial nodes as targets, we should attribute-tag targets with
             # the session ID, and have a tool that adds and retrieves targets by session ID similar to what we do for virtual fit results
             session_openlifu = session.update_underlying_openlifu_session(targets)
+            # Sync the photoscan / photocollection index into the openlifu Session
+            # dataclass. ``session_photocollections`` on the parameter node is the
+            # source of truth used everywhere else in the app, and
+            # ``affiliated_photoscans`` on the wrapper is populated from disk on load
+            # and via add/remove flows. Persisting them here is what lets the cleanup
+            # logic (and the on-disk session JSON) round-trip correctly.
+            session_openlifu.photocollections = list(parameter_node.session_photocollections or [])
+            session_openlifu.photoscans = list(session.get_affiliated_photoscan_ids() or [])
             parameter_node.loaded_session = session # remember to write the updated session into the parameter node
             return session_openlifu
 
