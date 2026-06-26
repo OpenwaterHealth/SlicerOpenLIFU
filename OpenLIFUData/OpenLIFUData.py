@@ -2674,6 +2674,17 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
         self._original_parent = self._hosted_widget.parent()
         self._original_visible = self._hosted_widget.visible
 
+        # Resolve the python widget so we can drive its Slicer lifecycle
+        # (enter/exit) while the popup is hosting it. Modules like
+        # OpenLIFULogin defer dependency-gated init (_initDefaultUsers) to
+        # enter(); skipping it leaves the widget in a half-initialized
+        # state where login() succeeds but updateWidgetLoginState() bails
+        # out and clears active_user.
+        try:
+            self._python_widget = slicer.util.getModuleWidget(module_name)
+        except Exception:  # noqa: BLE001 - widget may not yet be instantiated
+            self._python_widget = None
+
         # Collect the embedded-panel-only chrome (dev "Reload & Test" section
         # and guided-mode workflow controls) so we can hide it while the popup
         # is shown and restore its previous visibility on close.
@@ -2707,6 +2718,17 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
         layout.addWidget(self._hosted_widget)
         self._hosted_widget.setVisible(True)
 
+        # Drive the hosted module's Slicer lifecycle so dependency-gated
+        # initializers that run in enter() (e.g. OpenLIFULogin._initDefaultUsers)
+        # fire even when the user never navigated to the module page.
+        if self._python_widget is not None:
+            try:
+                self._python_widget.enter()
+            except Exception:  # noqa: BLE001
+                logging.exception(
+                    "Error calling enter() on hosted module %r", module_name
+                )
+
         # Done button row.
         button_row = qt.QHBoxLayout()
         button_row.addStretch(1)
@@ -2722,43 +2744,15 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
         """Reparent the hosted widget back to its original parent."""
         if self._hosted_widget is None:
             return
-        # Restore the visibility of children we temporarily hid.
-        for child, was_visible in self._hidden_children:
+        # Mirror the enter() call from __init__ so the hosted module sees
+        # a normal enter/exit cycle.
+        if self._python_widget is not None:
             try:
-                child.setVisible(was_visible)
-            except Exception:  # noqa: BLE001 - widget may already be gone
-                pass
-        self._hidden_children = []
-        # Reparent back. If the original parent has a layout, re-add to it; if
-        # not, just set the parent so Slicer's module panel can rediscover it
-        # the next time the module is selected.
-        self._hosted_widget.setParent(self._original_parent)
-        original_layout = (
-            self._original_parent.layout() if self._original_parent is not None else None
-        )
-        if original_layout is not None:
-            original_layout.addWidget(self._hosted_widget)
-        self._hosted_widget.setVisible(self._original_visible)
-        self._hosted_widget = None
-
-    def closeEvent(self, event):
-        # Note: do NOT call ``super().closeEvent(event)``. Slicer's Qt binding
-        # does not expose QWidget.closeEvent through ``super()`` and that raises
-        # ``AttributeError: 'super' object has no attribute 'closeEvent'``.
-        # QDialog's default closeEvent simply calls ``reject()``, which will
-        # route through ``done()`` below and trigger our cleanup.
-        self._restore_hosted_widget()
-
-    def done(self, result):
-        # done() is called for accept()/reject() and is the most reliable entry
-        # point that fires for both keyboard-Esc and the Done button.
-        self._restore_hosted_widget()
-        qt.QDialog.done(self, result)
-
-    def _restore_hosted_widget(self) -> None:
-        """Reparent the hosted widget back to its original parent."""
-        if self._hosted_widget is None:
-            return
+                self._python_widget.exit()
+            except Exception:  # noqa: BLE001
+                logging.exception(
+                    "Error calling exit() on hosted module %r", self._module_name
+                )
         # Restore the visibility of children we temporarily hid.
         for child, was_visible in self._hidden_children:
             try:
@@ -5096,6 +5090,9 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # ``slicer.openlifu.allowed-roles`` tag wired by Login. ``Manage
         # Accounts`` is owned by the Login module; we forward the click here
         # so the same dialog is reachable from the Data page.
+        database_location_btn = getattr(self.ui, "databaseLocationButton", None)
+        if database_location_btn is not None:
+            database_location_btn.clicked.connect(self.onOpenDatabasePopup)
         manage_accounts_btn = getattr(self.ui, "manageAccountsButton", None)
         if manage_accounts_btn is not None:
             manage_accounts_btn.clicked.connect(self.onManageAccountsClicked)

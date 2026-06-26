@@ -59,6 +59,78 @@ def _strip_click_to(tooltip: str) -> str:
     return tooltip[:idx].rstrip().rstrip(".").rstrip()
 
 
+class _DatabaseStatusDialog(qt.QDialog):
+    """Read-only database status popup shown from non-Data pages.
+
+    The Data page opens the full interactive ``OpenLIFUDatabase`` widget in
+    its own popup; from every other page the database button instead opens
+    this lightweight dialog so the user can see the database location,
+    connection status, and cloud-sync status without being able to change
+    them.
+    """
+
+    def __init__(self, parent: Optional[qt.QWidget] = None) -> None:
+        qt.QDialog.__init__(self, parent or slicer.util.mainWindow())
+        self.setWindowTitle("Database")
+        self.setWindowModality(qt.Qt.ApplicationModal)
+        self.setMinimumWidth(420)
+
+        from OpenLIFULib import get_cur_db
+        try:
+            cur_db = get_cur_db()
+        except (AttributeError, RuntimeError):
+            cur_db = None
+        db_path = getattr(cur_db, "path", None) if cur_db is not None else None
+        db_status_text = "Database is connected." if cur_db is not None else "No database is connected."
+
+        try:
+            from OpenLIFUCloudSync import getCloudSyncLogic
+            cs_logic = getCloudSyncLogic()
+            cs_enabled = cs_logic.is_service_enabled()
+            cs_running = cs_logic.is_service_running()
+            cs_logged_in = cs_logic.is_logged_in()
+            cs_failed = cs_logic.did_service_fail()
+        except Exception:  # noqa: BLE001
+            cs_enabled = cs_running = cs_logged_in = cs_failed = False
+
+        if not cs_enabled:
+            cloud_status_text = "Cloud synchronization is disabled."
+        elif cs_failed or not cs_running:
+            cloud_status_text = "Cloud synchronization is enabled but the service failed to start."
+        elif not cs_logged_in:
+            cloud_status_text = "Cloud synchronization is enabled but not signed in."
+        else:
+            cloud_status_text = "Cloud synchronization is enabled."
+
+        layout = qt.QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        dir_label = qt.QLabel("Database directory:")
+        layout.addWidget(dir_label)
+        dir_field = qt.QLineEdit(str(db_path) if db_path else "(no database connected)")
+        dir_field.setReadOnly(True)
+        dir_field.setCursorPosition(0)
+        layout.addWidget(dir_field)
+
+        db_status_label = qt.QLabel(db_status_text)
+        layout.addWidget(db_status_label)
+
+        cloud_status_label = qt.QLabel(cloud_status_text)
+        layout.addWidget(cloud_status_label)
+
+        hint_label = qt.QLabel("To change the database, go to the Data Manager page.")
+        hint_label.setStyleSheet("color: gray;")
+        layout.addWidget(hint_label)
+
+        button_row = qt.QHBoxLayout()
+        button_row.addStretch(1)
+        done_button = qt.QPushButton("Done")
+        done_button.clicked.connect(lambda _checked=False: self.accept())
+        button_row.addWidget(done_button)
+        layout.addLayout(button_row)
+
+
 class ModuleHeaderWidget(qt.QWidget):
     """Single-row status header shared across OpenLIFU module pages.
 
@@ -166,20 +238,20 @@ class ModuleHeaderWidget(qt.QWidget):
         layout.addStretch(1)
 
     def _apply_read_only(self) -> None:
-        # Database / login global state should not be changed from inside
-        # a workflow step. Disable the database button (and the login button,
-        # unless the host opted in to keep it active), but leave the device
-        # (transducer info) button live - it is purely informational and
-        # useful from any page.
-        disabled = [self.databasePopupButton]
+        # The login button stays disabled on workflow pages unless the host
+        # opted in to keep it active (e.g. Home). The database and device
+        # buttons stay live everywhere so the popup info is always reachable;
+        # editability inside the database popup is enforced by the caller.
         if not self._keep_login_button_active:
-            disabled.append(self.loginPopupButton)
-        for w in disabled:
-            w.setEnabled(False)
+            self.loginPopupButton.setEnabled(False)
 
         # Wire the device-info button to the Data module's popup handler so
         # the same dialog is reachable from every workflow page.
         self.devicePopupButton.clicked.connect(self._open_device_popup_via_data_module)
+
+        # Database popup is always reachable; the popup itself decides
+        # whether the mutating controls are interactive based on context.
+        self.databasePopupButton.clicked.connect(self._open_database_popup_via_data_module)
 
         # Modules that opt in (e.g. Home) keep the sign-in icon live and
         # delegate to Data's existing login popup handler.
@@ -215,6 +287,41 @@ class ModuleHeaderWidget(qt.QWidget):
             )
             return
         handler()
+
+    def _open_database_popup_via_data_module(self, _checked: bool = False) -> None:
+        """Open the database popup.
+
+        From the Data Manager page (whether the standalone Data module or the
+        embedded Data page inside the OpenLIFU host) the user expects the
+        full interactive popup; from any other page they expect the
+        read-only status dialog. We detect "currently on Data" by asking the
+        OpenLIFU host for its active page key (the host owns the only
+        read-only header that can sit on top of the Data page); when no host
+        is present, fall back to the read-only dialog.
+        """
+        if self._host_active_page_is_data():
+            try:
+                data_widget = slicer.util.getModuleWidget("OpenLIFUData")
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not resolve OpenLIFUData widget: %s", e)
+                data_widget = None
+            handler = getattr(data_widget, "onOpenDatabasePopup", None) if data_widget else None
+            if handler is not None:
+                handler()
+                return
+        dialog = _DatabaseStatusDialog(parent=slicer.util.mainWindow())
+        dialog.exec_()
+
+    @staticmethod
+    def _host_active_page_is_data() -> bool:
+        """True iff the OpenLIFU host module exists and its current page is OpenLIFUData."""
+        try:
+            host_widget = slicer.util.getModuleWidget("OpenLIFU")
+        except Exception:  # noqa: BLE001
+            return False
+        if host_widget is None:
+            return False
+        return getattr(host_widget, "_current_page_key", None) == "OpenLIFUData"
 
     def _open_version_info_popup(self, _checked: bool = False) -> None:
         """Show a small dialog listing the versions of every OpenLIFU
@@ -437,23 +544,16 @@ class ModuleHeaderWidget(qt.QWidget):
             )
 
         # In read-only mode (every module page except OpenLIFU Data), the
-        # database and login buttons are disabled. Rewrite the
-        # "Click to ..." tooltips that ``updateStatusButtons`` just installed
-        # so they reflect that, and tell the user where to go to change
-        # those settings. The device button stays interactive on every
-        # page so its tooltip is left untouched. When the host module opted
-        # in to keep the login button active (e.g. Home), leave its tooltip
-        # alone too.
-        if self.read_only:
-            db_tip = self.databasePopupButton.toolTip
-            self.databasePopupButton.setToolTip(
-                _strip_click_to(db_tip) + "\n\nChange in the Data module."
+        # login button is disabled (unless the host opted to keep it active).
+        # The database and device buttons stay live everywhere: they open
+        # informational popups whose interactive controls are enforced by
+        # the popup itself. Tooltip rewriting only applies to the disabled
+        # login button.
+        if self.read_only and not self._keep_login_button_active:
+            login_tip = self.loginPopupButton.toolTip
+            self.loginPopupButton.setToolTip(
+                _strip_click_to(login_tip) + "\n\nChange in the Data module."
             )
-            if not self._keep_login_button_active:
-                login_tip = self.loginPopupButton.toolTip
-                self.loginPopupButton.setToolTip(
-                    _strip_click_to(login_tip) + "\n\nChange in the Data module."
-                )
 
     def refresh_all(self) -> None:
         """Repaint every status indicator from current global state."""

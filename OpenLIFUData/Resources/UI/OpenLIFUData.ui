@@ -86,6 +86,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="databaseLocationButton">
+        <property name="text">
+         <string>Database Location...</string>
+        </property>
+        <property name="toolTip">
+         <string>Open the database location chooser and connection controls.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="manageAccountsButton">
         <property name="text">
          <string>Manage Accounts</string>
