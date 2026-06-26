@@ -5,22 +5,161 @@ from slicer import vtkMRMLViewNode, vtkMRMLModelNode
 from OpenLIFULib.util import replace_widget
 from OpenLIFULib import SlicerOpenLIFUPhotoscan
 
+# Fixed pixel width for the wizard's left controls column. A fixed value keeps
+# long photoscan/volume names in the pickers from stretching the dialog while
+# leaving room for the fiducial table and the multi-control PV panel.
+_WIZARD_LEFT_COLUMN_WIDTH = 520
+
+
 def initialize_wizard_ui(wizard: qt.QWizard):
 
-    layout = qt.QVBoxLayout()
-    layout.setContentsMargins(0, 0, 0, 0)
-    wizard.setLayout(layout)
+    root = qt.QHBoxLayout()
+    root.setContentsMargins(0, 0, 0, 0)
+    wizard.setLayout(root)
     ui_path = slicer.modules.OpenLIFUTransducerLocalizationWidget.resourcePath("UI/TransducerLocalizationWizard.ui")
     uiWidget = slicer.util.loadUI(ui_path)
     ui = slicer.util.childWidgetVariables(uiWidget)
 
-    # Reparent the key widgets directly into the page layout, bypassing the
-    # intermediate uiWidget container whose designer geometry (553x793) constrains sizing.
-    layout.addWidget(ui.viewWidgetPlaceholder, 1)  # stretch=1 so it fills remaining space
-    layout.addWidget(ui.dialogControls)
-    layout.addWidget(ui.lockPanel)
+    # Left column: page-specific controls (expand to fill), then the
+    # Edit/Done button (lockPanel), then a stable slot for the proxy nav
+    # buttons (see hook_wizard_nav_buttons). Making dialogControls vertically
+    # Expanding pushes lockPanel + nav buttons to the bottom of the column and
+    # gives the fiducial table the rest of the vertical space.
+    ui.dialogControls.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
+
+    controlsColumn = qt.QWidget()
+    controlsLayout = qt.QVBoxLayout(controlsColumn)
+    controlsLayout.setContentsMargins(0, 0, 0, 0)
+    controlsLayout.addWidget(ui.dialogControls, 1)
+    controlsLayout.addWidget(ui.lockPanel)
+
+    navLayout = qt.QHBoxLayout()
+    navLayout.setContentsMargins(0, 0, 0, 0)
+    controlsLayout.addLayout(navLayout)
+    ui._wizardNavButtonLayout = navLayout
+
+    controlsColumn.setFixedWidth(_WIZARD_LEFT_COLUMN_WIDTH)
+
+    root.addWidget(controlsColumn)
+    root.addWidget(ui.viewWidgetPlaceholder, 1)  # stretch=1 so the 3D view fills remaining space
 
     return ui
+
+
+def hook_wizard_nav_buttons(wizard: qt.QWizard) -> None:
+    """Put per-page Back/Next/Cancel/Approve buttons in the page's left-column
+    nav slot. Call once after all pages have been added.
+
+    Implementation notes: QWizard's internal Back/Next/Cancel/Finish buttons
+    are left in place but hidden (zero-sized). Reparenting them into a page
+    layout, or replacing the wizard's button layout via setButtonLayout, has
+    crashed Slicer hard (no Python traceback) in PythonQt -- QWizard keeps
+    internal pointers to those widgets and gets confused when their parent/
+    layout changes. Instead, we add lightweight proxy QPushButtons that
+    forward clicks to the originals, so all of QWizard's state machinery
+    (enabled/disabled, finish-on-last-page, field validation, etc.) keeps
+    working unmodified.
+    """
+
+    # Hide QWizard's default bottom buttons without touching its button layout
+    # or reparenting them.
+    _internal_button_ids = (
+        qt.QWizard.BackButton,
+        qt.QWizard.NextButton,
+        qt.QWizard.FinishButton,
+        qt.QWizard.CancelButton,
+        qt.QWizard.CommitButton,
+        qt.QWizard.HelpButton,
+    )
+    for bid in _internal_button_ids:
+        btn = wizard.button(bid)
+        if btn is None:
+            continue
+        btn.setVisible(False)
+        btn.setMaximumHeight(0)
+        btn.setMaximumWidth(0)
+
+    # Build proxy buttons for each page once. Pages have already been added by
+    # the caller, so wizard.pageIds() returns all of them.
+    finish_text = wizard.buttonText(qt.QWizard.FinishButton) or "Finish"
+    for page_id in wizard.pageIds():
+        page = wizard.page(page_id)
+        if page is None:
+            continue
+        ui = getattr(page, "ui", None)
+        nav_layout = getattr(ui, "_wizardNavButtonLayout", None) if ui is not None else None
+        if nav_layout is None:
+            continue
+
+        back_btn = qt.QPushButton("< Back")
+        next_btn = qt.QPushButton("Next >")
+        finish_btn = qt.QPushButton(finish_text)
+        cancel_btn = qt.QPushButton("Cancel")
+
+        back_btn.clicked.connect(lambda _checked=False, w=wizard: w.button(qt.QWizard.BackButton).click())
+        next_btn.clicked.connect(lambda _checked=False, w=wizard: w.button(qt.QWizard.NextButton).click())
+        finish_btn.clicked.connect(lambda _checked=False, w=wizard: w.button(qt.QWizard.FinishButton).click())
+        cancel_btn.clicked.connect(lambda _checked=False, w=wizard: w.button(qt.QWizard.CancelButton).click())
+
+        nav_layout.addWidget(back_btn)
+        nav_layout.addStretch(1)
+        nav_layout.addWidget(next_btn)
+        nav_layout.addWidget(finish_btn)
+        nav_layout.addWidget(cancel_btn)
+
+        page._proxyBackButton = back_btn
+        page._proxyNextButton = next_btn
+        page._proxyFinishButton = finish_btn
+        page._proxyCancelButton = cancel_btn
+
+    start_id = wizard.startId
+
+    def _sync_proxy_enabled():
+        # Mirror each internal QWizard button's `enabled` state onto its proxy
+        # on the current page. QWizard already toggles Next/Finish via the
+        # page's isComplete(); we just reflect that into the visible proxy so
+        # 'Approve' greys out while a page is being edited (unlocked).
+        page = wizard.page(wizard.currentId)
+        if page is None:
+            return
+        for bid, attr in (
+            (qt.QWizard.BackButton,   "_proxyBackButton"),
+            (qt.QWizard.NextButton,   "_proxyNextButton"),
+            (qt.QWizard.FinishButton, "_proxyFinishButton"),
+            (qt.QWizard.CancelButton, "_proxyCancelButton"),
+        ):
+            internal = wizard.button(bid)
+            proxy = getattr(page, attr, None)
+            if internal is None or proxy is None:
+                continue
+            proxy.setEnabled(internal.enabled)
+
+    def _refresh(_id):
+        page = wizard.page(_id)
+        if page is None:
+            return
+        back_btn = getattr(page, "_proxyBackButton", None)
+        next_btn = getattr(page, "_proxyNextButton", None)
+        finish_btn = getattr(page, "_proxyFinishButton", None)
+        is_final = page.nextId() == -1
+        if back_btn is not None:
+            back_btn.setVisible(_id != start_id)
+        if next_btn is not None:
+            next_btn.setVisible(not is_final)
+        if finish_btn is not None:
+            finish_btn.setVisible(is_final)
+        _sync_proxy_enabled()
+
+    wizard.currentIdChanged.connect(_refresh)
+    # completeChanged is the signal each page emits when its isComplete()
+    # answer flips; mirror to the proxy enabled states.
+    for page_id in wizard.pageIds():
+        p = wizard.page(page_id)
+        if p is not None:
+            p.completeChanged.connect(_sync_proxy_enabled)
+    if start_id != -1:
+        _refresh(start_id)
+
 
 def set_threeD_view_widget(ui):
 

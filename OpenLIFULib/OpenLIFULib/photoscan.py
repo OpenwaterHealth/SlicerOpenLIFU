@@ -162,6 +162,17 @@ class SlicerOpenLIFUPhotoscan:
 
     def set_view_nodes(self,viewNodes: List[vtkMRMLViewNode] = []):
         """ If a viewNode is not specified, the model is displayed in all views by default"""
-        self.model_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
-        if self.facial_landmarks_fiducial_node:
-            self.facial_landmarks_fiducial_node.GetDisplayNode().SetViewNodeIDs([node.GetID() for node in viewNodes] if viewNodes else ())
+        # Use RemoveAllViewNodeIDs() rather than SetViewNodeIDs(()) when clearing
+        # so the view-scope is reliably reset (PythonQt's empty-collection handling
+        # for SetViewNodeIDs has been observed to leave stale wizard view IDs in place).
+        model_display = self.model_node.GetDisplayNode()
+        fl_display = self.facial_landmarks_fiducial_node.GetDisplayNode() if self.facial_landmarks_fiducial_node else None
+        if viewNodes:
+            ids = [node.GetID() for node in viewNodes]
+            model_display.SetViewNodeIDs(ids)
+            if fl_display is not None:
+                fl_display.SetViewNodeIDs(ids)
+        else:
+            model_display.RemoveAllViewNodeIDs()
+            if fl_display is not None:
+                fl_display.RemoveAllViewNodeIDs()

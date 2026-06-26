@@ -83,8 +83,20 @@ def apply_module_view_state(module_key: str) -> None:
         if pose_node is not None:
             _apply_transducer_pose(transducer, pose_node)
         _set_skin_visible(volume_node, True)
-        _set_photoscan_registered_visible_for_tt(
-            approved_tt_node or any_tt_node, any_tt_node is not None, opacity=0.5)
+        # Show the registered photoscan whenever any TT or an approved PR exists. When
+        # only a PR exists (e.g. the user just approved a registration but has not yet
+        # run tracking), still show its photoscan; revoking approval hides it again.
+        photoscan_id_for_view: Optional[str] = _photoscan_id_for_tt_node(any_tt_node)
+        if photoscan_id_for_view is None:
+            latest_pr = _find_latest_pr_node(approved_only=True)
+            if latest_pr is not None:
+                photoscan_id_for_view = latest_pr.GetAttribute("PR:photoscanID")
+        if photoscan_id_for_view is not None:
+            _set_photoscan_registered_visible_for_tt(
+                approved_tt_node or any_tt_node, True, opacity=0.5,
+                photoscan_id_override=photoscan_id_for_view)
+        else:
+            _set_photoscan_registered_visible_for_tt(None, False)
 
     elif module_key in (SONICATION_PLANNER, SONICATION_CONTROL):
         pose_node = approved_tt_node or approved_vf_node
@@ -176,6 +188,30 @@ def _find_approved_vf_node():
     return None
 
 
+def _find_latest_pr_node(approved_only: bool = False):
+    """The most recently added PR transform node in the current session, or None."""
+    from OpenLIFULib.photoscan_registrations import (
+        get_photoscan_registration_nodes_in_scene,
+    )
+    session_id = _get_session_id()
+    nodes = list(get_photoscan_registration_nodes_in_scene(
+        session_id=session_id, approved_only=approved_only))
+    if session_id is None:
+        nodes = [n for n in nodes if n.GetAttribute("PR:sessionID") is None]
+    if not nodes:
+        return None
+
+    def _idx(n):
+        raw = n.GetAttribute("PR:registrationIndex")
+        try:
+            return int(raw) if raw is not None else -1
+        except ValueError:
+            return -1
+
+    nodes.sort(key=_idx)
+    return nodes[-1]
+
+
 def _photoscan_id_for_tt_node(tt_node) -> Optional[str]:
     if tt_node is None:
         return None
@@ -210,6 +246,7 @@ def _set_photoscan_registered_visible_for_tt(
     tt_node,
     visible: bool,
     opacity: Optional[float] = None,
+    photoscan_id_override: Optional[str] = None,
 ) -> None:
     """Show or hide the photoscan model in the main view, parenting it to the
     photoscan-to-volume registration that is paired with the given TT result so
@@ -217,53 +254,66 @@ def _set_photoscan_registered_visible_for_tt(
     relative to the transducer when multiple registrations exist for the same photoscan).
 
     Falls back to the latest approved (then any) PR for the photoscan when ``tt_node``
-    is None.
+    is None. ``photoscan_id_override`` lets callers (e.g. LOCALIZATION mode after a fresh
+    PR but before any TT) pick a photoscan directly when no TT result is available yet.
     """
-    photoscan_id = _photoscan_id_for_tt_node(tt_node)
+    photoscan_id = photoscan_id_override or _photoscan_id_for_tt_node(tt_node)
+
+    if not visible:
+        # Hide every loaded photoscan when no specific one was identified, so callers
+        # that just want "no photoscan on screen" (e.g. PrePlanning) work regardless
+        # of which photoscan was last shown.
+        photoscans_to_hide = (
+            [_get_loaded_slicer_photoscan(photoscan_id)] if photoscan_id is not None
+            else list(get_openlifu_data_parameter_node().loaded_photoscans.values())
+        )
+        for slicer_photoscan in photoscans_to_hide:
+            if slicer_photoscan is None or slicer_photoscan.model_node is None:
+                continue
+            if slicer_photoscan.model_node.GetDisplayVisibility() != 0:
+                slicer_photoscan.model_node.SetDisplayVisibility(False)
+            slicer_photoscan.model_node.SetAndObserveTransformNodeID(None)
+        return
+
     slicer_photoscan = _get_loaded_slicer_photoscan(photoscan_id)
     if slicer_photoscan is None or slicer_photoscan.model_node is None:
         return
 
-    if visible:
-        from OpenLIFULib.photoscan_registrations import (
-            get_photoscan_registration_by_id,
-            get_photoscan_registration_nodes_in_scene,
+    from OpenLIFULib.photoscan_registrations import (
+        get_photoscan_registration_by_id,
+        get_photoscan_registration_nodes_in_scene,
+    )
+    session_id = _get_session_id()
+    pr_node = None
+    # Prefer the PR that is explicitly paired with this TT (via TT:registrationID).
+    if tt_node is not None:
+        registration_id = tt_node.GetAttribute("TT:registrationID")
+        if registration_id:
+            pr_node = get_photoscan_registration_by_id(registration_id, session_id)
+    # Fall back: prefer an approved PR for the photoscan, then any PR.
+    if pr_node is None:
+        pr_nodes = get_photoscan_registration_nodes_in_scene(
+            session_id=session_id,
+            photoscan_id=photoscan_id,
+            approved_only=True,
         )
-        session_id = _get_session_id()
-        pr_node = None
-        # Prefer the PR that is explicitly paired with this TT (via TT:registrationID).
-        if tt_node is not None:
-            registration_id = tt_node.GetAttribute("TT:registrationID")
-            if registration_id:
-                pr_node = get_photoscan_registration_by_id(registration_id, session_id)
-        # Fall back: prefer an approved PR for the photoscan, then any PR.
-        if pr_node is None:
+        if not pr_nodes:
             pr_nodes = get_photoscan_registration_nodes_in_scene(
                 session_id=session_id,
                 photoscan_id=photoscan_id,
-                approved_only=True,
             )
-            if not pr_nodes:
-                pr_nodes = get_photoscan_registration_nodes_in_scene(
-                    session_id=session_id,
-                    photoscan_id=photoscan_id,
-                )
-            if session_id is None:
-                pr_nodes = [n for n in pr_nodes if n.GetAttribute("PR:sessionID") is None]
-            pr_node = pr_nodes[0] if pr_nodes else None
-        if pr_node is not None:
-            slicer_photoscan.model_node.SetAndObserveTransformNodeID(pr_node.GetID())
-        # Restrict to default 3D views (clear any wizard-only view-scope).
-        display_node = slicer_photoscan.model_node.GetDisplayNode()
-        if display_node is not None:
-            display_node.SetViewNodeIDs([])
-            if opacity is not None:
-                display_node.SetOpacity(opacity)
-            else:
-                display_node.SetOpacity(1.0)
-        if slicer_photoscan.model_node.GetDisplayVisibility() != 1:
-            slicer_photoscan.model_node.SetDisplayVisibility(True)
-    else:
-        if slicer_photoscan.model_node.GetDisplayVisibility() != 0:
-            slicer_photoscan.model_node.SetDisplayVisibility(False)
-        slicer_photoscan.model_node.SetAndObserveTransformNodeID(None)
+        if session_id is None:
+            pr_nodes = [n for n in pr_nodes if n.GetAttribute("PR:sessionID") is None]
+        pr_node = pr_nodes[0] if pr_nodes else None
+    if pr_node is not None:
+        slicer_photoscan.model_node.SetAndObserveTransformNodeID(pr_node.GetID())
+    # Restrict to default 3D views (clear any wizard-only view-scope).
+    display_node = slicer_photoscan.model_node.GetDisplayNode()
+    if display_node is not None:
+        display_node.SetViewNodeIDs([])
+        if opacity is not None:
+            display_node.SetOpacity(opacity)
+        else:
+            display_node.SetOpacity(1.0)
+    if slicer_photoscan.model_node.GetDisplayVisibility() != 1:
+        slicer_photoscan.model_node.SetDisplayVisibility(True)
