@@ -64,6 +64,11 @@
              <string>Scan ID</string>
             </property>
            </column>
+           <column>
+            <property name="text">
+             <string># of Photos</string>
+            </property>
+           </column>
           </widget>
          </item>
          <item>
@@ -85,6 +90,16 @@
              </property>
              <property name="toolTip">
               <string>Preview the selected photocollection.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="generatePhotoscanFromPhotocollectionButton">
+             <property name="text">
+              <string>Generate Photoscan</string>
+             </property>
+             <property name="toolTip">
+              <string>Generate a photoscan locally from the selected photocollection. This process can take up to 20 minutes.</string>
              </property>
             </widget>
            </item>
@@ -141,12 +156,22 @@
            </attribute>
            <column>
             <property name="text">
-             <string>Photoscan ID</string>
+             <string>Scan ID</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Scan Name</string>
             </property>
            </column>
            <column>
             <property name="text">
              <string>Registration</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Approved</string>
             </property>
            </column>
           </widget>
@@ -160,16 +185,6 @@
              </property>
              <property name="toolTip">
               <string>Add a photoscan from the Open Water Android app or from disk.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="generatePhotoscanFromPhotocollectionButton">
-             <property name="text">
-              <string>Generate from Photocollection</string>
-             </property>
-             <property name="toolTip">
-              <string>Generate a photoscan locally from a photocollection of the subject. This process can take up to 20 minutes.</string>
              </property>
             </widget>
            </item>
@@ -190,16 +205,6 @@
              </property>
              <property name="toolTip">
               <string>Run the photoscan-to-volume registration wizard for the selected photoscan.</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="togglePhotoscanRegistrationApprovalButton">
-             <property name="text">
-              <string>Revoke Registration</string>
-             </property>
-             <property name="toolTip">
-              <string>Toggle the approval of the selected photoscan's registration. Revoking approval cascades to any localization results that reference it.</string>
              </property>
             </widget>
            </item>
@@ -305,12 +310,12 @@
         </column>
         <column>
          <property name="text">
-          <string>Distance from VF (mm)</string>
+          <string>Target ID</string>
          </property>
         </column>
         <column>
          <property name="text">
-          <string>Target ID</string>
+          <string>Distance from VF (mm)</string>
          </property>
         </column>
         <column>
@@ -339,16 +344,6 @@
           </property>
           <property name="toolTip">
            <string>Launch the wizard pre-filled with the selected row's photoscan to edit that tracking result.</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="toggleLocalizationApprovalButton">
-          <property name="text">
-           <string>Toggle Approval</string>
-          </property>
-          <property name="toolTip">
-           <string>Toggle approval for the selected localization result.</string>
           </property>
          </widget>
         </item>
