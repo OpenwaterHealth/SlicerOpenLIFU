@@ -147,6 +147,11 @@
              <string>Photoscan ID</string>
             </property>
            </column>
+           <column>
+            <property name="text">
+             <string>Registration</string>
+            </property>
+           </column>
           </widget>
          </item>
          <item>
@@ -191,6 +196,26 @@
              </property>
              <property name="toolTip">
               <string>Preview the selected photoscan.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="registerPhotoscanToVolumeButton">
+             <property name="text">
+              <string>Register to Volume</string>
+             </property>
+             <property name="toolTip">
+              <string>Run the photoscan-to-volume registration wizard for the selected photoscan.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="togglePhotoscanRegistrationApprovalButton">
+             <property name="text">
+              <string>Revoke Registration</string>
+             </property>
+             <property name="toolTip">
+              <string>Toggle the approval of the selected photoscan's registration. Revoking approval cascades to any localization results that reference it.</string>
              </property>
             </widget>
            </item>
