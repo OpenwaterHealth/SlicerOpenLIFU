@@ -50,7 +50,7 @@ from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
-from OpenLIFULib.targets import fiducial_to_openlifu_point_id
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id, get_target_candidates
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.transducer import TRANSDUCER_MODEL_COLORS
 from OpenLIFULib.transducer_tracking_results import (
@@ -93,9 +93,14 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, display_errors
 from OpenLIFULib.notifications import notify
-from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
+from OpenLIFULib.virtual_fit_results import (
+    get_approval_from_virtual_fit_result_node,
+    get_approved_target_ids,
+    get_best_virtual_fit_result_node,
+    get_virtual_fit_approval_for_target,
+)
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
 
 # These imports are for IDE and static analysis purposes only
@@ -964,6 +969,11 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.runICPRegistrationTP.clicked.connect(self.onRunICPRegistrationClicked)
         self.ui.pageLockButton.clicked.connect(self.togglePageLock)
 
+        # Photoscan / target pickers on this page replace the former TargetPage. Changing
+        # either re-runs the wizard's heavy setup with the new inputs.
+        self.ui.photoscanComboBoxTP.currentIndexChanged.connect(self._onPhotoscanComboChanged)
+        self.ui.targetComboBoxTP.currentIndexChanged.connect(self._onTargetComboChanged)
+
         # Connect visibility settings
         self.ui.transducerVisibilityCheckBox.stateChanged.connect(
             lambda state: self.wizard().transducer_body.SetDisplayVisibility(state == qt.Qt.Checked))
@@ -984,9 +994,103 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
         self.ui.initializeTPRegistration.setToolTip("Use the best virtual fit result to initialize the transducer position. If virtual fit has not been run,"
         "the transform is initialized to idenity.")
-    
+
+    def _populatePhotoscanCombo(self):
+        wz = self.wizard()
+        combo = self.ui.photoscanComboBoxTP
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            if wz is None:
+                combo.setEnabled(False)
+                return
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id = None if session is None else session.get_session_id()
+            approved_ids = set(get_photoscan_ids_with_approved_registrations(session_id))
+            loaded_photoscans = get_openlifu_data_parameter_node().loaded_photoscans
+            current_id = wz.photoscan.get_id() if wz.photoscan is not None else None
+            selected_index = -1
+            for slicer_photoscan in loaded_photoscans.values():
+                ph = slicer_photoscan.photoscan.photoscan
+                if ph.id not in approved_ids:
+                    continue
+                display = getattr(ph, "name", None) or ph.id
+                combo.addItem(display, ph)
+                if ph.id == current_id:
+                    selected_index = combo.count - 1
+            if selected_index >= 0:
+                combo.setCurrentIndex(selected_index)
+            combo.setEnabled(combo.count > 1)
+        finally:
+            combo.blockSignals(False)
+
+    def _populateTargetCombo(self):
+        wz = self.wizard()
+        combo = self.ui.targetComboBoxTP
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            if wz is None:
+                combo.setEnabled(False)
+                return
+            session = get_openlifu_data_parameter_node().loaded_session
+            session_id = None if session is None else session.get_session_id()
+            approved_target_ids = set(get_approved_target_ids(session_id))
+            current_target_id = wz._target_id
+            selected_index = -1
+            for target_node in get_target_candidates():
+                target_id = fiducial_to_openlifu_point_id(target_node)
+                if target_id not in approved_target_ids:
+                    continue
+                label = (target_node.GetNthControlPointLabel(0)
+                         if target_node.GetNumberOfControlPoints() > 0 else None)
+                display = label or target_id
+                combo.addItem(display, target_id)
+                if target_id == current_target_id:
+                    selected_index = combo.count - 1
+            if selected_index >= 0:
+                combo.setCurrentIndex(selected_index)
+            combo.setEnabled(combo.count > 1)
+        finally:
+            combo.blockSignals(False)
+
+    def _onPhotoscanComboChanged(self, index: int):
+        if index < 0:
+            return
+        wz = self.wizard()
+        if wz is None or not hasattr(wz, "_swap_inputs"):
+            return
+        new_openlifu = self.ui.photoscanComboBoxTP.itemData(index)
+        if new_openlifu is None or wz.photoscan is None:
+            return
+        if new_openlifu.id == wz.photoscan.get_id():
+            return
+        wz._swap_inputs(new_photoscan_openlifu=new_openlifu, new_target_id=wz._target_id)
+        self._populatePhotoscanCombo()
+        self._populateTargetCombo()
+
+    def _onTargetComboChanged(self, index: int):
+        if index < 0:
+            return
+        wz = self.wizard()
+        if wz is None or not hasattr(wz, "_swap_inputs"):
+            return
+        new_target_id = self.ui.targetComboBoxTP.itemData(index)
+        if not new_target_id or new_target_id == wz._target_id:
+            return
+        if wz.photoscan is None:
+            return
+        current_photoscan_openlifu = wz.photoscan.photoscan.photoscan
+        wz._swap_inputs(new_photoscan_openlifu=current_photoscan_openlifu, new_target_id=new_target_id)
+        self._populatePhotoscanCombo()
+        self._populateTargetCombo()
+
     def initializePage(self):
         """ This function is called when the user clicks 'Next'."""
+
+        # Refresh the input pickers; heavy setup ran in customexec_ before this page is shown.
+        self._populatePhotoscanCombo()
+        self._populateTargetCombo()
 
         view_node = self.wizard().volume_view_node
         set_threeD_view_node(self.viewWidget, view_node)
@@ -1218,121 +1322,19 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
             return False
         return not self.runningRegistration and self.page_locked
 
-class TargetPage(qt.QWizardPage):
-    """Wizard page 0: choose photoscan/volume/transducer for this localization run.
-
-    Hosts its own OpenLIFUAlgorithmInputWidget so the main TL panel no longer needs
-    one. On Next, this page commits the selections onto the wizard and triggers the
-    heavy setup (skin segmentation, photoscan load, view nodes, virtual-fit clone,
-    prior-result pre-load) that previously ran in the wizard constructor.
-    """
-    def __init__(self, parent=None):
-        super().__init__()
-        self.setTitle("Select inputs for transducer localization")
-        self.ui = initialize_wizard_ui(self)
-        self.ui.dialogControls.setCurrentIndex(4)
-        # Page-lock panel and 3D view are unused on the inputs page; hide them so the
-        # horizontal-layout right column does not show an empty viewport.
-        self.ui.lockPanel.setVisible(False)
-        self.ui.viewWidgetPlaceholder.setVisible(False)
-
-        # Reparent placeholder with an OpenLIFUAlgorithmInputWidget.
-        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(["Photoscan", "Volume", "Transducer"])
-        replace_widget(self.ui.wizardAlgorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
-        self.algorithm_input_widget.connect_combobox_indexchanged_signal(lambda: self.completeChanged())
-
-        self._heavy_setup_done = False
-
-    def initializePage(self):
-        # Populate dropdowns from the current scene state. If the caller pre-set an
-        # initial photoscan/result selection, mirror that into the widget here.
-        self.algorithm_input_widget.update()
-
-        # TT-only mode: hide the remember-PR checkbox; the chosen photoscan's approved PR
-        # is always reused as-is (the PR wizard owns photoscan-to-volume registration now).
-        self.ui.rememberPhotoscanRegistrationCheckBox.setVisible(False)
-
-        # Filter the Photoscan combobox to only those with an approved photoscan registration
-        # in the current session. This enforces the rule that a TT result can only be created
-        # after PR approval.
-        session = get_openlifu_data_parameter_node().loaded_session
-        session_id = None if session is None else session.get_session_id()
-        approved_photoscan_ids = set(get_photoscan_ids_with_approved_registrations(session_id))
-        photoscan_combo = self.algorithm_input_widget.inputs_dict["Photoscan"].combo_box
-        for i in reversed(range(photoscan_combo.count)):
-            photoscan_openlifu = photoscan_combo.itemData(i)
-            if photoscan_openlifu is None:
-                continue
-            if photoscan_openlifu.id not in approved_photoscan_ids:
-                photoscan_combo.removeItem(i)
-        if photoscan_combo.count == 0:
-            self.algorithm_input_widget.inputs_dict["Photoscan"].indicate_no_options()
-            photoscan_combo.setToolTip(
-                "No photoscans with an approved registration to the volume. "
-                "Register a photoscan first using 'Register to Volume'."
-            )
-
-        wz = self.wizard()
-        initial_photoscan_id = getattr(wz, "_initial_photoscan_id", None)
-
-        # When editing an existing result, prefer its saved photoscan id over the
-        # initial hint so the wizard sticks with the result's original photoscan.
-        if wz._result_id is not None:
-            existing_tv = get_transducer_tracking_result_by_id(wz._result_id, session_id)
-            if existing_tv is not None:
-                saved_photoscan_id = existing_tv.GetAttribute("TT:photoscanID")
-                if saved_photoscan_id:
-                    initial_photoscan_id = saved_photoscan_id
-
-        if initial_photoscan_id is not None:
-            loaded_photoscans = get_openlifu_data_parameter_node().loaded_photoscans
-            if initial_photoscan_id in loaded_photoscans:
-                photoscan_openlifu = loaded_photoscans[initial_photoscan_id].photoscan.photoscan
-                self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
-
-        # If heavy setup ran on a prior validate (e.g. user came Back from page 1),
-        # lock the inputs so the user cannot silently change them without redoing setup.
-        if self._heavy_setup_done:
-            self.algorithm_input_widget.setEnabled(False)
-            self.ui.rememberPhotoscanRegistrationCheckBox.setEnabled(False)
-
-    def isComplete(self):
-        if not self.algorithm_input_widget.has_valid_selections():
-            return False
-        data = self.algorithm_input_widget.get_current_data()
-        td = data.get("Transducer")
-        if td is None or td.surface_model_node is None or td.body_model_node is None:
-            return False
-        return True
-
-    def validatePage(self):
-        if self._heavy_setup_done:
-            return True
-        if not self.isComplete():
-            return False
-        data = self.algorithm_input_widget.get_current_data()
-        photoscan_openlifu = data["Photoscan"]
-        volume = data["Volume"]
-        transducer = data["Transducer"]
-        remember = self.ui.rememberPhotoscanRegistrationCheckBox.isChecked()
-        try:
-            self.wizard()._initializeHeavyContent(
-                photoscan_openlifu=photoscan_openlifu,
-                volume=volume,
-                transducer=transducer,
-                remember_prior_registration=remember,
-            )
-        except Exception as e:
-            slicer.util.errorDisplay(f"Failed to initialize transducer localization wizard: {e}", parent=self.wizard())
-            return False
-        self._heavy_setup_done = True
-        self.algorithm_input_widget.setEnabled(False)
-        self.ui.rememberPhotoscanRegistrationCheckBox.setEnabled(False)
-        return True
-
 class TransducerTrackingWizard(qt.QWizard):
+    """Single-page transducer-to-photoscan tracking wizard.
+
+    The Photoscan and Target pickers live on the TransducerPhotoscanTrackingPage itself
+    (replacing the former TargetPage). Volume + Transducer are resolved from the loaded
+    session. Changing either picker tears down the previous wizard state and re-runs
+    heavy setup with the new inputs via :meth:`_swap_inputs`.
+
+    Requires a loaded session with an approved photoscan registration for the chosen
+    photoscan (created by :class:`PhotoscanRegistrationWizard`) and an approved virtual
+    fit result for the chosen target.
+    """
     def __init__(self,
-                 virtual_fit_result_node: Optional[vtkMRMLTransformNode],
                  result_id: Optional[str] = None,
                  target_id: Optional[str] = None,
                  initial_photoscan_id: Optional[str] = None):
@@ -1349,19 +1351,22 @@ class TransducerTrackingWizard(qt.QWizard):
         # Hide all context menu items
         pluginLogic.allowedViewContextMenuActionNames = ["NoActionsAllowed"]
 
-        # Inputs committed by TargetPage.validatePage; remain None until then.
+        # Inputs committed by _initializeHeavyContent; remain None until then.
         self.transducer: Optional[SlicerOpenLIFUTransducer] = None
         self.transducer_surface = None
         self.transducer_body = None
         self.skin_mesh_node = None
         self.photoscan = None
-        self.virtual_fit_result_node = virtual_fit_result_node
+        self.virtual_fit_result_node: Optional[vtkMRMLTransformNode] = None
 
         # Pre-loaded tt result nodes (filled by _initializeHeavyContent when result_id is given).
         self.photoscan_to_volume_transform_node = None
         self.transducer_to_volume_transform_node = None
         self._valid_tt_result_exists = False
         self._existing_approval_revoked = False
+        # Set to True once setupViewNodes has cached the pre-wizard transducer visibility/view-nodes;
+        # prevents subsequent swaps from overwriting the original state with the wizard's overrides.
+        self._view_node_state_saved = False
 
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setWizardStyle(qt.QWizard.ClassicStyle)
@@ -1376,54 +1381,97 @@ class TransducerTrackingWizard(qt.QWizard):
         self.node_observations : Dict[str,List[int]] = defaultdict(list)
 
         self.setWindowTitle("Transducer Localization Wizard")
-        self.targetPage = TargetPage(self)
-        # PR-side pages are owned by PhotoscanRegistrationWizard now; the TT wizard only
-        # holds the target picker and the transducer-photoscan registration page.
+        # PR-side pages are owned by PhotoscanRegistrationWizard; the TT wizard is single-page.
         self.photoscanMarkupPage = None
         self.skinSegmentationMarkupPage = None
         self.photoscanVolumeTrackingPage = None
         self.transducerPhotoscanTrackingPage = TransducerPhotoscanTrackingPage(self)
-
-        self.addPage(self.targetPage)
         self.addPage(self.transducerPhotoscanTrackingPage)
 
-        # Move QWizard's Back/Next/Cancel/Approve buttons into the active page's
-        # left-column nav slot instead of the default full-width bottom bar.
+        # Move QWizard's Cancel/Approve buttons into the page's left-column nav slot.
         hook_wizard_nav_buttons(self)
+
+    # ----- Initial-input resolution -----
+
+    def _resolve_initial_photoscan(self):
+        """Pick the openlifu Photoscan to load initially: prefer ``_initial_photoscan_id``
+        when it has an approved PR, else the first photoscan with an approved PR."""
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session is None:
+            return None
+        session_id = session.get_session_id()
+        approved_ids = set(get_photoscan_ids_with_approved_registrations(session_id))
+        loaded_photoscans = get_openlifu_data_parameter_node().loaded_photoscans
+        if self._initial_photoscan_id and self._initial_photoscan_id in loaded_photoscans:
+            ph = loaded_photoscans[self._initial_photoscan_id].photoscan.photoscan
+            if ph.id in approved_ids:
+                return ph
+        for slicer_photoscan in loaded_photoscans.values():
+            ph = slicer_photoscan.photoscan.photoscan
+            if ph.id in approved_ids:
+                return ph
+        return None
+
+    def _resolve_initial_target_id(self) -> Optional[str]:
+        """Pick the target id to use initially: prefer ``_target_id`` when it has an
+        approved VF, else the first target with an approved VF."""
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session is None:
+            return None
+        session_id = session.get_session_id()
+        approved = list(get_approved_target_ids(session_id))
+        if self._target_id and self._target_id in approved:
+            return self._target_id
+        return approved[0] if approved else None
+
+    def _resolve_volume(self) -> Optional[vtkMRMLScalarVolumeNode]:
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session is None:
+            return None
+        return session.volume_node
+
+    def _resolve_transducer(self) -> "Optional[SlicerOpenLIFUTransducer]":
+        session = get_openlifu_data_parameter_node().loaded_session
+        param_node = get_openlifu_data_parameter_node()
+        if session is None:
+            return None
+        return param_node.loaded_transducers.get(session.get_transducer_id())
+
+    # ----- Heavy content + swap -----
 
     def _initializeHeavyContent(self,
                                 photoscan_openlifu,
-                                volume: vtkMRMLScalarVolumeNode,
-                                transducer: SlicerOpenLIFUTransducer,
-                                remember_prior_registration: bool = False):
-        """Run setup that depends on the photoscan/volume/transducer selections. Called
-        from TargetPage.validatePage() after the user clicks Next on the start page.
-
-        Resolves the approved PR for the chosen photoscan; the TT wizard now requires
-        an existing approved PR (created by :class:`PhotoscanRegistrationWizard`) and
-        does not produce a new one. The PR transform node is parented to the photoscan
-        model so it appears in volume space inside the wizard view.
-        """
+                                target_id: Optional[str]):
+        """Load the chosen photoscan, resolve its approved PR, and resolve the VF for the
+        chosen target. Configures wizard-only view nodes. Volume + transducer come from the
+        loaded session."""
         with BusyCursor():
-            self.transducer = transducer
-            if transducer.surface_model_node is None or transducer.body_model_node is None:
-                raise RuntimeError("The selected transducer does not have an affiliated body model and/or registration surface model, which are needed to run tracking.")
-            self.transducer_surface = transducer.surface_model_node
-            self.transducer_body = transducer.body_model_node
+            session = get_openlifu_data_parameter_node().loaded_session
+            if session is None:
+                raise RuntimeError("Transducer localization requires a loaded session.")
+            session_id = session.get_session_id()
 
+            self.transducer = self._resolve_transducer()
+            if self.transducer is None:
+                raise RuntimeError("No transducer is loaded for the current session.")
+            if self.transducer.surface_model_node is None or self.transducer.body_model_node is None:
+                raise RuntimeError(
+                    "The session transducer is missing a body model and/or registration surface model.")
+            self.transducer_surface = self.transducer.surface_model_node
+            self.transducer_body = self.transducer.body_model_node
+
+            volume = self._resolve_volume()
+            if volume is None:
+                raise RuntimeError("The session has no associated volume.")
             self.skin_mesh_node = get_skin_segmentation(volume)
             if self.skin_mesh_node is None:
                 raise RuntimeError(
-                    "No skin segmentation exists for the selected volume. Run the "
-                    "Photoscan Registration wizard first to create one."
+                    "No skin segmentation exists for the session volume. "
+                    "Run the Photoscan Registration wizard first to create one."
                 )
 
             self.photoscan = self._logic.load_openlifu_photoscan(photoscan_openlifu)
 
-            # Resolve the approved PR for this photoscan. TargetPage filters the combobox to
-            # photoscans with approved PRs, so this should always succeed; raise defensively.
-            session = get_openlifu_data_parameter_node().loaded_session
-            session_id = None if session is None else session.get_session_id()
             approved_pr_nodes = get_photoscan_registration_nodes_in_scene(
                 session_id=session_id,
                 photoscan_id=self.photoscan.get_id(),
@@ -1434,10 +1482,15 @@ class TransducerTrackingWizard(qt.QWizard):
                     f"No approved photoscan registration exists for photoscan '{self.photoscan.get_id()}'."
                 )
             self.photoscan_to_volume_transform_node = approved_pr_nodes[0]
-            # Parent the photoscan model so the wizard view shows it in volume space.
-            self.photoscan.model_node.SetAndObserveTransformNodeID(self.photoscan_to_volume_transform_node.GetID())
+            self.photoscan.model_node.SetAndObserveTransformNodeID(
+                self.photoscan_to_volume_transform_node.GetID())
 
-            if self.virtual_fit_result_node:
+            self._target_id = target_id
+            self.virtual_fit_result_node = (
+                get_best_virtual_fit_result_node(target_id=target_id, session_id=session_id)
+                if target_id else None
+            )
+            if self.virtual_fit_result_node is not None:
                 self.transducer.set_cloned_virtual_fit_model(self.virtual_fit_result_node)
 
             self.setupViewNodes()
@@ -1451,9 +1504,71 @@ class TransducerTrackingWizard(qt.QWizard):
                     if not get_approval_from_transducer_tracking_result_node(self.transducer_to_volume_transform_node):
                         self._existing_approval_revoked = True
 
-            _ = remember_prior_registration  # checkbox is hidden in TT-only mode
+    def _teardown_inputs(self) -> None:
+        """Undo the side effects of a prior :meth:`_initializeHeavyContent` so the wizard
+        can be re-initialized with a different (photoscan, target) pair. Discards the
+        TT page's in-flight transform; the user must re-click Initialize after a swap."""
+        page = self.transducerPhotoscanTrackingPage
+        if page.transducer_to_volume_transform_node is not None:
+            self.clean_up_observers(page.transducer_to_volume_transform_node)
+            slicer.mrmlScene.RemoveNode(page.transducer_to_volume_transform_node)
+            page.transducer_to_volume_transform_node = None
+        page.runningRegistration = False
+        page.page_locked = True
+        page.ui.TPICPRegistrationMetricLabel.text = ""
+
+        if self.photoscan is not None:
+            if self.photoscan.model_node is not None:
+                self.photoscan.model_node.SetAndObserveTransformNodeID(None)
+            self.photoscan.set_view_nodes([])
+
+        if self.transducer is not None:
+            if self.transducer_surface is not None:
+                self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+            if self.transducer_body is not None:
+                self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+            if self.transducer.cloned_virtual_fit_model is not None:
+                slicer.mrmlScene.RemoveNode(self.transducer.cloned_virtual_fit_model)
+                self.transducer.cloned_virtual_fit_model = None
+
+        # A swap implies the result key (photoscan + target) has changed; the pre-loaded
+        # TT for the old key no longer applies.
+        self.transducer_to_volume_transform_node = None
+        self._result_id = None
+        self._valid_tt_result_exists = False
+        self._existing_approval_revoked = False
+
+    def _swap_inputs(self, new_photoscan_openlifu, new_target_id: Optional[str]) -> None:
+        """Swap photoscan and/or target: tear down state, re-run heavy setup, refresh page."""
+        self._teardown_inputs()
+        try:
+            self._initializeHeavyContent(new_photoscan_openlifu, new_target_id)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to load new inputs: {e}", parent=self)
+            return
+        current_page = self.page(self.currentId)
+        if isinstance(current_page, TransducerPhotoscanTrackingPage):
+            current_page.initializePage()
+        self.setPageSpecificNodeDisplaySettings(self.currentId)
 
     def customexec_(self):
+        initial_photoscan = self._resolve_initial_photoscan()
+        initial_target_id = self._resolve_initial_target_id()
+        if initial_photoscan is None or initial_target_id is None:
+            slicer.util.errorDisplay(
+                "Transducer localization requires a session with at least one photoscan with an "
+                "approved registration to the volume, and at least one target with an approved virtual fit.",
+                parent=self,
+            )
+            return (qt.QDialog.Rejected, None, None)
+
+        try:
+            self._initializeHeavyContent(initial_photoscan, initial_target_id)
+        except Exception as e:
+            slicer.util.errorDisplay(
+                f"Failed to initialize transducer localization wizard: {e}", parent=self)
+            return (qt.QDialog.Rejected, None, None)
+
         self._needs_initial_maximize = True
         self.setWindowFlags(self.windowFlags() | qt.Qt.WindowFlags.CustomizeWindowHint | qt.Qt.WindowFlags.WindowMaximizeButtonHint)
         returncode = self.exec_()
@@ -1462,7 +1577,7 @@ class TransducerTrackingWizard(qt.QWizard):
             self.transducer_to_volume_transform_node,
             self._result_id,
         )
-    
+
     def setPageSpecificNodeDisplaySettings(self, page_id: int):
         current_page = self.page(page_id)
 
@@ -1485,13 +1600,8 @@ class TransducerTrackingWizard(qt.QWizard):
                 dialog_page.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
             else:
                 dialog_page.setSizePolicy(qt.QSizePolicy.Ignored, qt.QSizePolicy.Ignored)
-                
-        current_page.ui.dialogControls.updateGeometry()
 
-        # TargetPage runs before any photoscan/skin/transducer state is committed;
-        # no scene-level display tweaks needed here.
-        if isinstance(current_page, TargetPage):
-            return
+        current_page.ui.dialogControls.updateGeometry()
 
         if isinstance(current_page, TransducerPhotoscanTrackingPage):
 
@@ -1568,27 +1678,33 @@ class TransducerTrackingWizard(qt.QWizard):
         """Handle Cancel button click."""
 
         self.clean_up()
-        self.transducer.update_color()
+        if self.transducer is not None:
+            self.transducer.update_color()
         self.reject()  # Closes the wizard
-    
+
     def clean_up(self):
         """Clean up routine before exiting wizard"""
 
-        self.resetViewNodes()
+        if self.photoscan is not None and self.transducer is not None:
+            self.resetViewNodes()
 
         # Reset the transducer surface to observe the transducer transform
-        self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
-        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+        if self.transducer is not None:
+            if self.transducer_surface is not None:
+                self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+            if self.transducer_body is not None:
+                self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
 
         # Restore transducer surface display settings
-        self.transducerPhotoscanTrackingPage._update_distance_map_visibility(
-            visible = False,
-            model = self.transducer_surface
-        )
+        if self.transducer_surface is not None:
+            self.transducerPhotoscanTrackingPage._update_distance_map_visibility(
+                visible = False,
+                model = self.transducer_surface
+            )
 
         self.clearWizardNodes()
         # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
-        # This forced set of the interaction node is needed to solve that. 
+        # This forced set of the interaction node is needed to solve that.
         interactionNode = slicer.app.applicationLogic().GetInteractionNode()
         interactionNode.SwitchToViewTransformMode()
 
@@ -1601,7 +1717,9 @@ class TransducerTrackingWizard(qt.QWizard):
         # Ensure any temporary variables are cleared. Nodes in the scene are not updated.
         # The PR transform is persistent and is NOT removed here; only the TT-side temporary
         # transform owned by TransducerPhotoscanTrackingPage gets cleaned.
-        slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
+        page = self.transducerPhotoscanTrackingPage
+        if page.transducer_to_volume_transform_node is not None:
+            slicer.mrmlScene.RemoveNode(page.transducer_to_volume_transform_node)
 
     def clean_up_observers(self, node: vtkMRMLNode):
         """ Removes any tagged observers associated with this node """
@@ -1609,17 +1727,17 @@ class TransducerTrackingWizard(qt.QWizard):
             return
         for tag in self.node_observations.pop(node.GetID()):
             node.RemoveObserver(tag)
-        
+
     def setupViewNodes(self):
-                
+
         # Create a viewNode for displaying the photoscan if it hasn't been created
         photoscan_id = self.photoscan.get_id()
         if self.photoscan.view_node is None:
             self.photoscan.view_node = create_threeD_photoscan_view_node(photoscan_id = photoscan_id)
-            
-            # Update the photoscan stored in the data parameter node 
+
+            # Update the photoscan stored in the data parameter node
             get_openlifu_data_parameter_node().loaded_photoscans[self.photoscan.get_id()] = self.photoscan
-        
+
         self.volume_view_node = get_threeD_transducer_tracking_view_node()
         wizard_view_nodes = [self.photoscan.view_node, self.volume_view_node]
 
@@ -1627,8 +1745,8 @@ class TransducerTrackingWizard(qt.QWizard):
         hide_displayable_nodes_from_view(wizard_view_nodes = wizard_view_nodes)
 
         # Set view nodes for the skin mesh, transducer and photoscan
-        # We are okay with overwriting the view nodes and potentially hiding these models from the main view. 
-        # This ensures that visibility settings or transformations applied in the wizard are not simultaneously visible in the main window. 
+        # We are okay with overwriting the view nodes and potentially hiding these models from the main view.
+        # This ensures that visibility settings or transformations applied in the wizard are not simultaneously visible in the main window.
         self.skin_mesh_node.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.skin_mesh_node.GetDisplayNode().SetOpacity(1.0)
         self.skin_mesh_node.SetSelectable(True)
@@ -1639,24 +1757,26 @@ class TransducerTrackingWizard(qt.QWizard):
         parentFolderID = shNode.GetItemParent(shNode.GetItemByDataNode(self.transducer_surface))
         shNode.SetItemDisplayVisibility(parentFolderID, True)
 
-        # If the transducer surface has specific view nodes associated with it, maintain those view nodes
-        # We need to check for current view settings since the transducer exists in the scene
-        # before the wizard. Note: the transducer model remains visible in the scene
-        self.current_transducer_surface_visibility = self.transducer_surface.GetDisplayNode().GetVisibility()
-        self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
+        # Save the pre-wizard transducer view state ONCE so swaps don't overwrite the
+        # original with the wizard's overridden state.
+        if not self._view_node_state_saved:
+            self.current_transducer_surface_visibility = self.transducer_surface.GetDisplayNode().GetVisibility()
+            self.current_transducer_surface_viewnodes = self.transducer_surface.GetDisplayNode().GetViewNodeIDs()
+            self.current_transducer_body_visibility = self.transducer_body.GetDisplayNode().GetVisibility()
+            self.current_transducer_body_viewnodes = self.transducer_body.GetDisplayNode().GetViewNodeIDs()
+            self._view_node_state_saved = True
+
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.transducer_surface.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
-        self.current_transducer_body_visibility = self.transducer_body.GetDisplayNode().GetVisibility()
-        self.current_transducer_body_viewnodes = self.transducer_body.GetDisplayNode().GetViewNodeIDs()
         self.transducer_body.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.transducer_body.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
-        
+
         if self.transducer.cloned_virtual_fit_model:
             self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
 
         self.photoscan.set_view_nodes(wizard_view_nodes)
         self.photoscan.model_node.GetDisplayNode().SetOpacity(1.0)
-        
+
     def resetViewNodes(self):
         """Resets the view nodes of all models created by the wizard to null '()'. This allows the
         user to toggle and view the models in the main window through scene manipulation if they 
@@ -4494,7 +4614,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         self._running_wizard = True
         self.wizard = TransducerTrackingWizard(
-            virtual_fit_result_node = self._virtual_fit_transform_for_tracking,
             result_id = result_id,
             target_id = target_id_for_wizard,
             initial_photoscan_id = initial_photoscan_id,

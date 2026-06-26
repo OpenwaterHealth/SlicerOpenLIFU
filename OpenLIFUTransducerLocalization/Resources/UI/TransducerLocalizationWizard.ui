@@ -491,6 +491,54 @@
      <widget class="QWidget" name="TransducerPhotoscanTracking">
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
+        <layout class="QHBoxLayout" name="photoscanPickerLayoutTP">
+         <item>
+          <widget class="QLabel" name="photoscanPickerLabelTP">
+           <property name="text">
+            <string>Photoscan:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="photoscanComboBoxTP">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Photoscans with an approved registration to the volume.</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="targetPickerLayoutTP">
+         <item>
+          <widget class="QLabel" name="targetPickerLabelTP">
+           <property name="text">
+            <string>Target:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="targetComboBoxTP">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Targets with an approved virtual fit result for this transducer.</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
         <spacer name="verticalSpacer_TransducerPhotoscanTracking">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
