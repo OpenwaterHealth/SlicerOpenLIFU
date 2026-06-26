@@ -3515,8 +3515,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         session = get_openlifu_data_parameter_node().loaded_session
         session_id = None if session is None else session.get_session_id()
         approved_pr_ids = set(get_photoscan_ids_with_approved_registrations(session_id))
-        approved_brush = qt.QBrush(qt.QColor("#DFFFD6"))  # light green
-        unapproved_brush = qt.QBrush(qt.QColor("#FFE4B5"))  # tracked-but-not-approved highlight
         affiliated_photoscans = (getattr(session, "affiliated_photoscans", None) or {}) if session is not None else {}
         table.blockSignals(True)
         table.setRowCount(len(photoscan_ids))
@@ -3541,23 +3539,16 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 pr_nodes_for_id = get_photoscan_registration_nodes_in_scene(
                     session_id=session_id, photoscan_id=photoscan_id,
                 )
-            if has_pr:
-                status_text = "Approved"
-                brush = approved_brush
-            elif pr_nodes_for_id:
-                status_text = "Unapproved"
-                brush = unapproved_brush
-            else:
-                status_text = "\u2014"
-                brush = None
+            any_pr_exists = has_pr or bool(pr_nodes_for_id)
+            # Registration column reports presence (True/False) only; the Approved
+            # column on the right covers the approval state.
+            status_text = "True" if any_pr_exists else "False"
             status_item = qt.QTableWidgetItem(status_text)
             status_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
-            if brush is not None:
-                status_item.setBackground(brush)
+            status_item.setTextAlignment(qt.Qt.AlignCenter)
             table.setItem(row, 2, status_item)
 
             approval_item = qt.QTableWidgetItem("")
-            any_pr_exists = has_pr or bool(pr_nodes_for_id)
             if any_pr_exists:
                 approval_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable)
                 approval_item.setCheckState(qt.Qt.Checked if has_pr else qt.Qt.Unchecked)
@@ -3794,9 +3785,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         pr_node = self._get_selected_photoscan_registration_node()
 
-        # Register/Edit Registration button: always enabled when a photoscan is selected.
-        # Label flips depending on whether a PR already exists. Clicking while the PR is
-        # approved triggers a confirm-revoke-and-edit flow in onRegisterPhotoscanToVolumeClicked.
+        # Register/Edit Registration button: enabled when a photoscan is selected,
+        # except that Edit is disabled for an approved PR -- the user must first
+        # uncheck the Approved column for the photoscan before editing.
         register_btn = self.ui.registerPhotoscanToVolumeButton
         if selected_photoscan_id is None:
             register_btn.setText("Register to Volume")
@@ -3808,11 +3799,12 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             register_btn.setToolTip("Open the photoscan-to-volume registration wizard.")
         else:
             register_btn.setText("Edit Registration")
-            register_btn.setEnabled(True)
-            if get_approval_from_photoscan_registration_node(pr_node):
+            is_approved = get_approval_from_photoscan_registration_node(pr_node)
+            register_btn.setEnabled(not is_approved)
+            if is_approved:
                 register_btn.setToolTip(
-                    "Edit the registration. Approval will be revoked (with confirmation) "
-                    "and any dependent localization results dropped."
+                    "Unapprove this photoscan's registration (uncheck the Approved column) "
+                    "before editing it."
                 )
             else:
                 register_btn.setToolTip("Edit the unapproved photoscan-to-volume registration.")
