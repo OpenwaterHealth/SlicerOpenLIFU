@@ -53,21 +53,19 @@ def apply_module_view_state(module_key: str) -> None:
     approved_tt_node = _find_approved_tt_transducer_node()
     any_tt_node = approved_tt_node or _find_any_tt_transducer_node()
     approved_vf_node = _find_approved_vf_node()
-    tt_photoscan_id = _photoscan_id_for_tt_node(approved_tt_node) \
-        or _photoscan_id_for_tt_node(any_tt_node)
 
     if module_key == SESSION:
         if approved_tt_node is not None:
             _apply_transducer_pose(transducer, approved_tt_node)
             _set_skin_visible(volume_node, False)
-            _set_photoscan_registered_visible(tt_photoscan_id, True, opacity=0.25)
+            _set_photoscan_registered_visible_for_tt(approved_tt_node, True, opacity=0.25)
         elif approved_vf_node is not None:
             _apply_transducer_pose(transducer, approved_vf_node)
             _set_skin_visible(volume_node, True)
-            _set_photoscan_registered_visible(tt_photoscan_id, False)
+            _set_photoscan_registered_visible_for_tt(None, False)
         else:
             _set_skin_visible(volume_node, True)
-            _set_photoscan_registered_visible(tt_photoscan_id, False)
+            _set_photoscan_registered_visible_for_tt(None, False)
 
     elif module_key == PREPLANNING:
         # Snap the transducer to the approved VF (if any) so going Back from later modules
@@ -76,24 +74,25 @@ def apply_module_view_state(module_key: str) -> None:
         if approved_vf_node is not None:
             _apply_transducer_pose(transducer, approved_vf_node)
         _set_skin_visible(volume_node, True)
-        _set_photoscan_registered_visible(tt_photoscan_id, False)
+        _set_photoscan_registered_visible_for_tt(None, False)
 
     elif module_key == LOCALIZATION:
-        pose_node = any_tt_node or approved_vf_node
+        # Prefer the approved TT (matches what Solution/Control display) so going Back
+        # from later steps doesn't leave the view stuck on a stale or different pose.
+        pose_node = approved_tt_node or any_tt_node or approved_vf_node
         if pose_node is not None:
             _apply_transducer_pose(transducer, pose_node)
         _set_skin_visible(volume_node, True)
-        _set_photoscan_registered_visible(tt_photoscan_id, any_tt_node is not None, opacity=0.5)
+        _set_photoscan_registered_visible_for_tt(
+            approved_tt_node or any_tt_node, any_tt_node is not None, opacity=0.5)
 
     elif module_key in (SONICATION_PLANNER, SONICATION_CONTROL):
         pose_node = approved_tt_node or approved_vf_node
         if pose_node is not None:
             _apply_transducer_pose(transducer, pose_node)
         _set_skin_visible(volume_node, False)
-        _set_photoscan_registered_visible(
-            tt_photoscan_id,
-            approved_tt_node is not None,
-            opacity=0.25,
+        _set_photoscan_registered_visible_for_tt(
+            approved_tt_node, approved_tt_node is not None, opacity=0.25,
         )
 
 
@@ -132,14 +131,12 @@ def _get_loaded_volume_node():
 def _find_approved_tt_transducer_node():
     """The approved transducer_to_volume TT result node, if any (at most one under the one-approval rule)."""
     from OpenLIFULib.transducer_tracking_results import (
-        TransducerTrackingTransformType,
         get_transducer_tracking_result_nodes_in_scene,
     )
     session_id = _get_session_id()
     nodes = list(get_transducer_tracking_result_nodes_in_scene(
         session_id=session_id,
         photoscan_id=None,
-        transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
     ))
     if session_id is None:
         nodes = [n for n in nodes if n.GetAttribute("TT:sessionID") is None]
@@ -152,14 +149,12 @@ def _find_approved_tt_transducer_node():
 def _find_any_tt_transducer_node():
     """The most recently added transducer_to_volume TT result node, regardless of approval."""
     from OpenLIFULib.transducer_tracking_results import (
-        TransducerTrackingTransformType,
         get_transducer_tracking_result_nodes_in_scene,
     )
     session_id = _get_session_id()
     nodes = list(get_transducer_tracking_result_nodes_in_scene(
         session_id=session_id,
         photoscan_id=None,
-        transform_type=TransducerTrackingTransformType.TRANSDUCER_TO_VOLUME,
     ))
     if session_id is None:
         nodes = [n for n in nodes if n.GetAttribute("TT:sessionID") is None]
@@ -211,34 +206,53 @@ def _get_loaded_slicer_photoscan(photoscan_id: Optional[str]):
     return get_openlifu_data_parameter_node().loaded_photoscans.get(photoscan_id)
 
 
-def _set_photoscan_registered_visible(
-    photoscan_id: Optional[str],
+def _set_photoscan_registered_visible_for_tt(
+    tt_node,
     visible: bool,
     opacity: Optional[float] = None,
 ) -> None:
     """Show or hide the photoscan model in the main view, parenting it to the
-    saved photoscan_to_volume transform when becoming visible so it appears
-    registered to the volume rather than at identity."""
+    photoscan-to-volume registration that is paired with the given TT result so
+    pose and registration come from the same record (otherwise the model can drift
+    relative to the transducer when multiple registrations exist for the same photoscan).
+
+    Falls back to the latest approved (then any) PR for the photoscan when ``tt_node``
+    is None.
+    """
+    photoscan_id = _photoscan_id_for_tt_node(tt_node)
     slicer_photoscan = _get_loaded_slicer_photoscan(photoscan_id)
     if slicer_photoscan is None or slicer_photoscan.model_node is None:
         return
 
     if visible:
-        from OpenLIFULib.transducer_tracking_results import (
-            TransducerTrackingTransformType,
-            get_transducer_tracking_result_nodes_in_scene,
+        from OpenLIFULib.photoscan_registrations import (
+            get_photoscan_registration_by_id,
+            get_photoscan_registration_nodes_in_scene,
         )
         session_id = _get_session_id()
-        pv_nodes = list(get_transducer_tracking_result_nodes_in_scene(
-            session_id=session_id,
-            photoscan_id=photoscan_id,
-            transform_type=TransducerTrackingTransformType.PHOTOSCAN_TO_VOLUME,
-        ))
-        if session_id is None:
-            pv_nodes = [n for n in pv_nodes if n.GetAttribute("TT:sessionID") is None]
-        pv_node = pv_nodes[0] if pv_nodes else None
-        if pv_node is not None:
-            slicer_photoscan.model_node.SetAndObserveTransformNodeID(pv_node.GetID())
+        pr_node = None
+        # Prefer the PR that is explicitly paired with this TT (via TT:registrationID).
+        if tt_node is not None:
+            registration_id = tt_node.GetAttribute("TT:registrationID")
+            if registration_id:
+                pr_node = get_photoscan_registration_by_id(registration_id, session_id)
+        # Fall back: prefer an approved PR for the photoscan, then any PR.
+        if pr_node is None:
+            pr_nodes = get_photoscan_registration_nodes_in_scene(
+                session_id=session_id,
+                photoscan_id=photoscan_id,
+                approved_only=True,
+            )
+            if not pr_nodes:
+                pr_nodes = get_photoscan_registration_nodes_in_scene(
+                    session_id=session_id,
+                    photoscan_id=photoscan_id,
+                )
+            if session_id is None:
+                pr_nodes = [n for n in pr_nodes if n.GetAttribute("PR:sessionID") is None]
+            pr_node = pr_nodes[0] if pr_nodes else None
+        if pr_node is not None:
+            slicer_photoscan.model_node.SetAndObserveTransformNodeID(pr_node.GetID())
         # Restrict to default 3D views (clear any wizard-only view-scope).
         display_node = slicer_photoscan.model_node.GetDisplayNode()
         if display_node is not None:

@@ -696,6 +696,56 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="targetSelection">
+      <layout class="QVBoxLayout" name="verticalLayout_targetSelection">
+       <item>
+        <widget class="QLabel" name="targetSelectionInstructionsLabel">
+         <property name="text">
+          <string>Select the photoscan, volume, and transducer to use for this transducer localization. Click Next to continue.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="wizardAlgorithmInputWidgetPlaceholder" native="true">
+         <layout class="QFormLayout" name="formLayout_targetSelection">
+          <item row="0" column="0">
+           <widget class="QLabel" name="wizardAlgorithmInputPlaceholderLabel">
+            <property name="text">
+             <string>Placeholder for an OpenLIFUAlgorithmInputWidget</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="rememberPhotoscanRegistrationCheckBox">
+         <property name="toolTip">
+          <string>If checked and a prior approved transducer localization exists for the selected (photoscan, target), the photoscan-to-volume registration from that prior result is used as the starting point for this new run.</string>
+         </property>
+         <property name="text">
+          <string>Remember photoscan registration from prior result (if any)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_targetSelection">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>

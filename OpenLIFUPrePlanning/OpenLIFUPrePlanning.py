@@ -459,7 +459,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         tl_logic = getattr(tl_widget, "logic", None) if tl_widget is not None else None
         if tl_logic is not None:
             from OpenLIFULib.transducer_tracking_results import (
-                TransducerTrackingTransformType,
                 get_all_transducer_tracking_results,
                 get_approval_from_transducer_tracking_result_node,
                 get_result_id_from_transducer_tracking_result_node,
@@ -467,16 +466,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             )
             session = get_openlifu_data_parameter_node().loaded_session
             session_id = None if session is None else session.get_session_id()
-            for tv, pv in list(get_all_transducer_tracking_results(session_id)):
-                if not (get_approval_from_transducer_tracking_result_node(tv)
-                        and get_approval_from_transducer_tracking_result_node(pv)):
+            for tt_node in list(get_all_transducer_tracking_results(session_id)):
+                if not get_approval_from_transducer_tracking_result_node(tt_node):
                     continue
-                tt_target_id = get_target_id_from_transducer_tracking_result_node(tv)
+                tt_target_id = get_target_id_from_transducer_tracking_result_node(tt_node)
                 if target_id is not None and tt_target_id is not None and tt_target_id != target_id:
                     # Different target -- this VF revocation does not affect that TT.
                     continue
                 tl_widget.revokeTransducerTrackingApprovalIfAny(
-                    result_id=get_result_id_from_transducer_tracking_result_node(tv),
+                    result_id=get_result_id_from_transducer_tracking_result_node(tt_node),
                     reason=(
                         "The underlying virtual fit approval was revoked"
                         + (f": {reason}" if reason else ".")

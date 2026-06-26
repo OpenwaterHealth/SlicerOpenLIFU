@@ -67,6 +67,12 @@ from OpenLIFULib.transducer_tracking_results import (
     get_photoscan_id_from_transducer_tracking_result,
     is_transducer_tracking_result_node,
 )
+from OpenLIFULib.photoscan_registrations import (
+    add_photoscan_registrations_from_openlifu_session_format,
+    clear_photoscan_registrations,
+    get_photoscan_registration_by_id,
+    is_photoscan_registration_node,
+)
 from OpenLIFULib.user_account_mode_util import (
     get_current_user,
     get_user_account_mode_state,
@@ -6529,6 +6535,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     self.remove_photoscan(photoscan_id)
 
             clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
+            clear_photoscan_registrations(session_id = loaded_session.get_session_id())
 
             self.session_loading_unloading_in_progress = False
 
@@ -6866,22 +6873,48 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 newly_loaded_transducer.set_visibility(True)
                 slicer.util.getModuleLogic("OpenLIFUPrePlanning").chosen_virtual_fit = vf_node
 
+        # === Load photoscan registrations ===
+        # PRs must be loaded BEFORE the TT results below so that TT entries whose
+        # photoscan_registration_id references a PR can resolve it. Orphaned TT entries
+        # (whose registration_id refers to a PR not present in the session) are dropped
+        # silently with a log warning.
+
+        newly_added_pr_nodes = add_photoscan_registrations_from_openlifu_session_format(
+            pr_list_openlifu = session_openlifu.photoscan_registrations,
+            session_id = session_openlifu.id,
+            replace=True,
+        )
+
+        for pr_node in newly_added_pr_nodes:
+            slicer.modules.OpenLIFUTransducerLocalizationWidget.watchPhotoscanRegistrationNode(pr_node)
+            newly_loaded_transducer.move_node_into_transducer_sh_folder(pr_node)
+
         # === Load transducer localization results ===
+        # Filter out orphans: TT entries referring to a PR id that did not load successfully.
+        loaded_pr_ids = {
+            pr.id for pr in session_openlifu.photoscan_registrations if pr.id is not None
+        }
+        valid_tt_results = []
+        for tt in session_openlifu.transducer_tracking_results:
+            if tt.photoscan_registration_id is not None and tt.photoscan_registration_id not in loaded_pr_ids:
+                logging.warning(
+                    "Skipping orphaned TT result %r in session %r: photoscan_registration_id=%r not found in session.",
+                    tt.id, session_openlifu.id, tt.photoscan_registration_id,
+                )
+                continue
+            valid_tt_results.append(tt)
 
         newly_added_tt_result_nodes = add_transducer_tracking_results_from_openlifu_session_format(
-            tt_results_openlifu = session_openlifu.transducer_tracking_results,
+            tt_results_openlifu = valid_tt_results,
             session_id = session_openlifu.id,
             transducer = newly_loaded_transducer.transducer.transducer,
             replace=True, # If there happen to already be some transducer localization result nodes that clash, loading a session will silently overwrite them.
         )
 
-        for (transducer_to_volume_node, photoscan_to_volume_node) in newly_added_tt_result_nodes:
+        for tt_node in newly_added_tt_result_nodes:
             transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
-            transducer_tracking_widget.watchTransducerTrackingNode(transducer_to_volume_node)
-            transducer_tracking_widget.watchTransducerTrackingNode(photoscan_to_volume_node)
-
-            newly_loaded_transducer.move_node_into_transducer_sh_folder(transducer_to_volume_node)
-            newly_loaded_transducer.move_node_into_transducer_sh_folder(photoscan_to_volume_node)
+            transducer_tracking_widget.watchTransducerTrackingNode(tt_node)
+            newly_loaded_transducer.move_node_into_transducer_sh_folder(tt_node)
 
         # === Toggle slice visibility and center slices on first target ===
 
@@ -6924,14 +6957,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             get_result_id_from_transducer_tracking_result_node,
         )
         matched_already = False
-        for transducer_to_volume_node, photoscan_to_volume_node in newly_added_tt_result_nodes:
-            tv_approved = get_approval_from_transducer_tracking_result_node(transducer_to_volume_node)
-            pv_approved = get_approval_from_transducer_tracking_result_node(photoscan_to_volume_node)
-            if not (tv_approved and pv_approved):
+        for tt_node in newly_added_tt_result_nodes:
+            if not get_approval_from_transducer_tracking_result_node(tt_node):
                 continue
-            result_id = get_result_id_from_transducer_tracking_result_node(transducer_to_volume_node)
-            if not matched_already and newly_loaded_transducer.is_matching_transform(transducer_to_volume_node):
-                newly_loaded_transducer.set_matching_transform(transducer_to_volume_node)
+            result_id = get_result_id_from_transducer_tracking_result_node(tt_node)
+            if not matched_already and newly_loaded_transducer.is_matching_transform(tt_node):
+                newly_loaded_transducer.set_matching_transform(tt_node)
                 newly_loaded_transducer.set_visibility(True)
                 matched_already = True
             else:

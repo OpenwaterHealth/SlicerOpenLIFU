@@ -18,6 +18,7 @@ from OpenLIFULib.transform_conversion import transducer_transform_node_to_openli
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.transducer_tracking_results import get_transducer_tracking_results_in_openlifu_session_format
+from OpenLIFULib.photoscan_registrations import get_photoscan_registrations_in_openlifu_session_format
 
 if TYPE_CHECKING:
     import openlifu
@@ -212,6 +213,12 @@ class SlicerOpenLIFUSession:
             units = transducer_openlifu.units,
         )
 
+        # Update photoscan registrations (must happen before TT serialization so that any TT
+        # node whose registration was just (re)approved/edited rides on the fresh PR list).
+        self.session.session.photoscan_registrations = get_photoscan_registrations_in_openlifu_session_format(
+            session_id=self.get_session_id(),
+        )
+
         #Update transducer localization results
         self.session.session.transducer_tracking_results = get_transducer_tracking_results_in_openlifu_session_format(
             session_id=self.get_session_id(),
@@ -224,14 +231,16 @@ class SlicerOpenLIFUSession:
         """Get the transducer localization approval state in the current session object, a list of photoscan IDs for which
         transducer localization is approved.
         """
+        # Post-split: a TT result no longer carries the PV approval flag; PV approval lives on
+        # the PhotoscanRegistration. We treat a photoscan as "approved for TT" when it has at
+        # least one approved TT result. (PR approval is queried separately.)
         session_openlifu = self.session.session
         approved_tt_results = [
             tt_result
             for tt_result in session_openlifu.transducer_tracking_results
-            if tt_result.transducer_to_volume_tracking_approved
-            and tt_result.photoscan_to_volume_tracking_approved
+            if tt_result.approval
             ]
-        
+
         approved_tt_photoscans = [
             photoscan.id
             for photoscan in self.get_affiliated_photoscans()
