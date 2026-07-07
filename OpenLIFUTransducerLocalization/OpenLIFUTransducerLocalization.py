@@ -3419,8 +3419,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     # ---- Manager (photocollections/photoscans) helpers ----
 
     def _get_photocollection_scan_ids(self) -> List[str]:
-        data_parameter_node = get_openlifu_data_parameter_node()
-        return list(data_parameter_node.session_photocollections or [])
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
+            return []
+        return list(loaded_session.get_affiliated_photocollection_ids() or [])
 
     def _get_photoscan_ids(self) -> List[str]:
         data_parameter_node = get_openlifu_data_parameter_node()
@@ -4175,11 +4177,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             return
         data_logic = slicer.util.getModuleLogic("OpenLIFUData")
         data_logic.remove_photocollection(scan_id)
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        if loaded_session is not None and scan_id in loaded_session.affiliated_photocollections:
-            loaded_session.affiliated_photocollections = [
-                s for s in loaded_session.affiliated_photocollections if s != scan_id
-            ]
         self._refresh_photocollections_table()
         self._update_manager_button_states()
         self.updatePhotoscanGenerationButtons()
@@ -4351,11 +4348,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 )
                 return
 
-            # Below is done twice because session_photocollections stored in the
-            # data parameter node is not the same as those stored in
-            # SlicerOpenLIFUSession and both must be updated
-            if photocollection_dict["scan_id"] not in data_parameter_node.session_photocollections:
-                data_parameter_node.session_photocollections.append(photocollection_dict["scan_id"]) # automatically load as well
             data_logic.update_photocollections_affiliated_with_loaded_session()
             self._refresh_photocollections_table()
             self._update_manager_button_states()
@@ -4385,11 +4377,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         data_logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
 
-        # Below is done twice because session_photocollections stored in the
-        # data parameter node is not the same as those stored in
-        # SlicerOpenLIFUSession and both must be updated
-        if photocollection_dict["scan_id"] not in data_parameter_node.session_photocollections:
-            data_parameter_node.session_photocollections.append(photocollection_dict["scan_id"]) # automatically load as well
         data_logic.update_photocollections_affiliated_with_loaded_session()
         self._refresh_photocollections_table()
         self._update_manager_button_states()
@@ -4431,7 +4418,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def onStartPhotoscanGenerationButtonClicked(self, checked:bool):
         add_slicer_log_handler("MeshRecon", "Mesh reconstruction")
         add_slicer_log_handler("Meshroom", "Meshroom process", use_dialogs=False)
-        scan_ids = get_openlifu_data_parameter_node().session_photocollections
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        scan_ids = list(loaded_session.get_affiliated_photocollection_ids() or []) if loaded_session is not None else []
         if len(scan_ids) > 1:
             dialog = PhotoscanFromPhotocollectionDialog(scan_ids)
             if dialog.exec_() == qt.QDialog.Accepted:
@@ -4924,10 +4912,11 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     def updateStartPhotoscanGenerationButton(self):
         button = self.ui.generatePhotoscanFromPhotocollectionButton
-        if get_openlifu_data_parameter_node().loaded_session is None:
+        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        if loaded_session is None:
             button.setEnabled(False)
             button.setToolTip("Generating a photoscan requires an active session.")
-        elif len(get_openlifu_data_parameter_node().session_photocollections) == 0:
+        elif len(loaded_session.get_affiliated_photocollection_ids() or []) == 0:
             button.setEnabled(False)
             button.setToolTip("Generating a photoscan requires at least one photocollection.")
         else:

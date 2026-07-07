@@ -71,8 +71,16 @@ class SlicerOpenLIFUSession:
         return self.session.session.protocol_id
 
     def get_volume_id(self) -> Optional[str]:
-        """Get the ID of the volume_node associated with this session"""
-        return self.volume_node.GetAttribute('OpenLIFUData.volume_id')
+        """Get the ID of the volume associated with this session.
+
+        Read from the openlifu Session field rather than the pack's
+        ``volume_node.GetAttribute(...)``: the parameterPack's MRML-node
+        reference can go stale (return None) when the volume node is removed
+        from the scene, which happens during ``clear_session`` and would
+        otherwise crash observers that call this before ``loaded_session``
+        itself is nulled.
+        """
+        return self.session.session.volume_id
 
     def transducer_is_valid(self) -> bool:
         """Return whether this session's transducer is present in the list of loaded objects."""
@@ -134,13 +142,20 @@ class SlicerOpenLIFUSession:
     def initialize_from_openlifu_session(
         session : "openlifu.db.Session",
         volume_info : dict,
+        affiliated_photocollections : Optional[List[str]] = None,
+        affiliated_photoscans : Optional[Dict[str, "openlifu.nav.photoscan.Photoscan"]] = None,
     ) -> "SlicerOpenLIFUSession":
         """Create a SlicerOpenLIFUSession from an openlifu Session, loading affiliated data into the scene.
 
         Args:
             session: OpenLIFU Session
             volume_info: Dictionary containing the metadata (name, id and filepath) of the volume
-            being loaded as part of the session
+                being loaded as part of the session
+            affiliated_photocollections: Optional list of photocollection scan_ids to seed the
+                session's affiliated_photocollections field. Callers should read this from the
+                database up-front so the returned session is fully populated in one shot.
+            affiliated_photoscans: Optional dict of ``{photoscan_id: openlifu Photoscan}`` to
+                seed the session's affiliated_photoscans field.
         """
 
         # Load volume
@@ -161,8 +176,17 @@ class SlicerOpenLIFUSession:
         # Load targets
         target_nodes = [openlifu_point_to_fiducial(target) for target in session.targets]
 
-
-        return SlicerOpenLIFUSession(SlicerOpenLIFUSessionWrapper(session), volume_node, target_nodes)
+        wrapped_photoscans = {
+            pid: SlicerOpenLIFUPhotoscanWrapper(ps)
+            for pid, ps in (affiliated_photoscans or {}).items()
+        }
+        return SlicerOpenLIFUSession(
+            SlicerOpenLIFUSessionWrapper(session),
+            volume_node,
+            target_nodes,
+            list(affiliated_photocollections or []),
+            wrapped_photoscans,
+        )
 
     def set_affiliated_photocollections(self, affiliated_photocollections : List[str]):
         

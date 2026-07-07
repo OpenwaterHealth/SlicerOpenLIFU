@@ -153,7 +153,6 @@ class OpenLIFUDataParameterNode:
     loaded_solution : "Optional[SlicerOpenLIFUSolution]"
     loaded_session : "Optional[SlicerOpenLIFUSession]"
     loaded_run: "Optional[SlicerOpenLIFURun]"
-    session_photocollections: List[str]
     loaded_photoscans: "Dict[str,SlicerOpenLIFUPhotoscan]"
 
 #
@@ -5583,19 +5582,30 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             loaded_session = self._parameterNode.loaded_session
             session_openlifu : "openlifu.db.Session" = loaded_session.session.session
             subject_openlifu = self.logic.get_subject(session_openlifu.subject_id)
-            protocol_openlifu : "openlifu.plan.Protocol" = loaded_session.get_protocol().protocol
-            
+
             self.ui.sessionStatusSubjectNameIdValueLabel.setText(
                 f"{subject_openlifu.name} (ID: {session_openlifu.subject_id})"
             )
             self.ui.sessionStatusSessionNameIdValueLabel.setText(
                 f"{session_openlifu.name} (ID: {session_openlifu.id})"
             )
-            self.ui.sessionStatusProtocolValueLabel.setText(
-                f"{protocol_openlifu.name} (ID: {session_openlifu.protocol_id})"
-            )
+            # Guard get_protocol() with protocol_is_valid() the same way get_transducer() is
+            # guarded below. This handler runs on any Data parameter-node ModifiedEvent, so it
+            # can transiently observe a session whose protocol/transducer registry entry has
+            # not yet been (or has been) populated -- e.g. between load_protocol_from_openlifu
+            # and loaded_session assignment during load_session, or between
+            # remove_protocol and clear_session's loaded_session=None during teardown.
+            # Fall back to displaying the id alone in that case; the session's own field
+            # (session_openlifu.protocol_id) is always present.
+            if loaded_session.protocol_is_valid():
+                protocol_openlifu : "openlifu.plan.Protocol" = loaded_session.get_protocol().protocol
+                self.ui.sessionStatusProtocolValueLabel.setText(
+                    f"{protocol_openlifu.name} (ID: {session_openlifu.protocol_id})"
+                )
+            else:
+                self.ui.sessionStatusProtocolValueLabel.setText(f"(ID: {session_openlifu.protocol_id})")
             self.ui.sessionStatusVolumeValueLabel.setText(session_openlifu.volume_id)
-            
+
             # Add a validity check here since this function call is triggered after a transducer is removed but 
             # before a session is invalidated. 
             if loaded_session.transducer_is_valid():
@@ -5603,6 +5613,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 self.ui.sessionStatusTransducerValueLabel.setText(
                     f"{transducer_openlifu.name} (ID: {session_openlifu.transducer_id})"
                 )
+            else:
+                self.ui.sessionStatusTransducerValueLabel.setText(f"(ID: {session_openlifu.transducer_id})")
 
             # Build the additional info message here; this is status text that conditionally displays.
             additional_info_messages : List[str] = []
@@ -6503,37 +6515,42 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 content is removed.
         """
 
+        # try/finally around the whole body so the flag is always restored, including
+        # the no-op early return and the clean_up_scene=False path. Otherwise a stuck
+        # flag would silently suppress future validate_session invalidations.
         self.session_loading_unloading_in_progress = True
+        try:
+            loaded_session = self.getParameterNode().loaded_session
+            if loaded_session is None:
+                return # There is no active session to clear
+            self.getParameterNode().loaded_session = None
+            if clean_up_scene:
+                loaded_session.clear_volume_and_target_nodes()
+                if loaded_session.get_transducer_id() in self.getParameterNode().loaded_transducers:
+                    self.remove_transducer(loaded_session.get_transducer_id())
+                if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
+                    self.remove_protocol(loaded_session.get_protocol_id())
+                if (
+                    self.getParameterNode().loaded_solution is not None
+                    and loaded_session.session.session.solution_id == self.getParameterNode().loaded_solution.solution.solution.id
+                ):
+                    # Don't clear the persisted session.solution_id link: we want to be able to reload
+                    # this session later and restore its Solution.
+                    self.clear_solution(clean_up_scene=True, update_session_link=False)
+                clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
+                for photocollection_id in list(loaded_session.get_affiliated_photocollection_ids()):
+                    # Pass the local session in explicitly: the parameter node has already been
+                    # nulled out above, so remove_photocollection cannot read the session back
+                    # through it.
+                    self.remove_photocollection(photocollection_id, loaded_session=loaded_session)
 
-        loaded_session = self.getParameterNode().loaded_session
-        if loaded_session is None:
-            return # There is no active session to clear
-        self.getParameterNode().loaded_session = None
-        if clean_up_scene:
-            loaded_session.clear_volume_and_target_nodes()
-            if loaded_session.get_transducer_id() in self.getParameterNode().loaded_transducers:
-                self.remove_transducer(loaded_session.get_transducer_id())
-            if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
-                self.remove_protocol(loaded_session.get_protocol_id())
-            if (
-                self.getParameterNode().loaded_solution is not None
-                and loaded_session.session.session.solution_id == self.getParameterNode().loaded_solution.solution.solution.id
-            ):
-                # Don't clear the persisted session.solution_id link: we want to be able to reload
-                # this session later and restore its Solution.
-                self.clear_solution(clean_up_scene=True, update_session_link=False)
-            clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
-            for photocollection_id in loaded_session.get_affiliated_photocollection_ids():
-                if photocollection_id in self.getParameterNode().session_photocollections:
-                    self.remove_photocollection(photocollection_id)
-            
-            for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
-                if photoscan_id in self.getParameterNode().loaded_photoscans:
-                    self.remove_photoscan(photoscan_id)
+                for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
+                    if photoscan_id in self.getParameterNode().loaded_photoscans:
+                        self.remove_photoscan(photoscan_id)
 
-            clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
-            clear_photoscan_registrations(session_id = loaded_session.get_session_id())
-
+                clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
+                clear_photoscan_registrations(session_id = loaded_session.get_session_id())
+        finally:
             self.session_loading_unloading_in_progress = False
 
     def save_session(self) -> None:
@@ -6645,12 +6662,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             # the session ID, and have a tool that adds and retrieves targets by session ID similar to what we do for virtual fit results
             session_openlifu = session.update_underlying_openlifu_session(targets)
             # Sync the photoscan / photocollection index into the openlifu Session
-            # dataclass. ``session_photocollections`` on the parameter node is the
-            # source of truth used everywhere else in the app, and
-            # ``affiliated_photoscans`` on the wrapper is populated from disk on load
-            # and via add/remove flows. Persisting them here is what lets the cleanup
-            # logic (and the on-disk session JSON) round-trip correctly.
-            session_openlifu.photocollections = list(parameter_node.session_photocollections or [])
+            # dataclass so the on-disk session JSON round-trips correctly. The wrapper's
+            # affiliated_* fields are the single source of truth for what belongs to the
+            # session in-memory.
+            session_openlifu.photocollections = list(session.get_affiliated_photocollection_ids() or [])
             session_openlifu.photoscans = list(session.get_affiliated_photoscan_ids() or [])
             parameter_node.loaded_session = session # remember to write the updated session into the parameter node
             return session_openlifu
@@ -6663,6 +6678,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         In guided mode we want this function to never ever return False -- it should not be
         possible to invalidate a session. Outside of guided mode, users can do all kinds of things like deleting
         data nodes that are in use by a session."""
+
+        # While a session load or unload is in progress, transient states such as
+        # "transducer already removed but loaded_session still populated" are expected
+        # and will be resolved by the time the load/unload completes. Do not fire
+        # invalidation popups during that window.
+        if self.session_loading_unloading_in_progress:
+            return False
 
         loaded_session = self.getParameterNode().loaded_session
 
@@ -6773,11 +6795,16 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         loaded_session = self.getParameterNode().loaded_session
         subject_id = loaded_session.get_subject_id()
         session_id = loaded_session.get_session_id()
-        
-        # Keep track of any photocollections associated with the session
-        affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        if affiliated_photocollections:
-            loaded_session.set_affiliated_photocollections(affiliated_photocollections)
+
+        # Read the authoritative list from disk and assign it via the wrapper setter.
+        # The wrapper's ``affiliated_photocollections`` is the single source of truth
+        # for photocollections belonging to this session; observers pick up the change
+        # via ModifiedEvent that fires when a @parameterPack field is reassigned.
+        # An empty list is a valid state and must overwrite any prior contents.
+        affiliated_photocollections = list(
+            get_cur_db().get_photocollection_reference_numbers(subject_id, session_id) or []
+        )
+        loaded_session.set_affiliated_photocollections(affiliated_photocollections)
 
     def update_photoscans_affiliated_with_loaded_session(self) -> None:
 
@@ -6785,10 +6812,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         subject_id = loaded_session.get_subject_id()
         session_id = loaded_session.get_session_id()
 
-        # Keep track of any photoscans associated with the session
+        # Read the authoritative catalog from disk and assign it via the wrapper setter.
+        # An empty dict is a valid state and must overwrite any prior contents (e.g. a
+        # photoscan that was deleted from disk between refreshes).
         affiliated_photoscans = {id:get_cur_db().load_photoscan(subject_id, session_id, id) for id in get_cur_db().get_photoscan_ids(subject_id, session_id)}
-        if affiliated_photoscans:
-            loaded_session.set_affiliated_photoscans(affiliated_photoscans)
+        loaded_session.set_affiliated_photoscans(affiliated_photoscans)
 
         # Eagerly load each affiliated photoscan into the scene (with visibility off by
         # default; see SlicerOpenLIFUPhotoscan.set_model_display_settings). This means
@@ -6803,6 +6831,8 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 self.load_photoscan_from_openlifu(
                     photoscan_openlifu,
                     load_from_active_session=True,
+                    subject_id=subject_id,
+                    session_id=session_id,
                     replace_confirmed=True,
                 )
             except Exception as e:
@@ -6898,10 +6928,24 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         volume_info = get_cur_db().get_volume_info(session_openlifu.subject_id, session_openlifu.volume_id)
 
-       # Create the SlicerOpenLIFU session object; this handles loading volume and targets
+        # Read the session's affiliated catalogs from disk BEFORE constructing new_session.
+        # This lets initialize_from_openlifu_session return a fully-populated pack, so that
+        # when we assign it to the parameter node below there is a single atomic transition
+        # rather than a sequence of intermediate states that observers might act on.
+        affiliated_photocollection_ids = list(
+            get_cur_db().get_photocollection_reference_numbers(subject_id, session_id) or []
+        )
+        affiliated_photoscans_openlifu = {
+            pid: get_cur_db().load_photoscan(subject_id, session_id, pid)
+            for pid in get_cur_db().get_photoscan_ids(subject_id, session_id)
+        }
+
+        # Create the SlicerOpenLIFU session object; this handles loading volume and targets
         new_session = SlicerOpenLIFUSession.initialize_from_openlifu_session(
             session_openlifu,
-            volume_info
+            volume_info,
+            affiliated_photocollections=affiliated_photocollection_ids,
+            affiliated_photoscans=affiliated_photoscans_openlifu,
         )
 
         # === Load transducer ===
@@ -7008,15 +7052,35 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         threeDView.resetFocalPoint()
 
         # === Set the newly created session as the currently active session ===
+        # new_session is already fully populated at this point (session, volume, targets,
+        # affiliated_photocollections, affiliated_photoscans). Assigning it here is the
+        # single atomic transition that observers should react to.
 
         self.getParameterNode().loaded_session = new_session
 
-        # === Keep track of affiliated photoscans and unload any conflicting photoscans that have been previously loaded ===
-        self.update_photoscans_affiliated_with_loaded_session()
-
-        # === Load photocollections as all scan_ids ===
-        session_affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        self.getParameterNode().session_photocollections = session_affiliated_photocollections
+        # === Eagerly load affiliated photoscans into the scene ===
+        # Downstream consumers -- photoscan manager preview, transducer localization -- can
+        # then assume an affiliated photoscan is already in ``loaded_photoscans`` and don't
+        # need to lazily load on first click. Pass subject_id and session_id explicitly so
+        # load_photoscan_from_openlifu doesn't need to re-read loaded_session out of the
+        # parameter node during this observer-active window.
+        already_loaded = self.getParameterNode().loaded_photoscans
+        for photoscan_id, wrapped_photoscan in new_session.affiliated_photoscans.items():
+            if photoscan_id in already_loaded:
+                continue
+            try:
+                self.load_photoscan_from_openlifu(
+                    wrapped_photoscan.photoscan,
+                    load_from_active_session=True,
+                    subject_id=subject_id,
+                    session_id=session_id,
+                    replace_confirmed=True,
+                )
+            except Exception as e:
+                logging.warning(
+                    "Could not eagerly load affiliated photoscan '%s' into the scene: %s",
+                    photoscan_id, e,
+                )
 
         # If there are any *approved* transducer localization results that we have just loaded in newly_added_tt_result_nodes,
         # then we check to see if any of them match the current transducer transform in terms of matrix values.
@@ -7251,6 +7315,16 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # Set the folder deletion flag to true
         self._folder_deletion_in_progress = True
 
+        # During deliberate load/teardown, remove_transducer takes care of unloading the
+        # transducer wrapper -- the folder removal we're observing here is a side effect of
+        # that same operation, not a user-driven manual deletion. Skip the user-facing
+        # "was unloaded because affiliated nodes were removed" warning and the follow-up
+        # validate_session (which would fire a second popup about the session being invalidated).
+        if self.session_loading_unloading_in_progress:
+            self._folder_deletion_in_progress = False
+            self._timer = None
+            return
+
         matching_transducer_openlifu_ids = [
             transducer_openlifu_id
             for transducer_openlifu_id, _ in self.getParameterNode().loaded_transducers.items()
@@ -7300,6 +7374,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # If False, then only the node was removed by manual manipulation and manual clean up of affiliated
         # transform nodes can take place if wanted.  
         def delayed_node_deletion():
+            # Same rationale as on_transducer_affiliated_folder_about_to_be_removed: during
+            # a deliberate load/teardown the transducer is already being unloaded by the
+            # code path that triggered this observer. Skip the warning + validate_session.
+            if self.session_loading_unloading_in_progress:
+                self._timer = None
+                return
             if not self._folder_deletion_in_progress:
                 #Remove the transducer, but keep any other nodes under it. This transducer was removed
                 # by manual mrml scene manipulation, so we don't want to pull other nodes out from
@@ -7557,7 +7637,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         else:
             slicer.util.errorDisplay("Invalid photoscan filetype specified")
 
-    def load_photoscan_from_openlifu(self, photoscan_openlifu, load_from_active_session: bool = False, parent_dir: Optional[str] = None, replace_confirmed : bool = False) -> SlicerOpenLIFUPhotoscan:
+    def load_photoscan_from_openlifu(self, photoscan_openlifu, load_from_active_session: bool = False, parent_dir: Optional[str] = None, replace_confirmed : bool = False, subject_id: Optional[str] = None, session_id: Optional[str] = None) -> SlicerOpenLIFUPhotoscan:
         """Load an openlifu photoscan object into the scene as a SlicerOpenLIFUPhotoscan,
         adding it to the list of loaded openlifu objects.
 
@@ -7568,6 +7648,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 photoscan object and affiliated model and texture files needs to be specified. 
             replace_confirmed: Whether we can bypass the prompt to re-load an already loaded Photoscan.
                 This could be used for example if we already know the user is okay with re-loading the photoscan.
+            subject_id: Explicit subject id for the database lookup path (used with ``load_from_active_session``).
+                When both ``subject_id`` and ``session_id`` are provided, no read of
+                ``parameter_node.loaded_session`` is performed. This lets callers use this method in
+                the middle of a session-load flow, where reaching back through the parameter node
+                would produce spurious observer cascades or race with intermediate state.
+            session_id: Explicit session id (see ``subject_id``).
 
         Returns: The newly loaded SlicerOpenLIFUPhotoscan.
         """
@@ -7591,8 +7677,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         with BusyCursor():
             if load_from_active_session:
-                loaded_session = self.getParameterNode().loaded_session
-                _, (model_data, texture_data) = get_cur_db().load_photoscan(loaded_session.get_subject_id(),loaded_session.get_session_id(),photoscan_openlifu.id, load_data = True)
+                if subject_id is None or session_id is None:
+                    loaded_session = self.getParameterNode().loaded_session
+                    if loaded_session is None:
+                        raise RuntimeError("Cannot load photoscan from active session: no session is loaded.")
+                    subject_id = loaded_session.get_subject_id()
+                    session_id = loaded_session.get_session_id()
+                _, (model_data, texture_data) = get_cur_db().load_photoscan(subject_id, session_id, photoscan_openlifu.id, load_data=True)
             else:
                 import openlifu.nav.photoscan
 
@@ -7637,17 +7728,26 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             ).customexec_()
             self.remove_photoscan(photoscan_openlifu_id, clean_up_scene=clean_up_scene)
 
-    def remove_photocollection(self, photocollection_id:str) -> None:
-        """Remove a photocollection from the list of loaded photocollections.
+    def remove_photocollection(self, photocollection_id:str, loaded_session: Optional[SlicerOpenLIFUSession] = None) -> None:
+        """Remove a photocollection from the loaded session's affiliated list.
 
         Args:
             photocollection_id: The openlifu scan_id of the photocollection to remove
+            loaded_session: Optional explicit session to mutate. When ``None``, falls back to
+                reading ``parameter_node.loaded_session``. Passing this explicitly is required in
+                flows like ``clear_session`` where the parameter node has already been nulled out
+                but the local reference to the outgoing session is still valid.
         """
-        session_photocollections = self.getParameterNode().session_photocollections
-        if not photocollection_id in session_photocollections:
+        if loaded_session is None:
+            loaded_session = self.getParameterNode().loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot remove photocollection: no session is loaded.")
+        affiliated = list(loaded_session.get_affiliated_photocollection_ids())
+        if photocollection_id not in affiliated:
             raise IndexError(f"No photocollection with scan_id {photocollection_id} appears to be loaded; cannot remove it.")
-
-        session_photocollections.remove(photocollection_id)
+        affiliated.remove(photocollection_id)
+        # Reassign via the setter so the @parameterPack fires ModifiedEvent on the parent parameter node.
+        loaded_session.set_affiliated_photocollections(affiliated)
 
     def remove_photoscan(self, photoscan_id:str, clean_up_scene:bool = True) -> None:
         """Remove a photoscan from the list of loaded photoscans, clearing away its data from the scene.
