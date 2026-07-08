@@ -272,6 +272,16 @@ Pick ONE module and land it end-to-end before proceeding. Recommended: **OpenLIF
 Then **OpenLIFUSession** (empty parameter node, read-only observer of Data — pure UI
 that reflects state).
 
+- [x] **Round 1b done (Session):** Widget/Logic/Test/ParameterNode class bodies extracted
+  to `OpenLIFU/OpenLIFUApp/pages/session_page.py`. `OpenLIFUSession/OpenLIFUSession.py`
+  reduced to module metadata + re-export of the four classes, so
+  `slicer.util.selectModule("OpenLIFUSession")` and
+  `slicer.modules.OpenLIFUSessionWidget` keep working during rounds 2-4. `Resources/UI`
+  and `Resources/Icons` remain in `OpenLIFUSession/` (Slicer resolves `self.resourcePath`
+  via the module directory). External caller `from OpenLIFUSession import
+  OpenLIFUSessionTest` in `OpenLIFUHome.py` still works via the re-export. The shell
+  module is deleted in Round 5 when the host owns page navigation.
+
 **Round 2 — passive workflow pages**
 
 - OpenLIFUPrePlanning
