@@ -8,9 +8,12 @@ adapter so ``slicer.util.getModuleLogic('OpenLIFUData')`` and
 import ...`` used by OpenLIFUHome, session_page, sonication_control_page)
 keep working until Round 5 folds page navigation into the host.
 
-Round 4b/4c will migrate ``loaded_*`` fields to ``OpenLIFUAppState``,
-delete ``get_openlifu_data_parameter_node()``, and convert the remaining
-VTK ``ModifiedEvent`` observers in Round-2 pages to Qt signals.
+Round 4c will delete ``get_openlifu_data_parameter_node()`` and convert
+the remaining VTK ``ModifiedEvent`` observers in Round-2 pages to Qt
+signals on ``OpenLIFUAppState.dataChanged``. The ``loaded_*`` fields
+already live on ``OpenLIFUAppState`` as of Round 4b;
+``OpenLIFUDataLogic.getParameterNode()`` returns an ``OpenLIFUAppState``
+wrapper.
 """
 
 from __future__ import annotations
@@ -114,6 +117,8 @@ from OpenLIFULib.virtual_fit_results import (
     clear_virtual_fit_results,
 )
 
+from OpenLIFUApp.logic.app_state import OpenLIFUAppState
+
 if TYPE_CHECKING:
     import openlifu
     import openlifu.bf
@@ -130,19 +135,6 @@ if TYPE_CHECKING:
     import openlifu.xdc.util
     from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
     from OpenLIFUPrePlanning.OpenLIFUPrePlanning import OpenLIFUPrePlanningWidget
-
-#
-# OpenLIFUDataParameterNode
-#
-
-@parameterNodeWrapper
-class OpenLIFUDataParameterNode:
-    loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
-    loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
-    loaded_solution : "Optional[SlicerOpenLIFUSolution]"
-    loaded_session : "Optional[SlicerOpenLIFUSession]"
-    loaded_run: "Optional[SlicerOpenLIFURun]"
-    loaded_photoscans: "Dict[str,SlicerOpenLIFUPhotoscan]"
 
 #
 # OpenLIFUDataDialogs
@@ -6410,7 +6402,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 )
         qsettings.endGroup()
 
-    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUDataParameterNode]) -> None:
+    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUAppState]) -> None:
         """
         Set and observe parameter node.
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
@@ -6457,7 +6449,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """List of functions to call when `subject` property is changed."""
 
     def getParameterNode(self):
-        return OpenLIFUDataParameterNode(super().getParameterNode())
+        return OpenLIFUAppState(super().getParameterNode())
 
     def call_on_subject_changed(self, f : Callable[[Optional["openlifu.db.Subject"]],None]) -> None:
         """Set a function to be called whenever the `subject` property is changed.
@@ -6640,7 +6632,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         parameter_node = self.getParameterNode()
 
         if parameter_node.loaded_session is None:
-            raise RuntimeError("Cannot save session because OpenLIFUDataParameterNode.loaded_session is None")
+            raise RuntimeError("Cannot save session because OpenLIFUAppState.loaded_session is None")
 
         session : SlicerOpenLIFUSession = parameter_node.loaded_session
         if session is not None:

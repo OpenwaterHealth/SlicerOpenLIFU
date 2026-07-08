@@ -7,7 +7,7 @@ from slicer import vtkMRMLNode
 if TYPE_CHECKING:
     from openlifu.db import Database
     from OpenLIFUDatabase.OpenLIFUDatabase import OpenLIFUDatabaseParameterNode
-    from OpenLIFUData.OpenLIFUData import OpenLIFUDataParameterNode
+    from OpenLIFUApp.logic.app_state import OpenLIFUAppState
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginParameterNode
     from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginLogic
 
@@ -34,7 +34,7 @@ def get_cur_db() -> "Optional[Database]":
     """Get the current openlifu.db.Database loaded in the OpenLIFU Database module"""
     return slicer.util.getModuleLogic('OpenLIFUDatabase').db
 
-def get_openlifu_data_parameter_node() -> "OpenLIFUDataParameterNode":
+def get_openlifu_data_parameter_node() -> "OpenLIFUAppState":
     """Get the parameter node of the OpenLIFU Data module"""
     return slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
 

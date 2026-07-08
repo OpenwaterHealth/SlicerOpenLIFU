@@ -375,6 +375,22 @@ Localization, Planner, Control.
   reviewable and preserves the "every intermediate main builds and py_OpenLIFUHome
   passes" invariant.
 
+- [x] **Round 4b done (state rename + relocate):** the six `loaded_*` fields
+  (`loaded_protocols`, `loaded_transducers`, `loaded_solution`, `loaded_session`,
+  `loaded_run`, `loaded_photoscans`) moved from `OpenLIFUDataParameterNode` onto
+  `OpenLIFUAppState` in `OpenLIFU/OpenLIFUApp/logic/app_state.py`. Class
+  `OpenLIFUDataParameterNode` deleted; `OpenLIFUDataLogic.getParameterNode()` now
+  returns `OpenLIFUAppState(super().getParameterNode())`, so every existing call
+  site — `get_openlifu_data_parameter_node().loaded_*`,
+  `slicer.util.getModuleLogic('OpenLIFUData').getParameterNode().loaded_*`, and
+  `self.getParameterNode().loaded_*` inside Data's own Logic — keeps working
+  unchanged. AppState wrapper wraps Data's MRML singleton node for now (same
+  storage). Type hints updated in `OpenLIFULib/OpenLIFULib/util.py` and the
+  `OpenLIFUData` shim re-export list. No call-site rewrites; 577 read references
+  untouched. Round 4c will move AppState onto its own MRML node under the host
+  Logic, delete `get_openlifu_data_parameter_node()`, and convert Round-2 VTK
+  observers to Qt signals on `OpenLIFUAppState.dataChanged`.
+
 **Round 5 — OpenLIFUHome + desktop app**
 
 - Fold OpenLIFUHome (workflow logic) into host logic.
