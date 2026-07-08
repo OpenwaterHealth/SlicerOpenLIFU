@@ -328,6 +328,26 @@ Localization, Planner, Control.
 - Delete `cacheAllLoginRelatedWidgets` (all page widgets already exist at host construct
   time — that's the whole point of the migration).
 
+- [x] **Round 3 done (Database + Login):** The two modal-only modules were folded
+  using the same page-shim pattern as Round 2. `OpenLIFUDatabase/OpenLIFUDatabase.py`
+  and `OpenLIFULogin/OpenLIFULogin.py` were reduced to ~55-line shims that keep
+  their original module metadata (`hidden = True`, contributors, full original
+  `dependencies` list — Login preserves its 7-entry list) and re-export every
+  previously public class. Bodies moved to `OpenLIFU/OpenLIFUApp/pages/database_page.py`
+  (4 classes) and `OpenLIFU/OpenLIFUApp/pages/login_page.py` (8 classes; Login has
+  no Test class). External callers keep working: `from OpenLIFUDatabase import
+  OpenLIFUDatabaseTest` in OpenLIFUHome; `from OpenLIFULogin import
+  UsernamePasswordDialog` in the database page; `from OpenLIFULogin.OpenLIFULogin
+  import OpenLIFULoginParameterNode` / `OpenLIFULoginLogic` in OpenLIFULib.util
+  under TYPE_CHECKING; and every `slicer.util.getModuleLogic('OpenLIFUDatabase')` /
+  `getModuleWidget('OpenLIFULogin')` lookup. Same rule as Rounds 1b/2: **do NOT add
+  `"OpenLIFU"` to either shim's `dependencies`** — Round 4 puts
+  `OpenLIFUDatabase`/`OpenLIFULogin` in the host's `dependencies`, and a reverse
+  edge would cycle. The Round-3 ride-alongs (convert `call_on_db_changed` /
+  `call_on_active_user_changed` to Qt signals, delete `cacheAllLoginRelatedWidgets`,
+  simplify the allowed-roles walk) were NOT done this round; they slot naturally
+  into Round 4 once the host owns the state and page widgets.
+
 **Round 4 — the central hub**
 
 - Fold OpenLIFUData last. Move its `loaded_*` fields onto `OpenLIFUAppState`. Move

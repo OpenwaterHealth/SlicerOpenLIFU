@@ -11,6 +11,8 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFUApp/pages/transducer_localization_page.py
   OpenLIFUApp/pages/sonication_planner_page.py
   OpenLIFUApp/pages/sonication_control_page.py
+  OpenLIFUApp/pages/database_page.py
+  OpenLIFUApp/pages/login_page.py
   OpenLIFUApp/logic/__init__.py
   OpenLIFUApp/logic/app_state.py
   OpenLIFUApp/logic/cloud_sync.py
