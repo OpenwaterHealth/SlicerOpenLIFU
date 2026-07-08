@@ -356,6 +356,25 @@ Localization, Planner, Control.
   remaining VTK `ModifiedEvent` observer on it — Round 2 pages that still observe it get
   swapped over to Qt signals (`self.host.state.dataChanged`) in this round.
 
+- [x] **Round 4a done (Data extraction only):** `OpenLIFUData/OpenLIFUData.py`
+  reduced to a ~55-line shim; the 30 classes and 14 module-level helpers (dialogs,
+  form widgets, protocol/session/transducer/photoscan/run/solution managers, the
+  parameter node, Widget, Logic, Test) moved to
+  `OpenLIFU/OpenLIFUApp/pages/data_page.py`. The shim re-exports only the symbols
+  that other modules actually import by name:
+  `OpenLIFUDataParameterNode`, `OpenLIFUDataLogic`, `OpenLIFUDataTest`,
+  `OpenLIFUDataWidget`, `CreateNewSessionDialog`, `LoadSubjectDialog`,
+  `ProtocolPreviewDialog`, `TransducerPreviewDialog`, `RunManagerDialog`,
+  `_ModuleWidgetPopupDialog`, `_JsonTreeDialog` (the last two are underscore-
+  prefixed but imported by OpenLIFUHome/session_page). `dependencies=["OpenLIFUHome"]`
+  unchanged; same GOTCHA as before — no `"OpenLIFU"` in shim dependencies. The state
+  migration and observer/signal work described above becomes **Round 4b** (move
+  `loaded_*` fields to `OpenLIFUAppState`) and **Round 4c** (delete
+  `get_openlifu_data_parameter_node()`, convert Round-2 VTK observers to
+  `OpenLIFUAppState.dataChanged` Qt signals). Splitting the round keeps the diffs
+  reviewable and preserves the "every intermediate main builds and py_OpenLIFUHome
+  passes" invariant.
+
 **Round 5 — OpenLIFUHome + desktop app**
 
 - Fold OpenLIFUHome (workflow logic) into host logic.

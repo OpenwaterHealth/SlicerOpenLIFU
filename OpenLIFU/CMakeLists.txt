@@ -13,6 +13,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFUApp/pages/sonication_control_page.py
   OpenLIFUApp/pages/database_page.py
   OpenLIFUApp/pages/login_page.py
+  OpenLIFUApp/pages/data_page.py
   OpenLIFUApp/logic/__init__.py
   OpenLIFUApp/logic/app_state.py
   OpenLIFUApp/logic/cloud_sync.py
