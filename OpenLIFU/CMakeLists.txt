@@ -4,6 +4,10 @@ set(MODULE_NAME OpenLIFU)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
+  OpenLIFUApp/__init__.py
+  OpenLIFUApp/pages/__init__.py
+  OpenLIFUApp/logic/__init__.py
+  OpenLIFUApp/logic/app_state.py
   )
 
 set(MODULE_PYTHON_RESOURCES

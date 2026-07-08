@@ -28,6 +28,12 @@ from OpenLIFULib.module_layout import (
 )
 from OpenLIFULib.util import display_errors
 
+# Smoke import to verify the OpenLIFUApp subpackage is installed and importable.
+# Round 0 scaffolding — the class is empty and not yet wired into the host
+# parameter node; later rounds move fields onto it and eventually replace
+# OpenLIFUParameterNode.
+from OpenLIFUApp.logic.app_state import OpenLIFUAppState  # noqa: F401
+
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
     from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic

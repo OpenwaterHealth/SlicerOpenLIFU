@@ -2628,8 +2628,6 @@ class _DeviceStatusDialog(qt.QDialog):
                 "OpenLIFUTransducerLocalization",
                 "OpenLIFUSonicationPlanner",
                 "OpenLIFUSonicationControl",
-                "OpenLIFUProtocolConfig",
-                "OpenLIFUTransducerTracker",
             ):
                 try:
                     w = slicer.util.getModuleWidget(module_name)
