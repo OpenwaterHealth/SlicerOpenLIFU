@@ -298,6 +298,26 @@ Order within round 2: PrePlanning first (touches Localization + SonicationPlanne
 `getModuleWidget`; unwinding those coupling points early flushes out issues). Then
 Localization, Planner, Control.
 
+- [x] **Round 2 done (all four workflow pages):** Each of the four modules' body was
+  moved to a new `OpenLIFU/OpenLIFUApp/pages/<snake_case>_page.py` file
+  (`preplanning_page.py`, `transducer_localization_page.py`,
+  `sonication_planner_page.py`, `sonication_control_page.py`) and its
+  `<Module>/<Module>.py` was replaced with a ~55-line shim that keeps the original
+  module metadata (title/categories/contributors/help/hidden=True), sets
+  `dependencies=["OpenLIFUHome"]` (or the original `['OpenLIFUData',"OpenLIFUHome"]`
+  for TransducerLocalization — kept unchanged), and re-exports every previously
+  public class so `from OpenLIFU<Xxx> import <Class>` calls in other modules
+  (`OpenLIFUHome`, `OpenLIFUData`, `session_page`, `preplanning_page`) keep working
+  and Slicer discovers the Widget/Logic/Test via attribute lookup. Module
+  `Resources/UI` and `Resources/Icons` stayed put. Shell modules will be deleted
+  in Round 5. All four page files added to `OpenLIFU/CMakeLists.txt`
+  MODULE_PYTHON_SCRIPTS. **Rule that bit us in Round 1b, re-applied here: NEVER add
+  `"OpenLIFU"` to a page shim's `dependencies` — the host `OpenLIFU` already
+  depends on all four, so the reverse dep cycles and hangs Slicer at "Loading
+  OpenLIFU..." with no error.** The Round-2 ride-alongs (`if loaded_session is
+  None:` guard consolidation, `load_session` try/finally) were NOT done this
+  round; deferred, not blocking.
+
 **Round 3 — modal / hidden modules**
 
 - OpenLIFUDatabase → `pages/database_page.py` (QDialog) + `logic/database_logic.py`.
