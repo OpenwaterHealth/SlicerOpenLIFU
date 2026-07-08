@@ -2951,7 +2951,7 @@ class AddFromAppDialog(qt.QDialog):
     def _apply_cloud_visibility(self):
         is_logged_in = False
         try:
-            from OpenLIFUCloudSync import getCloudSyncLogic
+            from OpenLIFUApp.logic.cloud_sync import getCloudSyncLogic
             is_logged_in = bool(getCloudSyncLogic().is_logged_in())
         except Exception:
             is_logged_in = False

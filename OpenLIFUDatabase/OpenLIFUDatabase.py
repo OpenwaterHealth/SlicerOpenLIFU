@@ -150,7 +150,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         self.ui.databaseDirectoryLineEdit.currentPathChanged.connect(self.on_database_directory_path_changed)
 
         # ---- Cloud Sync controls (formerly OpenLIFUCloudSync module) ----
-        from OpenLIFUCloudSync import getCloudSyncLogic
+        from OpenLIFUApp.logic.cloud_sync import getCloudSyncLogic
         self._cloudSyncLogic = getCloudSyncLogic()
         self._cloud_login_error: Optional[str] = None
         self.ui.enableCloudSyncCheckBox.toggled.connect(self.onEnableCloudSyncToggled)

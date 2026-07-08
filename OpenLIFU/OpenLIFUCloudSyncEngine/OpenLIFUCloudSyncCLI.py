@@ -57,8 +57,8 @@ def main():
             token_expiry = time.time() + int(data['expires_in'])
 
             # NOTE: these prints are a control-protocol with the parent
-            # process (see onProcessOutput in OpenLIFUCloudSync.py). They
-            # MUST be raw stdout writes (not logging calls) so the lines
+            # process (see onProcessOutput in OpenLIFUApp/logic/cloud_sync.py).
+            # They MUST be raw stdout writes (not logging calls) so the lines
             # start with the literal sentinel and have no prefix.
             print(f"NEW_ID_TOKEN:{current_id_token}")
             print(f"NEW_EXPIRY:{token_expiry}")

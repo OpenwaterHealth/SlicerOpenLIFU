@@ -55,7 +55,6 @@ add_subdirectory(OpenLIFUSonicationControl)
 add_subdirectory(OpenLIFUSonicationPlanner)
 add_subdirectory(OpenLIFUTransducerLocalization)
 add_subdirectory(OpenLIFULogin)
-add_subdirectory(OpenLIFUCloudSync)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------

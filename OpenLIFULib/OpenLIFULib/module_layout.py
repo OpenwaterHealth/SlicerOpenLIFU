@@ -13,7 +13,7 @@ Provides:
 
 * :func:`wire_passive_module_header` -- install the observers needed to keep a
   read-only :class:`ModuleHeaderWidget` in sync with global state (Login,
-  OpenLIFUSonicationControl, OpenLIFUDatabase, OpenLIFUCloudSync).
+  OpenLIFUSonicationControl, OpenLIFUDatabase, cloud-sync logic).
 
 The Data module owns the *interactive* header (``read_only=False``) and wires
 its own slots; every other workflow module gets a *read-only* header so the
@@ -84,7 +84,7 @@ class _DatabaseStatusDialog(qt.QDialog):
         db_status_text = "Database is connected." if cur_db is not None else "No database is connected."
 
         try:
-            from OpenLIFUCloudSync import getCloudSyncLogic
+            from OpenLIFUApp.logic.cloud_sync import getCloudSyncLogic
             cs_logic = getCloudSyncLogic()
             cs_enabled = cs_logic.is_service_enabled()
             cs_running = cs_logic.is_service_running()
@@ -378,7 +378,7 @@ class ModuleHeaderWidget(qt.QWidget):
         db_connected = cur_db is not None
 
         try:
-            from OpenLIFUCloudSync import getCloudSyncLogic
+            from OpenLIFUApp.logic.cloud_sync import getCloudSyncLogic
             cs_logic = getCloudSyncLogic()
             cs_enabled = cs_logic.is_service_enabled()
             cs_running = cs_logic.is_service_running()
@@ -759,7 +759,7 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
 
         # --- Cloud sync state ---
         try:
-            from OpenLIFUCloudSync import getCloudSyncLogic
+            from OpenLIFUApp.logic.cloud_sync import getCloudSyncLogic
             cs_logic = getCloudSyncLogic()
             register_module_callback(
                 widget_owner,

@@ -8,6 +8,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFUApp/pages/__init__.py
   OpenLIFUApp/logic/__init__.py
   OpenLIFUApp/logic/app_state.py
+  OpenLIFUApp/logic/cloud_sync.py
   )
 
 set(MODULE_PYTHON_RESOURCES
@@ -22,6 +23,11 @@ slicerMacroBuildScriptedModule(
   RESOURCES ${MODULE_PYTHON_RESOURCES}
   WITH_GENERIC_TESTS
   )
+
+#-----------------------------------------------------------------------------
+# CLI subprocess used by OpenLIFUApp/logic/cloud_sync.py. Installed to
+# ``<lib>/bin/OpenLIFUCloudSyncCLI.py`` (see the subdir's CMakeLists).
+add_subdirectory(OpenLIFUCloudSyncEngine)
 
 #-----------------------------------------------------------------------------
 if(BUILD_TESTING)

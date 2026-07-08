@@ -259,6 +259,16 @@ Pick ONE module and land it end-to-end before proceeding. Recommended: **OpenLIF
 - Landing this proves: pages/logic layout, replacement of `apply_module_layout`, deleting
   a Slicer scripted module (remove from CMake, delete dir, verify build).
 
+- [x] **Round 1a done (CloudSync):** `OpenLIFUCloudSync/` deleted. Logic moved to
+  `OpenLIFU/OpenLIFUApp/logic/cloud_sync.py` (singleton `getCloudSyncLogic()` +
+  `CloudStatusHelper` unchanged in API). CLI subprocess moved to
+  `OpenLIFU/OpenLIFUCloudSyncEngine/OpenLIFUCloudSyncCLI.py` (still installed to
+  `<lib>/bin/OpenLIFUCloudSyncCLI.py`). Widget class dropped — CloudSync had no
+  visible page, only the controls hosted in Database's popup. All four callers
+  (module_layout.py x3, TransducerLocalization, Home, Database) rewritten to
+  `from OpenLIFUApp.logic.cloud_sync import getCloudSyncLogic`. Top-level
+  `add_subdirectory(OpenLIFUCloudSync)` removed.
+
 Then **OpenLIFUSession** (empty parameter node, read-only observer of Data — pure UI
 that reflects state).
 

@@ -1,18 +1,21 @@
-import qt
-import slicer
-import time
-import os
-import requests
-import signal
+from __future__ import annotations
+
 import logging
+import os
+import signal
+import time
 from typing import Callable, List
-from slicer.ScriptedLoadableModule import *
-from slicer.i18n import tr as _
-from slicer.i18n import translate
+
+import qt
+import requests
+import slicer
+
 logger = logging.getLogger('OpenLIFU.CloudSync')
 
 
 _sharedLogicInstance = None
+
+
 def getCloudSyncLogic():
     global _sharedLogicInstance
     if _sharedLogicInstance is None:
@@ -31,54 +34,7 @@ class CloudStatusHelper(qt.QObject):
         super().__init__()
 
 
-class OpenLIFUCloudSync(ScriptedLoadableModule):
-    def __init__(self, parent):
-        ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("OpenLIFU Cloud Sync")
-        self.parent.categories = [
-            translate("qSlicerAbstractCoreModule", "OpenLIFU")]
-        self.parent.dependencies = ["OpenLIFUHome"]
-        # Deprecated: cloud-sync controls now live inside the Database popup
-        # on the Data page. The logic class below is still the source of
-        # truth for the background sync engine, but this standalone module
-        # is hidden from the module selector.
-        self.parent.hidden = True
-        self.parent.contributors = ["Andrew Howe (Kitware), Erik (NVP Software"]
-        # short description of the module and a link to online module documentation
-        # _() function marks text as translatable to other languages
-        self.parent.helpText = _(
-            "This is the database module of the OpenLIFU extension for focused ultrasound. "
-            "More information at <a href=\"https://github.com/OpenwaterHealth/SlicerOpenLIFU\">github.com/OpenwaterHealth/SlicerOpenLIFU</a>."
-        )
-        # organization, grant, and thanks
-        self.parent.acknowledgementText = _(
-            "This is part of Openwater's OpenLIFU, an open-source "
-            "hardware and software platform for Low Intensity Focused Ultrasound (LIFU) research "
-            "and development."
-        )
-
-
-class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
-    """Minimal placeholder widget. The cloud-sync UI now lives in the
-    Database popup; this widget exists only so the module can still be
-    instantiated by Slicer without errors.
-    """
-
-    def setup(self):
-        ScriptedLoadableModuleWidget.setup(self)
-        # Make sure the singleton logic is alive so QSettings-based
-        # autostart on boot still works.
-        getCloudSyncLogic()
-
-        label = qt.QLabel(
-            _("Cloud Sync controls have moved into the Database popup on the Data page.")
-        )
-        label.setWordWrap(True)
-        self.layout.addWidget(label)
-        self.layout.addStretch(1)
-
-
-class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
+class OpenLIFUCloudSyncLogic:
 
     # QSettings keys
     _SETTING_REFRESH_TOKEN = "OpenLIFU/CloudRefreshToken"
@@ -87,7 +43,6 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
     _SETTING_CLOUD_EMAIL = "OpenLIFU/CloudAccountEmail"
 
     def __init__(self):
-        ScriptedLoadableModuleLogic.__init__(self)
         self.syncProcess = None
         self._cloudTokens = None
         self._last_sync_timestamp = qt.QSettings().value(self._SETTING_LAST_SYNC, "") or ""
@@ -204,7 +159,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self.environment = os.getenv("OPENLIFU_CLOUD_ENV", "prod").lower()
         if self.environment not in ["prod", "dev"]:
             self.environment = "prod"
-        
+
         return self.environment
 
     def startHeartbeat(self):
@@ -220,7 +175,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         token = self.getValidToken()
         if not self.syncProcess and token:
             self.attemptAutoStartSync()
-    
+
     def _safeStatusUpdate(self, status):
         """Thread-safe bridge to emit UI updates from background threads."""
         timestamp = time.strftime("%H:%M:%S")
@@ -247,15 +202,21 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             self._notifyStateChanged()
             return
 
+        # Locate the CLI subprocess script. In a packaged / CMake-built
+        # layout the CLI is installed to ``<lib>/bin/OpenLIFUCloudSyncCLI.py``
+        # (a sibling of the ``qt-scripted-modules`` directory that holds
+        # this module). When running from the source tree it lives beside
+        # the host module dir at ``OpenLIFU/OpenLIFUCloudSyncEngine/``.
+        # Compute both candidates relative to this file
+        # (``<...>/qt-scripted-modules/OpenLIFUApp/logic/cloud_sync.py``
+        # when installed; ``<...>/OpenLIFU/OpenLIFUApp/logic/cloud_sync.py``
+        # in the dev tree).
         moduleDir = os.path.dirname(__file__)
-        # In a packaged / CMake-built layout the CLI is installed to
-        # ``<lib>/bin/OpenLIFUCloudSyncCLI.py`` (a sibling of the
-        # ``qt-scripted-modules`` directory that holds this file). When
-        # running from the source tree it lives in the
-        # ``OpenLIFUCloudSyncEngine`` subfolder. Try both.
         candidatePaths = [
-            os.path.abspath(os.path.join(moduleDir, "..", "bin", "OpenLIFUCloudSyncCLI.py")),
-            os.path.abspath(os.path.join(moduleDir, "OpenLIFUCloudSyncEngine", "OpenLIFUCloudSyncCLI.py")),
+            # Packaged install: up 3 from OpenLIFUApp/logic/ to lib root, then bin/.
+            os.path.abspath(os.path.join(moduleDir, "..", "..", "..", "bin", "OpenLIFUCloudSyncCLI.py")),
+            # Dev tree: up 2 from OpenLIFUApp/logic/ to OpenLIFU/, then engine subdir.
+            os.path.abspath(os.path.join(moduleDir, "..", "..", "OpenLIFUCloudSyncEngine", "OpenLIFUCloudSyncCLI.py")),
         ]
         scriptPath = next((p for p in candidatePaths if os.path.exists(p)), None)
 
