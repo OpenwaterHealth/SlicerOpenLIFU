@@ -134,6 +134,16 @@
             </widget>
            </item>
            <item>
+            <widget class="QPushButton" name="importTargetButton">
+             <property name="toolTip">
+              <string>Import an existing scene fiducial or a fiducial from disk as a session target</string>
+             </property>
+             <property name="text">
+              <string>Import</string>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QPushButton" name="editTargetsButton">
              <property name="toolTip">
               <string>Toggle whether the target name and position cells in the table are editable</string>

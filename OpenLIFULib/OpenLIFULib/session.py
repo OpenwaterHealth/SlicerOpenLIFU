@@ -97,6 +97,17 @@ class SlicerOpenLIFUSession:
             and slicer.mrmlScene.GetNodeByID(self.volume_node.GetID()) is not None
         )
 
+    def get_target_nodes(self) -> List[vtkMRMLMarkupsFiducialNode]:
+        """Return the session's target fiducial nodes, filtering out stale entries.
+
+        The ``target_nodes`` parameterPack field stores each fiducial by MRML ID;
+        when a node is removed from the scene, the stored ID goes stale and the
+        entry dereferences to ``None``. Every caller that iterates targets should
+        go through this accessor so observer cascades that fire during scene
+        teardown do not see the ``None`` placeholders.
+        """
+        return [n for n in self.target_nodes if n is not None]
+
     def get_transducer(self) -> "SlicerOpenLIFUTransducer":
         """Return the transducer associated with this session, from the  list of loaded transducers in the scene.
 
@@ -207,23 +218,64 @@ class SlicerOpenLIFUSession:
             raise RuntimeError("The specified photoscan is not affiliated with this session") 
         self.affiliated_photoscans[photoscan.id] = SlicerOpenLIFUPhotoscanWrapper(photoscan)
 
-    def update_underlying_openlifu_session(self, targets : List[vtkMRMLMarkupsFiducialNode]) -> "openlifu.db.Session":
-        """Update the underlying openlifu session and the list of target nodes that are considered to be affiliated with this session.
+    def add_target(self, node: vtkMRMLMarkupsFiducialNode) -> None:
+        """Register ``node`` as a session-owned target.
 
-        Args:
-            targets: new list of targets
+        Appends the fiducial to ``target_nodes`` (skipping duplicates and any
+        stale/``None`` entries the pack may currently hold) and rewrites the
+        underlying openlifu ``Session.targets`` in one shot. This is the only
+        supported way to make a scene fiducial count as a session target under the
+        session-owns-all model; loose scene fiducials are no longer picked up.
+        """
+        if self.session.session is None:
+            raise RuntimeError("No underlying openlifu session")
+        if node is None:
+            return
+        current = [n for n in self.target_nodes if n is not None]
+        if node in current:
+            return
+        self.target_nodes = [*current, node]
+        self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
+
+    def remove_target(self, node: vtkMRMLMarkupsFiducialNode) -> bool:
+        """Deregister ``node`` from this session's targets.
+
+        Removes the fiducial from ``target_nodes`` (also dropping any stale/``None``
+        entries the pack may hold) and rewrites the underlying openlifu
+        ``Session.targets``. Returns True if the node was tracked (and therefore
+        removed), False otherwise. Does not touch the scene; the caller is
+        responsible for ``slicer.mrmlScene.RemoveNode`` when appropriate.
+        """
+        if self.session.session is None:
+            raise RuntimeError("No underlying openlifu session")
+        current = [n for n in self.target_nodes if n is not None]
+        if node not in current:
+            # Still rewrite the pack if we filtered out any None entries.
+            if len(current) != len(self.target_nodes):
+                self.target_nodes = current
+                self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
+            return False
+        self.target_nodes = [n for n in current if n is not node]
+        self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
+        return True
+
+    def update_underlying_openlifu_session(self) -> "openlifu.db.Session":
+        """Sync derived session state (targets, transducer transform, VF / PR / TT results)
+        from the current scene into the underlying openlifu Session.
+
+        Targets are read from ``self.target_nodes`` (the session-owned list); scene
+        fiducials that were never added via :meth:`add_target` are ignored.
 
         Returns: the now updated underlying openlifu Session
         """
 
-        # Update target fiducial nodes in this object
-        self.target_nodes = targets
-
         if self.session.session is None:
             raise RuntimeError("No underlying openlifu session")
 
-        # Update target Points in the underlying Session
-        self.session.session.targets = list(map(fiducial_to_openlifu_point,targets))
+        # Update target Points in the underlying Session (filter stale/None entries;
+        # see SlicerOpenLIFUSession.get_target_nodes for why the pack may hold Nones).
+        valid_target_nodes = self.get_target_nodes()
+        self.session.session.targets = list(map(fiducial_to_openlifu_point, valid_target_nodes))
 
         # Update transducer transform in the underlying Session
         transducer = get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]

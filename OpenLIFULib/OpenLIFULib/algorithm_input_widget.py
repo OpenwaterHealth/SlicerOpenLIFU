@@ -11,8 +11,6 @@ from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
 from OpenLIFULib.util import get_openlifu_data_parameter_node
 from OpenLIFULib import SlicerOpenLIFUTransducer
 
-from OpenLIFULib.targets import get_target_candidates
-
 if TYPE_CHECKING:
     import openlifu
     import openlifu.nav.photoscan
@@ -229,9 +227,14 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         else:
             self._populate_from_loaded_objects()
 
-        # Update target combo box if part of the algorithm inputs
+        # Update target combo box if part of the algorithm inputs. Targets are session-owned:
+        # the combo lists only fiducials that have been explicitly registered with the
+        # session via SlicerOpenLIFUSession.add_target (loose scene fiducials are ignored).
+        # Use get_target_nodes() so we skip any stale entries the parameterPack may hold
+        # for MRML nodes that have already been removed from the scene.
         if "Target" in self.inputs_dict:
-            target_nodes = get_target_candidates()
+            session = get_openlifu_data_parameter_node().loaded_session
+            target_nodes = session.get_target_nodes() if session is not None else []
             if len(target_nodes) == 0:
                 self.inputs_dict["Target"].indicate_no_options()
             else:

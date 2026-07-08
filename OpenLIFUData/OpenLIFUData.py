@@ -45,7 +45,6 @@ from OpenLIFULib import (
     ensure_python_requirements_for_module_enter,
     get_cur_db,
     get_required_openlifu_version,
-    get_target_candidates,
     kwave_binaries_exist,
     openlifu_version_matches,
     python_requirements_exist,
@@ -6657,10 +6656,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         session : SlicerOpenLIFUSession = parameter_node.loaded_session
         if session is not None:
-            targets = get_target_candidates()
-            # TODO: I think instead of getting all 1-point fiducial nodes as targets, we should attribute-tag targets with
-            # the session ID, and have a tool that adds and retrieves targets by session ID similar to what we do for virtual fit results
-            session_openlifu = session.update_underlying_openlifu_session(targets)
+            # Targets are session-owned: SlicerOpenLIFUSession pulls them from its
+            # own target_nodes list. Loose scene fiducials are no longer promoted
+            # to targets on save (see SlicerOpenLIFUSession.add_target / .remove_target).
+            session_openlifu = session.update_underlying_openlifu_session()
             # Sync the photoscan / photocollection index into the openlifu Session
             # dataclass so the on-disk session JSON round-trips correctly. The wrapper's
             # affiliated_* fields are the single source of truth for what belongs to the

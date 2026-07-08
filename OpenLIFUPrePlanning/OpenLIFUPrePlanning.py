@@ -68,6 +68,120 @@ if TYPE_CHECKING:
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
 
+
+class ImportTargetDialog(qt.QDialog):
+    """Modal dialog that lets the user add a scene fiducial (or one loaded from disk) as a
+    session-owned target.
+
+    Presents a list of one-control-point fiducial nodes currently in the scene that are not
+    already registered with the session. A "Load from File..." button lets the user pick a
+    ``.mrk.json`` / ``.fcsv`` file; the loaded node is required to have exactly one control
+    point and is then registered with the session automatically. OK registers the currently
+    selected scene fiducial; Cancel closes without changes.
+    """
+
+    def __init__(self, session: "SlicerOpenLIFUSession", parent: Optional[qt.QWidget] = None):
+        super().__init__(parent or slicer.util.mainWindow())
+        self._session = session
+        self.setWindowTitle("Import Target")
+        self.setMinimumWidth(420)
+
+        layout = qt.QVBoxLayout(self)
+        layout.addWidget(qt.QLabel(
+            "Select a fiducial already in the scene to add as a target,\n"
+            "or use \"Load from File...\" to import one from disk."
+        ))
+        self._listWidget = qt.QListWidget()
+        self._listWidget.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+        layout.addWidget(self._listWidget, 1)
+
+        buttonRow = qt.QHBoxLayout()
+        self._loadFileButton = qt.QPushButton("Load from File...")
+        buttonRow.addWidget(self._loadFileButton)
+        buttonRow.addStretch(1)
+        # Build the button box explicitly so we can keep direct references. PythonQt's
+        # QDialogButtonBox.button(StandardButton) can return None before the dialog is
+        # shown, which broke the initial _update_ok_enabled() call.
+        self._buttonBox = qt.QDialogButtonBox()
+        self._okButton = self._buttonBox.addButton(qt.QDialogButtonBox.Ok)
+        self._cancelButton = self._buttonBox.addButton(qt.QDialogButtonBox.Cancel)
+        buttonRow.addWidget(self._buttonBox)
+        layout.addLayout(buttonRow)
+
+        self._buttonBox.accepted.connect(self._on_accept)
+        self._buttonBox.rejected.connect(self.reject)
+        self._loadFileButton.clicked.connect(self._on_load_from_file)
+        self._listWidget.itemSelectionChanged.connect(self._update_ok_enabled)
+
+        self._populate_scene_list()
+        self._update_ok_enabled()
+
+    def _populate_scene_list(self) -> None:
+        self._listWidget.clear()
+        session_ids = {n.GetID() for n in self._session.target_nodes if n is not None}
+        candidates = [n for n in get_target_candidates() if n.GetID() not in session_ids]
+        for node in candidates:
+            item = qt.QListWidgetItem(f"{node.GetName()}  [{node.GetID()}]")
+            item.setData(qt.Qt.UserRole, node)
+            self._listWidget.addItem(item)
+        if not candidates:
+            placeholder = qt.QListWidgetItem("(no importable fiducials in the scene)")
+            placeholder.setFlags(qt.Qt.NoItemFlags)
+            self._listWidget.addItem(placeholder)
+
+    def _update_ok_enabled(self) -> None:
+        item = self._listWidget.currentItem()
+        self._okButton.setEnabled(item is not None and item.data(qt.Qt.UserRole) is not None)
+
+    def _on_accept(self) -> None:
+        item = self._listWidget.currentItem()
+        if item is None:
+            return
+        node = item.data(qt.Qt.UserRole)
+        if node is None:
+            return
+        self._session.add_target(node)
+        self.accept()
+
+    def _on_load_from_file(self) -> None:
+        filepath, _selected_filter = qt.QFileDialog.getOpenFileName(
+            self, "Load Target Fiducial", "",
+            "Markups (*.mrk.json *.fcsv);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            loaded_node = slicer.util.loadMarkups(filepath)
+        except Exception as e:  # noqa: BLE001 - report any load-time error to the user
+            slicer.util.errorDisplay(
+                f"Failed to load markups from '{filepath}':\n{e}", "Import failed",
+            )
+            return
+        if loaded_node is None:
+            slicer.util.errorDisplay(
+                f"No markups node was loaded from '{filepath}'.", "Import failed",
+            )
+            return
+        if not loaded_node.IsA("vtkMRMLMarkupsFiducialNode"):
+            slicer.mrmlScene.RemoveNode(loaded_node)
+            slicer.util.errorDisplay(
+                "Only fiducial markups can be imported as targets.", "Import failed",
+            )
+            return
+        n_points = loaded_node.GetNumberOfControlPoints()
+        if n_points != 1:
+            slicer.mrmlScene.RemoveNode(loaded_node)
+            slicer.util.errorDisplay(
+                f"Only single-point fiducials can be imported as targets; the loaded "
+                f"file has {n_points} control points.",
+                "Import failed",
+            )
+            return
+        loaded_node.SetMaximumNumberOfControlPoints(1)
+        self._session.add_target(loaded_node)
+        self.accept()
+
+
 class OpenLIFUPrePlanning(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
@@ -236,6 +350,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateVirtualFitSectionState()
 
         self.ui.addTargetButton.clicked.connect(self.onAddTargetClicked)
+        self.ui.importTargetButton.clicked.connect(self.onImportTargetClicked)
         self.ui.removeTargetButton.clicked.connect(self.onRemoveTargetClicked)
         self.ui.editTargetsButton.toggled.connect(self.onEditTargetsToggled)
         self.ui.virtualfitButton.clicked.connect(self.onRunAutoFitClicked)
@@ -342,6 +457,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
             data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             if not data_logic.session_loading_unloading_in_progress:
+                # Deregister from the session if the node was a session-owned target.
+                # Safe to call unconditionally: remove_target is a no-op for untracked nodes.
+                session = get_openlifu_data_parameter_node().loaded_session
+                if session is not None:
+                    session.remove_target(node)
+
                 self.revokeTargetApprovalIfAny(node, reason="The target was removed.\n" +
                 "Any virtual fit transforms associated with this target will also be removed.")
 
@@ -496,7 +617,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             )
 
     def updateTargetsTable(self):
-        """Rebuild the targets table from the current set of target candidate fiducials."""
+        """Rebuild the targets table from the session's target list.
+
+        Under the session-owns-all model, only fiducials registered with the session
+        via ``session.add_target`` appear here. Loose scene fiducials are ignored.
+        """
         table = self.ui.targetsTableWidget
         currently_selected_row = table.currentRow()
 
@@ -504,7 +629,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         try:
             table.clearContents()
             table.setRowCount(0)  # ensures any previous cell widgets (jump buttons) are released
-            target_nodes = get_target_candidates()
+            session = get_openlifu_data_parameter_node().loaded_session
+            target_nodes = session.get_target_nodes() if session is not None else []
             table.setRowCount(len(target_nodes))
 
             editable_flags = (
@@ -635,9 +761,16 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
 
     def onDataParameterNodeModified(self,caller, event) -> None:
-        self.updateInputOptions() 
+        self.updateInputOptions()
         self.updateWorkflowControls()
         self.updateVirtualFitRelatedLabels()
+        # Targets are now session-owned, so target-list changes come through the
+        # data parameter node's ModifiedEvent (assignment to session.target_nodes)
+        # rather than through scene NodeAdded/Removed. Refresh the table and
+        # collapsible from here so Import, add_target, and remove_target all
+        # propagate to the UI.
+        self.updateTargetsTable()
+        self.updateVirtualFitSectionState()
 
     def updateVirtualFitRelatedLabels(self):
         """When virtual fit approval is revoked or toggled, the messages displayed in the data module
@@ -646,10 +779,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         slicer.modules.OpenLIFUTransducerLocalizationWidget.updateVirtualFitStatus()
 
     def updateTargetsActionButtonsEnabled(self):
-        """Update enabled state and label of the targets action buttons (Add / Edit / Remove)."""
+        """Update enabled state and label of the targets action buttons (Add / Import / Edit / Remove)."""
         current_selection = self.getCurrentSelectedTarget()
         self.ui.removeTargetButton.setEnabled(current_selection is not None and not self._targets_in_edit_mode)
         self.ui.addTargetButton.setEnabled(not self._targets_in_edit_mode)
+        self.ui.importTargetButton.setEnabled(not self._targets_in_edit_mode)
         # The Edit/Done toggle is always enabled (you can leave edit mode even if no target is selected).
         self.ui.editTargetsButton.setEnabled(self.ui.targetsTableWidget.rowCount > 0 or self._targets_in_edit_mode)
         self.ui.editTargetsButton.setText("Done Editing" if self._targets_in_edit_mode else "Edit")
@@ -680,11 +814,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._set_targets_edit_mode(checked)
 
     def _set_targets_edit_mode(self, enabled: bool) -> None:
-        """Toggle edit mode for the targets table: unlock all fiducials and allow cell editing when on."""
+        """Toggle edit mode for the targets table: unlock the session's target fiducials and allow cell editing when on."""
         self._targets_in_edit_mode = enabled
         # Lock state on the fiducials mirrors edit mode -- when not editing, all targets are locked so
         # they cannot be dragged in the 3D view either. We also tint the glyph color to indicate state.
-        for node in get_target_candidates():
+        session = get_openlifu_data_parameter_node().loaded_session
+        target_nodes = session.get_target_nodes() if session is not None else []
+        for node in target_nodes:
             node.SetLocked(not enabled)
             self._apply_edit_mode_color(node, editing=enabled)
         # Toggle table edit triggers so the cells become editable / read-only in sync with the mode.
@@ -733,6 +869,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         for widget in (
             self.ui.targetsTableWidget,
             self.ui.addTargetButton,
+            self.ui.importTargetButton,
             self.ui.editTargetsButton,
             self.ui.removeTargetButton,
             self.ui.virtualfitCollapsible,
@@ -790,6 +927,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.updateWorkflowControls()
             return
 
+        # Register the newly-placed fiducial with the session so it counts as a target.
+        # (Loose scene fiducials are no longer picked up automatically.)
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session is not None:
+            session.add_target(node)
+
         # A point was placed: enter edit mode (so the user can fine-tune by dragging) and select the
         # new target in the table.
         if not self._targets_in_edit_mode:
@@ -813,8 +956,37 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         node = self.getCurrentSelectedTarget()
         if node is None:
             raise RuntimeError("It should not be possible to click Remove target while there is not a valid target selected.")
+        # Deregister from the session before removing the scene node so the session's
+        # target_nodes list never holds a dangling MRML reference. (onNodeRemoved will
+        # also call remove_target defensively, but it is idempotent.)
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session is not None:
+            session.remove_target(node)
         slicer.mrmlScene.RemoveNode(node)
 
+        self.updateWorkflowControls()
+
+    def onImportTargetClicked(self, checked: bool = False):
+        """Open the Import Target dialog to pull an existing scene fiducial — or a fiducial
+        loaded from disk — into the session's target list."""
+        session = get_openlifu_data_parameter_node().loaded_session
+        if session is None:
+            # Session-required invariant is enforced upstream by guided workflow; this branch
+            # is only reachable in unusual dev/test scenarios.
+            slicer.util.errorDisplay(
+                "A session must be loaded before importing targets.",
+                "No session loaded",
+            )
+            return
+        dialog = ImportTargetDialog(session, parent=slicer.util.mainWindow())
+        try:
+            dialog.exec_()
+        finally:
+            dialog.deleteLater()
+        # Explicit refresh in case the ModifiedEvent cascade from add_target was
+        # coalesced away or arrived before the widget had a chance to react.
+        self.updateTargetsTable()
+        self.updateVirtualFitSectionState()
         self.updateWorkflowControls()
 
     def updateInputOptions(self):

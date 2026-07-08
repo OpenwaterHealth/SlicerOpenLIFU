@@ -818,200 +818,29 @@ def embed_module_body_into(
     page_layout.addWidget(ui_widget)
     stacked_widget.addWidget(page)
 
-    # Embed-time hides: the per-module shared header and per-module
-    # workflow controls (or placeholder) are replaced by host chrome.
-    # These must stay hidden across all page swaps, so we track them in
-    # a module-level dict and re-apply on every force_embedded_body_visible
-    # call. Module-managed hides (progress bars, conditional sections,
-    # "session loaded" / "no session" toggles) are NOT tracked here -- a
-    # fresh snapshot is taken on each force call so the recipe reflects
-    # the module's most recent intent.
-    embed_hides = []
-
     # PythonQt's findChildren does not reliably filter by Python subclass
     # type (returns every QObject descendant), so use the direct reference
     # the module stored during apply_module_layout().
     module_header = getattr(mw, "module_header", None)
     if module_header is not None:
         module_header.setVisible(False)
-        embed_hides.append(module_header)
 
     workflow_controls = getattr(mw, "workflow_controls", None)
     if workflow_controls is not None:
         workflow_controls.setVisible(False)
-        embed_hides.append(workflow_controls)
     placeholder = ui_widget.findChild(qt.QWidget, "workflowControlsPlaceholder")
     if placeholder is not None and workflow_controls is None:
         # The placeholder is empty (module never injected controls). Hide it
         # so it does not occupy space in the host page.
         placeholder.setVisible(False)
-        embed_hides.append(placeholder)
 
-    _EMBED_HIDES_BY_MODULE[module_name] = embed_hides
-
-    # The qMRMLWidget loaded from the .ui file was never shown by Slicer
-    # before we reparented it into the host stack. Force the subtree
-    # visible now (and again on every page swap via the host) so the
-    # page actually paints. The dynamic snapshot in force_*() will pick
-    # up the module-managed hides already applied by setup().
-    force_embedded_body_visible(ui_widget, module_name=module_name)
+    # Slicer never showed this qMRMLWidget before we reparented it into the
+    # host stack (its owning module was never selected), so its top-level
+    # visibility flag is still off. Show it once now; QStackedWidget handles
+    # visibility across subsequent page swaps on its own.
+    ui_widget.show()
 
     return page
-
-
-# Module-level dict storing the per-module embed-time hides (header,
-# workflow_controls, placeholder). Python attributes set on PythonQt
-# QObject instances do not reliably survive between calls, so a plain
-# dict keyed by module name is the working storage.
-_EMBED_HIDES_BY_MODULE: dict = {}
-
-
-# Widget classes whose internals (body / content area) are managed by the
-# widget itself based on user interaction (e.g. expand / collapse). The
-# embedding visibility recipe must NOT walk into their subtrees, or it will
-# clobber the widget's own show/hide bookkeeping and leave the content
-# stuck hidden after the user expands the section.
-_OPAQUE_CONTAINER_CLASS_NAMES = ("ctkCollapsibleButton", "ctkCollapsibleGroupBox")
-
-
-def _has_opaque_container_ancestor(widget, ui_widget) -> bool:
-    """Return True if ``widget`` has an ancestor (strictly above it, up to
-    ``ui_widget`` exclusive) whose class is one of
-    :data:`_OPAQUE_CONTAINER_CLASS_NAMES`. The widget itself is not checked.
-    """
-    try:
-        parent = widget.parent()
-    except Exception:  # noqa: BLE001
-        return False
-    while parent is not None and parent is not ui_widget:
-        try:
-            cls_name = parent.metaObject().className()
-        except Exception:  # noqa: BLE001
-            cls_name = ""
-        if cls_name in _OPAQUE_CONTAINER_CLASS_NAMES:
-            return True
-        try:
-            parent = parent.parent()
-        except Exception:  # noqa: BLE001
-            return False
-    return False
-
-
-def _walk_widget_descendants(ui_widget, skip_inside_opaque_containers: bool = False):
-    """Yield each widget-like descendant of ``ui_widget``.
-
-    PythonQt's ``findChildren(qt.QWidget)`` does NOT include QWidget
-    subclasses, and ``isinstance(x, qt.QWidget)`` is unreliable across
-    binding versions. Duck-type on ``show`` + ``isHidden`` to identify
-    widget-like objects in the QObject child set.
-
-    When ``skip_inside_opaque_containers`` is True, descendants whose
-    parent chain passes through a self-managing container (e.g.
-    ``ctkCollapsibleButton``) are skipped so we don't interfere with the
-    container's own show/hide logic. The container widget itself is still
-    yielded.
-    """
-    for descendant in ui_widget.findChildren(qt.QObject):
-        if not (hasattr(descendant, "show") and hasattr(descendant, "isHidden")):
-            continue
-        if skip_inside_opaque_containers and _has_opaque_container_ancestor(descendant, ui_widget):
-            continue
-        yield descendant
-
-
-def snapshot_hidden_descendants(ui_widget: qt.QWidget) -> list:
-    """Return a list of descendants of ``ui_widget`` currently in the
-    hidden state. Captured for later replay by
-    :func:`force_embedded_body_visible` so that module-managed hides
-    survive QStackedWidget page swaps (which can cascade ``hide()`` calls
-    down a page's subtree)."""
-    hidden = []
-    if ui_widget is None:
-        return hidden
-    for w in _walk_widget_descendants(ui_widget, skip_inside_opaque_containers=True):
-        try:
-            if w.isHidden():
-                hidden.append(w)
-        except Exception:  # noqa: BLE001
-            pass
-    return hidden
-
-
-def force_embedded_body_visible(ui_widget: qt.QWidget, module_name: str = None) -> None:
-    """Restore the intended visibility state of an embedded module body.
-
-    A qMRMLWidget loaded from a .ui file and reparented into a
-    QStackedWidget page can end up with ``WState_Hidden`` set on most of
-    its subtree after subsequent page additions / current-page swaps.
-    Naive show()-based recipes (force-show every descendant, or skip
-    widgets that look "explicitly hidden") both fail in practice: the
-    first leaks module-managed hides (progress bars, conditional
-    sections), and the second permanently traps any widget that was
-    ever explicitly shown/hidden, including header buttons.
-
-    Recipe: capture a *dynamic* snapshot of every descendant currently
-    in the hidden state, force-show every widget-like descendant of
-    ``ui_widget``, then replay the snapshot. Always add the persistent
-    embed-time hides (per-module header, workflow controls, placeholder)
-    as a defensive backstop in case they got accidentally shown.
-
-    The dynamic snapshot reflects the module's most recent intent: any
-    `setVisible(False)` the module applied (in `setup()`, in an observer
-    fired by session-load, etc.) is honored, and any `setVisible(True)`
-    the module applied since the last force call is preserved.
-    """
-    if ui_widget is None:
-        return
-
-    def _force(w):
-        try:
-            w.show()
-        except Exception:  # noqa: BLE001
-            try:
-                w.setVisible(True)
-            except Exception:  # noqa: BLE001
-                pass
-
-    def _hide(w):
-        try:
-            w.hide()
-        except Exception:  # noqa: BLE001
-            try:
-                w.setVisible(False)
-            except Exception:  # noqa: BLE001
-                pass
-
-    # Dynamic snapshot: capture currently-hidden widget-like descendants
-    # BEFORE we start force-showing things. Skip descendants inside
-    # self-managing containers (ctkCollapsibleButton, etc.) so we don't
-    # treat their collapsed-state internals as module-managed hides.
-    current_hidden = []
-    for d in _walk_widget_descendants(ui_widget, skip_inside_opaque_containers=True):
-        try:
-            if d.isHidden():
-                current_hidden.append(d)
-        except Exception:  # noqa: BLE001
-            pass
-
-    # Persistent embed-time hides: defensive backstop in case anything
-    # showed them. Append (deduped) to the dynamic snapshot.
-    embed_hides = _EMBED_HIDES_BY_MODULE.get(module_name, []) if module_name else []
-    seen_ids = {id(w) for w in current_hidden}
-    for w in embed_hides:
-        if id(w) not in seen_ids:
-            current_hidden.append(w)
-            seen_ids.add(id(w))
-
-    # Force-show the root and every widget-like descendant, again skipping
-    # the subtrees of self-managing containers so they can finish their
-    # own pending show/hide animations correctly.
-    _force(ui_widget)
-    for descendant in _walk_widget_descendants(ui_widget, skip_inside_opaque_containers=True):
-        _force(descendant)
-
-    # Re-hide whatever the dynamic snapshot + embed hides require.
-    for w in current_hidden:
-        _hide(w)
 
 
 def navigate_to_page(module_name: str) -> None:

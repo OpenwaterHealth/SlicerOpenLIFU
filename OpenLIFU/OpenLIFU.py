@@ -24,7 +24,6 @@ from OpenLIFULib.guided_mode_util import (
 from OpenLIFULib.module_layout import (
     ModuleHeaderWidget,
     embed_module_body_into,
-    force_embedded_body_visible,
     wire_passive_module_header,
 )
 from OpenLIFULib.util import display_errors
@@ -453,9 +452,6 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
         if self._embedding_done and self._current_page_key is not None:
             self._delegate_enter(self._current_page_key)
-            mw = slicer.util.getModuleWidget(self._current_page_key)
-            if mw is not None and getattr(mw, "uiWidget", None) is not None:
-                force_embedded_body_visible(mw.uiWidget, module_name=self._current_page_key)
         self._refresh_timeline_state()
         self._refresh_save_exit_state()
 
@@ -509,12 +505,6 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if page.on_timeline:
             self._visited_timeline_keys.add(module_name)
         self._delegate_enter(module_name)
-        # QStackedWidget page-switch and the module's enter() can both re-set
-        # WState_Hidden on body chrome that embed_module_body_into originally
-        # un-hid; re-clear it after every page show so the page actually paints.
-        mw = slicer.util.getModuleWidget(module_name)
-        if mw is not None and getattr(mw, "uiWidget", None) is not None:
-            force_embedded_body_visible(mw.uiWidget, module_name=module_name)
         self._refresh_timeline_state()
         self._refresh_save_exit_state()
 
