@@ -7,7 +7,7 @@ from slicer import (
     vtkMRMLMarkupsFiducialNode,
 )
 from slicer.parameterNodeWrapper import parameterPack
-from OpenLIFULib.util import get_openlifu_data_parameter_node, BusyCursor
+from OpenLIFULib.util import get_app_state, BusyCursor
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
 from OpenLIFULib.targets import (
@@ -84,11 +84,11 @@ class SlicerOpenLIFUSession:
 
     def transducer_is_valid(self) -> bool:
         """Return whether this session's transducer is present in the list of loaded objects."""
-        return self.get_transducer_id() in get_openlifu_data_parameter_node().loaded_transducers
+        return self.get_transducer_id() in get_app_state().loaded_transducers
 
     def protocol_is_valid(self) -> bool:
         """Return whether this session's protocol is present in the list of loaded objects."""
-        return self.get_protocol_id() in get_openlifu_data_parameter_node().loaded_protocols
+        return self.get_protocol_id() in get_app_state().loaded_protocols
 
     def volume_is_valid(self) -> bool:
         """Return whether this session's volume is present in the scene."""
@@ -114,7 +114,7 @@ class SlicerOpenLIFUSession:
         Does not check that the session is still valid and everything it needs is there in the scene; make sure to
         check before using this.
         """
-        return get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]
+        return get_app_state().loaded_transducers[self.get_transducer_id()]
 
     def get_protocol(self) -> "SlicerOpenLIFUProtocol":
         """Return the protocol associated with this session, from the  list of loaded protocols in the scene.
@@ -122,7 +122,7 @@ class SlicerOpenLIFUSession:
         Does not check that the session is still valid and everything it needs is there in the scene; make sure to
         check before using this.
         """
-        return get_openlifu_data_parameter_node().loaded_protocols[self.get_protocol_id()]
+        return get_app_state().loaded_protocols[self.get_protocol_id()]
 
     def get_affiliated_photocollection_ids(self):
         return self.affiliated_photocollections
@@ -278,7 +278,7 @@ class SlicerOpenLIFUSession:
         self.session.session.targets = list(map(fiducial_to_openlifu_point, valid_target_nodes))
 
         # Update transducer transform in the underlying Session
-        transducer = get_openlifu_data_parameter_node().loaded_transducers[self.get_transducer_id()]
+        transducer = get_app_state().loaded_transducers[self.get_transducer_id()]
         transducer_openlifu = transducer.transducer.transducer
         transducer_transform_node : vtkMRMLTransformNode = transducer.transform_node
         self.session.session.array_transform = transducer_transform_node_to_openlifu(transducer_transform_node, transducer_openlifu.units)

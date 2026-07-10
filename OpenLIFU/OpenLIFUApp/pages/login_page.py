@@ -51,7 +51,7 @@ from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
 from OpenLIFULib.util import (
     display_errors,
-    get_openlifu_data_parameter_node,
+    get_app_state,
     cleanup_module_callbacks,
     register_module_callback,
 )
@@ -1025,7 +1025,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Clear Data module items
         slicer.util.getModuleLogic('OpenLIFUData').clear_session()
-        for protocol_id in get_openlifu_data_parameter_node().loaded_protocols:
+        for protocol_id in get_app_state().loaded_protocols:
             slicer.util.getModuleLogic('OpenLIFUData').remove_protocol(protocol_id)
 
         self._last_active_user = new_active_user

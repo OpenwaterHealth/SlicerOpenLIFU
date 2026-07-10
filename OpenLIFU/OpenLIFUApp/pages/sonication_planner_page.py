@@ -43,7 +43,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUSolutionAnalysis,
     SlicerOpenLIFUTransducer,
     fiducial_to_openlifu_point_in_transducer_coords,
-    get_openlifu_data_parameter_node,
+    get_app_state,
     make_xarray_in_transducer_coords_from_volume,
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
@@ -158,7 +158,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionAnalysis()
 
         # Add observers on the Data module's parameter node and this module's own parameter node
-        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        self.addObserver(get_app_state().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
         
         # This ensures we update the drop down options in the volume and fiducial combo boxes when nodes are added/removed
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
@@ -222,7 +222,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Default-on Render PNP whenever a solution is already loaded on entry.
         if (
-            get_openlifu_data_parameter_node().loaded_solution is not None
+            get_app_state().loaded_solution is not None
             and not self.ui.renderPNPCheckBox.checked
         ):
             self.ui.renderPNPCheckBox.checked = True  # triggers onrenderPNPCheckBoxToggled -> render_pnp
@@ -307,13 +307,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Update the solution progress bar. 0% if there is no existing solution, 100% if there is an existing solution."""
         self.ui.solutionProgressBar.maximum = 1 # (during computation we set maxmimum=0 to put it into an infinite loading animation)
 
-        if get_openlifu_data_parameter_node().loaded_solution is None:
+        if get_app_state().loaded_solution is None:
             self.ui.solutionProgressBar.value = 0
         else:
             self.ui.solutionProgressBar.value = 1
 
     def updateRenderPNPCheckBox(self):
-        if get_openlifu_data_parameter_node().loaded_solution is None:
+        if get_app_state().loaded_solution is None:
             self.ui.renderPNPCheckBox.enabled = False
             self.ui.renderPNPCheckBox.checked = False
             self.ui.renderPNPCheckBox.setToolTip("Compute a solution first to generate a PNP volume that can be visualized")
@@ -333,7 +333,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.pnpOpacityLabel.enabled = False
     
         # Get target pressure from the current protocol with validation checks.
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         if not data_parameter_node:
             return
     
@@ -405,7 +405,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updatePNPSliders()
         self.updateApproveButton()
 
-        if get_openlifu_data_parameter_node().loaded_solution is None:
+        if get_app_state().loaded_solution is None:
             self.logic.getParameterNode().solution_analysis = None
 
         self.updateWorkflowControls()
@@ -503,7 +503,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         ``self.algorithm_input_widget.update()``, which rebuilds the items
         from scratch (so we always start from undecorated text).
         """
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         approved_target_ids = (
             set(loaded_session.get_virtual_fit_approvals())
             if loaded_session is not None else set()
@@ -564,7 +564,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             box.setToolTip(item_tooltip or "")
 
     def updateApproveButton(self):
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         if data_parameter_node.loaded_solution is None:
             self.ui.approveButton.setEnabled(False)
             self.ui.approveButton.setToolTip("There is no active solution to write the approval")
@@ -599,7 +599,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 )
 
     def onApproveClicked(self):
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         solution = data_parameter_node.loaded_solution
         if solution is None:
             raise RuntimeError("Cannot approve/unapprove solution because there is no solution.")
@@ -639,7 +639,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onExportClicked(self, checked: bool):
         """Export the active solution to a JSON file (and optionally a .nc
         file with the simulation data) chosen by the user."""
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         loaded_solution = data_parameter_node.loaded_solution
         if loaded_solution is None:
             raise RuntimeError("Cannot export solution because there is no active solution.")
@@ -726,8 +726,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateApproveButton()
 
         # ---- Revoke the solution approval in certain cases ----
-        if get_openlifu_data_parameter_node().loaded_solution is not None:
-            solution_is_approved = get_openlifu_data_parameter_node().loaded_solution.is_approved()
+        if get_app_state().loaded_solution is not None:
+            solution_is_approved = get_app_state().loaded_solution.is_approved()
             if solution_is_approved and not self.logic.solution_analysis_exists():
                 self.logic.toggle_solution_approval()
                 notify(f"Solution approval revoked: missing solution analysis!")
@@ -738,7 +738,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def updateSolutionAnalysis(self) -> None:
         """Update the solution analysis widgets"""
 
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         solution = data_parameter_node.loaded_solution
 
         if solution is None:
@@ -768,13 +768,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.analysisStackedWidget.setCurrentIndex(1) # set the page to analysis
 
     def updateWorkflowControls(self):
-        if get_openlifu_data_parameter_node().loaded_session is None:
+        if get_app_state().loaded_session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
-        elif get_openlifu_data_parameter_node().loaded_solution is None:
+        elif get_app_state().loaded_solution is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Compute a sonication solution to proceed."
-        elif  not get_openlifu_data_parameter_node().loaded_solution.is_approved():
+        elif  not get_app_state().loaded_solution.is_approved():
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Approve a sonication solution to proceed."
         else:
@@ -849,7 +849,7 @@ def compute_solution_openlifu(
         intensity_aggregated: Time-averaged intensity, a simulation output. This is mean-aggregated over all focus points.
             Note: It should be weighted by the number of times each focus point is focused on, but this functionality is not yet represented by openlifu.
     """
-    session = get_openlifu_data_parameter_node().loaded_session
+    session = get_app_state().loaded_session
     solution, simulation_result_aggregated, scaled_solution_analysis = protocol.calc_solution(
         transducer=transducer.transducer.transducer,
         volume=make_xarray_in_transducer_coords_from_volume(volume_node, transducer, protocol),
@@ -908,7 +908,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
 
     def get_pnp(self) -> Optional[vtkMRMLScalarVolumeNode]:
         """Get the PNP volume of the active solution, if there is an active solution. Return None if there isn't."""
-        solution : SlicerOpenLIFUSolution = get_openlifu_data_parameter_node().loaded_solution
+        solution : SlicerOpenLIFUSolution = get_app_state().loaded_solution
         if solution is None:
             return None
         return solution.pnp
@@ -1046,7 +1046,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         If the protocol used to compute the solution is not present, then this returns None.
         """
         solution_openlifu : "openlifu.plan.Solution" = solution.solution.solution
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         if solution_openlifu.protocol_id not in data_parameter_node.loaded_protocols:
             return None
         protocol = data_parameter_node.loaded_protocols[solution_openlifu.protocol_id]
@@ -1081,21 +1081,21 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
         selected_transducer = activeData["Transducer"]
 
         sp_widget.onComputeSolutionClicked(True)
-        assert get_openlifu_data_parameter_node().loaded_solution is not None
+        assert get_app_state().loaded_solution is not None
     
         # Test that moving the target clears the solution
         curr_pos =  selected_target.GetNthControlPointPositionWorld(0)
 
         selected_target.SetNthControlPointPositionWorld(0, (curr_pos[0], curr_pos[1], curr_pos[2]+0.1)) # this should clear the results
         slicer.app.processEvents()
-        assert get_openlifu_data_parameter_node().loaded_solution is None
+        assert get_app_state().loaded_solution is None
 
         # Test that moving the transducer clears the solution
         solution, analysis = sp_logic.computeSolution(
             activeData["Volume"], activeData["Target"],
             activeData["Transducer"], activeData["Protocol"]
             )
-        assert get_openlifu_data_parameter_node().loaded_solution is not None
+        assert get_app_state().loaded_solution is not None
 
         def make_random_matrix() -> np.ndarray:
             rng = np.random.default_rng()
@@ -1108,7 +1108,7 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
         selected_transducer.transform_node.GetMatrixTransformToParent(original_transducer_transform)
         selected_transducer.update_transform(make_random_matrix())
         slicer.app.processEvents()
-        assert get_openlifu_data_parameter_node().loaded_solution is None
+        assert get_app_state().loaded_solution is None
 
         # Sonication control requires a loaded solution. Compute a fresh solution
         # with live volume nodes for the sonication control workflow.

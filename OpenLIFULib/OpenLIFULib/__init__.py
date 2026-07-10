@@ -21,7 +21,7 @@ from OpenLIFULib.user_account_mode_util import get_current_user
 from OpenLIFULib.util import (
         get_openlifu_database_parameter_node,
         get_cur_db,
-        get_openlifu_data_parameter_node,
+        get_app_state,
         BusyCursor,
 )
 from OpenLIFULib.targets import (
@@ -49,7 +49,7 @@ __all__ = [
     "SlicerOpenLIFUPhotoscan",
     "get_cur_db",
     "get_openlifu_database_parameter_node",
-    "get_openlifu_data_parameter_node",
+    "get_app_state",
     "BusyCursor",
     "get_target_candidates",
     "OpenLIFUAlgorithmInputWidget",

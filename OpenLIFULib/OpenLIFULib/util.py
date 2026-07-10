@@ -34,7 +34,7 @@ def get_cur_db() -> "Optional[Database]":
     """Get the current openlifu.db.Database loaded in the OpenLIFU Database module"""
     return slicer.util.getModuleLogic('OpenLIFUDatabase').db
 
-def get_openlifu_data_parameter_node() -> "OpenLIFUAppState":
+def get_app_state() -> "OpenLIFUAppState":
     """Get the parameter node of the OpenLIFU Data module"""
     return slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
 

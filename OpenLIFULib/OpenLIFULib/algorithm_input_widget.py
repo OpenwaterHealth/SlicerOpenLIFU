@@ -8,7 +8,7 @@ import slicer
 
 from slicer import vtkMRMLScalarVolumeNode
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
-from OpenLIFULib.util import get_openlifu_data_parameter_node
+from OpenLIFULib.util import get_app_state
 from OpenLIFULib import SlicerOpenLIFUTransducer
 
 if TYPE_CHECKING:
@@ -124,7 +124,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
     def _populate_from_loaded_objects(self) -> None:
         """" Update protocol, transducer, and volume comboboxes if present based on the OpenLIFU objects loaded into the scene.
         Adds the items only; does not clear the ComboBoxes."""
-        dataParameterNode = get_openlifu_data_parameter_node()
+        dataParameterNode = get_app_state()
 
         # Update protocol combo box
         if "Protocol" in self.inputs_dict:
@@ -180,7 +180,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
 
         Adds the items only; does not clear the ComboBoxes.
         """
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
 
         # These are the protocol, transducer, photoscans and and volume that will be used
         protocol : SlicerOpenLIFUProtocol = session.get_protocol()
@@ -233,7 +233,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         # Use get_target_nodes() so we skip any stale entries the parameterPack may hold
         # for MRML nodes that have already been removed from the scene.
         if "Target" in self.inputs_dict:
-            session = get_openlifu_data_parameter_node().loaded_session
+            session = get_app_state().loaded_session
             target_nodes = session.get_target_nodes() if session is not None else []
             if len(target_nodes) == 0:
                 self.inputs_dict["Target"].indicate_no_options()

@@ -8,12 +8,14 @@ adapter so ``slicer.util.getModuleLogic('OpenLIFUData')`` and
 import ...`` used by OpenLIFUHome, session_page, sonication_control_page)
 keep working until Round 5 folds page navigation into the host.
 
-Round 4c will delete ``get_openlifu_data_parameter_node()`` and convert
-the remaining VTK ``ModifiedEvent`` observers in Round-2 pages to Qt
-signals on ``OpenLIFUAppState.dataChanged``. The ``loaded_*`` fields
-already live on ``OpenLIFUAppState`` as of Round 4b;
-``OpenLIFUDataLogic.getParameterNode()`` returns an ``OpenLIFUAppState``
-wrapper.
+Round 5 will convert the remaining VTK ``ModifiedEvent`` observers in
+the Round-2 pages to Qt signals on ``OpenLIFUAppState`` and delete
+the ``get_app_state()`` helper along with Data's Logic. The
+``loaded_*`` fields already live on ``OpenLIFUAppState`` as of Round
+4b; ``OpenLIFUDataLogic.getParameterNode()`` returns an
+``OpenLIFUAppState`` wrapper, and every read/write reaches AppState
+through ``get_app_state()`` (renamed from
+``get_openlifu_data_parameter_node()`` in Round 4c).
 """
 
 from __future__ import annotations
@@ -107,7 +109,7 @@ from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
     display_errors,
     ensure_list,
-    get_openlifu_data_parameter_node,
+    get_app_state,
     register_module_callback,
     replace_widget,
 )
@@ -3147,7 +3149,7 @@ def _generate_unique_protocol_id(db: "openlifu.db.Database", base: str = "new_pr
     except Exception:
         existing = set()
     try:
-        existing.update(get_openlifu_data_parameter_node().loaded_protocols.keys())
+        existing.update(get_app_state().loaded_protocols.keys())
     except Exception:
         pass
     i = 1
@@ -3876,7 +3878,7 @@ class ProtocolManagerDialog(qt.QDialog):
             return
         # Also drop from the in-memory loaded set if present.
         try:
-            loaded = get_openlifu_data_parameter_node().loaded_protocols
+            loaded = get_app_state().loaded_protocols
             if pid in loaded:
                 loaded.pop(pid)
         except Exception as e:
@@ -4022,7 +4024,7 @@ class SolutionManagerDialog(qt.QDialog):
 
     def _loaded_solution_id(self) -> Optional[str]:
         try:
-            sol = get_openlifu_data_parameter_node().loaded_solution
+            sol = get_app_state().loaded_solution
             if sol is None:
                 return None
             return sol.solution.solution.id
@@ -4315,7 +4317,7 @@ class PhotoscanManagerDialog(qt.QDialog):
 
     def _loaded_photoscan_ids(self) -> set:
         try:
-            return set(get_openlifu_data_parameter_node().loaded_photoscans.keys())
+            return set(get_app_state().loaded_photoscans.keys())
         except Exception:
             return set()
 
@@ -4486,7 +4488,7 @@ class PhotoscanManagerDialog(qt.QDialog):
 
     def _loaded_photoscan_object(self, pid: str) -> "Optional[SlicerOpenLIFUPhotoscan]":
         """Return the SlicerOpenLIFUPhotoscan for ``pid``, loading it on demand if needed."""
-        param = get_openlifu_data_parameter_node()
+        param = get_app_state()
         if pid in param.loaded_photoscans:
             return param.loaded_photoscans[pid]
         # On-demand load. Requires an active session matching this manager.
@@ -4696,7 +4698,7 @@ class RunManagerDialog(qt.QDialog):
 
     def _loaded_run_id(self) -> Optional[str]:
         try:
-            run = get_openlifu_data_parameter_node().loaded_run
+            run = get_app_state().loaded_run
             if run is None:
                 return None
             return run.run.id

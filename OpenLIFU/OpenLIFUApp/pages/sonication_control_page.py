@@ -39,7 +39,7 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib import (
     SlicerOpenLIFURun,
     ensure_python_requirements_for_module_enter,
-    get_openlifu_data_parameter_node,
+    get_app_state,
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
@@ -379,7 +379,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Add an observer on the Data module's parameter node
         self.addObserver(
-            get_openlifu_data_parameter_node().parameterNode,
+            get_app_state().parameterNode,
             vtk.vtkCommand.ModifiedEvent,
             self.onDataParameterNodeModified
         )
@@ -465,7 +465,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         logging.debug("onDataParameterNodeModified() called")
         self.updateAllButtonsEnabled()
-        if (solution_parameter_pack := get_openlifu_data_parameter_node().loaded_solution) is None:
+        if (solution_parameter_pack := get_app_state().loaded_solution) is None:
             self._cur_solution_id = None
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         elif solution_parameter_pack.solution.solution.id != self._cur_solution_id:
@@ -502,7 +502,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             return False
 
     def updateSendSonicationSolutionToDevicePushButtonEnabled(self):
-        solution = get_openlifu_data_parameter_node().loaded_solution
+        solution = get_app_state().loaded_solution
 
         if solution is None:
             enabled = False
@@ -529,7 +529,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.sendSonicationSolutionToDevicePushButton.setToolTip(tooltip)
 
     def updateRunEnabled(self):
-        solution = get_openlifu_data_parameter_node().loaded_solution
+        solution = get_app_state().loaded_solution
         if solution is None:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
@@ -553,7 +553,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.abortPushButton.setEnabled(self.logic.running)
 
     def updateViewRunsEnabled(self):
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             self.ui.viewRunsPushButton.setEnabled(False)
             self.ui.viewRunsPushButton.setToolTip(
@@ -637,10 +637,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         try:
             import openlifu_sdk
 
-            self.logic.cur_lifu_interface.set_solution(get_openlifu_data_parameter_node().loaded_solution.solution.solution.to_dict())
+            self.logic.cur_lifu_interface.set_solution(get_app_state().loaded_solution.solution.solution.to_dict())
             if self.logic.cur_lifu_interface.get_status() != openlifu_sdk.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
-            self.logic.cur_solution_on_hardware = get_openlifu_data_parameter_node().loaded_solution.solution.solution
+            self.logic.cur_solution_on_hardware = get_app_state().loaded_solution.solution.solution
             logging.debug("Solution successfully sent to device")
             success = True
         except LIFUCommunicationError as e:
@@ -720,7 +720,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onViewRunsClicked(self, checked: bool = False) -> None:
         """Open the per-session run viewer (read-only subset of the Run manager)."""
         from OpenLIFULib.util import get_cur_db
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             slicer.util.errorDisplay(
                 "Load a session before viewing run logs.",
@@ -813,7 +813,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.runHardwareStatusLabel.setProperty("text", "Run in progress.")
             self.ui.runProgressBar.value = new_run_progress_value
         else:
-            if get_openlifu_data_parameter_node().loaded_run is None:
+            if get_app_state().loaded_run is None:
                 self.ui.runProgressBar.value = 0
             else:
                 self.ui.runProgressBar.value = 100
@@ -875,7 +875,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunEnabled()
 
     def updateWorkflowControls(self):
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
 
         if session is None:
             self.workflow_controls.can_proceed = False
@@ -1066,7 +1066,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         return self.lifu_interface_is_simulated
 
     def _get_current_session_transducer(self):
-        data_parameter_node = get_openlifu_data_parameter_node()
+        data_parameter_node = get_app_state()
         loaded_session = data_parameter_node.loaded_session
         if loaded_session is None or not loaded_session.transducer_is_valid():
             return None
@@ -1191,7 +1191,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if iface is None:
             return DeviceCompatibility(DeviceCompatibilitySeverity.OK)
 
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             return DeviceCompatibility(DeviceCompatibilitySeverity.OK)
 
@@ -1590,7 +1590,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if self.cur_lifu_interface is None:
             raise RuntimeError("LIFUInterface has not been initialized. Enter the module before running sonication.")
 
-        if get_openlifu_data_parameter_node().loaded_solution is None:
+        if get_app_state().loaded_solution is None:
             raise RuntimeError("No solution loaded; cannot run sonication.")
 
         self.run_progress = 0
@@ -1646,8 +1646,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
     def create_openlifu_run(self, run_parameters: Dict) -> SlicerOpenLIFURun:
         logging.debug(f" create_openlifu_run() called with success_flag={run_parameters.get('success_flag')}")
 
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
-        loaded_solution = get_openlifu_data_parameter_node().loaded_solution
+        loaded_session = get_app_state().loaded_session
+        loaded_solution = get_app_state().loaded_solution
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         run_id = timestamp
@@ -1731,12 +1731,12 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
         sc_widget = slicer.modules.OpenLIFUSonicationControlWidget
         sc_logic = sc_widget.logic 
 
-        loaded_solution = get_openlifu_data_parameter_node().loaded_solution
+        loaded_solution = get_app_state().loaded_solution
         assert loaded_solution is not None
         if not loaded_solution.is_approved():
             slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
             slicer.app.processEvents()
-            loaded_solution = get_openlifu_data_parameter_node().loaded_solution
+            loaded_solution = get_app_state().loaded_solution
         assert loaded_solution.is_approved()
         solution_id = loaded_solution.solution.solution.id
 
@@ -1750,7 +1750,7 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
         assert sc_widget.cur_solution_on_hardware_state == SolutionOnHardwareState.SUCCESSFUL_SEND
         assert sc_logic.cur_solution_on_hardware.id == solution_id
 
-        previous_run = get_openlifu_data_parameter_node().loaded_run
+        previous_run = get_app_state().loaded_run
         previous_run_id = previous_run.run.id if previous_run is not None else None
 
         dialog_timer = qt.QTimer()
@@ -1763,9 +1763,9 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
             assert not sc_widget.ui.runPushButton.isEnabled()
             self._wait_until(
                 lambda: (
-                    get_openlifu_data_parameter_node().loaded_run is not None
-                    and get_openlifu_data_parameter_node().loaded_run.run.id != previous_run_id
-                    and get_openlifu_data_parameter_node().loaded_run.run.solution_id == solution_id
+                    get_app_state().loaded_run is not None
+                    and get_app_state().loaded_run.run.id != previous_run_id
+                    and get_app_state().loaded_run.run.solution_id == solution_id
                 ),
                 timeout_s=30.0,
             )
@@ -1774,7 +1774,7 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
 
         import openlifu_sdk
 
-        saved_run = get_openlifu_data_parameter_node().loaded_run.run
+        saved_run = get_app_state().loaded_run.run
         assert saved_run.solution_id == solution_id
         assert saved_run.success_flag is True
         assert saved_run.note == "Simulated hardware test run"

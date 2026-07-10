@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from OpenLIFULib.util import get_openlifu_data_parameter_node
+from OpenLIFULib.util import get_app_state
 
 if TYPE_CHECKING:
     from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
@@ -113,7 +113,7 @@ def apply_module_view_state(module_key: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _get_loaded_session():
-    return get_openlifu_data_parameter_node().loaded_session
+    return get_app_state().loaded_session
 
 
 def _get_session_id() -> Optional[str]:
@@ -123,7 +123,7 @@ def _get_session_id() -> Optional[str]:
 
 def _get_loaded_transducer() -> "Optional[SlicerOpenLIFUTransducer]":
     session = _get_loaded_session()
-    param_node = get_openlifu_data_parameter_node()
+    param_node = get_app_state()
     if session is None:
         # Manual workflow: if exactly one transducer is loaded, use it; otherwise punt.
         if len(param_node.loaded_transducers) == 1:
@@ -239,7 +239,7 @@ def _set_skin_visible(volume_node, visible: bool) -> None:
 def _get_loaded_slicer_photoscan(photoscan_id: Optional[str]):
     if not photoscan_id:
         return None
-    return get_openlifu_data_parameter_node().loaded_photoscans.get(photoscan_id)
+    return get_app_state().loaded_photoscans.get(photoscan_id)
 
 
 def _set_photoscan_registered_visible_for_tt(
@@ -265,7 +265,7 @@ def _set_photoscan_registered_visible_for_tt(
         # of which photoscan was last shown.
         photoscans_to_hide = (
             [_get_loaded_slicer_photoscan(photoscan_id)] if photoscan_id is not None
-            else list(get_openlifu_data_parameter_node().loaded_photoscans.values())
+            else list(get_app_state().loaded_photoscans.values())
         )
         for slicer_photoscan in photoscans_to_hide:
             if slicer_photoscan is None or slicer_photoscan.model_node is None:

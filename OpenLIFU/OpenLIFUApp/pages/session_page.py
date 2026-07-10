@@ -28,7 +28,7 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
-from OpenLIFULib import get_openlifu_data_parameter_node
+from OpenLIFULib import get_app_state
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.util import BusyCursor, display_errors
@@ -102,7 +102,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         # Observe Data's parameter node so the dashboard refreshes when the
         # loaded session, loaded photoscans, solution, or run change.
         self.addObserver(
-            get_openlifu_data_parameter_node().parameterNode,
+            get_app_state().parameterNode,
             vtk.vtkCommand.ModifiedEvent,
             self.onDataParameterNodeModified,
         )
@@ -162,7 +162,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
     @display_errors
     def onPreviewProtocol(self, checked: bool = False) -> None:
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None or not loaded_session.protocol_is_valid():
             slicer.util.errorDisplay("No protocol is loaded in the current session.")
             return
@@ -172,7 +172,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
     @display_errors
     def onPreviewTransducer(self, checked: bool = False) -> None:
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None or not loaded_session.transducer_is_valid():
             slicer.util.errorDisplay("No transducer is loaded in the current session.")
             return
@@ -195,7 +195,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         ).exec_()
 
     def _preview_photoscan(self, pid: str) -> None:
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             slicer.util.errorDisplay("No session is loaded.")
             return
@@ -203,7 +203,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         session_id = loaded_session.get_session_id()
         # Prefer the rich 3D preview dialog used by Transducer Localization /
         # the Photoscan manager; fall back to the JSON tree if loading fails.
-        slicer_photoscan = get_openlifu_data_parameter_node().loaded_photoscans.get(pid)
+        slicer_photoscan = get_app_state().loaded_photoscans.get(pid)
         if slicer_photoscan is None:
             try:
                 data_logic = slicer.util.getModuleLogic("OpenLIFUData")
@@ -235,7 +235,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         _JsonTreeDialog(f"Photoscan {pid}", {pid: data}).exec_()
 
     def _preview_solution(self, sid: str) -> None:
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             slicer.util.errorDisplay("No session is loaded.")
             return
@@ -255,7 +255,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         _JsonTreeDialog(f"Solution {sid}", {sid: data}).exec_()
 
     def _preview_run(self, rid: str) -> None:
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             slicer.util.errorDisplay("No session is loaded.")
             return
@@ -289,7 +289,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
     def updateSessionDashboard(self) -> None:
         """Repopulate every read-only section from the currently loaded session."""
-        data_param = get_openlifu_data_parameter_node()
+        data_param = get_app_state()
         loaded_session: "Optional[SlicerOpenLIFUSession]" = data_param.loaded_session
 
         if loaded_session is None:
@@ -409,7 +409,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         # One-shot auto-expand per session per section, so the user sees
         # loaded data without needing to click the header.
         try:
-            loaded_session = get_openlifu_data_parameter_node().loaded_session
+            loaded_session = get_app_state().loaded_session
             session_key = (
                 f"{loaded_session.get_subject_id()}|{loaded_session.get_session_id()}"
                 if loaded_session is not None else None
@@ -583,7 +583,7 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
         widget = slicer.modules.OpenLIFUSessionWidget
         widget.updateSessionDashboard()
 
-        loaded_session = get_openlifu_data_parameter_node().loaded_session
+        loaded_session = get_app_state().loaded_session
         assert loaded_session is not None, "Expected a loaded session before exercising the dashboard."
 
         assert widget.ui.noSessionLabel.visible is False

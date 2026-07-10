@@ -40,7 +40,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUTransducer,
     ensure_python_requirements_for_module_enter,
-    get_openlifu_data_parameter_node,
+    get_app_state,
     get_target_candidates,
 )
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
@@ -304,7 +304,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
-        self.addObserver(get_openlifu_data_parameter_node().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        self.addObserver(get_app_state().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
 
         # Replace the placeholder algorithm input widget by the actual one
         algorithm_input_names = ["Protocol", "Transducer", "Volume", "Target"]
@@ -444,7 +444,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             if not data_logic.session_loading_unloading_in_progress:
                 # Deregister from the session if the node was a session-owned target.
                 # Safe to call unconditionally: remove_target is a no-op for untracked nodes.
-                session = get_openlifu_data_parameter_node().loaded_session
+                session = get_app_state().loaded_session
                 if session is not None:
                     session.remove_target(node)
 
@@ -503,7 +503,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """Clear virtual fit results for the target from the scene if any.
         """
         target_id = fiducial_to_openlifu_point_id(target)
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         
         if list(get_virtual_fit_result_nodes(target_id, session_id)):
@@ -570,7 +570,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 get_result_id_from_transducer_tracking_result_node,
                 get_target_id_from_transducer_tracking_result_node,
             )
-            session = get_openlifu_data_parameter_node().loaded_session
+            session = get_app_state().loaded_session
             session_id = None if session is None else session.get_session_id()
             for tt_node in list(get_all_transducer_tracking_results(session_id)):
                 if not get_approval_from_transducer_tracking_result_node(tt_node):
@@ -614,7 +614,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         try:
             table.clearContents()
             table.setRowCount(0)  # ensures any previous cell widgets (jump buttons) are released
-            session = get_openlifu_data_parameter_node().loaded_session
+            session = get_app_state().loaded_session
             target_nodes = session.get_target_nodes() if session is not None else []
             table.setRowCount(len(target_nodes))
 
@@ -784,7 +784,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # surface the Virtual Fitting section so the user sees existing VF results without clicking.
         if has_targets and not self._targets_in_edit_mode:
             try:
-                session = get_openlifu_data_parameter_node().loaded_session
+                session = get_app_state().loaded_session
                 session_key = (
                     f"{session.get_subject_id()}|{session.get_session_id()}"
                     if session is not None else None
@@ -803,7 +803,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._targets_in_edit_mode = enabled
         # Lock state on the fiducials mirrors edit mode -- when not editing, all targets are locked so
         # they cannot be dragged in the 3D view either. We also tint the glyph color to indicate state.
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         target_nodes = session.get_target_nodes() if session is not None else []
         for node in target_nodes:
             node.SetLocked(not enabled)
@@ -914,7 +914,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         # Register the newly-placed fiducial with the session so it counts as a target.
         # (Loose scene fiducials are no longer picked up automatically.)
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         if session is not None:
             session.add_target(node)
 
@@ -944,7 +944,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Deregister from the session before removing the scene node so the session's
         # target_nodes list never holds a dangling MRML reference. (onNodeRemoved will
         # also call remove_target defensively, but it is idempotent.)
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         if session is not None:
             session.remove_target(node)
         slicer.mrmlScene.RemoveNode(node)
@@ -954,7 +954,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onImportTargetClicked(self, checked: bool = False):
         """Open the Import Target dialog to pull an existing scene fiducial — or a fiducial
         loaded from disk — into the session's target list."""
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         if session is None:
             # Session-required invariant is enforced upstream by guided workflow; this branch
             # is only reachable in unusual dev/test scenarios.
@@ -1032,7 +1032,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                     self.ui.removeTransformPushButton.setToolTip("Remove the selected virtual fit result from the scene")
 
     def updateWorkflowControls(self):
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
 
         if session is None:
@@ -1090,7 +1090,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         activeData = self.algorithm_input_widget.get_current_data()
         target = activeData["Target"]
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
         vf_results = []
         if target is not None:
@@ -1333,7 +1333,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         slicer.mrmlScene.RemoveNode(selected_vf_result)
 
         # Update the underlying session so persisted virtual fit results stay in sync with the scene.
-        if get_openlifu_data_parameter_node().loaded_session is not None:
+        if get_app_state().loaded_session is not None:
             data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
             data_logic.update_underlying_openlifu_session()
 
@@ -1387,7 +1387,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         activeData = self.algorithm_input_widget.get_current_data() 
         target = activeData["Target"]
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         if not target:
@@ -1476,7 +1476,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
     def clear_virtual_fit_results(self, target: vtkMRMLMarkupsFiducialNode):
         """Remove all virtual fit results nodes from the scene that match the given target for the currently active session.
         Or if there is no session, then sessionless results are cleared."""
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
         target_id = fiducial_to_openlifu_point_id(target)
         clear_virtual_fit_results(target_id=target_id,session_id=session_id)
@@ -1495,13 +1495,13 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         return not is_approved
 
     def find_best_virtual_fit_result_for_target(self, target_id: str) -> vtkMRMLTransformNode:
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         virtual_fit_result = get_best_virtual_fit_result_node(target_id=target_id, session_id=session_id)
         return virtual_fit_result
     
     def find_approved_virtual_fit_results_for_target(self, target_id: str) -> vtkMRMLTransformNode:
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         virtual_fit_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, approved_only = True))
         return virtual_fit_results
@@ -1515,7 +1515,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         return get_approval_from_virtual_fit_result_node(virtual_fit_result)
 
     def revoke_virtual_fit_approval(self, target_id : str):
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         revoke_any_virtual_fit_approvals_for_target(target_id=target_id, session_id=session_id)
         data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
@@ -1534,7 +1534,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             if skin_mesh_node is None:
                 skin_mesh_node = generate_skin_segmentation(volume)
 
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         target_id = fiducial_to_openlifu_point_id(target)
@@ -1602,7 +1602,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
             vf_transforms, debug_info = vf_transforms # In this case two things were actually returned, the first of which is the list of transforms
             self.load_vf_debugging_info(debug_info)
 
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         target_id = fiducial_to_openlifu_point_id(target)
@@ -1730,7 +1730,7 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
         curr_pos = example_target.GetNthControlPointPositionWorld(0)
 
         # Validate session and run virtual fit
-        session = get_openlifu_data_parameter_node().loaded_session
+        session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         assert session_id is not None
         preplanning_widget.create_virtual_fit_result(auto_fit = True)

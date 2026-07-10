@@ -16,11 +16,13 @@ module already declares ``dependencies=[..., "OpenLIFUData", ...]``; a
 reverse dep cycles and hangs Slicer at "Loading OpenLIFU...".
 ``OpenLIFUApp`` is importable regardless of load order.
 
-Rounds 4c will delete ``get_openlifu_data_parameter_node()`` and convert the
-remaining VTK ``ModifiedEvent`` observers in the Round-2 pages to Qt signals
-on ``OpenLIFUAppState.dataChanged``. The ``loaded_*`` fields already live on
-``OpenLIFUAppState`` as of Round 4b; ``OpenLIFUDataLogic.getParameterNode()``
-returns an ``OpenLIFUAppState`` wrapper.
+Round 5 will convert the remaining VTK ``ModifiedEvent`` observers in
+the Round-2 pages to Qt signals on ``OpenLIFUAppState`` and delete the
+``get_app_state()`` helper along with Data's Logic. The ``loaded_*``
+fields already live on ``OpenLIFUAppState`` as of Round 4b;
+``OpenLIFUDataLogic.getParameterNode()`` returns an ``OpenLIFUAppState``
+wrapper, and every read/write reaches AppState through ``get_app_state()``
+(renamed from ``get_openlifu_data_parameter_node()`` in Round 4c).
 """
 
 from __future__ import annotations

@@ -20,7 +20,7 @@ class OpenLIFUAppState:
 
     Owns the ``loaded_*`` fields formerly declared on
     ``OpenLIFUDataParameterNode`` (Round 4b of DEMODULING.md). Additional
-    workflow state migrates here in later rounds; ``get_openlifu_data_parameter_node()``
+    workflow state migrates here in later rounds; ``get_app_state()``
     and ``OpenLIFUDataLogic.getParameterNode()`` both return an
     ``OpenLIFUAppState`` wrapper during the transition.
     """
