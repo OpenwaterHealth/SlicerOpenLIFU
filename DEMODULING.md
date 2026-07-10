@@ -391,18 +391,68 @@ Localization, Planner, Control.
   Logic, delete `get_openlifu_data_parameter_node()`, and convert Round-2 VTK
   observers to Qt signals on `OpenLIFUAppState.dataChanged`.
 
+- [x] **Round 4c done (accessor rename):** `get_openlifu_data_parameter_node()`
+  renamed to `get_app_state()` across the entire repository. 187 occurrences
+  updated (LSP handled 18 in `OpenLIFULib/`; the remaining 170 in the seven
+  `OpenLIFUApp/pages/*.py` files were bulk-renamed via targeted PowerShell text
+  substitution because Pylance can't statically resolve the cross-package
+  `from OpenLIFULib import <symbol>` imports). Definition + re-exports in
+  `OpenLIFULib/util.py` and `OpenLIFULib/__init__.py` renamed too. No behavioral
+  change — the helper still calls
+  `slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()` and
+  `OpenLIFUDataLogic.getParameterNode()` still returns
+  `OpenLIFUAppState(super().getParameterNode())`. The five Round-2 VTK
+  `ModifiedEvent` observers on Data's parameter node are unchanged (they still
+  fire on writes to Data's MRML singleton, which is where AppState still writes).
+  Deleting `get_app_state()`, relocating AppState under the host module's MRML
+  singleton, and converting the VTK observers to Qt signals on a QObject
+  `AppStateSignals` were deferred out of Round 4c because they hinge on Data's
+  Logic going away — that work rolls into Round 5.
+
 **Round 5 — OpenLIFUHome + desktop app**
 
-- Fold OpenLIFUHome (workflow logic) into host logic.
-- Update `openlifu-desktop-application/Modules/Scripted/Home/Home.py`: replace every
-  `getModuleLogic("OpenLIFU<Xxx>")` call with `getModuleLogic("OpenLIFU")` +
-  attribute access on the host (`host_logic.workflow.start_guided_mode()` etc.).
-- Delete `_install_select_module_shim`, `_hook_workflow_updates`, `apply_module_layout`,
-  `wire_passive_module_header`, `embed_module_body_into`, `navigate_to_page` from
-  module_layout.py — that file is now down to just the shared `ModuleHeaderWidget` (or
-  it disappears entirely if the host owns the header directly).
-- Rip out the `_connectGuiVtkObserverTag` workaround in every `setParameterNode` —
-  there's only ONE parameter node now, on the host, and its lifetime matches the host's.
+Split into three sub-rounds with a rebuild-test cycle between each. Tracked
+by [issue #586](https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/586)
+(label `v2-refactor`).
+
+- [x] **Round 5a done (Home extraction):** `OpenLIFUHome/OpenLIFUHome.py` reduced
+  to a thin shim following the pattern of the other 8 modules. `OpenLIFUHomeParameterNode`,
+  `_StatusLabelClickFilter`, `OpenLIFUHomeWidget`, `OpenLIFUHomeLogic`, and
+  `OpenLIFUHomeTest` (with its `runTest` / `_ensure_dvc_gdrive_support` /
+  `get_test_database` / `_OpenLIFU_FullTest1` orchestration) moved to
+  `OpenLIFU/OpenLIFUApp/pages/home_page.py`. Shim re-exports the four public
+  classes. `OpenLIFU/CMakeLists.txt` MODULE_PYTHON_SCRIPTS gained `home_page.py`;
+  `OpenLIFUHome/CMakeLists.txt`, `OpenLIFUHome/Resources/`, and
+  `OpenLIFUHome/Testing/` untouched — the shim keeps its resources and DVC-env
+  test wiring (`py_OpenLIFUHome` CTest fires the shim, which re-exports
+  `OpenLIFUHomeTest`). `openlifu-desktop-application/Modules/Scripted/Home/Home.py`
+  is *not* updated; its `getModuleLogic('OpenLIFUHome')` calls still resolve via
+  the shim.
+
+- [ ] **Round 5b (pending):** relocate `OpenLIFUAppState` onto host `OpenLIFULogic`'s
+  own MRML singleton. Add `AppStateSignals(QObject)` with a `dataChanged` Qt
+  signal, fired from an internal VTK→Qt bridge on the AppState's MRML node.
+  Convert the 5 Round-2 VTK `ModifiedEvent` observers (in `session_page.py`,
+  `preplanning_page.py`, `sonication_planner_page.py`, `sonication_control_page.py`,
+  `transducer_localization_page.py`) to Qt `connect`. Delete `get_app_state()`;
+  callers move to `host_logic.app_state` (or equivalent attribute).
+
+- [ ] **Round 5c (pending):** fold OpenLIFUHome workflow logic (`start_guided_mode`,
+  `workflow_jump_ahead`, `workflow_go_to_start`, `workflow`) into host `OpenLIFULogic`.
+  Update `openlifu-desktop-application/Modules/Scripted/Home/Home.py` in lockstep:
+  replace `getModuleLogic("OpenLIFUHome")` / `getModuleLogic("OpenLIFULogin")` /
+  `getModuleWidget/Logic("OpenLIFUDatabase")` with `getModuleLogic("OpenLIFU")` +
+  host attribute access. Delete all 9 shim modules and their `CMakeLists.txt` /
+  `Resources` / `Testing` trees: `OpenLIFUSession`, `OpenLIFUPrePlanning`,
+  `OpenLIFUTransducerLocalization`, `OpenLIFUSonicationPlanner`,
+  `OpenLIFUSonicationControl`, `OpenLIFUDatabase`, `OpenLIFULogin`, `OpenLIFUData`,
+  `OpenLIFUHome`. Delete `_install_select_module_shim`, `_hook_workflow_updates`,
+  `apply_module_layout`, `wire_passive_module_header`, `embed_module_body_into`,
+  `navigate_to_page`, every `_connectGuiVtkObserverTag` workaround, and
+  `cacheAllLoginRelatedWidgets`. Migrate DVC env plumbing + `_OpenLIFU_FullTest1`
+  orchestration from `OpenLIFUHome/CMakeLists.txt` into `OpenLIFU/CMakeLists.txt`
+  and `OpenLIFU/tests/test_orchestration.py`. Replace all `py_OpenLIFU<Xxx>` CTest
+  targets with a single `py_OpenLIFU`.
 
 ---
 
