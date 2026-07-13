@@ -16,7 +16,7 @@ def initialize_wizard_ui(wizard: qt.QWizard):
     root = qt.QHBoxLayout()
     root.setContentsMargins(0, 0, 0, 0)
     wizard.setLayout(root)
-    ui_path = slicer.modules.OpenLIFUTransducerLocalizationWidget.resourcePath("UI/TransducerLocalizationWizard.ui")
+    ui_path = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").resourcePath("UI/TransducerLocalizationWizard.ui")
     uiWidget = slicer.util.loadUI(ui_path)
     ui = slicer.util.childWidgetVariables(uiWidget)
 

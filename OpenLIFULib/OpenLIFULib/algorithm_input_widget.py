@@ -222,7 +222,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         self._clear_input_options()
 
         # Update protocol, transducer, and volume comboboxes
-        if slicer.util.getModuleLogic('OpenLIFUData').validate_session():
+        if slicer.util.getModuleLogic("OpenLIFU").data_logic.validate_session():
             self._populate_from_session()
         else:
             self._populate_from_loaded_objects()

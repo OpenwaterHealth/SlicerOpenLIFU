@@ -4,7 +4,7 @@ Read-only view over ``OpenLIFUData``'s loaded session. Extracted from the
 former standalone ``OpenLIFUSession`` scripted module during the de-moduling
 migration (Round 1b of DEMODULING.md). The Slicer module shell
 ``OpenLIFUSession/OpenLIFUSession.py`` still exists as a thin adapter so
-``slicer.util.selectModule("OpenLIFUSession")`` navigation keeps working until
+``navigate_to_page("OpenLIFUSession")`` navigation keeps working until
 Round 5 folds page navigation into the host.
 """
 
@@ -31,7 +31,7 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib import get_app_state
 from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.util import BusyCursor, display_errors
 
 # These imports are done only for IDE and static analysis purposes
@@ -59,6 +59,8 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
     def __init__(self, parent=None) -> None:
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)
         self.logic: Optional[OpenLIFUSessionLogic] = None
         self._parameterNode = None
@@ -181,7 +183,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         body_path = None
         registration_path = None
         try:
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             if db is not None:
                 abspaths = db.get_transducer_absolute_filepaths(transducer_openlifu.id) or {}
                 body_path = abspaths.get("transducer_body_abspath")
@@ -207,8 +209,8 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         slicer_photoscan = get_app_state().loaded_photoscans.get(pid)
         if slicer_photoscan is None:
             try:
-                data_logic = slicer.util.getModuleLogic("OpenLIFUData")
-                db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+                data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
+                db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
                 openlifu_photoscan = db.load_photoscan(subject_id, session_id, pid)
                 slicer_photoscan = data_logic.load_photoscan_from_openlifu(
                     openlifu_photoscan,
@@ -228,7 +230,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
     def _json_preview_photoscan(self, pid: str, subject_id: str, session_id: str) -> None:
         from OpenLIFUData import _JsonTreeDialog
         try:
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             obj = db.load_photoscan(subject_id, session_id, pid)
             data = obj.to_dict()
         except Exception as e:
@@ -243,7 +245,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         from OpenLIFUData import _JsonTreeDialog
         try:
             import openlifu.plan
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             json_filepath = db.get_solution_filepath(
                 loaded_session.get_subject_id(),
                 loaded_session.get_session_id(),
@@ -266,20 +268,20 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         tree_data = {}
         try:
             import openlifu.plan
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             run_filepath = db.get_run_filepath(subject_id, session_id, rid)
             run = openlifu.plan.Run.from_file(run_filepath)
             tree_data["run"] = run.to_dict()
         except Exception as e:
             tree_data["run"] = {"error": f"Could not load run {rid}: {e}"}
         try:
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             session_snap = db.load_session_snapshot(subject_id, session_id, rid)
             tree_data["session_snapshot"] = session_snap.to_dict()
         except Exception as e:
             tree_data["session_snapshot"] = {"error": str(e)}
         try:
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             protocol_snap = db.load_protocol_snapshot(subject_id, session_id, rid)
             tree_data["protocol_snapshot"] = protocol_snap.to_dict()
         except Exception as e:
@@ -448,7 +450,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         if not subject_id:
             return "-"
         try:
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             if db is not None:
                 subject = db.load_subject_info(subject_id)
                 name = getattr(subject, "name", None)
@@ -490,7 +492,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         solution_ids: list = []
         run_ids: list = []
         try:
-            db = slicer.util.getModuleLogic("OpenLIFUDatabase").db
+            db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             if db is not None:
                 solution_ids = list(
                     db.get_solution_ids(
@@ -565,8 +567,8 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
 
     def test_dashboard_with_no_session(self):
         """The dashboard must render gracefully when no session is loaded."""
-        slicer.util.selectModule("OpenLIFUSession")
-        widget = slicer.modules.OpenLIFUSessionWidget
+        navigate_to_page("OpenLIFUSession")
+        widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSession")
         widget.updateSessionDashboard()
         assert widget.ui.noSessionLabel.visible is True
         assert widget.ui.sessionContentsWidget.visible is False
@@ -580,8 +582,8 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
         broken imports / signal wiring in the preview handlers fail the test
         instead of slipping through to live UI use.
         """
-        slicer.util.selectModule("OpenLIFUSession")
-        widget = slicer.modules.OpenLIFUSessionWidget
+        navigate_to_page("OpenLIFUSession")
+        widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSession")
         widget.updateSessionDashboard()
 
         loaded_session = get_app_state().loaded_session

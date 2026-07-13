@@ -3,6 +3,7 @@ import qt
 import slicer
 from OpenLIFULib.util import display_errors, replace_widget
 from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget
+from OpenLIFULib.module_layout import navigate_to_page
 
 if TYPE_CHECKING:
     import openlifu
@@ -11,12 +12,12 @@ if TYPE_CHECKING:
 
 def get_guided_mode_state() -> bool:
     """Get guided mode state from the OpenLIFU Home module's parameter node"""
-    openlifu_home_parameter_node = slicer.util.getModuleLogic('OpenLIFUHome').getParameterNode()
+    openlifu_home_parameter_node = slicer.util.getModuleLogic("OpenLIFU").home_logic.getParameterNode()
     return openlifu_home_parameter_node.guided_mode
 
 def set_guided_mode_state(new_guided_mode_state: bool):
     """Set guided mode state in OpenLIFU Home module's parameter node"""
-    home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+    home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic("OpenLIFU").home_logic
     openlifu_home_parameter_node = home_module_logic.getParameterNode()
     openlifu_home_parameter_node.guided_mode = new_guided_mode_state
     home_module_logic.workflow.update_all()
@@ -173,7 +174,7 @@ class WorkflowControls(qt.QWidget):
 
     @display_errors
     def on_save(self, clicked:bool):
-        data_module_parameter_node = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
+        data_module_parameter_node = slicer.util.getModuleLogic("OpenLIFU").data_logic.getParameterNode()
 
         if data_module_parameter_node.loaded_session is None:
             slicer.util.errorDisplay("There is no loaded session.")
@@ -183,7 +184,7 @@ class WorkflowControls(qt.QWidget):
 
     @display_errors
     def on_exit(self, clicked:bool):
-        data_module_parameter_node = slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
+        data_module_parameter_node = slicer.util.getModuleLogic("OpenLIFU").data_logic.getParameterNode()
 
         if data_module_parameter_node.loaded_session is None:
             slicer.util.errorDisplay("There is no loaded session.")
@@ -196,15 +197,15 @@ class WorkflowControls(qt.QWidget):
 
         # Always return to Home after exiting a session. (workflow_jump_ahead would land
         # the user on Session, which is the workflow's starting module post-PR-5.)
-        slicer.util.selectModule("OpenLIFUHome")
+        navigate_to_page("OpenLIFUHome")
 
     def save_session(self):
-        data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+        data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_module_logic.save_session()
 
     def close_session(self, save:bool):
         """Close the session, saving it or not depending on `save`"""
-        data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+        data_module_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         if save:
             self.save_session()
         data_module_logic.clear_session(clean_up_scene=True)
@@ -410,7 +411,7 @@ class GuidedWorkflowMixin:
         Off-workflow modules that still want a footer should call
         :py:meth:`inject_custom_workflow_controls_into_placeholder` instead.
         """
-        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic("OpenLIFU").home_logic
         controls = home_module_logic.workflow.workflow_controls.get(self.moduleName)
         if controls is None:
             self.workflow_controls = None

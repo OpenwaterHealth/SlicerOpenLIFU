@@ -3,7 +3,7 @@
 Extracted from the former standalone ``OpenLIFUData`` scripted module
 during the de-moduling migration (Round 4a of DEMODULING.md). The Slicer
 module shell ``OpenLIFUData/OpenLIFUData.py`` still exists as a thin
-adapter so ``slicer.util.getModuleLogic('OpenLIFUData')`` and
+adapter so ``slicer.util.getModuleLogic("OpenLIFU").data_logic`` and
 ``getModuleWidget('OpenLIFUData')`` lookups (and every ``from OpenLIFUData
 import ...`` used by OpenLIFUHome, session_page, sonication_control_page)
 keep working until Round 5 folds page navigation into the host.
@@ -83,7 +83,7 @@ from OpenLIFULib.class_definition_widgets import (
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.transducer_tracking_wizard_utils import hide_displayable_nodes_from_view
 from OpenLIFULib.transducer_tracking_results import (
     add_transducer_tracking_results_from_openlifu_session_format,
@@ -233,7 +233,7 @@ class CreateNewSessionDialog(qt.QDialog):
         if not (len(volume_filepath) and len(volume_name) and len(volume_id)):
             slicer.util.errorDisplay("Required fields are missing", parent=self)
             return
-        slicer.util.getModuleLogic("OpenLIFUData").add_volume_to_database(
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.add_volume_to_database(
             self._subject_id, volume_id, volume_name, volume_filepath
         )
         self._reload_volumes(select_id=volume_id)
@@ -559,7 +559,7 @@ class LoadSubjectDialog(qt.QDialog):
             return
 
         # Add subject to database
-        slicer.util.getModuleLogic("OpenLIFUData").add_subject_to_database(subject_name,subject_id)
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.add_subject_to_database(subject_name,subject_id)
         new_subject = self.db.load_subject(subject_id)
         self.appendSubjectToList(new_subject)
 
@@ -799,7 +799,7 @@ class LoadSessionDialog(qt.QDialog):
         if not returncode:
             return
 
-        slicer.util.getModuleLogic("OpenLIFUData").add_session_to_database(self.subject_id, session_parameters)
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.add_session_to_database(self.subject_id, session_parameters)
         new_session_info = self.db.load_session_info(self.subject_id, session_parameters["id"])
         self.append_session_to_list(new_session_info)
 
@@ -1869,7 +1869,7 @@ class TransducerManagerDialog(qt.QDialog):
         no ``device`` block, or any read fails.
         """
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             iface = getattr(sc_logic, "cur_lifu_interface", None)
             if iface is None:
                 return None
@@ -1950,7 +1950,7 @@ class TransducerManagerDialog(qt.QDialog):
         # Delegate to the existing module logic so the load is consistent with
         # the legacy "Manual Object Load > Load Transducer" path. After loading
         # into the scene, also persist into the database.
-        logic = slicer.util.getModuleLogic("OpenLIFUData")
+        logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         loaded = logic.load_transducer_from_file(filepath)
         if loaded is None:
             # load_transducer_from_file currently returns None; fall back to
@@ -1973,7 +1973,7 @@ class TransducerManagerDialog(qt.QDialog):
     @display_errors
     def onAddFromDevice(self, checked: bool = False) -> None:
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             iface = getattr(sc_logic, "cur_lifu_interface", None)
         except (AttributeError, RuntimeError):
             iface = None
@@ -2588,7 +2588,7 @@ class _DeviceStatusDialog(qt.QDialog):
             if timer is not None and not timer.isActive():
                 timer.start()
             try:
-                sc_widget = slicer.util.getModuleWidget("OpenLIFUSonicationControl")
+                sc_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationControl")
             except Exception:  # noqa: BLE001
                 sc_widget = None
             if sc_widget is not None:
@@ -3758,7 +3758,7 @@ class ProtocolManagerDialog(qt.QDialog):
         # Reflect the saved protocol in the in-memory loaded set so other
         # modules (e.g. SonicationPlanner) pick up the new/updated definition.
         try:
-            data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+            data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.load_protocol_from_openlifu(saved, replace_confirmed=True)
         except Exception as e:
             logging.warning("Could not refresh in-memory protocol after save: %s", e)
@@ -3805,7 +3805,7 @@ class ProtocolManagerDialog(qt.QDialog):
             slicer.util.errorDisplay(f"Failed to write protocol to database: {e}", parent=self)
             return
         try:
-            data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+            data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.load_protocol_from_openlifu(protocol, replace_confirmed=True)
         except Exception as e:
             logging.warning("Could not refresh in-memory protocol after import: %s", e)
@@ -4496,7 +4496,7 @@ class PhotoscanManagerDialog(qt.QDialog):
         if loaded_session is None or loaded_session.get_session_id() != self.session_id:
             return None
         try:
-            data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+            data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
             openlifu_photoscan = self._load_photoscan_metadata(pid)
             if openlifu_photoscan is None:
                 return None
@@ -4910,6 +4910,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
@@ -5001,7 +5003,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
         
         # Connect to the database logic for updates related to database
-        db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+        db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
         register_module_callback(
             self,
             db_logic.call_on_db_changed,
@@ -5098,7 +5100,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         #
         # Anything that reaches into the Login module - including
         # ``get_user_account_mode_state()``, ``get_current_user()`` and
-        # ``slicer.util.getModuleLogic("OpenLIFULogin")`` - forces the Login
+        # ``slicer.util.getModuleLogic("OpenLIFU").login_logic`` - forces the Login
         # widget to be instantiated. ``OpenLIFULoginWidget.setup`` then walks
         # every OpenLIFU module's ``widgetRepresentation()`` to cache
         # permission widgets, which re-enters this Data widget and drags
@@ -5125,7 +5127,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # doesn't know about page-body sections, so we observe both
         # signals separately here.
         try:
-            login_parameter_node = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
+            login_parameter_node = slicer.util.getModuleLogic("OpenLIFU").login_logic.getParameterNode()
             self.addObserver(
                 login_parameter_node,
                 vtk.vtkCommand.ModifiedEvent,
@@ -5134,7 +5136,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         except (AttributeError, RuntimeError):
             return
         try:
-            login_logic = slicer.util.getModuleLogic("OpenLIFULogin")
+            login_logic = slicer.util.getModuleLogic("OpenLIFU").login_logic
             register_module_callback(
                 self,
                 login_logic.call_on_active_user_changed,
@@ -5150,7 +5152,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # _logDeviceStateTransition for why this is polled rather than
         # signal-driven).
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             register_module_callback(
                 self,
                 sc_logic.call_on_lifu_device_connected,
@@ -5202,7 +5204,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             path_str = qsettings.value("OpenLIFU/databaseDirectory", "")
             if not path_str:
                 return
-            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
             path = Path(str(path_str))
             if not db_logic.path_is_openlifu_database_root(path):
                 logging.info(
@@ -5650,7 +5652,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
             if choice == "save":
                 self.logic.save_session()
             self.logic.clear_session(clean_up_scene=True)
-        slicer.util.selectModule("OpenLIFUHome")
+        navigate_to_page("OpenLIFUHome")
 
     # ------------------------------------------------------------------
     # Administration section (admin-only)
@@ -5695,7 +5697,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onManageAccountsClicked(self, checked: bool = False) -> None:
         """Forward the click to OpenLIFULogin's Manage Accounts handler."""
         try:
-            login_widget = slicer.util.getModuleWidget("OpenLIFULogin")
+            login_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFULogin")
         except Exception as exc:  # noqa: BLE001
             slicer.util.errorDisplay(
                 f"Could not open Manage Accounts: {exc}",
@@ -5713,7 +5715,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def onParameterNodeModified(self, caller, event) -> None:
         # Pass any new session onto the home module global workflow object
-        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic('OpenLIFUHome')
+        home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic("OpenLIFU").home_logic
         if self._parameterNode is None or self._parameterNode.loaded_session is None:
             home_module_logic.workflow.global_session = None
         else:
@@ -5808,7 +5810,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         by another Slicer instance.
         """
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             iface = getattr(sc_logic, "cur_lifu_interface", None)
             tx_conn, hv_conn = iface.is_device_connected() if iface is not None else (False, False)
         except (AttributeError, RuntimeError):
@@ -6148,7 +6150,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         raises ``LIFUError`` on bus errors).
         """
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
         except (AttributeError, RuntimeError):
             sc_logic = None
         if sc_logic is None:
@@ -6278,7 +6280,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 "Sign in as an admin to access it.",
                 windowTitle="Admin access required",
             )
-            qt.QTimer.singleShot(0, lambda: slicer.util.selectModule("OpenLIFUHome"))
+            qt.QTimer.singleShot(0, lambda: navigate_to_page("OpenLIFUHome"))
             return
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
@@ -6961,7 +6963,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
 
         for vf_node in newly_added_vf_result_nodes:
-            preplanning_widget : OpenLIFUPrePlanningWidget = slicer.modules.OpenLIFUPrePlanningWidget
+            preplanning_widget : OpenLIFUPrePlanningWidget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning")
             preplanning_widget.watchVirtualFit(vf_node)
 
             # Place virtual fit results under the transducer folder
@@ -6971,7 +6973,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             if newly_loaded_transducer.is_matching_transform(vf_node):
                 newly_loaded_transducer.set_matching_transform(vf_node)
                 newly_loaded_transducer.set_visibility(True)
-                slicer.util.getModuleLogic("OpenLIFUPrePlanning").chosen_virtual_fit = vf_node
+                slicer.util.getModuleLogic("OpenLIFU").preplanning_logic.chosen_virtual_fit = vf_node
 
         # === Load photoscan registrations ===
         # PRs must be loaded BEFORE the TT results below so that TT entries whose
@@ -6986,7 +6988,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
 
         for pr_node in newly_added_pr_nodes:
-            slicer.modules.OpenLIFUTransducerLocalizationWidget.watchPhotoscanRegistrationNode(pr_node)
+            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").watchPhotoscanRegistrationNode(pr_node)
             newly_loaded_transducer.move_node_into_transducer_sh_folder(pr_node)
 
         # === Load transducer localization results ===
@@ -7012,7 +7014,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
 
         for tt_node in newly_added_tt_result_nodes:
-            transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
+            transducer_tracking_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
             transducer_tracking_widget.watchTransducerTrackingNode(tt_node)
             newly_loaded_transducer.move_node_into_transducer_sh_folder(tt_node)
 
@@ -7071,7 +7073,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # "officially" linked to the current transform by setting the "matching_transform" attribute, thereby ensuring that
         # TT approval is revoked if the transducer is moved.
         # Additionally, any other transducer localization results whose matrix does not match current transducer get their approval revoked.
-        transducer_tracking_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
+        transducer_tracking_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
         from OpenLIFULib.transducer_tracking_results import (
             get_approval_from_transducer_tracking_result_node,
             get_result_id_from_transducer_tracking_result_node,
@@ -7138,7 +7140,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # write_to_db=False: we just loaded the solution from disk, nothing new to write.
         self.set_solution(slicer_solution, write_to_db=False)
 
-        planner_logic = slicer.util.getModuleLogic('OpenLIFUSonicationPlanner')
+        planner_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_planner_logic
         analysis_openlifu = None
         try:
             analysis_openlifu = db.load_solution_analysis(session_openlifu, solution_id)
@@ -7157,7 +7159,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # Solution invalidation is now driven by VF/TT approval changes, not by transducer-transform
         # changes (e.g. navigating back from the planner to the localization page no longer wipes
         # an existing solution).
-        slicer.util.getModuleWidget('OpenLIFUTransducerLocalization').checkCanDisplayVirtualFitResult()
+        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").checkCanDisplayVirtualFitResult()
 
         # Transducer-tracking approval is no longer auto-revoked when the transducer transform
         # changes. With the one-approved-VF / one-approved-TT model, TT approval is tied to its
@@ -7922,8 +7924,8 @@ class OpenLIFUDataTest(ScriptedLoadableModuleTest):
 
     def load_subject_session(self):
 
-        slicer.util.selectModule("OpenLIFUData")
-        dw = slicer.modules.OpenLIFUDataWidget
+        navigate_to_page("OpenLIFUData")
+        dw = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData")
 
         cur_db = get_cur_db()
         # Load subject

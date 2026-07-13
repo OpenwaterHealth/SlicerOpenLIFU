@@ -3,9 +3,9 @@
 Extracted from the former standalone ``OpenLIFULogin`` scripted module
 during the de-moduling migration (Round 3 of DEMODULING.md). The Slicer
 module shell ``OpenLIFULogin/OpenLIFULogin.py`` still exists as a thin
-adapter so ``slicer.util.getModuleLogic('OpenLIFULogin')`` (used by
+adapter so ``slicer.util.getModuleLogic("OpenLIFU").login_logic`` (used by
 OpenLIFULib.util, module_layout, user_account_mode_util, Data, Home) and
-``slicer.util.getModuleWidget('OpenLIFULogin')`` (used by Data and by the
+``slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFULogin")`` (used by Data and by the
 self-referential login/logout dialog callbacks) keep working until Round 5
 folds page navigation into the host.
 """
@@ -435,7 +435,7 @@ class ManageAccountsDialog(qt.QDialog):
             self.tableWidget.setRowHeight(row, 48) # help wrap
 
     def onCreateNewUserClicked(self):
-        slicer.util.getModuleWidget("OpenLIFULogin").onCreateNewAccountClicked()
+        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFULogin").onCreateNewAccountClicked()
         self.updateUsersList()
 
     def onEditUserRolesClicked(self):
@@ -498,7 +498,7 @@ class ManageAccountsDialog(qt.QDialog):
             ):
                 return
             self.db.delete_user(user_id)
-            slicer.util.getModuleWidget("OpenLIFULogin").logout()
+            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFULogin").logout()
             self.accept()
         else:
             if not slicer.util.confirmYesNoDisplay(
@@ -556,6 +556,8 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._cur_login_state = LoginState.NOT_LOGGED_IN
@@ -591,7 +593,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # === Connections and UI setup =======
 
         # Connect to the database logic for updates related to database
-        db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+        db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
         register_module_callback(
             self,
             db_logic.call_on_db_changed,
@@ -716,7 +718,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Subscribe banners to database state changes and seed initial state.
         try:
-            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
         except Exception:
             db_logic = None
         if db_logic is not None:
@@ -1024,9 +1026,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return  # If it's the same user, we don't need to delete data
 
         # Clear Data module items
-        slicer.util.getModuleLogic('OpenLIFUData').clear_session()
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.clear_session()
         for protocol_id in get_app_state().loaded_protocols:
-            slicer.util.getModuleLogic('OpenLIFUData').remove_protocol(protocol_id)
+            slicer.util.getModuleLogic("OpenLIFU").data_logic.remove_protocol(protocol_id)
 
         self._last_active_user = new_active_user
 

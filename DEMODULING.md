@@ -467,18 +467,31 @@ by [issue #586](https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/586)
     `getModuleLogic("OpenLIFU")`. Shims still present and functional; all
     callsites still work through the shims until 5c-2/5c-3.
 
-  - [ ] **5c-2 (pending — rewires + resource moves):** rewrite ~150 callsites:
-    27+ `slicer.modules.OpenLIFU<X>Widget` → `getModuleWidget("OpenLIFU").get_page_widget("OpenLIFU<X>")`,
-    60+ `getModuleLogic("OpenLIFU<X>")` → `getModuleLogic("OpenLIFU").<x>_logic`,
-    15+ `slicer.util.selectModule("OpenLIFU<X>")` → `navigate_to_page("OpenLIFU<X>")`,
-    plus `getModuleWidget("OpenLIFU<X>")` rewires. Move all 9 UI files, Home's
-    icons, and Database's `openlifu-database/empty_db/` into `OpenLIFU/Resources/`.
-    Set `self.moduleName = "OpenLIFU"` on each page Widget's `__init__` so
-    `resourcePath()` resolves via the host. Fix `data_page.py`'s
-    `getModuleWidget('OpenLIFUDatabase').resourcePath("openlifu-database/empty_db")`
-    to use the host widget. Add host `OpenLIFULogic.<x>_logic` sub-logic
-    instances and `OpenLIFUWidget.get_page_widget(name)` helper. Shims still
-    present as backup — pages continue to load via shims for now.
+  - [x] **5c-2 done (callsites + resources rewired):** ~163 mechanical
+    substitutions applied via `scripts/5c2_sweep.py` (since deleted) across
+    page files and `OpenLIFULib` (`module_layout.py`, `guided_mode_util.py`,
+    `util.py`, `session.py`, `transducer_tracking_wizard_utils.py`,
+    `algorithm_input_widget.py`): 17 `selectModule` → `navigate_to_page`,
+    98 `getModuleLogic("OpenLIFU<X>")` → `getModuleLogic("OpenLIFU").<x>_logic`,
+    15 `getModuleWidget("OpenLIFU<X>")` → `getModuleWidget("OpenLIFU").get_page_widget("OpenLIFU<X>")`,
+    27 `slicer.modules.OpenLIFU<X>Widget` → same widget-getter form. Host
+    `OpenLIFULogic` gained 9 `<x>_logic` property accessors (delegate to
+    `getModuleLogic("OpenLIFU<X>")` — swaps to owned attributes in 5c-3),
+    and `OpenLIFUWidget` gained a `get_page_widget(name)` helper. Host's own
+    four `getModuleLogic("OpenLIFUData")` sites in `OpenLIFU.py`
+    (`onSaveClicked` / `onExitClicked` / `onBackToHomeClicked` /
+    `_refresh_save_exit_state`) rewired to `self.logic.data_logic`. All 22
+    resource files under the 9 shim `Resources/` trees (9 `.ui`,
+    12 `.png`, plus the `openlifu-database/empty_db/` subtree with its
+    4 index JSONs and one extra `TransducerLocalizationWizard.ui`)
+    `git mv`'d into `OpenLIFU/Resources/`. Each of the 9 page Widget
+    `__init__`s now sets `self.moduleName = "OpenLIFU"` so
+    `ScriptedLoadableModuleWidget.resourcePath()` resolves via the host.
+    `data_page.py`'s `empty_db` special-case updated to look up
+    `getModuleWidget("OpenLIFU").resourcePath("openlifu-database/empty_db")`
+    directly. Shims still present and registered (they still re-export
+    Logic/Widget classes so `getModuleLogic("OpenLIFU<X>")` continues to
+    work); 5c-3 deletes them.
 
   - [ ] **5c-3 (pending — deletion + cleanup):** refactor `_embed_all_pages`
     to instantiate page widgets directly (no more `getModuleWidget`). Delete

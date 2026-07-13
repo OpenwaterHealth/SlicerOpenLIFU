@@ -43,7 +43,7 @@ from OpenLIFULib import (
 )
 from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
     SlicerLogHandler,
@@ -262,6 +262,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._cur_solution_on_hardware_state : SolutionOnHardwareState = SolutionOnHardwareState.NOT_SENT
@@ -756,7 +758,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     @display_errors
     def onRunClicked(self, checked=False):
         logging.debug("onRunClicked() called")
-        if not slicer.util.getModuleLogic('OpenLIFUData').validate_solution():
+        if not slicer.util.getModuleLogic("OpenLIFU").data_logic.validate_solution():
             raise RuntimeError("Invalid solution; not running sonication.")
         self.ui.runProgressBar.value = 0
 
@@ -1677,7 +1679,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         # Add SlicerOpenLIFURun to data parameter node
         run = SlicerOpenLIFURun(run_openlifu)
         logging.debug(f" create_openlifu_run() created run with id={run_id}")
-        slicer.util.getModuleLogic('OpenLIFUData').set_run(run)
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.set_run(run)
         
         return run
 
@@ -1728,14 +1730,14 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
 
     def _workflow_sonication_control(self):
         
-        slicer.util.selectModule("OpenLIFUSonicationControl")
-        sc_widget = slicer.modules.OpenLIFUSonicationControlWidget
+        navigate_to_page("OpenLIFUSonicationControl")
+        sc_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationControl")
         sc_logic = sc_widget.logic 
 
         loaded_solution = get_app_state().loaded_solution
         assert loaded_solution is not None
         if not loaded_solution.is_approved():
-            slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
+            slicer.util.getModuleLogic("OpenLIFU").data_logic.toggle_solution_approval()
             slicer.app.processEvents()
             loaded_solution = get_app_state().loaded_solution
         assert loaded_solution.is_approved()

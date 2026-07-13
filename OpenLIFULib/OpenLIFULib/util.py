@@ -28,11 +28,11 @@ class BusyCursor:
 
 def get_openlifu_database_parameter_node() -> "OpenLIFUDatabaseParameterNode":
     """Get the parameter node of the OpenLIFU Database module"""
-    return slicer.util.getModuleLogic('OpenLIFUDatabase').getParameterNode()
+    return slicer.util.getModuleLogic("OpenLIFU").database_logic.getParameterNode()
 
 def get_cur_db() -> "Optional[Database]":
     """Get the current openlifu.db.Database loaded in the OpenLIFU Database module"""
-    return slicer.util.getModuleLogic('OpenLIFUDatabase').db
+    return slicer.util.getModuleLogic("OpenLIFU").database_logic.db
 
 def get_app_state() -> "OpenLIFUAppState":
     """Get the OpenLIFU app-state parameter node (owned by the host module)."""
@@ -40,11 +40,11 @@ def get_app_state() -> "OpenLIFUAppState":
 
 def get_openlifu_login_parameter_node() -> "OpenLIFULoginParameterNode":
     """Get the parameter node of the OpenLIFU Login module"""
-    return slicer.util.getModuleLogic('OpenLIFULogin').getParameterNode()
+    return slicer.util.getModuleLogic("OpenLIFU").login_logic.getParameterNode()
 
 def get_openlifu_login_logic() -> "OpenLIFULoginLogic":
     """Get the logic of the OpenLIFU Login module"""
-    return slicer.util.getModuleLogic('OpenLIFULogin')
+    return slicer.util.getModuleLogic("OpenLIFU").login_logic
 
 
 def register_module_callback(widget, register_func, remove_func, callback) -> None:

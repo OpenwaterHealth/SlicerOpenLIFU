@@ -593,6 +593,18 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception:  # noqa: BLE001
             return None
 
+    def get_page_widget(self, module_name: str):
+        """Public accessor for a page's ``ScriptedLoadableModuleWidget``.
+
+        Preferred replacement for ``slicer.modules.OpenLIFU<X>Widget`` and
+        ``slicer.util.getModuleWidget("OpenLIFU<X>")`` at cross-page call
+        sites. During 5c-2 this delegates to Slicer's module registry (so
+        it still works via the shim modules); 5c-3 will swap the body to
+        read from the host's owned ``_page_widgets`` dict after the shim
+        modules are deleted.
+        """
+        return self._get_embedded_widget(module_name)
+
     # ------------------------------------------------------------------
     # Timeline footer
     # ------------------------------------------------------------------
@@ -713,7 +725,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def onSaveClicked(self, checked: bool = False) -> None:
-        data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic: "OpenLIFUDataLogic" = self.logic.data_logic
         if data_logic.getParameterNode().loaded_session is None:
             slicer.util.errorDisplay("There is no loaded session.")
             return
@@ -737,7 +749,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def onExitClicked(self, checked: bool = False) -> None:
-        data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic: "OpenLIFUDataLogic" = self.logic.data_logic
         if data_logic.getParameterNode().loaded_session is None:
             slicer.util.errorDisplay("There is no loaded session.")
             return
@@ -753,7 +765,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onBackToHomeClicked(self, checked: bool = False) -> None:
         """Return to the Home page from the Data Manager, prompting to save
         or discard any loaded session first."""
-        data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic: "OpenLIFUDataLogic" = self.logic.data_logic
         if data_logic.getParameterNode().loaded_session is not None:
             choice = confirm_exit_session_dialog()
             if choice == "cancel":
@@ -765,7 +777,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def _refresh_save_exit_state(self) -> None:
         try:
-            data_pn = slicer.util.getModuleLogic("OpenLIFUData").getParameterNode()
+            data_pn = self.logic.data_logic.getParameterNode()
             has_session = data_pn.loaded_session is not None
         except Exception:  # noqa: BLE001
             has_session = False
@@ -918,6 +930,52 @@ class OpenLIFULogic(ScriptedLoadableModuleLogic):
     def workflow_go_to_start(self) -> None:
         """Go to the starting module of the workflow."""
         slicer.util.selectModule(self.workflow.starting_module())
+
+    # ------------------------------------------------------------------
+    # Sub-logic accessors (formerly reached via
+    # ``slicer.util.getModuleLogic("OpenLIFU<X>")``).
+    #
+    # During 5c-2 these properties delegate to Slicer's module registry so
+    # they resolve through the shim modules; 5c-3 will swap them to
+    # references to host-owned Logic instances constructed in ``__init__``
+    # after the shim modules are deleted.
+    # ------------------------------------------------------------------
+
+    @property
+    def home_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUHome")
+
+    @property
+    def data_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUData")
+
+    @property
+    def session_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUSession")
+
+    @property
+    def preplanning_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUPrePlanning")
+
+    @property
+    def transducer_localization_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUTransducerLocalization")
+
+    @property
+    def sonication_planner_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUSonicationPlanner")
+
+    @property
+    def sonication_control_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+
+    @property
+    def database_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFUDatabase")
+
+    @property
+    def login_logic(self):
+        return slicer.util.getModuleLogic("OpenLIFULogin")
 
 
 # ---------------------------------------------------------------------------

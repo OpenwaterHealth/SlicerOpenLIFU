@@ -261,7 +261,7 @@ class ModuleHeaderWidget(qt.QWidget):
     def _open_device_popup_via_data_module(self, _checked: bool = False) -> None:
         """Delegate to ``OpenLIFUDataWidget.onOpenDevicePopup`` (read-only header)."""
         try:
-            data_widget = slicer.util.getModuleWidget("OpenLIFUData")
+            data_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData")
         except Exception as e:  # noqa: BLE001
             logging.warning("Could not resolve OpenLIFUData widget: %s", e)
             return
@@ -276,7 +276,7 @@ class ModuleHeaderWidget(qt.QWidget):
     def _open_login_popup_via_data_module(self, _checked: bool = False) -> None:
         """Delegate to ``OpenLIFUDataWidget.onOpenLoginPopup`` (read-only header opt-in)."""
         try:
-            data_widget = slicer.util.getModuleWidget("OpenLIFUData")
+            data_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData")
         except Exception as e:  # noqa: BLE001
             logging.warning("Could not resolve OpenLIFUData widget: %s", e)
             return
@@ -301,7 +301,7 @@ class ModuleHeaderWidget(qt.QWidget):
         """
         if self._host_active_page_is_data():
             try:
-                data_widget = slicer.util.getModuleWidget("OpenLIFUData")
+                data_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData")
             except Exception as e:  # noqa: BLE001
                 logging.warning("Could not resolve OpenLIFUData widget: %s", e)
                 data_widget = None
@@ -481,7 +481,7 @@ class ModuleHeaderWidget(qt.QWidget):
 
         # --- Device ---
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             iface = getattr(sc_logic, "cur_lifu_interface", None)
             tx_conn, hv_conn = (
                 iface.is_device_connected() if iface is not None else (False, False)
@@ -708,7 +708,7 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
 
         # --- Database ---
         try:
-            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
             register_module_callback(
                 widget_owner,
                 db_logic.call_on_db_changed,
@@ -720,7 +720,7 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
 
         # --- Login (active user only; the permissions dropdown was removed) ---
         try:
-            login_pn = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
+            login_pn = slicer.util.getModuleLogic("OpenLIFU").login_logic.getParameterNode()
             widget_owner.addObserver(
                 login_pn,
                 vtk.vtkCommand.ModifiedEvent,
@@ -729,7 +729,7 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
         except Exception:  # noqa: BLE001
             pass
         try:
-            login_logic = slicer.util.getModuleLogic("OpenLIFULogin")
+            login_logic = slicer.util.getModuleLogic("OpenLIFU").login_logic
             register_module_callback(
                 widget_owner,
                 login_logic.call_on_active_user_changed,
@@ -741,7 +741,7 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
 
         # --- Hardware device connect / disconnect ---
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             register_module_callback(
                 widget_owner,
                 sc_logic.call_on_lifu_device_connected,

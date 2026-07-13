@@ -2,7 +2,7 @@
 
 The Slicer-module shell (metadata class + hidden module registration) lives
 in ``OpenLIFUHome/OpenLIFUHome.py``; that shell simply re-exports the classes
-defined here so ``slicer.util.getModuleLogic("OpenLIFUHome")`` and friends
+defined here so ``slicer.util.getModuleLogic("OpenLIFU").home_logic`` and friends
 continue to resolve during the Round-5 migration.
 """
 
@@ -35,7 +35,7 @@ from OpenLIFULib.guided_mode_util import set_guided_mode_state, Workflow
 from OpenLIFULib.kiosk_util import (
     get_require_login_on_home,
 )
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state, set_user_account_mode_state
 from OpenLIFULib.util import (
     cleanup_module_callbacks,
@@ -90,6 +90,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic: Optional["OpenLIFUHomeLogic"] = None
         self._parameterNode = None
@@ -240,7 +242,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def _wire_status_row_observers(self) -> None:
         """Hook events that should trigger a status-row refresh."""
         try:
-            db_logic = slicer.util.getModuleLogic("OpenLIFUDatabase")
+            db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
             register_module_callback(
                 self,
                 db_logic.call_on_db_changed,
@@ -250,7 +252,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception:  # noqa: BLE001
             pass
         try:
-            login_logic = slicer.util.getModuleLogic("OpenLIFULogin")
+            login_logic = slicer.util.getModuleLogic("OpenLIFU").login_logic
             register_module_callback(
                 self,
                 login_logic.call_on_active_user_changed,
@@ -260,7 +262,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception:  # noqa: BLE001
             pass
         try:
-            login_pn = slicer.util.getModuleLogic("OpenLIFULogin").getParameterNode()
+            login_pn = slicer.util.getModuleLogic("OpenLIFU").login_logic.getParameterNode()
             self.addObserver(
                 login_pn,
                 vtk.vtkCommand.ModifiedEvent,
@@ -269,7 +271,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception:  # noqa: BLE001
             pass
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             register_module_callback(
                 self,
                 sc_logic.call_on_lifu_device_connected,
@@ -341,7 +343,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # ---- Transducer row ----
         try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+            sc_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
             iface = getattr(sc_logic, "cur_lifu_interface", None)
             tx_conn, hv_conn = (
                 iface.is_device_connected() if iface is not None else (False, False)
@@ -435,7 +437,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         Home's own setup().
         """
         slicer.util.getModule("OpenLIFUData").widgetRepresentation()
-        return slicer.modules.OpenLIFUDataWidget
+        return slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData")
 
     @display_errors
     def on_sign_in_clicked(self, checked: bool = False) -> None:
@@ -530,14 +532,14 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not returncode:
             return
 
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.add_session_to_database(subject_id, session_parameters)
 
         if load_checked:
             data_logic.clear_session(clean_up_scene=True)
             data_logic.load_session(subject_id, session_parameters["id"])
             set_guided_mode_state(True)
-            slicer.util.selectModule("OpenLIFUSession")
+            navigate_to_page("OpenLIFUSession")
 
     @display_errors
     def on_load_session_clicked(self, checked: bool) -> None:
@@ -554,11 +556,11 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not data_widget.on_load_session_clicked(True):
             return
         set_guided_mode_state(True)
-        slicer.util.selectModule("OpenLIFUSession")
+        navigate_to_page("OpenLIFUSession")
 
     @display_errors
     def on_data_manager_clicked(self, checked: bool) -> None:
-        slicer.util.selectModule("OpenLIFUData")
+        navigate_to_page("OpenLIFUData")
 
 
 #
@@ -573,7 +575,7 @@ class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
     ``workflow_jump_ahead``/``workflow_go_to_start`` entry points were folded
     into the host ``OpenLIFULogic`` in Round 5c-1. This class remains as a
     thin delegating facade so callers using
-    ``slicer.util.getModuleLogic("OpenLIFUHome")`` keep working while the
+    ``slicer.util.getModuleLogic("OpenLIFU").home_logic`` keep working while the
     ``OpenLIFUHome`` shim module still exists (through Round 5c-2).
     """
 

@@ -3,9 +3,9 @@
 Extracted from the former standalone ``OpenLIFUDatabase`` scripted module
 during the de-moduling migration (Round 3 of DEMODULING.md). The Slicer
 module shell ``OpenLIFUDatabase/OpenLIFUDatabase.py`` still exists as a
-thin adapter so ``slicer.util.getModuleLogic('OpenLIFUDatabase')`` (used
+thin adapter so ``slicer.util.getModuleLogic("OpenLIFU").database_logic`` (used
 by OpenLIFULib.util, module_layout, Data, Home, Login) and
-``slicer.util.getModuleWidget('OpenLIFUDatabase').resourcePath(...)``
+``slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUDatabase").resourcePath(...)``
 (used to reach ``Resources/openlifu-database/empty_db``) keep working
 until Round 5 folds page navigation into the host.
 """
@@ -45,6 +45,7 @@ from OpenLIFULib import sample_data
 from OpenLIFULib import sample_data_gui
 from OpenLIFULib import ensure_python_requirements_for_module_enter
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
+from OpenLIFULib.module_layout import navigate_to_page
 from OpenLIFULib.sample_data_gui import (
     InitializationResult,
     SampleDatabaseSetupController,
@@ -77,6 +78,8 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
@@ -687,7 +690,7 @@ class OpenLIFUDatabaseLogic(ScriptedLoadableModuleLogic):
     @staticmethod
     def copy_preinitialized_database(destination):
         destination = Path(destination)
-        db_source = Path(slicer.util.getModuleWidget('OpenLIFUDatabase').resourcePath(os.path.join("openlifu-database", "empty_db")))
+        db_source = Path(slicer.util.getModuleWidget("OpenLIFU").resourcePath(os.path.join("openlifu-database", "empty_db")))
 
         destination.mkdir(parents=True, exist_ok=True)
 
@@ -731,8 +734,8 @@ class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
 
         from OpenLIFULib import get_cur_db
 
-        slicer.util.selectModule("OpenLIFUDatabase")
-        dbw = slicer.modules.OpenLIFUDatabaseWidget
+        navigate_to_page("OpenLIFUDatabase")
+        dbw = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUDatabase")
         dbw.ui.databaseDirectoryLineEdit.currentPath = database_dir
         dbw.onLoadDatabaseClicked(True) 
         
@@ -1062,7 +1065,7 @@ class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
             self.assertEqual([], list(destination.iterdir()))
 
     def test_copy_preinitialized_database_still_creates_empty_database(self):
-        slicer.util.selectModule("OpenLIFUDatabase")
+        navigate_to_page("OpenLIFUDatabase")
         with tempfile.TemporaryDirectory() as temp_dir:
             destination = Path(temp_dir) / "empty-database"
 

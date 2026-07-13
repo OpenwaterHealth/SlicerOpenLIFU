@@ -3,7 +3,7 @@
 Extracted from the former standalone ``OpenLIFUPrePlanning`` scripted module
 during the de-moduling migration (Round 2 of DEMODULING.md). The Slicer
 module shell ``OpenLIFUPrePlanning/OpenLIFUPrePlanning.py`` still exists as
-a thin adapter so ``slicer.util.selectModule("OpenLIFUPrePlanning")``
+a thin adapter so ``navigate_to_page("OpenLIFUPrePlanning")``
 navigation keeps working until Round 5 folds page navigation into the host.
 """
 
@@ -47,7 +47,7 @@ from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
@@ -222,6 +222,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
@@ -362,7 +364,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.removeTransformPushButton.setToolTip("Remove the selected virtual fit result from the scene")
         self.updateVirtualFitResultsTable()
         slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation()
-        self.logic.call_on_chosen_virtual_fit_changed(slicer.modules.OpenLIFUTransducerLocalizationWidget.setVirtualFitResultForTracking)
+        self.logic.call_on_chosen_virtual_fit_changed(slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").setVirtualFitResultForTracking)
         # ------------------------------------
 
         self.updateWorkflowControls()
@@ -445,7 +447,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if node.IsA('vtkMRMLMarkupsFiducialNode'):
             self.unwatch_fiducial_node(node)
 
-            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
             if not data_logic.session_loading_unloading_in_progress:
                 # Deregister from the session if the node was a session-owned target.
                 # Safe to call unconditionally: remove_target is a no-op for untracked nodes.
@@ -483,12 +485,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
         self.updateWorkflowControls()
         self.updateVirtualFitSectionState()
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")._running_wizard:
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
+        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
-            slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
+            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner").deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
 
     def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         # Refresh the corresponding row's R/A/S cells to reflect the new fiducial position, unless we
@@ -497,12 +499,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if not self._target_table_edit_in_progress:
             self._refresh_target_row_for_node(node)
 
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
-        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")._running_wizard:
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
+        if not data_logic.session_loading_unloading_in_progress and not slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")._running_wizard:
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
-            slicer.util.getModuleWidget('OpenLIFUSonicationPlanner').deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
+            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner").deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
 
     def clearVirtualFitResultsIfAny(self,target: vtkMRMLMarkupsFiducialNode, reason:str):
         """Clear virtual fit results for the target from the scene if any.
@@ -542,7 +544,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             set_approval_for_virtual_fit_result_node(
                 approval_state= False,
                 vf_result_node = node)
-            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.update_underlying_openlifu_session()
             notify(f"Virtual fit approval revoked:\n{reason}")
 
@@ -564,7 +566,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         changes rather than by transducer-transform events.
         """
         try:
-            tl_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
+            tl_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
         except AttributeError:
             tl_widget = None
         tl_logic = getattr(tl_widget, "logic", None) if tl_widget is not None else None
@@ -595,7 +597,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Clear solution regardless of whether there was a TT to revoke: the VF
         # revocation alone is enough to invalidate any cached solution.
         try:
-            sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
+            sp_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner")
         except AttributeError:
             sp_widget = None
         if sp_widget is not None:
@@ -765,8 +767,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def updateVirtualFitRelatedLabels(self):
         """When virtual fit approval is revoked or toggled, the messages displayed in the data module
         and transducer tracking module need to be updated."""
-        slicer.modules.OpenLIFUDataWidget.updateSessionStatus()
-        slicer.modules.OpenLIFUTransducerLocalizationWidget.updateVirtualFitStatus()
+        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData").updateSessionStatus()
+        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").updateVirtualFitStatus()
 
     def updateTargetsActionButtonsEnabled(self):
         """Update enabled state and label of the targets action buttons (Add / Import / Edit / Remove)."""
@@ -1258,7 +1260,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if skin_mesh_node is None:
             raise RuntimeError(f"There is no skin mesh node associated to the volume {volume_node.GetID()}")
         skin_mesh_node.SetDisplayVisibility(True)
-        slicer.modules.OpenLIFUTransducerLocalizationWidget.updateModelRenderingSettings()
+        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").updateModelRenderingSettings()
 
     def run_virtual_fit_algorithm(
         self,
@@ -1339,7 +1341,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         # Update the underlying session so persisted virtual fit results stay in sync with the scene.
         if get_app_state().loaded_session is not None:
-            data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.update_underlying_openlifu_session()
 
         self.updateVirtualFitResultsTable()
@@ -1473,7 +1475,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
     def get_approved_target_ids(self) -> List[str]:
         """Return a list of target IDs that have approved virtual fit, for the currently active session.
         Or if there is no session, then sessionless approved target IDs are returned."""
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
         session_id = None if not data_logic.validate_session() else data_logic.getParameterNode().loaded_session.get_session_id()
         approved_target_ids = get_approved_target_ids(session_id=session_id)
         return approved_target_ids
@@ -1494,7 +1496,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         set_approval_for_virtual_fit_result_node(
             approval_state=not is_approved,
             vf_result_node = node)
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.update_underlying_openlifu_session()
 
         return not is_approved
@@ -1523,7 +1525,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         revoke_any_virtual_fit_approvals_for_target(target_id=target_id, session_id=session_id)
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.update_underlying_openlifu_session()
 
     def create_manual_virtual_fit_result(
@@ -1709,7 +1711,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
             disp.SetVisibility(visible)
 
-        self.debug_info=debug_info # TODO REMOVE. FOr now I use it like this: debug_info = slicer.modules.OpenLIFUPrePlanningWidget.logic.debug_info
+        self.debug_info=debug_info # TODO REMOVE. FOr now I use it like this: debug_info = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning").logic.debug_info
 
 #
 # OpenLIFUPrePlanningTest
@@ -1725,8 +1727,8 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
     def _workflow_virtual_fit(self):
         """Test running virtual fit and approving results."""
 
-        slicer.util.selectModule("OpenLIFUPrePlanning")
-        preplanning_widget = slicer.modules.OpenLIFUPrePlanningWidget
+        navigate_to_page("OpenLIFUPrePlanning")
+        preplanning_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning")
         preplanning_logic = preplanning_widget.logic
 
         # Get the example target loaded in the scene

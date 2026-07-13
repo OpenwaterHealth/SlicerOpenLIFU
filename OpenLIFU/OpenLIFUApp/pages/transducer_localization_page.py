@@ -65,7 +65,7 @@ from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMixin
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id, get_target_candidates
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
@@ -1362,7 +1362,7 @@ class TransducerTrackingWizard(qt.QWizard):
                  initial_photoscan_id: Optional[str] = None):
         super().__init__()
 
-        self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerLocalization')
+        self._logic = slicer.util.getModuleLogic("OpenLIFU").transducer_localization_logic
         self._result_id = result_id  # None = create new on finalize; str = replace this result on finalize
         self._target_id = target_id
         self._initial_photoscan_id = initial_photoscan_id
@@ -1846,7 +1846,7 @@ class PhotoscanRegistrationWizard(qt.QWizard):
                  initial_photoscan_id: Optional[str] = None):
         super().__init__()
 
-        self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerLocalization')
+        self._logic = slicer.util.getModuleLogic("OpenLIFU").transducer_localization_logic
         self._initial_photoscan_id = initial_photoscan_id
         # Registration id to replace on Approve; set by _look_up_existing_pr.
         # None = create a new PR on finalize.
@@ -2224,7 +2224,7 @@ class PhotoscanRegistrationWizard(qt.QWizard):
             widget.watchPhotoscanRegistrationNode(self.photoscan_to_volume_transform_node)
 
         if session is not None:
-            slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+            slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
 
         self.clean_up()
         self.accept()
@@ -3071,6 +3071,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
@@ -3354,7 +3356,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def refreshPhotoscanList(self):
         """ Refreshes the list of photoscans affiliated with the loaded session"""
 
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_parameter_node = get_app_state()
 
         loaded_session = data_parameter_node.loaded_session
@@ -3725,7 +3727,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 self.logic.update_photoscan_approval(
                     photoscan_id=photoscan_id, approval_state=True)
             if session is not None:
-                slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+                slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
         self._refresh_localizations_table()
         self.updateWorkflowControls()
 
@@ -3763,7 +3765,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         remove_transducer_tracking_result_by_id(result_id=result_id, session_id=session_id)
         reindex_transducer_tracking_results(session_id=session_id)
         if session is not None:
-            slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+            slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
         self._refresh_localizations_table()
         self.updateWorkflowControls()
 
@@ -3923,7 +3925,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     @display_errors
     def onRefreshPhotocollectionsClicked(self, checked: bool = False):
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         if get_app_state().loaded_session is not None:
             data_logic.update_photocollections_affiliated_with_loaded_session()
         self._refresh_photocollections_table()
@@ -4010,7 +4012,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 raise RuntimeError(
                     "Photoscan registration wizard was completed without producing a PV transform.")
             if wizard_volume is not None:
-                slicer.modules.OpenLIFUPrePlanningWidget.showSkin(wizard_volume)
+                slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning").showSkin(wizard_volume)
             self._refresh_localizations_table()
             self._refresh_photoscans_table()
             self.updateWorkflowControls()
@@ -4083,7 +4085,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if not new_state:
             self._cascade_delete_tt_after_pr_unapproval(registration_id, session_id)
         if session is not None:
-            slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+            slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
         self._refresh_photoscans_table()
         self._refresh_localizations_table()
         self._update_manager_button_states()
@@ -4165,7 +4167,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             windowTitle="Delete photocollection",
         ):
             return
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.remove_photocollection(scan_id)
         self._refresh_photocollections_table()
         self._update_manager_button_states()
@@ -4228,7 +4230,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             reindex_photoscan_registrations(session_id=session_id)
 
         # Unload the photoscan from the scene and from the session-affiliated list.
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         if photoscan_id in get_app_state().loaded_photoscans:
             data_logic.remove_photoscan(photoscan_id, clean_up_scene=True)
         if session is not None and photoscan_id in session.affiliated_photoscans:
@@ -4263,7 +4265,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         with BusyCursor():
             data_type, pulled_files = self.logic.pull_photo_data_from_android(cur_scan_id)
 
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_parameter_node = get_app_state()
         subject_id = data_parameter_node.loaded_session.get_subject_id()
         session_id = data_parameter_node.loaded_session.get_session_id()
@@ -4353,7 +4355,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     @display_errors
     def onLoadPhotocollectionPressed(self, checked:bool):
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_parameter_node = get_app_state()
 
         loaded_session = data_parameter_node.loaded_session
@@ -4380,7 +4382,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         adding the photoscan, the list of photoscans affiliated with the loaded 
         session is updated."""
 
-        data_logic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_parameter_node = get_app_state()
 
         loaded_session = data_parameter_node.loaded_session
@@ -4490,7 +4492,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         finally:
             self.resetPhotoscanGeneratorProgressDisplay()
 
-        data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFUData")
+        data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.update_photoscans_affiliated_with_loaded_session()
         self.updateInputOptions()
         self.updateWorkflowControls()
@@ -4519,7 +4521,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def get_currently_selected_target_from_preplanning(self) -> Optional[vtkMRMLMarkupsFiducialNode]:
         """Returns the currently selected target in the pre-planning module. Returns None if no target is selected"""
         
-        preplanning_widget_input_data = slicer.modules.OpenLIFUPrePlanningWidget.algorithm_input_widget.get_current_data()
+        preplanning_widget_input_data = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning").algorithm_input_widget.get_current_data()
         preplanning_target = preplanning_widget_input_data["Target"]
         return preplanning_target
     
@@ -4532,7 +4534,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         selected_target = self.get_currently_selected_target_from_preplanning()
         if not selected_target:
             return None
-        preplanning_virtualfit = slicer.modules.OpenLIFUPrePlanningWidget.getCurrentVirtualFitSelection()
+        preplanning_virtualfit = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning").getCurrentVirtualFitSelection()
         return preplanning_virtualfit
 
     def checkCanRunTracking(self,caller = None, event = None) -> None:
@@ -4788,7 +4790,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
             # Enable photoscan rendering options if tracking was run successfully and display the skin segmentation
             if wizard_volume is not None:
-                slicer.modules.OpenLIFUPrePlanningWidget.showSkin(wizard_volume)
+                slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning").showSkin(wizard_volume)
 
             # Watch the transducer localization result for any deletions/modifications. The PR
             # was created/approved by the PhotoscanRegistrationWizard and is watched there.
@@ -4806,7 +4808,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             # pointing at the prior (e.g. virtual-fit) pose, which causes a "transform does not match" revoke on
             # next session load.
             if get_app_state().loaded_session is not None:
-                slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+                slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
 
             self.updateWorkflowControls()
 
@@ -4894,7 +4896,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             else:
                 notify(f"Photoscan registration approval revoked:\n{reason}")
             if session is not None:
-                slicer.util.getModuleLogic('OpenLIFUData').update_underlying_openlifu_session()
+                slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
             self._refresh_localizations_table()
             self._refresh_photoscans_table()
             self._update_manager_button_states()
@@ -4974,7 +4976,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             if selected_target is None:
                 self._virtual_fit_transform_for_tracking = None
             else:
-                best_virtual_fit_result_node = slicer.util.getModuleLogic('OpenLIFUPrePlanning').find_best_virtual_fit_result_for_target(
+                best_virtual_fit_result_node = slicer.util.getModuleLogic("OpenLIFU").preplanning_logic.find_best_virtual_fit_result_for_target(
                     target_id = fiducial_to_openlifu_point_id(selected_target))
                 self._virtual_fit_transform_for_tracking = best_virtual_fit_result_node # Could be None
         
@@ -5474,12 +5476,12 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
                 self.update_photoscan_approval(photoscan_id=photoscan_id, approval_state=False)
 
         if session:
-            data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.update_underlying_openlifu_session()
         # Clear any cached solution: revoking TT approval invalidates the pose source the
         # solution was computed against. Solution clearing is now driven by approval changes.
         try:
-            sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
+            sp_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner")
         except AttributeError:
             sp_widget = None
         if sp_widget is not None:
@@ -5531,7 +5533,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         if photoscan.id in get_app_state().loaded_photoscans:
             loaded_slicer_photoscan = get_app_state().loaded_photoscans[photoscan.id]
         elif get_app_state().loaded_session:
-            loaded_slicer_photoscan = slicer.util.getModuleLogic('OpenLIFUData').load_photoscan_from_openlifu(
+            loaded_slicer_photoscan = slicer.util.getModuleLogic("OpenLIFU").data_logic.load_photoscan_from_openlifu(
                     photoscan,
                     load_from_active_session = True)
         # This shouldn't happen - can't click the Preview button without a loaded photoscan or session
@@ -5880,7 +5882,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
 
         # This should trigger `onDataParameterNodeModified` which will trigger the approval status update
         if session:
-            data_logic: OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic: OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.update_underlying_openlifu_session()
 
         return (pr_transform_node, tv_transform_node)
@@ -5917,7 +5919,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         transducer.move_node_into_transducer_sh_folder(tv_transform_node)
 
         if session:
-            data_logic: OpenLIFUDataLogic = slicer.util.getModuleLogic('OpenLIFUData')
+            data_logic: OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.update_underlying_openlifu_session()
 
         return tv_transform_node
@@ -6063,8 +6065,8 @@ class OpenLIFUTransducerLocalizationTest(ScriptedLoadableModuleTest):
     def _workflow_localization(self):
         """Test running virtual fit and approving results."""
 
-        slicer.util.selectModule("OpenLIFUTransducerLocalization")
-        tl_widget = slicer.modules.OpenLIFUTransducerLocalizationWidget
+        navigate_to_page("OpenLIFUTransducerLocalization")
+        tl_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
         tl_logic = tl_widget.logic
 
         # ---- Phase 2 manager smoke-tests ----

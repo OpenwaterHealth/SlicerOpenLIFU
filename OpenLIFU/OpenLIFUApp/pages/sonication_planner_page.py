@@ -49,7 +49,7 @@ from OpenLIFULib import (
 from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
-from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
+from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
@@ -87,6 +87,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def __init__(self, parent=None) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Resolve resourcePath() via the OpenLIFU host module (post-5c-2 layout).
+        self.moduleName = "OpenLIFU"
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
@@ -495,7 +497,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Delete the solution in the data module and the solution analysis in
         the sonication planner module, and show a message dialog to that effect.
         """
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic('OpenLIFUData')
+        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
         if self.logic.solution_analysis_exists():
             data_logic.clear_solution(clean_up_scene=True)
             self._parameterNode.solution_analysis = None
@@ -907,7 +909,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             transducer=inputTransducer,
         )
         analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
-        slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution, analysis=analysis)
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(solution, analysis=analysis)
         self.getParameterNode().solution_analysis = analysis
         return solution, analysis
 
@@ -1043,7 +1045,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         This will write the approval to the solution in memory and, if there is an active session from which
         the active solution was generated, then it will also write the solution approval to the database.
         """
-        slicer.util.getModuleLogic('OpenLIFUData').toggle_solution_approval()
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.toggle_solution_approval()
 
     def compute_analysis_from_solution(self, solution:SlicerOpenLIFUSolution) -> Optional[SlicerOpenLIFUSolutionAnalysis]:
         """Compute solution analysis from a given solution.
@@ -1077,8 +1079,8 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
         import numpy as np
         from scipy.linalg import expm
         
-        slicer.util.selectModule("OpenLIFUSonicationPlanner")
-        sp_widget = slicer.modules.OpenLIFUSonicationPlannerWidget
+        navigate_to_page("OpenLIFUSonicationPlanner")
+        sp_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner")
         sp_logic = sp_widget.logic 
  
         activeData = sp_widget.algorithm_input_widget.get_current_data()
@@ -1125,5 +1127,5 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
             activeData["Transducer"], activeData["Protocol"]
         )
         solution.solution.solution.id = "TestSolutionID"
-        slicer.util.getModuleLogic('OpenLIFUData').set_solution(solution)
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(solution)
         sp_logic.getParameterNode().solution_analysis = analysis
