@@ -6414,6 +6414,14 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
+            # Also drop our ``ModifiedEvent`` observer before we (potentially)
+            # re-add it below. ``OpenLIFULogic.getParameterNode`` now caches
+            # and returns the same ``OpenLIFUAppState`` wrapper across calls
+            # (issue #586), so ``enter()`` -> ``initializeParameterNode()``
+            # -> ``setParameterNode(same_node)`` used to trip
+            # ``VTKObservationMixin.addObserver``'s "already has observer"
+            # warning on every re-entry into the Data page.
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
         self._parameterNode = inputParameterNode
         if self._parameterNode:
