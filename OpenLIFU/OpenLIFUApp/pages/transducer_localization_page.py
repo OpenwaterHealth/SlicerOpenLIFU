@@ -62,6 +62,7 @@ from OpenLIFULib import (
     get_app_state,
 )
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
+from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
@@ -3146,7 +3147,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        self.addObserver(get_app_state().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        get_app_state_signals().dataChanged.connect(self.onDataParameterNodeModified)
 
         # This ensures we update the drop down options in the volume and photoscan comboBox when nodes are added/removed
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
@@ -3218,6 +3219,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        try:
+            get_app_state_signals().dataChanged.disconnect(self.onDataParameterNodeModified)
+        except Exception:  # noqa: BLE001
+            pass
         self.removeObservers()
 
     def enter(self) -> None:
@@ -3268,7 +3273,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
-    def onDataParameterNodeModified(self, caller, event) -> None:
+    def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         self.updatePhotoscanGenerationButtons()
         self._refresh_photocollections_table()
         self._refresh_photoscans_table()

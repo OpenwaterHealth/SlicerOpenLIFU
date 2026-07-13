@@ -35,8 +35,8 @@ def get_cur_db() -> "Optional[Database]":
     return slicer.util.getModuleLogic('OpenLIFUDatabase').db
 
 def get_app_state() -> "OpenLIFUAppState":
-    """Get the parameter node of the OpenLIFU Data module"""
-    return slicer.util.getModuleLogic('OpenLIFUData').getParameterNode()
+    """Get the OpenLIFU app-state parameter node (owned by the host module)."""
+    return slicer.util.getModuleLogic('OpenLIFU').getParameterNode()
 
 def get_openlifu_login_parameter_node() -> "OpenLIFULoginParameterNode":
     """Get the parameter node of the OpenLIFU Login module"""

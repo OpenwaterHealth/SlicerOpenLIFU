@@ -41,6 +41,7 @@ from OpenLIFULib import (
     ensure_python_requirements_for_module_enter,
     get_app_state,
 )
+from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
@@ -377,12 +378,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateRunProgressBar()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
 
-        # Add an observer on the Data module's parameter node
-        self.addObserver(
-            get_app_state().parameterNode,
-            vtk.vtkCommand.ModifiedEvent,
-            self.onDataParameterNodeModified
-        )
+        # Refresh when AppState changes. Round 5b: Qt signal.
+        get_app_state_signals().dataChanged.connect(self.onDataParameterNodeModified)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -404,6 +401,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         logging.debug("OpenLIFUSonicationControlWidget.cleanup() called")
+        try:
+            get_app_state_signals().dataChanged.disconnect(self.onDataParameterNodeModified)
+        except Exception:  # noqa: BLE001
+            pass
         cleanup_module_callbacks(self)
         self.removeObservers()
 

@@ -6451,7 +6451,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """List of functions to call when `subject` property is changed."""
 
     def getParameterNode(self):
-        return OpenLIFUAppState(super().getParameterNode())
+        # AppState relocated to the OpenLIFU host module in Round 5b —
+        # delegate so both getModuleLogic calls resolve to the same node.
+        return slicer.util.getModuleLogic('OpenLIFU').getParameterNode()
 
     def call_on_subject_changed(self, f : Callable[[Optional["openlifu.db.Subject"]],None]) -> None:
         """Set a function to be called whenever the `subject` property is changed.

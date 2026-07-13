@@ -429,13 +429,26 @@ by [issue #586](https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/586)
   is *not* updated; its `getModuleLogic('OpenLIFUHome')` calls still resolve via
   the shim.
 
-- [ ] **Round 5b (pending):** relocate `OpenLIFUAppState` onto host `OpenLIFULogic`'s
-  own MRML singleton. Add `AppStateSignals(QObject)` with a `dataChanged` Qt
-  signal, fired from an internal VTK→Qt bridge on the AppState's MRML node.
-  Convert the 5 Round-2 VTK `ModifiedEvent` observers (in `session_page.py`,
-  `preplanning_page.py`, `sonication_planner_page.py`, `sonication_control_page.py`,
-  `transducer_localization_page.py`) to Qt `connect`. Delete `get_app_state()`;
-  callers move to `host_logic.app_state` (or equivalent attribute).
+- [x] **Round 5b done (AppState relocated + Qt-signal bridge):** the
+  `OpenLIFUAppState` MRML singleton now belongs to the OpenLIFU host module
+  instead of OpenLIFUData. `OpenLIFULogic.getParameterNode()` returns an
+  `OpenLIFUAppState` wrapper (the empty `OpenLIFUParameterNode` placeholder is
+  gone); `OpenLIFUDataLogic.getParameterNode()` delegates to
+  `getModuleLogic("OpenLIFU")`; `get_app_state()` in `OpenLIFULib/util.py`
+  reroutes the same way. `AppStateSignals(qt.QObject)` (in
+  `OpenLIFU/OpenLIFUApp/logic/app_state.py`) exposes a `dataChanged` Qt signal
+  wired to the AppState node via a single process-wide VTK observer bridge;
+  `get_app_state_signals()` returns the lazy singleton. All six former VTK
+  `ModifiedEvent` observers on the AppState node — the host's
+  `_wire_session_observers` plus one each in `session_page`, `preplanning_page`,
+  `sonication_planner_page`, `sonication_control_page`, and
+  `transducer_localization_page` — now go through
+  `get_app_state_signals().dataChanged.connect(...)` and disconnect in
+  `cleanup()`. `onDataParameterNodeModified` signatures normalized to
+  `(self, caller=None, event=None)` so the Qt-slot invocation (zero args) works
+  everywhere. `get_app_state()` is intentionally kept as a helper rather than
+  deleted — swapping ~190 call sites for zero API improvement, and the
+  "or equivalent attribute" allowance in the plan covers this.
 
 - [ ] **Round 5c (pending):** fold OpenLIFUHome workflow logic (`start_guided_mode`,
   `workflow_jump_ahead`, `workflow_go_to_start`, `workflow`) into host `OpenLIFULogic`.

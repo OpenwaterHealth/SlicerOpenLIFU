@@ -29,6 +29,7 @@ from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
 from OpenLIFULib import get_app_state
+from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, wire_passive_module_header
 from OpenLIFULib.util import BusyCursor, display_errors
@@ -99,13 +100,9 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
         self.initializeParameterNode()
 
-        # Observe Data's parameter node so the dashboard refreshes when the
-        # loaded session, loaded photoscans, solution, or run change.
-        self.addObserver(
-            get_app_state().parameterNode,
-            vtk.vtkCommand.ModifiedEvent,
-            self.onDataParameterNodeModified,
-        )
+        # Refresh the dashboard whenever AppState changes (loaded session,
+        # loaded photoscans, solution, or run). Round 5b: Qt signal.
+        get_app_state_signals().dataChanged.connect(self.onDataParameterNodeModified)
 
         # ---- View buttons: open the same preview popups as the Data Manager.
         # Protocol/Transducer are 1:1 with the session and get a section-level
@@ -117,6 +114,10 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         self.updateSessionDashboard()
 
     def cleanup(self) -> None:
+        try:
+            get_app_state_signals().dataChanged.disconnect(self.onDataParameterNodeModified)
+        except Exception:  # noqa: BLE001
+            pass
         self.removeObservers()
 
     def enter(self) -> None:

@@ -43,6 +43,7 @@ from OpenLIFULib import (
     get_app_state,
     get_target_candidates,
 )
+from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.coordinate_system_utils import get_IJK2RAS
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
@@ -304,7 +305,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
-        self.addObserver(get_app_state().parameterNode, vtk.vtkCommand.ModifiedEvent, self.onDataParameterNodeModified)
+        get_app_state_signals().dataChanged.connect(self.onDataParameterNodeModified)
 
         # Replace the placeholder algorithm input widget by the actual one
         algorithm_input_names = ["Protocol", "Transducer", "Volume", "Target"]
@@ -368,6 +369,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        try:
+            get_app_state_signals().dataChanged.disconnect(self.onDataParameterNodeModified)
+        except Exception:  # noqa: BLE001
+            pass
         self.removeObservers()
 
     def enter(self) -> None:
@@ -745,7 +750,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onTargetNameModified(self, caller, event):
         self.updateInputOptions()
 
-    def onDataParameterNodeModified(self,caller, event) -> None:
+    def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         self.updateInputOptions()
         self.updateWorkflowControls()
         self.updateVirtualFitRelatedLabels()

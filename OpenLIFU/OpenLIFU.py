@@ -12,7 +12,6 @@ import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
-from slicer.parameterNodeWrapper import parameterNodeWrapper
 from slicer.util import VTKObservationMixin
 
 # OpenLIFULib imports
@@ -28,11 +27,8 @@ from OpenLIFULib.module_layout import (
 )
 from OpenLIFULib.util import display_errors
 
-# Smoke import to verify the OpenLIFUApp subpackage is installed and importable.
-# Round 0 scaffolding — the class is empty and not yet wired into the host
-# parameter node; later rounds move fields onto it and eventually replace
-# OpenLIFUParameterNode.
-from OpenLIFUApp.logic.app_state import OpenLIFUAppState  # noqa: F401
+# Host's parameter node type — relocated from OpenLIFUData in Round 5b.
+from OpenLIFUApp.logic.app_state import OpenLIFUAppState, get_app_state_signals
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
@@ -79,11 +75,11 @@ class OpenLIFU(ScriptedLoadableModule):
 # Parameter node
 # ---------------------------------------------------------------------------
 
-@parameterNodeWrapper
-class OpenLIFUParameterNode:
-    """The host module's own parameter node currently holds no state — every
-    workflow piece still owns its own parameter node. Reserved for future
-    use (e.g. the active page id)."""
+# The host module's parameter-node type is :class:`OpenLIFUAppState`, imported
+# above. Round 5b of DEMODULING.md relocated the AppState's underlying MRML
+# singleton from ``OpenLIFUData`` to this module; ``OpenLIFULogic``,
+# ``OpenLIFUDataLogic.getParameterNode()``, and ``get_app_state()`` all
+# resolve to the same wrapper around the OpenLIFU host module's node.
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +446,10 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def cleanup(self) -> None:
         self.removeObservers()
+        try:
+            get_app_state_signals().dataChanged.disconnect(self._on_app_state_changed)
+        except Exception:  # noqa: BLE001
+            pass
         self._uninstall_select_module_shim()
         self._unhook_workflow_updates()
 
@@ -472,7 +472,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self.logic is not None:
             self.setParameterNode(self.logic.getParameterNode())
 
-    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUParameterNode]) -> None:
+    def setParameterNode(self, inputParameterNode: Optional[OpenLIFUAppState]) -> None:
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
         self._parameterNode = inputParameterNode
@@ -856,14 +856,13 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def _wire_session_observers(self) -> None:
         try:
-            data_pn = slicer.util.getModuleLogic("OpenLIFUData").getParameterNode().parameterNode
-            self.addObserver(
-                data_pn,
-                vtk.vtkCommand.ModifiedEvent,
-                lambda *_: (self._refresh_save_exit_state(), self._refresh_timeline_state()),
-            )
+            get_app_state_signals().dataChanged.connect(self._on_app_state_changed)
         except Exception:  # noqa: BLE001
             pass
+        self._refresh_save_exit_state()
+        self._refresh_timeline_state()
+
+    def _on_app_state_changed(self) -> None:
         self._refresh_save_exit_state()
         self._refresh_timeline_state()
 
@@ -892,7 +891,7 @@ class OpenLIFULogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
     def getParameterNode(self):
-        return OpenLIFUParameterNode(super().getParameterNode())
+        return OpenLIFUAppState(super().getParameterNode())
 
 
 # ---------------------------------------------------------------------------
