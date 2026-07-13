@@ -363,8 +363,20 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.removeTransformPushButton.clicked.connect(self.onRemoveVirtualFitClicked)
         self.ui.removeTransformPushButton.setToolTip("Remove the selected virtual fit result from the scene")
         self.updateVirtualFitResultsTable()
-        slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation()
-        self.logic.call_on_chosen_virtual_fit_changed(slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").setVirtualFitResultForTracking)
+        # Wire the "chosen virtual fit changed" callback so it forwards to the
+        # TransducerLocalization page. Fetch the target widget lazily inside
+        # the callback rather than calling ``widgetRepresentation()`` here:
+        # eagerly creating the TransducerLocalization widget during
+        # PrePlanning's setup triggers TransducerLocalization.setup(), which
+        # calls ``_refresh_localizations_table`` ->
+        # ``get_currently_selected_target_from_preplanning`` ->
+        # ``get_page_widget("OpenLIFUPrePlanning")``. Because Slicer only
+        # caches the widget after ``setup`` returns, that lookup creates a
+        # second PrePlanning widget and recurses (issue #586).
+        def _forward_chosen_virtual_fit_to_tl(*args, **kwargs):
+            tl_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
+            tl_widget.setVirtualFitResultForTracking(*args, **kwargs)
+        self.logic.call_on_chosen_virtual_fit_changed(_forward_chosen_virtual_fit_to_tl)
         # ------------------------------------
 
         self.updateWorkflowControls()
