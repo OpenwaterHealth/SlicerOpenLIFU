@@ -910,9 +910,30 @@ class OpenLIFULogic(ScriptedLoadableModuleLogic):
         # Workflow was formerly owned by OpenLIFUHomeLogic; folded in here
         # in Round 5c-1. OpenLIFUHomeLogic.workflow now delegates to this.
         self.workflow = Workflow()
+        self._app_state_cache: Optional[OpenLIFUAppState] = None
+        self._app_state_cache_node = None
 
     def getParameterNode(self):
-        return OpenLIFUAppState(super().getParameterNode())
+        """Return the OpenLIFU app-state wrapper (cached).
+
+        Construction of :class:`OpenLIFUAppState` runs
+        ``parameterNodeWrapper._initMethod``, which writes defaults for any
+        unset fields. Each write fires ``ModifiedEvent`` on the underlying
+        MRML node; observers (page ``onDataParameterNodeModified`` handlers,
+        the ``AppStateSignals.dataChanged`` re-emit lambda) can call
+        ``get_app_state()`` again before the wrapper is fully constructed.
+        We batch the default-writes inside ``NodeModify`` so a single
+        ``ModifiedEvent`` fires *after* construction finishes and after the
+        cache is populated — observers then get the fully-initialised
+        wrapper and never re-enter ``OpenLIFUAppState(...)``.
+        """
+        mrml_node = super().getParameterNode()
+        if self._app_state_cache is None or self._app_state_cache_node is not mrml_node:
+            with slicer.util.NodeModify(mrml_node):
+                wrapper = OpenLIFUAppState(mrml_node)
+            self._app_state_cache = wrapper
+            self._app_state_cache_node = mrml_node
+        return self._app_state_cache
 
     # ------------------------------------------------------------------
     # Guided-workflow entry points (formerly on OpenLIFUHomeLogic)
