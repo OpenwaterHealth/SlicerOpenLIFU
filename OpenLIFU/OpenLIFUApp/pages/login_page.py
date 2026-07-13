@@ -699,6 +699,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.setParameterNode(self.logic.getParameterNode())
 
     def cacheAllLoginRelatedWidgets(self) -> None:
+        # As of Round 5c-3 the OpenLIFU host module instantiates every
+        # page widget in ``_embed_all_pages`` at startup and exposes them
+        # via ``get_page_widget(module_name)``. Walk the host-owned
+        # widgets rather than Slicer's module registry so we operate on
+        # the same instances the user actually sees. (Pre-5c-3 this
+        # called ``slicer.util.getModule(name).widgetRepresentation()``
+        # which forced each shim module to build its own widget.)
+        host_widget = slicer.util.getModuleWidget("OpenLIFU")
         all_openlifu_modules = [
             "OpenLIFUDatabase",
             "OpenLIFUData",
@@ -709,10 +717,12 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "OpenLIFUTransducerLocalization",
             ]
         for moduleName in all_openlifu_modules:
-            module = slicer.util.getModule(moduleName)
-            widgetRepresentation = module.widgetRepresentation()
-            self._permissions_widgets.extend(slicer.util.findChildren(widgetRepresentation, name="permissionsWidget*"))
-            self._user_account_banners.extend(slicer.util.findChildren(widgetRepresentation, className="UserAccountBanner"))
+            page_widget = host_widget.get_page_widget(moduleName)
+            ui_widget = getattr(page_widget, "uiWidget", None) if page_widget is not None else None
+            if ui_widget is None:
+                continue
+            self._permissions_widgets.extend(slicer.util.findChildren(ui_widget, name="permissionsWidget*"))
+            self._user_account_banners.extend(slicer.util.findChildren(ui_widget, className="UserAccountBanner"))
 
         self._permissions_widgets.extend([self.ui.permissionsWidget1])
 

@@ -378,7 +378,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # caches the widget after ``setup`` returns, that lookup creates a
         # second PrePlanning widget and recurses (issue #586).
         def _forward_chosen_virtual_fit_to_tl(*args, **kwargs):
+            # ``_page_widgets`` is populated incrementally as the host module
+            # instantiates each page. During PrePlanning's own setup(), the
+            # TransducerLocalization page has not been embedded yet, so
+            # ``get_page_widget`` returns None; skip the forward in that
+            # case (TransducerLocalization reads the current chosen virtual
+            # fit from PrePlanning at its own setup time).
             tl_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
+            if tl_widget is None:
+                return
             tl_widget.setVirtualFitResultForTracking(*args, **kwargs)
         self.logic.call_on_chosen_virtual_fit_changed(_forward_chosen_virtual_fit_to_tl)
         # ------------------------------------
@@ -465,17 +473,28 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
             data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
             if not data_logic.session_loading_unloading_in_progress:
+                # Same ordering rationale as ``onRemoveTargetClicked`` (#586): clear the
+                # target from the session and its VF result nodes from the scene *before*
+                # invoking the TT-approval cascade, so the cascade's inner ``write_session``
+                # sees a self-consistent openlifu Session.
+                reason = ("The target was removed.\n"
+                    "Any virtual fit transforms associated with this target will also be removed.")
+                target_id = fiducial_to_openlifu_point_id(node)
+                had_vf_approval = self.logic.get_virtual_fit_approval(target_id)
+
                 # Deregister from the session if the node was a session-owned target.
                 # Safe to call unconditionally: remove_target is a no-op for untracked nodes.
                 session = get_app_state().loaded_session
                 if session is not None:
                     session.remove_target(node)
 
-                self.revokeTargetApprovalIfAny(node, reason="The target was removed.\n" +
-                "Any virtual fit transforms associated with this target will also be removed.")
-
                 # Clear affiliated virtual fit results if present
                 self.logic.clear_virtual_fit_results(target = node)
+
+                if had_vf_approval:
+                    notify(f"Virtual fit approval revoked:\n{reason}")
+                    self._cascade_revoke_tt_after_vf_unapproval(reason=reason, target_id=target_id)
+
                 self.updateWorkflowControls()
 
         self.updateTargetsTable()
@@ -964,12 +983,34 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         node = self.getCurrentSelectedTarget()
         if node is None:
             raise RuntimeError("It should not be possible to click Remove target while there is not a valid target selected.")
-        # Deregister from the session before removing the scene node so the session's
-        # target_nodes list never holds a dangling MRML reference. (onNodeRemoved will
-        # also call remove_target defensively, but it is idempotent.)
+        # Ordering matters here. The TT-approval cascade
+        # (``_cascade_revoke_tt_after_vf_unapproval`` -> ``tl_logic
+        # .revoke_transducer_tracking_approval``) calls ``update_underlying_openlifu_session``
+        # and then ``clear_solution`` -> ``db.write_session``. openlifu's ``write_session``
+        # validates that every ``target_id`` in ``session.virtual_fit_results`` still appears
+        # in ``session.targets``. So before invoking the cascade we must (1) drop the target
+        # from the session and (2) clear the target's VF result nodes from the scene, so that
+        # ``update_underlying_openlifu_session`` re-serializes a self-consistent session
+        # (#586).
+        reason = (
+            "The target was removed.\n"
+            "Any virtual fit transforms associated with this target will also be removed."
+        )
+        target_id = fiducial_to_openlifu_point_id(node)
+        # Snapshot approval before we clear scene state; clear_virtual_fit_results will
+        # drop the VF nodes so the usual ``get_virtual_fit_approval`` lookup can no longer
+        # tell us whether a cascade is warranted.
+        had_vf_approval = self.logic.get_virtual_fit_approval(target_id)
+
         session = get_app_state().loaded_session
         if session is not None:
             session.remove_target(node)
+        self.logic.clear_virtual_fit_results(target=node)
+
+        if had_vf_approval:
+            notify(f"Virtual fit approval revoked:\n{reason}")
+            self._cascade_revoke_tt_after_vf_unapproval(reason=reason, target_id=target_id)
+
         slicer.mrmlScene.RemoveNode(node)
 
         self.updateWorkflowControls()

@@ -4949,9 +4949,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUDataLogic()
+        # Use the OpenLIFU host module's single OpenLIFUDataLogic instance rather than
+        # constructing a widget-private one. OpenLIFUDataLogic holds mutable Python-only
+        # state (``_subject``, ``_on_subject_changed_callbacks``, ``session_loading_
+        # unloading_in_progress``); every other page reads/writes that state via
+        # ``slicer.util.getModuleLogic("OpenLIFU").data_logic``, so a second instance
+        # here silently diverges and downstream flows (e.g. delete-target cascade ->
+        # clear_solution -> ``db.write_session(self.subject, ...)``) crash with
+        # ``AttributeError: 'NoneType' object has no attribute 'id'`` (#586).
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
 
         # The legacy user-account banner has been retired; the shared
         # ``ModuleHeaderWidget`` (inserted by ``apply_module_layout`` above)
@@ -6916,6 +6922,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # === Proceed with loading session ===
 
         self.clear_session()
+
+        # Make sure ``self.subject`` reflects the subject that owns this
+        # session. Historically this was set by the widget's
+        # ``on_load_subject_clicked`` before calling ``load_session``, but
+        # not every caller goes through that flow (e.g. Home's
+        # ``on_create_new_session_clicked`` at home_page.py:541 calls
+        # ``data_logic.load_session`` directly after a Create-Session
+        # dialog). Setting it here maintains the invariant that whenever a
+        # session is loaded, ``self.subject`` is populated -- otherwise
+        # downstream operations that need the subject (save_session,
+        # clear_solution -> db.write_session) crash with
+        # ``AttributeError: 'NoneType' object has no attribute 'id'``
+        # (#586).
+        self.subject = self.get_subject(subject_id)
 
         self.session_loading_unloading_in_progress = True  
 

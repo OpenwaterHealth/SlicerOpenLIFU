@@ -190,6 +190,14 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
+        # Re-run the analysis refresh now that ``_parameterNode`` is wired.
+        # The earlier call at the top of setup no-ops when the parameter
+        # node isn't ready yet (see the guard in ``updateSolutionAnalysis``);
+        # this second call catches the case where a solution was already
+        # loaded (e.g. Data page auto-connected the database) before this
+        # page's setup ran (#586).
+        self.updateSolutionAnalysis()
+
         self.updateWorkflowControls()
 
     def _lift_approve_widget_out_of_scroll_area(self, uiWidget) -> None:
@@ -751,6 +759,14 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         if solution is None:
             self.clear_solution_analysis_tables() # clear out the table
             self.ui.analysisStackedWidget.setCurrentIndex(0) # set the page to "no solution"
+            return
+
+        # ``setup`` calls this method before ``initializeParameterNode`` runs
+        # (parameter node is set up last so it can connectGui to fully-swapped
+        # widgets). Skip the analysis refresh in that transient window; setup
+        # will call updateSolutionAnalysis again through the parameter-node
+        # observer once the parameter node is wired (#586).
+        if self._parameterNode is None:
             return
 
         analysis = self._parameterNode.solution_analysis

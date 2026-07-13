@@ -605,8 +605,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             widget_class = widget_classes[page_def.key]
             try:
                 logging.info("[OpenLIFU host] embedding %s...", page.key)
-                widget = widget_class(parent=None)
-                widget.setup()
+                widget = self._instantiate_page_widget(widget_class)
                 self._page_widgets[page.key] = widget
 
                 container = self._embed_page_widget_into_stack(widget)
@@ -637,8 +636,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             widget_class = widget_classes[key]
             try:
                 logging.info("[OpenLIFU host] setting up popup-only %s...", key)
-                widget = widget_class(parent=None)
-                widget.setup()
+                widget = self._instantiate_page_widget(widget_class)
                 self._page_widgets[key] = widget
             except Exception:  # noqa: BLE001
                 logging.exception("[OpenLIFU host] setup failed for popup-only %s", key)
@@ -656,6 +654,40 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._current_page_key = None  # force show_page to do the swap
         self.show_page(target)
         logging.info("[OpenLIFU host] show_page(%r) done, current=%s", target, self._current_page_key)
+
+    def _instantiate_page_widget(self, widget_class):
+        """Construct a page widget and call ``setup()`` on it in the right order.
+
+        ``ScriptedLoadableModuleWidget.__init__`` auto-creates a
+        ``qMRMLWidget`` parent AND auto-calls ``setup()`` **when parent is
+        None**. Every page widget's ``__init__`` sets
+        ``self.moduleName = "OpenLIFU"`` *after* the super ``__init__``, so
+        the parent-less path invokes ``setup()`` before ``moduleName`` has
+        been redirected — which makes ``self.resourcePath("UI/...")`` look
+        under the (deleted) per-page module directory and raise
+        ``Could not load UI file``.
+
+        We work around that by supplying a real (but invisible) parent so
+        the base class skips its auto-setup path, then explicitly calling
+        ``widget.setup()`` after ``moduleName`` has been assigned. This is
+        equivalent to the flow Slicer uses when instantiating shim modules
+        (parent = a qMRMLWidget with a layout, deferred setup call).
+
+        The dummy parent must have a layout because the base
+        ``__init__`` captures ``self.layout = self.parent.layout()``, and
+        every page's ``setup()`` does ``self.layout.addWidget(uiWidget)``.
+        """
+        parent_qwidget = qt.QWidget()
+        # Give the parent a layout so `self.layout = self.parent.layout()`
+        # inside ScriptedLoadableModuleWidget.__init__ is not None.
+        qt.QVBoxLayout(parent_qwidget)
+        parent_qwidget.setVisible(False)
+        widget = widget_class(parent=parent_qwidget)
+        # ``moduleName`` has now been set to "OpenLIFU" by the widget's
+        # __init__, so resourcePath() will resolve under the host module's
+        # Resources/ directory.
+        widget.setup()
+        return widget
 
     def _embed_page_widget_into_stack(self, widget) -> qt.QWidget:
         """Reparent ``widget.uiWidget`` into a new page of ``self.ui.pageStack``.
