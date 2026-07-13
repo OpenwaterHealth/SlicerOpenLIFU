@@ -78,7 +78,7 @@ if TYPE_CHECKING:
     import openlifu.plan
     import openlifu.seg.virtual_fit
     import openlifu.xdc
-    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
+    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
 
 PLACE_INTERACTION_MODE_ENUM_VALUE = slicer.vtkMRMLInteractionNode().Place
 

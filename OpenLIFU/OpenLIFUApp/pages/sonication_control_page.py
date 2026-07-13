@@ -738,7 +738,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             )
             return
         # Local import to avoid pulling all of the Data module's symbols at import time.
-        from OpenLIFUData import RunManagerDialog
+        from OpenLIFUApp.pages.data_page import RunManagerDialog
         dlg = RunManagerDialog(
             db=db,
             subject_id=loaded_session.get_subject_id(),

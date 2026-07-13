@@ -6,10 +6,10 @@ import slicer
 from slicer import vtkMRMLNode
 if TYPE_CHECKING:
     from openlifu.db import Database
-    from OpenLIFUDatabase.OpenLIFUDatabase import OpenLIFUDatabaseParameterNode
+    from OpenLIFUApp.pages.database_page import OpenLIFUDatabaseParameterNode
     from OpenLIFUApp.logic.app_state import OpenLIFUAppState
-    from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginParameterNode
-    from OpenLIFULogin.OpenLIFULogin import OpenLIFULoginLogic
+    from OpenLIFUApp.pages.login_page import OpenLIFULoginParameterNode
+    from OpenLIFUApp.pages.login_page import OpenLIFULoginLogic
 
 # Use this to ensure compatibility in Python 3.9
 get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext

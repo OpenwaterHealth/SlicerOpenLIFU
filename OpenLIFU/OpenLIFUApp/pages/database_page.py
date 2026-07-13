@@ -426,7 +426,7 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
             self._cloudSyncLogic.forget_credentials()
             self._setCloudLoginError(None)
             return
-        from OpenLIFULogin import UsernamePasswordDialog
+        from OpenLIFUApp.pages.login_page import UsernamePasswordDialog
         dlg = UsernamePasswordDialog()
         res, user, pw = dlg.customexec_()
         if res != qt.QDialog.Accepted:

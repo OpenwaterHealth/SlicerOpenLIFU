@@ -7,8 +7,8 @@ from OpenLIFULib.module_layout import navigate_to_page
 
 if TYPE_CHECKING:
     import openlifu
-    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
-    from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
+    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
+    from OpenLIFUApp.pages.home_page import OpenLIFUHomeLogic
 
 def get_guided_mode_state() -> bool:
     """Get guided mode state from the OpenLIFU Home module's parameter node"""

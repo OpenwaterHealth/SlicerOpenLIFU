@@ -125,7 +125,7 @@ if TYPE_CHECKING:
     import openlifu
     from openlifu.db import Database
     import openlifu.nav.photoscan
-    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
+    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
 
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def __init__(self, parent=None):

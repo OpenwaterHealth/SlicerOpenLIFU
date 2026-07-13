@@ -442,7 +442,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def on_sign_in_clicked(self, checked: bool = False) -> None:
-        from OpenLIFUData import _ModuleWidgetPopupDialog
+        from OpenLIFUApp.pages.data_page import _ModuleWidgetPopupDialog
         dlg = _ModuleWidgetPopupDialog(
             "OpenLIFULogin", "Account", parent=slicer.util.mainWindow()
         )
@@ -451,7 +451,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def on_database_label_clicked(self) -> None:
-        from OpenLIFUData import _ModuleWidgetPopupDialog
+        from OpenLIFUApp.pages.data_page import _ModuleWidgetPopupDialog
         dlg = _ModuleWidgetPopupDialog(
             "OpenLIFUDatabase", "Database", parent=slicer.util.mainWindow()
         )
@@ -504,7 +504,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Step 1: subject pick (reuses Data's LoadSubjectDialog, which also
         # exposes "Add Subject" so the user can create a subject on the fly).
-        from OpenLIFUData import CreateNewSessionDialog, LoadSubjectDialog
+        from OpenLIFUApp.pages.data_page import CreateNewSessionDialog, LoadSubjectDialog
         subject_dlg = LoadSubjectDialog(db)
         subject = subject_dlg.exec_and_get_subject()
         if subject is None:
@@ -692,30 +692,30 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
             
     def _OpenLIFU_FullTest1(self, db_path:str) -> None:
 
-        from OpenLIFUDatabase import OpenLIFUDatabaseTest
+        from OpenLIFUApp.pages.database_page import OpenLIFUDatabaseTest
         dbt = OpenLIFUDatabaseTest()
         dbt.connect_database(database_dir = db_path)
 
-        from OpenLIFUData import OpenLIFUDataTest
+        from OpenLIFUApp.pages.data_page import OpenLIFUDataTest
         dt = OpenLIFUDataTest()
         dt.load_subject_session()
 
-        from OpenLIFUSession import OpenLIFUSessionTest
+        from OpenLIFUApp.pages.session_page import OpenLIFUSessionTest
         st = OpenLIFUSessionTest()
         st.workflow_session_dashboard()
 
-        from OpenLIFUPrePlanning import OpenLIFUPrePlanningTest
+        from OpenLIFUApp.pages.preplanning_page import OpenLIFUPrePlanningTest
         pt = OpenLIFUPrePlanningTest()
         pt._workflow_virtual_fit()
 
-        from OpenLIFUTransducerLocalization import OpenLIFUTransducerLocalizationTest
+        from OpenLIFUApp.pages.transducer_localization_page import OpenLIFUTransducerLocalizationTest
         tlt = OpenLIFUTransducerLocalizationTest()
         tlt._workflow_localization()
 
-        from OpenLIFUSonicationPlanner import OpenLIFUSonicationPlannerTest
+        from OpenLIFUApp.pages.sonication_planner_page import OpenLIFUSonicationPlannerTest
         spt = OpenLIFUSonicationPlannerTest()
         spt._workflow_planning()
 
-        from OpenLIFUSonicationControl import OpenLIFUSonicationControlTest
+        from OpenLIFUApp.pages.sonication_control_page import OpenLIFUSonicationControlTest
         sct = OpenLIFUSonicationControlTest()
         sct._workflow_sonication_control()
