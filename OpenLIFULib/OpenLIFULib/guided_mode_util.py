@@ -412,7 +412,16 @@ class GuidedWorkflowMixin:
         :py:meth:`inject_custom_workflow_controls_into_placeholder` instead.
         """
         home_module_logic : OpenLIFUHomeLogic = slicer.util.getModuleLogic("OpenLIFU").home_logic
-        controls = home_module_logic.workflow.workflow_controls.get(self.moduleName)
+        # Derive the workflow key from the Widget class name (e.g.
+        # ``OpenLIFUPrePlanningWidget`` -> ``OpenLIFUPrePlanning``).
+        # Round 5c-2 set ``self.moduleName = "OpenLIFU"`` on every page Widget
+        # so that ``resourcePath`` resolves under the host module; that
+        # override made ``self.moduleName`` unusable as the ``workflow_controls``
+        # dict key (which is populated with the per-page module names in
+        # :attr:`Workflow.modules`). The class-name derivation matches those
+        # keys exactly for every page.
+        module_key = type(self).__name__.removesuffix("Widget")
+        controls = home_module_logic.workflow.workflow_controls.get(module_key)
         if controls is None:
             self.workflow_controls = None
             placeholder = getattr(self.ui, "workflowControlsPlaceholder", None)
