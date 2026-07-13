@@ -567,38 +567,41 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
 class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
-    """This class should implement all the actual
-    computation done by your module.  The interface
-    should be such that other python code can import
-    this class and make use of the functionality without
-    requiring an instance of the Widget.
-    Uses ScriptedLoadableModuleLogic base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """Backward-compat logic shim for the Home page.
+
+    The guided ``Workflow`` state and the ``start_guided_mode``/
+    ``workflow_jump_ahead``/``workflow_go_to_start`` entry points were folded
+    into the host ``OpenLIFULogic`` in Round 5c-1. This class remains as a
+    thin delegating facade so callers using
+    ``slicer.util.getModuleLogic("OpenLIFUHome")`` keep working while the
+    ``OpenLIFUHome`` shim module still exists (through Round 5c-2).
     """
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
 
-        self.workflow = Workflow()
-
     def getParameterNode(self):
         return OpenLIFUHomeParameterNode(super().getParameterNode())
+
+    @property
+    def workflow(self) -> Workflow:
+        """Delegate to the host's Workflow instance."""
+        return slicer.util.getModuleLogic("OpenLIFU").workflow
 
     def clear_session(self) -> None:
         self.current_session = None
 
-    def start_guided_mode(self):
-        set_guided_mode_state(True)
-        self.workflow_go_to_start()
+    def start_guided_mode(self) -> None:
+        slicer.util.getModuleLogic("OpenLIFU").start_guided_mode()
 
-    def workflow_jump_ahead(self):
+    def workflow_jump_ahead(self) -> None:
         """Jump ahead in the guided workflow to the furthest step for which `can_proceed` is True."""
-        slicer.util.selectModule(self.workflow.furthest_module_to_which_can_proceed())
+        slicer.util.getModuleLogic("OpenLIFU").workflow_jump_ahead()
 
-    def workflow_go_to_start(self):
+    def workflow_go_to_start(self) -> None:
         """Go to the starting module of the workflow"""
-        slicer.util.selectModule(self.workflow.starting_module())
+        slicer.util.getModuleLogic("OpenLIFU").workflow_go_to_start()
 
 #
 # OpenLIFUHomeTest

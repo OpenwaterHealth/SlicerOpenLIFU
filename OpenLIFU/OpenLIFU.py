@@ -18,6 +18,7 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib import ensure_python_requirements_for_module_enter
 from OpenLIFULib.guided_mode_util import (
     confirm_exit_session_dialog,
+    set_guided_mode_state,
     Workflow,
 )
 from OpenLIFULib.module_layout import (
@@ -32,7 +33,6 @@ from OpenLIFUApp.logic.app_state import OpenLIFUAppState, get_app_state_signals
 
 if TYPE_CHECKING:
     from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
-    from OpenLIFUHome.OpenLIFUHome import OpenLIFUHomeLogic
 
 
 # ---------------------------------------------------------------------------
@@ -818,7 +818,7 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def _hook_workflow_updates(self) -> None:
         workflow = self._get_workflow()
         if workflow is None:
-            # OpenLIFUHomeLogic may not be ready yet on a cold start; retry once.
+            # Host logic may not be ready yet on a cold start; retry once.
             qt.QTimer.singleShot(100, self._hook_workflow_updates)
             return
         if getattr(workflow, "_openlifu_host_hooked", False):
@@ -870,11 +870,11 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Utility
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _get_workflow() -> Optional[Workflow]:
+    def _get_workflow(self) -> Optional[Workflow]:
+        """Return the host's Workflow instance. Post 5c-1 this lives on
+        ``OpenLIFULogic`` directly (was formerly owned by ``OpenLIFUHomeLogic``)."""
         try:
-            home_logic: "OpenLIFUHomeLogic" = slicer.util.getModuleLogic("OpenLIFUHome")
-            return getattr(home_logic, "workflow", None)
+            return self.logic.workflow
         except Exception:  # noqa: BLE001
             return None
 
@@ -884,14 +884,40 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 # ---------------------------------------------------------------------------
 
 class OpenLIFULogic(ScriptedLoadableModuleLogic):
-    """Host module's logic class. Most domain logic still lives in each
-    child module; this class is reserved for shell-level state."""
+    """Host module's logic class.
+
+    Owns the guided-workflow state (formerly on ``OpenLIFUHomeLogic``) and
+    the host-level ``OpenLIFUAppState`` parameter node. Domain logic for
+    each page still lives in the corresponding page's ``*Logic`` class;
+    those remain reachable via ``slicer.util.getModuleLogic("OpenLIFU<X>")``
+    while the shim modules exist.
+    """
 
     def __init__(self) -> None:
         ScriptedLoadableModuleLogic.__init__(self)
+        # Workflow was formerly owned by OpenLIFUHomeLogic; folded in here
+        # in Round 5c-1. OpenLIFUHomeLogic.workflow now delegates to this.
+        self.workflow = Workflow()
 
     def getParameterNode(self):
         return OpenLIFUAppState(super().getParameterNode())
+
+    # ------------------------------------------------------------------
+    # Guided-workflow entry points (formerly on OpenLIFUHomeLogic)
+    # ------------------------------------------------------------------
+
+    def start_guided_mode(self) -> None:
+        set_guided_mode_state(True)
+        self.workflow_go_to_start()
+
+    def workflow_jump_ahead(self) -> None:
+        """Jump ahead in the guided workflow to the furthest step for which
+        ``can_proceed`` is True."""
+        slicer.util.selectModule(self.workflow.furthest_module_to_which_can_proceed())
+
+    def workflow_go_to_start(self) -> None:
+        """Go to the starting module of the workflow."""
+        slicer.util.selectModule(self.workflow.starting_module())
 
 
 # ---------------------------------------------------------------------------

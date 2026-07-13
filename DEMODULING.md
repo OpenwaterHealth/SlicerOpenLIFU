@@ -450,22 +450,47 @@ by [issue #586](https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/586)
   deleted — swapping ~190 call sites for zero API improvement, and the
   "or equivalent attribute" allowance in the plan covers this.
 
-- [ ] **Round 5c (pending):** fold OpenLIFUHome workflow logic (`start_guided_mode`,
-  `workflow_jump_ahead`, `workflow_go_to_start`, `workflow`) into host `OpenLIFULogic`.
-  Update `openlifu-desktop-application/Modules/Scripted/Home/Home.py` in lockstep:
-  replace `getModuleLogic("OpenLIFUHome")` / `getModuleLogic("OpenLIFULogin")` /
-  `getModuleWidget/Logic("OpenLIFUDatabase")` with `getModuleLogic("OpenLIFU")` +
-  host attribute access. Delete all 9 shim modules and their `CMakeLists.txt` /
-  `Resources` / `Testing` trees: `OpenLIFUSession`, `OpenLIFUPrePlanning`,
-  `OpenLIFUTransducerLocalization`, `OpenLIFUSonicationPlanner`,
-  `OpenLIFUSonicationControl`, `OpenLIFUDatabase`, `OpenLIFULogin`, `OpenLIFUData`,
-  `OpenLIFUHome`. Delete `_install_select_module_shim`, `_hook_workflow_updates`,
-  `apply_module_layout`, `wire_passive_module_header`, `embed_module_body_into`,
-  `navigate_to_page`, every `_connectGuiVtkObserverTag` workaround, and
-  `cacheAllLoginRelatedWidgets`. Migrate DVC env plumbing + `_OpenLIFU_FullTest1`
-  orchestration from `OpenLIFUHome/CMakeLists.txt` into `OpenLIFU/CMakeLists.txt`
-  and `OpenLIFU/tests/test_orchestration.py`. Replace all `py_OpenLIFU<Xxx>` CTest
-  targets with a single `py_OpenLIFU`.
+- [ ] **Round 5c (in progress, split into 3 sub-rounds):** given the volume of
+  callsite rewrites (~150), 5c is being landed in 3 independently testable
+  commits.
+
+  - [x] **5c-1 done (Home logic folded):** `Workflow` ownership plus
+    `start_guided_mode` / `workflow_jump_ahead` / `workflow_go_to_start` moved
+    onto host `OpenLIFULogic`. `OpenLIFUHomeLogic` in `home_page.py` reduced
+    to a thin delegating facade (its `workflow` is now a property that
+    forwards to `getModuleLogic("OpenLIFU").workflow`; the three
+    `workflow_*` / `start_guided_mode` methods delegate identically). Host's
+    `_get_workflow` now uses `self.logic.workflow` directly (no more
+    `getModuleLogic("OpenLIFUHome")` round-trip). `openlifu-desktop-application/Modules/Scripted/Home/Home.py`
+    updated in lockstep: `start_guided_mode`, `workflow_jump_ahead`, and
+    the `enforceGuidedModeVisibility(True)` timer callback all now target
+    `getModuleLogic("OpenLIFU")`. Shims still present and functional; all
+    callsites still work through the shims until 5c-2/5c-3.
+
+  - [ ] **5c-2 (pending — rewires + resource moves):** rewrite ~150 callsites:
+    27+ `slicer.modules.OpenLIFU<X>Widget` → `getModuleWidget("OpenLIFU").get_page_widget("OpenLIFU<X>")`,
+    60+ `getModuleLogic("OpenLIFU<X>")` → `getModuleLogic("OpenLIFU").<x>_logic`,
+    15+ `slicer.util.selectModule("OpenLIFU<X>")` → `navigate_to_page("OpenLIFU<X>")`,
+    plus `getModuleWidget("OpenLIFU<X>")` rewires. Move all 9 UI files, Home's
+    icons, and Database's `openlifu-database/empty_db/` into `OpenLIFU/Resources/`.
+    Set `self.moduleName = "OpenLIFU"` on each page Widget's `__init__` so
+    `resourcePath()` resolves via the host. Fix `data_page.py`'s
+    `getModuleWidget('OpenLIFUDatabase').resourcePath("openlifu-database/empty_db")`
+    to use the host widget. Add host `OpenLIFULogic.<x>_logic` sub-logic
+    instances and `OpenLIFUWidget.get_page_widget(name)` helper. Shims still
+    present as backup — pages continue to load via shims for now.
+
+  - [ ] **5c-3 (pending — deletion + cleanup):** refactor `_embed_all_pages`
+    to instantiate page widgets directly (no more `getModuleWidget`). Delete
+    9 shim directories + top-level `CMakeLists.txt` `add_subdirectory` lines.
+    Delete `_install_select_module_shim`, `_uninstall_select_module_shim`,
+    `_hook_workflow_updates`, `_unhook_workflow_updates`,
+    `embed_module_body_into`, `cacheAllLoginRelatedWidgets`. Consolidate DVC
+    env plumbing + `_OpenLIFU_FullTest1` orchestration into
+    `OpenLIFU/CMakeLists.txt`; register a single `py_OpenLIFU` unittest.
+    Update `_OpenLIFU_FullTest1` imports to use
+    `OpenLIFUApp.pages.<x>_page`. Final downstream `Home.py` lockstep for the
+    remaining `OpenLIFULogin` / `OpenLIFUDatabase` refs.
 
 ---
 
