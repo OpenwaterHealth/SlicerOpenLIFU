@@ -86,9 +86,12 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
         self.logic = OpenLIFUSessionLogic()
 
-        # Prevent two OpenLIFUData widgets from being created --
-        # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
-        slicer.util.getModule("OpenLIFUData").widgetRepresentation()
+        # Note: pre-5c-3 this called ``slicer.util.getModule("OpenLIFUData")
+        # .widgetRepresentation()`` to force-create the Data widget so its
+        # onNodeAdded observers were in place before any scene node was
+        # added (see issue #120). As of Round 5c-3 the host module
+        # instantiates every page widget in ``_embed_all_pages`` during
+        # its own ``setup()``, so this is no longer needed.
 
         # ---- Inject guided mode workflow controls ----
         self.inject_workflow_controls_into_placeholder()

@@ -430,13 +430,14 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # ------------------------------------------------------------------
 
     def _ensure_data_widget(self):
-        """Instantiate the OpenLIFUData widget on first use and return it.
+        """Return the host-owned OpenLIFUData page widget.
 
-        Called from button handlers (never from setup()) so the cascading
-        Data->Login->cacheAllLoginRelatedWidgets walk never re-enters
-        Home's own setup().
+        As of Round 5c-3 the OpenLIFU host module instantiates every page
+        widget in ``_embed_all_pages`` at startup, so this is a pure
+        lookup. The helper is preserved to keep the button-handler call
+        sites compact and to leave one obvious place to log / handle a
+        missing widget in the future.
         """
-        slicer.util.getModule("OpenLIFUData").widgetRepresentation()
         return slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData")
 
     @display_errors

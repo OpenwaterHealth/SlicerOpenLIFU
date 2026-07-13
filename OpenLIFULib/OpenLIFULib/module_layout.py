@@ -780,68 +780,8 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
 
 
 # ----------------------------------------------------------------------
-# Embedding sibling modules into the OpenLIFU host module
+# Navigation between OpenLIFU host pages
 # ----------------------------------------------------------------------
-
-def embed_module_body_into(
-    *,
-    module_name: str,
-    stacked_widget: qt.QStackedWidget,
-) -> qt.QWidget:
-    """Force ``module_name`` to set up and reparent its body into a new page
-    of ``stacked_widget``.
-
-    Returns the page container that was added to ``stacked_widget``.
-
-    Each embedded module must expose ``self.uiWidget`` from its ``setup()``
-    method (the qMRMLWidget loaded via :func:`slicer.util.loadUI`) so the
-    host can take ownership of it. The per-module shared header
-    (:class:`ModuleHeaderWidget`) is hidden, and the per-module workflow
-    controls placeholder is hidden, because the host module provides a
-    single shared header and footer.
-    """
-    slicer.util.getModule(module_name).widgetRepresentation()
-    mw = slicer.util.getModuleWidget(module_name)
-    if mw is None:
-        raise RuntimeError(f"No widget representation for module {module_name!r}")
-    ui_widget = getattr(mw, "uiWidget", None)
-    if ui_widget is None:
-        raise RuntimeError(
-            f"Module {module_name!r} did not expose self.uiWidget; "
-            f"add `self.uiWidget = uiWidget` in its setup() to enable embedding."
-        )
-
-    page = qt.QWidget(stacked_widget)
-    page_layout = qt.QVBoxLayout(page)
-    page_layout.setContentsMargins(0, 0, 0, 0)
-    page_layout.setSpacing(0)
-    page_layout.addWidget(ui_widget)
-    stacked_widget.addWidget(page)
-
-    # PythonQt's findChildren does not reliably filter by Python subclass
-    # type (returns every QObject descendant), so use the direct reference
-    # the module stored during apply_module_layout().
-    module_header = getattr(mw, "module_header", None)
-    if module_header is not None:
-        module_header.setVisible(False)
-
-    workflow_controls = getattr(mw, "workflow_controls", None)
-    if workflow_controls is not None:
-        workflow_controls.setVisible(False)
-    placeholder = ui_widget.findChild(qt.QWidget, "workflowControlsPlaceholder")
-    if placeholder is not None and workflow_controls is None:
-        # The placeholder is empty (module never injected controls). Hide it
-        # so it does not occupy space in the host page.
-        placeholder.setVisible(False)
-
-    # Slicer never showed this qMRMLWidget before we reparented it into the
-    # host stack (its owning module was never selected), so its top-level
-    # visibility flag is still off. Show it once now; QStackedWidget handles
-    # visibility across subsequent page swaps on its own.
-    ui_widget.show()
-
-    return page
-
 
 def navigate_to_page(module_name: str) -> None:
     """Switch the OpenLIFU host module to its embedded page for ``module_name``.

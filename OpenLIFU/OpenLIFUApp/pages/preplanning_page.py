@@ -280,9 +280,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # in batch mode, without a graphical user interface.
         self.logic = OpenLIFUPrePlanningLogic()
 
-        # Prevents possible creation of two OpenLIFUData widgets
-        # see https://github.com/OpenwaterHealth/SlicerOpenLIFU/issues/120
-        slicer.util.getModule("OpenLIFUData").widgetRepresentation()
+        # Note: pre-5c-3 this called ``slicer.util.getModule("OpenLIFUData")
+        # .widgetRepresentation()`` to force-create the Data widget so its
+        # onNodeAdded observers were in place before any scene node was
+        # added (see issue #120). As of Round 5c-3 the OpenLIFU host module
+        # instantiates every page widget in ``_embed_all_pages`` during
+        # its own ``setup()``, so by the time any page's setup() runs,
+        # every other page widget already exists.
 
         # User-account status is now shown by the shared header inserted
         # by ``apply_module_layout`` above; no per-module banner needed.

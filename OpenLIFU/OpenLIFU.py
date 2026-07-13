@@ -23,7 +23,6 @@ from OpenLIFULib.guided_mode_util import (
 )
 from OpenLIFULib.module_layout import (
     ModuleHeaderWidget,
-    embed_module_body_into,
     wire_passive_module_header,
 )
 from OpenLIFULib.util import display_errors
@@ -32,7 +31,7 @@ from OpenLIFULib.util import display_errors
 from OpenLIFUApp.logic.app_state import OpenLIFUAppState, get_app_state_signals
 
 if TYPE_CHECKING:
-    from OpenLIFUData.OpenLIFUData import OpenLIFUDataLogic
+    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +373,11 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Page registry, keyed by module name.
         self._pages: Dict[str, _Page] = {p.key: _Page(p.key, p.label, p.on_timeline) for p in _PAGE_DEFS}
+        # Owned page-widget instances, keyed by module name. Populated in
+        # ``_embed_all_pages`` for stacked pages (Home, Data, Session,
+        # PrePlanning, TransducerLocalization, SonicationPlanner,
+        # SonicationControl) and for popup-only pages (Database, Login).
+        self._page_widgets: Dict[str, ScriptedLoadableModuleWidget] = {}
         self._current_page_key: Optional[str] = None
         self._embedding_done: bool = False
         # Timeline keys the user has navigated to at least once. Persists across
@@ -381,6 +385,10 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._visited_timeline_keys: Set[str] = set()
         # Custom-painted timeline footer widget; created in _build_timeline_footer.
         self._timeline_widget: Optional[_TimelineWidget] = None
+        # Bookkeeping for the workflow.update_all wrapper installed inline
+        # from setup() (formerly done by _hook_workflow_updates).
+        self._workflow_with_hook: Optional[Workflow] = None
+        self._workflow_original_update_all: Optional[Callable[[], None]] = None
 
     # ------------------------------------------------------------------
     # Slicer lifecycle
@@ -423,22 +431,36 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # ---- Build the timeline footer ----
         self._build_timeline_footer()
 
-        # ---- Install the selectModule redirect shim so external code that
-        #      calls slicer.util.selectModule("OpenLIFU<X>") for a hidden
-        #      embedded child module instead lands on the host page. ----
-        self._install_select_module_shim()
-
-        # Defer the actual embedding pass to the next event-loop tick so that
-        # every sibling module's setup() can complete first (avoids the
-        # OpenLIFULogin.cacheAllLoginRelatedWidgets recursion path).
+        # Defer the actual embedding pass to the next event-loop tick so
+        # that Slicer has fully finished loading the host module before we
+        # start instantiating page Widget classes. (Historically this was
+        # also needed to avoid re-entrancy through the shim modules; those
+        # are gone as of 5c-3 but the deferral is still nice for startup
+        # perf and to keep the Slicer main-window paint responsive.)
         qt.QTimer.singleShot(0, self._embed_all_pages)
 
         # Observe Data's parameter node so Save / Exit / status track session state.
         qt.QTimer.singleShot(0, self._wire_session_observers)
 
         # Hook Workflow.update_all so timeline + status repaint after every
-        # workflow state push.
-        qt.QTimer.singleShot(0, self._hook_workflow_updates)
+        # workflow state push. Do this inline (no external helper) because
+        # the wrap is a one-liner and the workflow is guaranteed to exist
+        # (it's constructed in OpenLIFULogic.__init__ above).
+        workflow = self._get_workflow()
+        if workflow is not None:
+            original_update_all = workflow.update_all
+            host = self
+
+            def update_all_with_host_refresh():
+                original_update_all()
+                try:
+                    host._refresh_timeline_state()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            workflow.update_all = update_all_with_host_refresh
+            self._workflow_with_hook = workflow
+            self._workflow_original_update_all = original_update_all
 
         # Initial state: nothing to do until embedding finishes.
         self.ui.hostSaveButton.setEnabled(False)
@@ -450,8 +472,26 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             get_app_state_signals().dataChanged.disconnect(self._on_app_state_changed)
         except Exception:  # noqa: BLE001
             pass
-        self._uninstall_select_module_shim()
-        self._unhook_workflow_updates()
+        # Restore workflow.update_all if we wrapped it in setup().
+        workflow = self._workflow_with_hook
+        original = self._workflow_original_update_all
+        if workflow is not None and original is not None:
+            try:
+                workflow.update_all = original
+            except Exception:  # noqa: BLE001
+                pass
+        self._workflow_with_hook = None
+        self._workflow_original_update_all = None
+        # Call cleanup() on each owned page widget so their observers /
+        # module-callbacks unwind cleanly. Failures are logged but not
+        # fatal — Slicer is tearing the module down.
+        import logging
+        for key, widget in list(self._page_widgets.items()):
+            try:
+                widget.cleanup()
+            except Exception:  # noqa: BLE001
+                logging.exception("[OpenLIFU host] cleanup() failed for %s", key)
+        self._page_widgets.clear()
 
     def enter(self) -> None:
         ensure_python_requirements_for_module_enter()
@@ -519,26 +559,65 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # ------------------------------------------------------------------
 
     def _embed_all_pages(self) -> None:
-        """Force each child module to set up and reparent its body into the
-        host's QStackedWidget. Runs exactly once."""
+        """Instantiate every page's ``Widget`` class and reparent its body
+        into the host's ``QStackedWidget`` (for pages in ``_PAGE_DEFS``) or
+        keep it as an off-screen widget for popup-only pages (Database,
+        Login). Runs exactly once.
+
+        Round 5c-3 replaced the former ``embed_module_body_into`` call
+        (which round-tripped through Slicer's module registry and pulled
+        the widget out from under the shim modules) with direct
+        instantiation using the imported ``OpenLIFU<X>Widget`` classes.
+        """
         if self._embedding_done:
             return
         import logging
         logging.info("[OpenLIFU host] _embed_all_pages: starting embedding pass.")
+
+        # Local imports here to avoid load-time circulars: each page module
+        # imports symbols from OpenLIFULib/other pages at load time and
+        # OpenLIFU.py is imported early by Slicer's module discovery pass.
+        from OpenLIFUApp.pages.home_page import OpenLIFUHomeWidget
+        from OpenLIFUApp.pages.data_page import OpenLIFUDataWidget
+        from OpenLIFUApp.pages.session_page import OpenLIFUSessionWidget
+        from OpenLIFUApp.pages.preplanning_page import OpenLIFUPrePlanningWidget
+        from OpenLIFUApp.pages.transducer_localization_page import OpenLIFUTransducerLocalizationWidget
+        from OpenLIFUApp.pages.sonication_planner_page import OpenLIFUSonicationPlannerWidget
+        from OpenLIFUApp.pages.sonication_control_page import OpenLIFUSonicationControlWidget
+        from OpenLIFUApp.pages.database_page import OpenLIFUDatabaseWidget
+        from OpenLIFUApp.pages.login_page import OpenLIFULoginWidget
+
+        widget_classes = {
+            "OpenLIFUHome":                   OpenLIFUHomeWidget,
+            "OpenLIFUData":                   OpenLIFUDataWidget,
+            "OpenLIFUSession":                OpenLIFUSessionWidget,
+            "OpenLIFUPrePlanning":            OpenLIFUPrePlanningWidget,
+            "OpenLIFUTransducerLocalization": OpenLIFUTransducerLocalizationWidget,
+            "OpenLIFUSonicationPlanner":      OpenLIFUSonicationPlannerWidget,
+            "OpenLIFUSonicationControl":      OpenLIFUSonicationControlWidget,
+            "OpenLIFUDatabase":               OpenLIFUDatabaseWidget,
+            "OpenLIFULogin":                  OpenLIFULoginWidget,
+        }
+
+        # -- Stacked pages (visible timeline; reachable via show_page) --
         for page_def in _PAGE_DEFS:
             page = self._pages[page_def.key]
+            widget_class = widget_classes[page_def.key]
             try:
                 logging.info("[OpenLIFU host] embedding %s...", page.key)
-                container = embed_module_body_into(
-                    module_name=page.key,
-                    stacked_widget=self.ui.pageStack,
-                )
+                widget = widget_class(parent=None)
+                widget.setup()
+                self._page_widgets[page.key] = widget
+
+                container = self._embed_page_widget_into_stack(widget)
+                page.container = container
+
                 logging.info(
                     "[OpenLIFU host] embedded %s: container=%s children=%d",
                     page.key, container, container.layout().count(),
                 )
             except Exception as exc:  # noqa: BLE001
-                logging.exception("[OpenLIFU host] embed_module_body_into failed for %s", page.key)
+                logging.exception("[OpenLIFU host] embedding failed for %s", page.key)
                 # Fall back to a placeholder so the host still loads.
                 container = qt.QWidget(self.ui.pageStack)
                 lay = qt.QVBoxLayout(container)
@@ -548,7 +627,21 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 lbl.setWordWrap(True)
                 lay.addWidget(lbl)
                 self.ui.pageStack.addWidget(container)
-            page.container = container
+                page.container = container
+
+        # -- Popup-only pages (Database, Login): instantiate + setup but
+        #    leave the widget off-screen. ``_ModuleWidgetPopupDialog`` will
+        #    reparent ``widget.uiWidget`` into a QDialog on demand and put
+        #    it back on close. --
+        for key in ("OpenLIFUDatabase", "OpenLIFULogin"):
+            widget_class = widget_classes[key]
+            try:
+                logging.info("[OpenLIFU host] setting up popup-only %s...", key)
+                widget = widget_class(parent=None)
+                widget.setup()
+                self._page_widgets[key] = widget
+            except Exception:  # noqa: BLE001
+                logging.exception("[OpenLIFU host] setup failed for popup-only %s", key)
 
         self._embedding_done = True
         logging.info(
@@ -563,6 +656,58 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._current_page_key = None  # force show_page to do the swap
         self.show_page(target)
         logging.info("[OpenLIFU host] show_page(%r) done, current=%s", target, self._current_page_key)
+
+    def _embed_page_widget_into_stack(self, widget) -> qt.QWidget:
+        """Reparent ``widget.uiWidget`` into a new page of ``self.ui.pageStack``.
+
+        Each embedded page's ``setup()`` must expose ``self.uiWidget`` (the
+        qMRMLWidget loaded via :func:`slicer.util.loadUI`) so the host can
+        take ownership of it. The per-page shared header
+        (:class:`ModuleHeaderWidget`) is hidden, and the per-page workflow
+        controls placeholder is hidden, because the host module provides a
+        single shared header and footer.
+
+        This is the direct in-host replacement for the former
+        ``OpenLIFULib.module_layout.embed_module_body_into`` helper (deleted
+        in Round 5c-3).
+        """
+        ui_widget = getattr(widget, "uiWidget", None)
+        if ui_widget is None:
+            raise RuntimeError(
+                f"Page widget {type(widget).__name__!r} did not expose "
+                "self.uiWidget; add `self.uiWidget = uiWidget` in its "
+                "setup() to enable embedding."
+            )
+
+        page = qt.QWidget(self.ui.pageStack)
+        page_layout = qt.QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+        page_layout.addWidget(ui_widget)
+        self.ui.pageStack.addWidget(page)
+
+        # PythonQt's findChildren does not reliably filter by Python subclass
+        # type (returns every QObject descendant), so use the direct reference
+        # the module stored during apply_module_layout().
+        module_header = getattr(widget, "module_header", None)
+        if module_header is not None:
+            module_header.setVisible(False)
+
+        workflow_controls = getattr(widget, "workflow_controls", None)
+        if workflow_controls is not None:
+            workflow_controls.setVisible(False)
+        placeholder = ui_widget.findChild(qt.QWidget, "workflowControlsPlaceholder")
+        if placeholder is not None and workflow_controls is None:
+            # The placeholder is empty (module never injected controls). Hide
+            # it so it does not occupy space in the host page.
+            placeholder.setVisible(False)
+
+        # The uiWidget's top-level visibility flag was off (its Widget was
+        # never made the active Slicer module). Show it once now;
+        # QStackedWidget handles visibility across subsequent page swaps.
+        ui_widget.show()
+
+        return page
 
     # ------------------------------------------------------------------
     # Per-page enter/exit delegation
@@ -586,24 +731,18 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception:  # noqa: BLE001
             pass
 
-    @staticmethod
-    def _get_embedded_widget(module_name: str):
-        try:
-            return slicer.util.getModuleWidget(module_name)
-        except Exception:  # noqa: BLE001
-            return None
+    def _get_embedded_widget(self, module_name: str):
+        return self._page_widgets.get(module_name)
 
     def get_page_widget(self, module_name: str):
         """Public accessor for a page's ``ScriptedLoadableModuleWidget``.
 
-        Preferred replacement for ``slicer.modules.OpenLIFU<X>Widget`` and
-        ``slicer.util.getModuleWidget("OpenLIFU<X>")`` at cross-page call
-        sites. During 5c-2 this delegates to Slicer's module registry (so
-        it still works via the shim modules); 5c-3 will swap the body to
-        read from the host's owned ``_page_widgets`` dict after the shim
-        modules are deleted.
+        Replacement for the pre-refactor ``slicer.modules.OpenLIFU<X>Widget``
+        and ``slicer.util.getModuleWidget("OpenLIFU<X>")`` call sites. As
+        of Round 5c-3 this returns the host-owned instance from
+        ``self._page_widgets`` (the shim modules are gone).
         """
-        return self._get_embedded_widget(module_name)
+        return self._page_widgets.get(module_name)
 
     # ------------------------------------------------------------------
     # Timeline footer
@@ -791,78 +930,6 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
 
     # ------------------------------------------------------------------
-    # Cross-module redirect: hidden child modules → host page
-    # ------------------------------------------------------------------
-
-    def _install_select_module_shim(self) -> None:
-        """Wrap ``slicer.util.selectModule`` so a request to switch to one of
-        the embedded child modules is rewritten as "switch to OpenLIFU and
-        change page". Other module names pass through untouched."""
-        embedded_keys = set(self._pages.keys())
-        original = slicer.util.selectModule
-        # Don't double-install.
-        if getattr(original, "_openlifu_host_shim", False):
-            self._original_select_module = None
-            return
-        host = self
-
-        def select_module_shim(module_name):
-            if module_name in embedded_keys:
-                original("OpenLIFU")
-                host.show_page(module_name)
-                return
-            return original(module_name)
-
-        select_module_shim._openlifu_host_shim = True  # type: ignore[attr-defined]
-        slicer.util.selectModule = select_module_shim
-        self._original_select_module = original
-
-    def _uninstall_select_module_shim(self) -> None:
-        original = getattr(self, "_original_select_module", None)
-        if original is not None:
-            slicer.util.selectModule = original
-            self._original_select_module = None
-
-    # ------------------------------------------------------------------
-    # Workflow hook: repaint footer timeline on every state push
-    # ------------------------------------------------------------------
-
-    def _hook_workflow_updates(self) -> None:
-        workflow = self._get_workflow()
-        if workflow is None:
-            # Host logic may not be ready yet on a cold start; retry once.
-            qt.QTimer.singleShot(100, self._hook_workflow_updates)
-            return
-        if getattr(workflow, "_openlifu_host_hooked", False):
-            return
-        original_update_all = workflow.update_all
-        host = self
-
-        def update_all_with_host_refresh():
-            original_update_all()
-            try:
-                host._refresh_timeline_state()
-            except Exception:  # noqa: BLE001
-                pass
-
-        workflow.update_all = update_all_with_host_refresh
-        workflow._openlifu_host_hooked = True
-        self._workflow_with_hook = workflow
-        self._workflow_original_update_all = original_update_all
-
-    def _unhook_workflow_updates(self) -> None:
-        workflow = getattr(self, "_workflow_with_hook", None)
-        original = getattr(self, "_workflow_original_update_all", None)
-        if workflow is not None and original is not None:
-            workflow.update_all = original
-            try:
-                delattr(workflow, "_openlifu_host_hooked")
-            except AttributeError:
-                pass
-        self._workflow_with_hook = None
-        self._workflow_original_update_all = None
-
-    # ------------------------------------------------------------------
     # Session observers (drive Save/Exit + timeline refresh)
     # ------------------------------------------------------------------
 
@@ -898,11 +965,11 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 class OpenLIFULogic(ScriptedLoadableModuleLogic):
     """Host module's logic class.
 
-    Owns the guided-workflow state (formerly on ``OpenLIFUHomeLogic``) and
-    the host-level ``OpenLIFUAppState`` parameter node. Domain logic for
-    each page still lives in the corresponding page's ``*Logic`` class;
-    those remain reachable via ``slicer.util.getModuleLogic("OpenLIFU<X>")``
-    while the shim modules exist.
+    Owns the guided-workflow state (formerly on ``OpenLIFUHomeLogic``), the
+    host-level ``OpenLIFUAppState`` parameter node, and one instance of each
+    page's ``*Logic`` class. Round 5c-3 replaced the former ``slicer.util
+    .getModuleLogic("OpenLIFU<X>")`` delegation with direct-attribute
+    ownership so the shim modules can be deleted.
     """
 
     def __init__(self) -> None:
@@ -912,6 +979,33 @@ class OpenLIFULogic(ScriptedLoadableModuleLogic):
         self.workflow = Workflow()
         self._app_state_cache: Optional[OpenLIFUAppState] = None
         self._app_state_cache_node = None
+
+        # Owned page-logic instances. Round 5c-3 replaced the former
+        # ``slicer.util.getModuleLogic("OpenLIFU<X>")`` property accessors
+        # with direct-attribute ownership; the shim modules have been
+        # deleted so the host is the single source of truth for logic
+        # instances. Local imports here avoid circulars: each page module
+        # imports symbols from ``OpenLIFULib``/other pages at load time and
+        # ``OpenLIFU.py`` is imported before ``OpenLIFUApp`` is on sys.path.
+        from OpenLIFUApp.pages.home_page import OpenLIFUHomeLogic
+        from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
+        from OpenLIFUApp.pages.session_page import OpenLIFUSessionLogic
+        from OpenLIFUApp.pages.preplanning_page import OpenLIFUPrePlanningLogic
+        from OpenLIFUApp.pages.transducer_localization_page import OpenLIFUTransducerLocalizationLogic
+        from OpenLIFUApp.pages.sonication_planner_page import OpenLIFUSonicationPlannerLogic
+        from OpenLIFUApp.pages.sonication_control_page import OpenLIFUSonicationControlLogic
+        from OpenLIFUApp.pages.database_page import OpenLIFUDatabaseLogic
+        from OpenLIFUApp.pages.login_page import OpenLIFULoginLogic
+
+        self.home_logic = OpenLIFUHomeLogic()
+        self.data_logic = OpenLIFUDataLogic()
+        self.session_logic = OpenLIFUSessionLogic()
+        self.preplanning_logic = OpenLIFUPrePlanningLogic()
+        self.transducer_localization_logic = OpenLIFUTransducerLocalizationLogic()
+        self.sonication_planner_logic = OpenLIFUSonicationPlannerLogic()
+        self.sonication_control_logic = OpenLIFUSonicationControlLogic()
+        self.database_logic = OpenLIFUDatabaseLogic()
+        self.login_logic = OpenLIFULoginLogic()
 
     def getParameterNode(self):
         """Return the OpenLIFU app-state wrapper (cached).
@@ -953,50 +1047,13 @@ class OpenLIFULogic(ScriptedLoadableModuleLogic):
         slicer.util.selectModule(self.workflow.starting_module())
 
     # ------------------------------------------------------------------
-    # Sub-logic accessors (formerly reached via
-    # ``slicer.util.getModuleLogic("OpenLIFU<X>")``).
+    # Sub-logic access
     #
-    # During 5c-2 these properties delegate to Slicer's module registry so
-    # they resolve through the shim modules; 5c-3 will swap them to
-    # references to host-owned Logic instances constructed in ``__init__``
-    # after the shim modules are deleted.
+    # As of Round 5c-3 all page logic instances are owned directly as
+    # attributes on this class (``self.home_logic``, ``self.data_logic``,
+    # ...) — see ``__init__``. The former ``getModuleLogic("OpenLIFU<X>")``
+    # delegation was deleted along with the shim modules.
     # ------------------------------------------------------------------
-
-    @property
-    def home_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUHome")
-
-    @property
-    def data_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUData")
-
-    @property
-    def session_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUSession")
-
-    @property
-    def preplanning_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUPrePlanning")
-
-    @property
-    def transducer_localization_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUTransducerLocalization")
-
-    @property
-    def sonication_planner_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUSonicationPlanner")
-
-    @property
-    def sonication_control_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUSonicationControl")
-
-    @property
-    def database_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFUDatabase")
-
-    @property
-    def login_logic(self):
-        return slicer.util.getModuleLogic("OpenLIFULogin")
 
 
 # ---------------------------------------------------------------------------

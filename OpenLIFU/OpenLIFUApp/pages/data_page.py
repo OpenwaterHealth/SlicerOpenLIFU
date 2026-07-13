@@ -2649,21 +2649,24 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
         self.setWindowModality(qt.Qt.ApplicationModal)
         self.setMinimumWidth(450)
 
-        self._hosted_widget = slicer.util.getModule(module_name).widgetRepresentation()
+        # Resolve the host-owned page widget (populated by the OpenLIFU
+        # host module's ``_embed_all_pages`` at startup). Popup-only pages
+        # (Database, Login) are instantiated with no visible parent; other
+        # pages have already been reparented into the host's page stack.
+        host_widget = slicer.util.getModuleWidget("OpenLIFU")
+        self._python_widget = host_widget.get_page_widget(module_name)
+        if self._python_widget is None:
+            raise RuntimeError(
+                f"OpenLIFU host has no page widget for {module_name!r}."
+            )
+        self._hosted_widget = getattr(self._python_widget, "uiWidget", None)
+        if self._hosted_widget is None:
+            raise RuntimeError(
+                f"Page widget for {module_name!r} did not expose self.uiWidget."
+            )
         # Remember where the widget originally lived so we can put it back.
         self._original_parent = self._hosted_widget.parent()
         self._original_visible = self._hosted_widget.visible
-
-        # Resolve the python widget so we can drive its Slicer lifecycle
-        # (enter/exit) while the popup is hosting it. Modules like
-        # OpenLIFULogin defer dependency-gated init (_initDefaultUsers) to
-        # enter(); skipping it leaves the widget in a half-initialized
-        # state where login() succeeds but updateWidgetLoginState() bails
-        # out and clears active_user.
-        try:
-            self._python_widget = slicer.util.getModuleWidget(module_name)
-        except Exception:  # noqa: BLE001 - widget may not yet be instantiated
-            self._python_widget = None
 
         # Collect the embedded-panel-only chrome (dev "Reload & Test" section
         # and guided-mode workflow controls) so we can hide it while the popup
@@ -2671,18 +2674,13 @@ class _ModuleWidgetPopupDialog(qt.QDialog):
         #
         # The reload section is created by ``ScriptedLoadableModuleWidget.setup``
         # without a Qt object name, but it is exposed as the Python attribute
-        # ``reloadCollapsibleButton`` on the Python widget instance (which we
-        # reach via ``slicer.util.getModuleWidget``). The workflow controls
-        # widget is a ``WorkflowControls``-class child that replaces the
-        # ``workflowControlsPlaceholder`` at module setup time, so we find it
-        # by class name in the widget tree.
+        # ``reloadCollapsibleButton`` on the Python widget instance. The
+        # workflow controls widget is a ``WorkflowControls``-class child that
+        # replaces the ``workflowControlsPlaceholder`` at module setup time,
+        # so we find it by class name in the widget tree.
         self._hidden_children: "List[Tuple[qt.QWidget, bool]]" = []
 
-        try:
-            python_widget = slicer.util.getModuleWidget(module_name)
-        except Exception:  # noqa: BLE001 - widget may not yet be instantiated
-            python_widget = None
-        reload_section = getattr(python_widget, "reloadCollapsibleButton", None)
+        reload_section = getattr(self._python_widget, "reloadCollapsibleButton", None)
         if reload_section is not None:
             self._hidden_children.append((reload_section, reload_section.visible))
             reload_section.setVisible(False)
@@ -6838,10 +6836,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         # Certain modules need to have their widgets already set up, if they were not, before loading a session.
         # This is because those module widgets set up observers on certain kinds of nodes as those nodes are added to the scene.
-        # If the widgets don't exist when a session is loaded, they will not get a chance to add their observers.
-        slicer.util.getModule("OpenLIFUPrePlanning").widgetRepresentation()
-        slicer.util.getModule("OpenLIFUTransducerLocalization").widgetRepresentation()
-        slicer.util.getModule("OpenLIFUSonicationPlanner").widgetRepresentation()
+        # As of Round 5c-3, the OpenLIFU host module instantiates every
+        # page widget in ``_embed_all_pages`` during its own ``setup()``,
+        # so by the time a session is loaded here every observer is in
+        # place. This block used to force-create widgets via
+        # ``slicer.util.getModule(<X>).widgetRepresentation()`` for
+        # PrePlanning / TransducerLocalization / SonicationPlanner.
 
         # === Ensure it's okay to load a session ===
 
