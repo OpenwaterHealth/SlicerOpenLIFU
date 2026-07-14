@@ -22,7 +22,33 @@ set(MODULE_PYTHON_SCRIPTS
 
 set(MODULE_PYTHON_RESOURCES
   Resources/UI/${MODULE_NAME}.ui
+  Resources/UI/OpenLIFUData.ui
+  Resources/UI/OpenLIFUDatabase.ui
+  Resources/UI/OpenLIFUHome.ui
+  Resources/UI/OpenLIFULogin.ui
+  Resources/UI/OpenLIFUPrePlanning.ui
+  Resources/UI/OpenLIFUSession.ui
+  Resources/UI/OpenLIFUSonicationControl.ui
+  Resources/UI/OpenLIFUSonicationPlanner.ui
+  Resources/UI/OpenLIFUTransducerLocalization.ui
+  Resources/UI/TransducerLocalizationWizard.ui
   Resources/Icons/${MODULE_NAME}.png
+  Resources/Icons/device.png
+  Resources/Icons/OpenLIFUData.png
+  Resources/Icons/OpenLIFUDatabase.png
+  Resources/Icons/OpenLIFUHome.png
+  Resources/Icons/OpenLIFULogin.png
+  Resources/Icons/OpenLIFUPrePlanning.png
+  Resources/Icons/OpenLIFUSession.png
+  Resources/Icons/OpenLIFUSonicationControl.png
+  Resources/Icons/OpenLIFUSonicationPlanner.png
+  Resources/Icons/OpenLIFUTransducerLocalization.png
+  Resources/Icons/qrcode.png
+  Resources/Icons/sync.png
+  Resources/openlifu-database/empty_db/protocols/protocols.json
+  Resources/openlifu-database/empty_db/subjects/subjects.json
+  Resources/openlifu-database/empty_db/transducers/transducers.json
+  Resources/openlifu-database/empty_db/users/users.json
   )
 
 #-----------------------------------------------------------------------------
