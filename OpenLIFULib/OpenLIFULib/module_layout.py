@@ -691,12 +691,11 @@ def wire_passive_module_header(widget_owner, header: ModuleHeaderWidget) -> None
 
     Every observer registration is deferred one event-loop tick. This
     matters because ``setup()`` for these modules can be triggered from
-    inside ``OpenLIFULoginWidget.cacheAllLoginRelatedWidgets`` (which calls
-    ``widgetRepresentation()`` on every OpenLIFU module). If we touched
+    inside other OpenLIFU page setups. If we touched
     ``slicer.util.getModuleLogic("OpenLIFU<X>")`` synchronously here we
-    could re-enter Login (or other modules) while their own ``setup()`` is
-    still on the stack and trigger the "Failed to instantiate scripted
-    pythonqt class OpenLIFULoginWidget" recursion.
+    could re-enter another module while its own ``setup()`` is still on
+    the stack and trigger a "Failed to instantiate scripted pythonqt
+    class" recursion.
 
     All callbacks accept ``*args, **kwargs`` because the various
     ``call_on_*`` callback registries pass different argument shapes

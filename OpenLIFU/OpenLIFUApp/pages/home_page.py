@@ -134,13 +134,10 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         getCloudSyncLogic()
 
         # Note: we deliberately do NOT force-instantiate the OpenLIFUData
-        # widget here. Doing so during setup() triggers Data's setup,
-        # whose deferred Login wiring eventually calls
-        # ``OpenLIFULoginWidget.cacheAllLoginRelatedWidgets`` which walks
-        # ``getModule("OpenLIFUHome").widgetRepresentation()`` -- if Home's
-        # setup() has not yet returned, that re-enters Home and recurses
-        # without bound. Instead, ``_ensure_data_widget()`` lazily builds
-        # the Data widget the first time a button handler needs it.
+        # widget here. Doing so during setup() triggers Data's setup, whose
+        # deferred Login/DB wiring may re-enter Home while its own setup()
+        # is still on the stack. Instead, ``_ensure_data_widget()`` lazily
+        # resolves the Data widget the first time a button handler needs it.
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -230,8 +227,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # changes. Only touch the TL widget if it already exists -- forcing
         # widgetRepresentation() to instantiate it from inside
         # onParameterNodeModified (which may fire during Home's own setup
-        # via initializeParameterNode/connectGui) can recurse via the
-        # Login cacheAllLoginRelatedWidgets walk.
+        # via initializeParameterNode/connectGui) can recurse via other
+        # page setup routines.
         tl_widget = getattr(slicer.modules, "OpenLIFUTransducerLocalizationWidget", None)
         if tl_widget is not None:
             try:

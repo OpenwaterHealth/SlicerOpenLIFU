@@ -562,8 +562,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.logic = None
         self._cur_login_state = LoginState.NOT_LOGGED_IN
         self._cur_user_id_enforced : str = ""  # for caching enforced permissions
-        self._permissions_widgets : List[qt.QWidget] = []
-        self._user_account_banners : List[UserAccountBanner] = []
         self._parameterNode = None
         self._parameterNodeGuiTag = None
         self._default_anonymous_user = None  # initialized after dependency check
@@ -625,7 +623,6 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
-        self.cacheAllLoginRelatedWidgets()
 
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.onDatabaseChanged() # Call the routine to update from data parameter node
@@ -693,6 +690,13 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.util.infoDisplay(f"You have been logged out because the database location was changed.")
             self.logout()
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
+        # Forward the new database status to every UserAccountBanner currently
+        # embedded in the host page container.
+        for widget in self._find_user_account_banners():
+            try:
+                widget.change_database_status(db)
+            except Exception:
+                pass
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -701,72 +705,24 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.setParameterNode(self.logic.getParameterNode())
 
-    def cacheAllLoginRelatedWidgets(self) -> None:
-        # As of Round 5c-3 the OpenLIFU host module instantiates every
-        # page widget in ``_embed_all_pages`` at startup and exposes them
-        # via ``get_page_widget(module_name)``. Walk the host-owned
-        # widgets rather than Slicer's module registry so we operate on
-        # the same instances the user actually sees. (Pre-5c-3 this
-        # called ``slicer.util.getModule(name).widgetRepresentation()``
-        # which forced each shim module to build its own widget.)
+    def _find_permissions_widgets(self) -> List[qt.QWidget]:
+        """Return all widgets tagged with the ``permissionsWidget*`` object name
+        under the host page container. Queried on demand so no cache needs to
+        be maintained across scene clears or page rebuilds."""
         host_widget = slicer.util.getModuleWidget("OpenLIFU")
-        all_openlifu_modules = [
-            "OpenLIFUDatabase",
-            "OpenLIFUData",
-            "OpenLIFUHome",
-            "OpenLIFUPrePlanning",
-            "OpenLIFUSonicationControl",
-            "OpenLIFUSonicationPlanner",
-            "OpenLIFUTransducerLocalization",
-            ]
-        for moduleName in all_openlifu_modules:
-            page_widget = host_widget.get_page_widget(moduleName)
-            ui_widget = getattr(page_widget, "uiWidget", None) if page_widget is not None else None
-            if ui_widget is None:
-                continue
-            self._permissions_widgets.extend(slicer.util.findChildren(ui_widget, name="permissionsWidget*"))
-            self._user_account_banners.extend(slicer.util.findChildren(ui_widget, className="UserAccountBanner"))
+        host_ui = getattr(host_widget, "uiWidget", None) if host_widget is not None else None
+        if host_ui is None:
+            return []
+        return list(slicer.util.findChildren(host_ui, name="permissionsWidget*"))
 
-        self._permissions_widgets.extend([self.ui.permissionsWidget1])
-
-        # Subscribe banners to database state changes and seed initial state.
-        try:
-            db_logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
-        except Exception:
-            db_logic = None
-        if db_logic is not None:
-            try:
-                register_module_callback(
-                    self,
-                    db_logic.call_on_db_changed,
-                    db_logic.remove_db_changed_callback,
-                    self._onDatabaseChangedForBanners,
-                )
-                current_db = getattr(db_logic, "db", None)
-                for widget in self._user_account_banners:
-                    widget.change_database_status(current_db)
-            except Exception:
-                pass
-        # Seed active user state too.
-        current_user = getattr(self.logic, "active_user", None)
-        try:
-            current_uam = bool(self._parameterNode.user_account_mode) if self._parameterNode else False
-        except (AttributeError, RuntimeError):
-            current_uam = False
-        for widget in self._user_account_banners:
-            try:
-                widget.change_user_account_mode(current_uam)
-                widget.change_active_user(current_user)
-            except Exception:
-                pass
-
-    def _onDatabaseChangedForBanners(self, db) -> None:
-        """Dispatch DB-changed events to all cached UserAccountBanner widgets."""
-        for widget in self._user_account_banners:
-            try:
-                widget.change_database_status(db)
-            except Exception:
-                pass
+    def _find_user_account_banners(self) -> List[qt.QWidget]:
+        """Return all UserAccountBanner widgets currently living under the host
+        page container. Queried on demand -- see ``_find_permissions_widgets``."""
+        host_widget = slicer.util.getModuleWidget("OpenLIFU")
+        host_ui = getattr(host_widget, "uiWidget", None) if host_widget is not None else None
+        if host_ui is None:
+            return []
+        return list(slicer.util.findChildren(host_ui, className="UserAccountBanner"))
 
     def setParameterNode(self, inputParameterNode: Optional[OpenLIFULoginParameterNode]) -> None:
         """
@@ -1008,7 +964,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             uam = bool(self._parameterNode.user_account_mode) if self._parameterNode else False
         except (AttributeError, RuntimeError):
             uam = False
-        for widget in self._user_account_banners:
+        for widget in self._find_user_account_banners():
             try:
                 widget.change_user_account_mode(uam)
                 widget.change_active_user(self.logic.active_user)
@@ -1020,19 +976,19 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # === Don't enforce if no user account mode ===
 
         if not self._parameterNode.user_account_mode:
-            for widget in self._permissions_widgets:
+            for widget in self._find_permissions_widgets():
                 widget.setEnabled(True)
             return
 
         # === Enforce ===
 
-        for widget in self._permissions_widgets:
+        for widget in self._find_permissions_widgets():
             allowed_roles = widget.property("slicer.openlifu.allowed-roles")
             user_roles = self.logic.active_user.roles if self.logic.active_user is not None else []
             widget.setEnabled(any(role in allowed_roles for role in user_roles))
 
     def onActiveUserChanged(self, new_active_user: Optional["openlifu.db.User"]) -> None:
-        for widget in self._user_account_banners:
+        for widget in self._find_user_account_banners():
             widget.change_active_user(new_active_user)
 
         if self._last_active_user == new_active_user:

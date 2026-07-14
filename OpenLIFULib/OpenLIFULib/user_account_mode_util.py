@@ -144,8 +144,9 @@ class UserAccountBanner(qt.QWidget):
         # for the first time), forcing Login widget instantiation here would
         # re-enter the in-progress module setup and crash. Instead, the chips
         # are left with their default "no database" / "Not signed in" text and
-        # neutral styling; ``OpenLIFULoginWidget.cacheAllLoginRelatedWidgets``
-        # seeds the proper state immediately after construction.
+        # neutral styling; the Login widget refreshes them via
+        # ``onDatabaseChanged`` / ``onActiveUserChanged`` /
+        # ``onParameterNodeModified`` once state is available.
         self._db_chip.setStyleSheet(
             self._chip_style("userAccountBannerDbChip", None)
         )
