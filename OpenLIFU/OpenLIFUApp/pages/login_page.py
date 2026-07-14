@@ -706,14 +706,25 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.setParameterNode(self.logic.getParameterNode())
 
     def _find_permissions_widgets(self) -> List[qt.QWidget]:
-        """Return all widgets tagged with the ``permissionsWidget*`` object name
-        under the host page container. Queried on demand so no cache needs to
-        be maintained across scene clears or page rebuilds."""
+        """Return all widgets tagged with the ``slicer.openlifu.allowed-roles``
+        dynamic property under the host page container. Queried on demand so
+        no cache needs to be maintained across scene clears or page rebuilds.
+
+        Note: the historical two-tier opt-in required both an
+        ``objectName=="permissionsWidget*"`` match AND the allowed-roles
+        property. The single-tier version below matches any widget carrying
+        the property, regardless of objectName. Custom-named widgets such as
+        ``approvePermissionsWidget`` / ``computeSolutionPermissionsWidget``
+        that used to fall outside the wildcard are now enforced correctly.
+        """
         host_widget = slicer.util.getModuleWidget("OpenLIFU")
         host_ui = getattr(host_widget, "uiWidget", None) if host_widget is not None else None
         if host_ui is None:
             return []
-        return list(slicer.util.findChildren(host_ui, name="permissionsWidget*"))
+        return [
+            w for w in host_ui.findChildren(qt.QWidget)
+            if w.property("slicer.openlifu.allowed-roles") is not None
+        ]
 
     def _find_user_account_banners(self) -> List[qt.QWidget]:
         """Return all UserAccountBanner widgets currently living under the host
