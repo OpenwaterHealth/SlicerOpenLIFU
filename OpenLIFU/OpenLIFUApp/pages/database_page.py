@@ -102,9 +102,12 @@ class OpenLIFUDatabaseWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, 
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUDatabaseLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``). Creating a fresh ``OpenLIFUDatabaseLogic()``
+        # here would give this widget its own private ``_db`` and callback
+        # list, so ``self.logic.db = ...`` would not notify any subscriber
+        # registered against the host's ``database_logic``.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").database_logic
 
         # ---- Inject guided mode workflow controls ----
 

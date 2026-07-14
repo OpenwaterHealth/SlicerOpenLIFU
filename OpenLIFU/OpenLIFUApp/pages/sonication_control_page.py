@@ -297,9 +297,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUSonicationControlLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``). Creating a fresh
+        # ``OpenLIFUSonicationControlLogic()`` here would give this widget
+        # its own private running/run_progress/device-event state and
+        # callback lists, silently divorced from every cross-page subscriber.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").sonication_control_logic
 
         # User-account status is now shown by the shared header inserted
         # by ``apply_module_layout`` above; no per-module banner needed.

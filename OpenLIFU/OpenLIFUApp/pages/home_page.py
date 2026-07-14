@@ -121,7 +121,11 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        self.logic = OpenLIFUHomeLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``). Creating a fresh ``OpenLIFUHomeLogic()``
+        # here would give this widget its own private callback lists and
+        # state, silently divorced from every cross-page subscriber.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").home_logic
 
         # The standalone OpenLIFUCloudSync module has been deprecated -- its
         # controls live in the Database popup on the Data page. We still

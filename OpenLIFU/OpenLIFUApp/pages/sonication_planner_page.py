@@ -124,9 +124,10 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUSonicationPlannerLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``) so callback subscribers registered
+        # elsewhere fire when this widget mutates logic state.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").sonication_planner_logic
 
         # Create and set solution analysis table models
         self.globalAnalysisTableModel = qt.QStandardItemModel() # analysis metrics that are for the whole solution, i.e. over all focus points

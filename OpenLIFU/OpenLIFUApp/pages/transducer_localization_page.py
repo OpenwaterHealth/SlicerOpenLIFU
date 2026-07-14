@@ -3122,9 +3122,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFUTransducerLocalizationLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``) so callback subscribers registered
+        # elsewhere fire when this widget mutates logic state.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").transducer_localization_logic
 
         # Note: pre-5c-3 this called ``slicer.util.getModule("OpenLIFUData")
         # .widgetRepresentation()`` to force-create the Data widget so its

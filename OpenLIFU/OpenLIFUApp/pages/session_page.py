@@ -84,7 +84,10 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        self.logic = OpenLIFUSessionLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``) so callback subscribers registered
+        # elsewhere fire when this widget mutates logic state.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").session_logic
 
         # Note: pre-5c-3 this called ``slicer.util.getModule("OpenLIFUData")
         # .widgetRepresentation()`` to force-create the Data widget so its

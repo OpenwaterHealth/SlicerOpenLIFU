@@ -586,9 +586,12 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
-        self.logic = OpenLIFULoginLogic()
+        # Use the single shared logic instance created by the host module
+        # (``OpenLIFULogic.__init__``). Creating a fresh ``OpenLIFULoginLogic()``
+        # here would give this widget its own private ``_active_user`` and
+        # callback list, so ``self.logic.active_user = ...`` would not
+        # notify any subscriber registered against the host's ``login_logic``.
+        self.logic = slicer.util.getModuleLogic("OpenLIFU").login_logic
 
         # === Connections and UI setup =======
 
