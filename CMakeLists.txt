@@ -43,18 +43,11 @@ if(BUILD_TESTING)
 endif()
 
 #-----------------------------------------------------------------------------
-# Extension modules
+# Extension modules. Round 5c-3 Commit D deleted the nine per-page shim
+# modules; the host ``OpenLIFU`` module now owns every Widget/Logic/Test
+# and Resources/{UI,Icons,openlifu-database} live under OpenLIFU/Resources/.
 add_subdirectory(OpenLIFULib)
 add_subdirectory(OpenLIFU)
-add_subdirectory(OpenLIFUHome)
-add_subdirectory(OpenLIFUDatabase)
-add_subdirectory(OpenLIFUData)
-add_subdirectory(OpenLIFUSession)
-add_subdirectory(OpenLIFUPrePlanning)
-add_subdirectory(OpenLIFUSonicationControl)
-add_subdirectory(OpenLIFUSonicationPlanner)
-add_subdirectory(OpenLIFUTransducerLocalization)
-add_subdirectory(OpenLIFULogin)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------

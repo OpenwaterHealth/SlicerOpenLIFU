@@ -374,12 +374,23 @@ class Workflow:
 
         # ---- Locate widgets of interest ----
 
+        # Round 5c-3: page keys in ``self.modules`` are host-owned page-key
+        # strings, not Slicer module names. Resolve each page via the host
+        # module's ``get_page_widget`` accessor and walk its ``uiWidget``
+        # tree. Missing page keys (e.g. during startup teardown) are skipped.
+        try:
+            host_widget = slicer.util.getModuleWidget("OpenLIFU")
+        except Exception:  # noqa: BLE001
+            return
+
         hide_in_guided_mode_widgets = []  # widgets with dynamic property
         call_enforce_in_guided_mode_widgets = []  # widgets with their own defined enforceGuidedModeVisibility()
         for moduleName in self.modules:
-            module = slicer.util.getModule(moduleName)
-            widgetRepresentation = module.widgetRepresentation()
-            all_widgets = slicer.util.findChildren(widgetRepresentation)
+            page_widget = host_widget.get_page_widget(moduleName)
+            ui_root = getattr(page_widget, "uiWidget", None) if page_widget is not None else None
+            if ui_root is None:
+                continue
+            all_widgets = slicer.util.findChildren(ui_root)
             for widget in all_widgets:
                 if widget.property("slicer.openlifu.hide-in-guided-mode") is not None:
                     # A QVariant() is returned set to None if the widget does

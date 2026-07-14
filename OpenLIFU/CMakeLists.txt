@@ -47,4 +47,20 @@ if(BUILD_TESTING)
     FAIL_REGULAR_EXPRESSION "FAILED"
   )
 
+  # Full end-to-end workflow integration test. Round 5c-3 Commit D folded
+  # the former ``py_OpenLIFUHome`` ctest into this host-owned ``py_OpenLIFU``
+  # target (see OpenLIFUTest in ${MODULE_NAME}.py). DVC env vars are read
+  # from CACHE variables set at the top-level CMakeLists when BUILD_TESTING
+  # is on.
+  slicer_add_python_unittest(SCRIPT ${MODULE_NAME}.py)
+
+  set_tests_properties(py_${MODULE_NAME} PROPERTIES
+    ENVIRONMENT "GDRIVE_CREDENTIALS_DATA=${DVC_GDRIVE_JSON_CONTENT};DVC_REPO_DIR=${DVC_REPO_DIR}"
+    # Use output matching instead of exit code, because vtkDebugLeaks
+    # reports OpenGL rendering object leaks at shutdown (issue #463)
+    # causing a non-zero exit even when all tests pass.
+    PASS_REGULAR_EXPRESSION "Ran [0-9]+ tests? in [0-9]"
+    FAIL_REGULAR_EXPRESSION "FAILED"
+  )
+
 endif()

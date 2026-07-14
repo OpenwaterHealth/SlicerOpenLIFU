@@ -581,7 +581,7 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
     def workflow_session_dashboard(self):
         """Integration helper: assert dashboard reflects the currently loaded session.
 
-        Called from OpenLIFUHomeTest._OpenLIFU_FullTest1 after a session has
+        Called from OpenLIFUTest._OpenLIFU_FullTest1 after a session has
         been loaded by the Data module. Verified counts come from the
         currently connected database. Also clicks every View button so that
         broken imports / signal wiring in the preview handlers fail the test

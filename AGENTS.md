@@ -46,14 +46,11 @@ Tests are integration tests that run inside Slicer's environment using CTest. Th
 # Run all tests
 cd build && ctest --verbose
 
-# Run a single module's test
-cd build && ctest -R py_OpenLIFUHome --verbose
-
-# Run just one module test (e.g. sonication planner)
-cd build && ctest -R py_OpenLIFUSonicationPlanner --verbose
+# Run the main integration test
+cd build && ctest -R py_OpenLIFU --verbose
 ```
 
-Test names follow the pattern `py_<ModuleName>`. The main integration test is `py_OpenLIFUHome`, which orchestrates a full workflow through all modules sequentially.
+As of Round 5c-3, all workflow modules were folded into a single host `OpenLIFU` scripted module. The lone integration test is `py_OpenLIFU` (`OpenLIFUTest` in `OpenLIFU/OpenLIFU.py`), which orchestrates a full workflow through every page's Test class sequentially.
 
 Test data is downloaded at runtime from Google Drive via DVC. The CMake config passes `GDRIVE_CREDENTIALS_DATA` and `DVC_REPO_DIR` as environment variables to CTest.
 
@@ -187,8 +184,8 @@ The [`openlifu-desktop-application`](https://github.com/OpenwaterHealth/openlifu
 
 Key differences from the vanilla extension build:
 - **Default home module**: The custom app sets `Slicer_DEFAULT_HOME_MODULE "Home"` (its own Home module, not OpenLIFUHome).
-- **All widgets created at startup**: The custom app's Home module connects to `startupCompleted()` and calls `enforceGuidedModeVisibility()` and Login's `cacheAllLoginRelatedWidgets()`, both of which call `widgetRepresentation()` on ALL OpenLIFU modules. This forces `setup()` (and thus `connectGui()`) to run on every module at startup, unlike vanilla Slicer where widgets are only created when a module is first selected.
-- **Tests**: Run against the custom application's Slicer build, for example `ctest -R py_OpenLIFUHome -VV --test-dir <custom-app-superbuild>/Slicer-build/`. The test executable is `OpenLIFU` not `Slicer`.
+- **All widgets created at startup**: The custom app's Home module connects to `startupCompleted()` and forces `slicer.util.getModule("OpenLIFU").widgetRepresentation()`. That triggers `OpenLIFUWidget.setup()`, which via `_embed_all_pages` instantiates every page widget (`Home`, `Data`, `Session`, `PrePlanning`, `TransducerLocalization`, `SonicationPlanner`, `SonicationControl`, `Database`, `Login`) into the host's `QStackedWidget`. This makes `connectGui()` run on every page at startup, unlike vanilla Slicer where a page's `setup()` only runs when the user first selects it.
+- **Tests**: Run against the custom application's Slicer build, for example `ctest -R py_OpenLIFU -VV --test-dir <custom-app-superbuild>/Slicer-build/`. The test executable is `OpenLIFU` not `Slicer`.
 - **File paths**: Installed module files live under the custom application's `lib/OpenLIFU-<version>/qt-scripted-modules/` tree (not a stock `lib/Slicer-<version>/...` tree). The bundled SlicerOpenLIFU source copy is fetched at a pinned revision during the custom application superbuild.
 
 ### connectGui/disconnectGui bug (Slicer upstream issue)

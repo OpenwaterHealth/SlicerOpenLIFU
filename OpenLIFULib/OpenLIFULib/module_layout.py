@@ -220,14 +220,16 @@ class ModuleHeaderWidget(qt.QWidget):
             "",
             "Hardware device connection status",
         )
-        # The device button uses the PNG that ships with OpenLIFUData (single
-        # piece of art shared across modules). We resolve the path through
-        # the OpenLIFUData module so the icon survives any path layout.
+        # The device button uses the PNG shipped with the host ``OpenLIFU``
+        # module (Round 5c-3 folded OpenLIFUData into the host, so
+        # ``device.png`` now lives at ``OpenLIFU/Resources/Icons/device.png``).
+        # We resolve the path through ``modulePath("OpenLIFU")`` so the icon
+        # survives any path layout.
         try:
-            data_module_dir = os.path.dirname(
-                slicer.util.modulePath("OpenLIFUData")
+            host_module_dir = os.path.dirname(
+                slicer.util.modulePath("OpenLIFU")
             )
-            icon_path = os.path.join(data_module_dir, "Resources", "Icons", "device.png")
+            icon_path = os.path.join(host_module_dir, "Resources", "Icons", "device.png")
             if os.path.exists(icon_path):
                 self.devicePopupButton.setIcon(qt.QIcon(icon_path))
                 self.devicePopupButton.setIconSize(qt.QSize(20, 20))

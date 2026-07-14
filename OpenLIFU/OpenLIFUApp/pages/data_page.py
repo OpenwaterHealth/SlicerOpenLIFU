@@ -5025,13 +5025,15 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.databasePopupButton.clicked.connect(self.onOpenDatabasePopup)
         self.ui.devicePopupButton.clicked.connect(self.onOpenDevicePopup)
 
-        # The device button uses a custom PNG icon (Resources/Icons/device.png)
-        # rather than an emoji glyph so we have a single piece of art that can
-        # be swapped in later. Loaded here in Python so we don't need a Qt
-        # resource (.qrc) file - matches the pattern used by OpenLIFUHome's
-        # toolbar sync action.
+        # The device button uses a custom PNG icon
+        # (``OpenLIFU/Resources/Icons/device.png``) rather than an emoji glyph
+        # so we have a single piece of art that can be swapped in later.
+        # Loaded here in Python so we don't need a Qt resource (.qrc) file -
+        # matches the pattern used by the Home page's toolbar sync action.
+        # ``__file__`` sits under ``OpenLIFU/OpenLIFUApp/pages/`` so we walk
+        # up two levels to reach the host module's ``Resources`` dir.
         try:
-            module_dir = os.path.dirname(__file__)
+            module_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             icon_path = os.path.join(module_dir, "Resources", "Icons", "device.png")
             if os.path.exists(icon_path):
                 self.ui.devicePopupButton.setIcon(qt.QIcon(icon_path))
