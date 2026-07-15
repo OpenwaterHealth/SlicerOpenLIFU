@@ -1109,7 +1109,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.workflow_controls.status_text = "Finish modifying the virtual fit transform before proceeding."
             return
 
-        target_nodes = get_target_candidates()
+        # Session-owns-all: only fiducials registered with the session via ``session.add_target``
+        # count as targets. Using ``session.get_target_nodes()`` here (instead of the scene-wide
+        # ``get_target_candidates()``) keeps this predicate in lockstep with the algorithm-input
+        # widget and the targets table, both of which already read from the session. It also fixes
+        # #582: when ``session.remove_target(node)`` fires the Data parameter node's
+        # ``ModifiedEvent`` (triggering ``onDataParameterNodeModified`` -> ``updateWorkflowControls``)
+        # *before* ``slicer.mrmlScene.RemoveNode(node)`` runs, the scene still contains the removed
+        # fiducial for a moment. Reading from the session avoids that stale-scene window.
+        target_nodes = session.get_target_nodes()
         if not target_nodes:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Create a target to proceed."
@@ -1869,11 +1877,15 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
             "Should be proceedable once every (single) target has an approved VF."
 
         # Add a second target with no VF -> proceed must be blocked with the per-target message.
+        # Register the fiducial with the session (as the Add Target UI flow does) so the
+        # session-owns-all predicate in ``updateWorkflowControls`` picks it up; a loose scene
+        # fiducial is deliberately ignored under that model (#582).
         extra_target = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
         extra_target.SetMaximumNumberOfControlPoints(1)
         extra_target.SetName(slicer.mrmlScene.GenerateUniqueName("Target"))
         extra_target.SetMarkupLabelFormat("%N")
         extra_target.AddControlPoint(curr_pos[0] + 5.0, curr_pos[1], curr_pos[2])
+        session.add_target(extra_target)
         slicer.app.processEvents()
         try:
             preplanning_widget.updateWorkflowControls()
@@ -1881,6 +1893,18 @@ class OpenLIFUPrePlanningTest(ScriptedLoadableModuleTest):
                 "Adding an unfit target should block Proceed."
             assert "every target" in preplanning_widget.workflow_controls.status_text.lower(), \
                 f"Unexpected status text: {preplanning_widget.workflow_controls.status_text!r}"
-        finally:
+
+            # Deleting the just-added target must clear the blocker without any extra prodding
+            # (regression guard for #582: the blocker used to stick because the predicate read
+            # scene state, which lagged behind ``session.remove_target``).
+            session.remove_target(extra_target)
             slicer.mrmlScene.RemoveNode(extra_target)
+            extra_target = None
+            slicer.app.processEvents()
+            preplanning_widget.updateWorkflowControls()
+            assert preplanning_widget.workflow_controls.can_proceed is True, \
+                "Removing the unfit target should clear the blocker; the remaining target still has an approved VF."
+        finally:
+            if extra_target is not None:
+                slicer.mrmlScene.RemoveNode(extra_target)
             preplanning_widget.updateWorkflowControls()
