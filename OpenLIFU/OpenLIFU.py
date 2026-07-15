@@ -1,6 +1,8 @@
 # Standard library imports
 from __future__ import annotations
 
+import logging
+import os
 from typing import Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 # Third-party imports
@@ -23,6 +25,9 @@ from OpenLIFULib.guided_mode_util import (
 )
 from OpenLIFULib.module_layout import (
     ModuleHeaderWidget,
+    icon_color_dim,
+    icon_color_neutral,
+    tinted_icon,
     wire_passive_module_header,
 )
 from OpenLIFULib.util import display_errors
@@ -413,6 +418,16 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         wire_passive_module_header(self, self.module_header)
 
         # ---- Save / Exit ----
+        # The button icons are set from ``_refresh_save_exit_state`` so
+        # they retint as ``dim`` when the button is disabled (no session)
+        # and ``neutral`` (theme-appropriate button text colour) when
+        # enabled. Emoji text kept its full colour when the button was
+        # disabled, making the buttons look clickable even when Save/Exit
+        # had nothing to act on -- switching to a bitmap glyph lets Qt
+        # apply its native disabled greyscaling, and re-tinting on state
+        # changes gives us high-contrast icons when actionable.
+        self.ui.hostSaveButton.setIconSize(qt.QSize(20, 20))
+        self.ui.hostExitButton.setIconSize(qt.QSize(20, 20))
         self.ui.hostSaveButton.clicked.connect(self.onSaveClicked)
         self.ui.hostExitButton.clicked.connect(self.onExitClicked)
 
@@ -457,9 +472,10 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self._workflow_with_hook = workflow
             self._workflow_original_update_all = original_update_all
 
-        # Initial state: nothing to do until embedding finishes.
-        self.ui.hostSaveButton.setEnabled(False)
-        self.ui.hostExitButton.setEnabled(False)
+        # Initial Save/Exit state: no session yet, so disabled + dim icons.
+        # The session observers wired below will re-run this on every state
+        # change, so tint stays in sync.
+        self._refresh_save_exit_state()
 
     def cleanup(self) -> None:
         self.removeObservers()
@@ -942,13 +958,29 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.show_page("OpenLIFUHome")
 
     def _refresh_save_exit_state(self) -> None:
+        # IMPORTANT: use ``self.logic.getParameterNode()`` here, NOT
+        # ``self.logic.data_logic.getParameterNode()``. The Data logic's
+        # ``getParameterNode`` delegates through
+        # ``slicer.util.getModuleLogic('OpenLIFU').getParameterNode()``,
+        # which forces Slicer to lazily construct its own OpenLIFULogic
+        # instance (separate from ``self.logic`` above) the first time
+        # it's called. That triggers every page-logic ``__init__``
+        # (including the expensive ``OpenLIFUSonicationControlLogic`` USB /
+        # monitor setup) a second time and, worse, can recurse into a
+        # third construction during startup before Slicer's cache is set.
+        # ``self.logic`` is the same OpenLIFULogic that Slicer will
+        # eventually cache, so calling its ``getParameterNode`` directly
+        # short-circuits the whole re-entrancy.
         try:
-            data_pn = self.logic.data_logic.getParameterNode()
+            data_pn = self.logic.getParameterNode()
             has_session = data_pn.loaded_session is not None
         except Exception:  # noqa: BLE001
             has_session = False
         self.ui.hostSaveButton.setEnabled(has_session)
         self.ui.hostExitButton.setEnabled(has_session)
+        icon_color = icon_color_neutral() if has_session else icon_color_dim()
+        self.ui.hostSaveButton.setIcon(tinted_icon("save.png", icon_color))
+        self.ui.hostExitButton.setIcon(tinted_icon("exit.png", icon_color))
         self.ui.hostSaveButton.setToolTip(
             "Save the active session." if has_session else "No loaded session to save."
         )

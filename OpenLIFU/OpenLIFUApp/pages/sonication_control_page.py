@@ -1328,6 +1328,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         self.reinitialize_lifu_interface(test_mode=True, transducer=transducer)
         self.lifu_hw_in_use_pid = None
         logging.info("[LIFU] Connected simulated LIFUInterface")
+        # OWSignal ``signal_connected`` only fires on real hardware
+        # connect; the simulator does not emit it. Dispatch manually so
+        # header icons and any other state observers refresh.
+        self._dispatch_device_connected()
 
     def disconnect_simulated_interface(self) -> None:
         """Tear down the simulator and restore a real :class:`LIFUInterface`."""
@@ -1336,6 +1340,14 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             return
         self.reinitialize_lifu_interface(test_mode=False)
         logging.info("[LIFU] Disconnected simulated LIFUInterface")
+        # Reinitialising to a real (unplugged) LIFUInterface does not
+        # emit an OWSignal ``signal_disconnected`` -- that signal is
+        # driven by physical device events. Dispatch our synthesised
+        # disconnect so downstream observers (header icons / tooltip,
+        # Data-page device dialog, etc.) redraw from the new "no device"
+        # state. Without this the icon and outline stayed pink /
+        # "simulated" after the user disconnected the simulator.
+        self._dispatch_device_disconnected()
 
     def __del__(self):
         print("OpenLIFUSonicationControlLogic.__del__ called")

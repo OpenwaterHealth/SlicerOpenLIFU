@@ -30,9 +30,91 @@ import qt
 import slicer
 import vtk
 
+# ---------------------------------------------------------------------------
+# Icon tinting
+# ---------------------------------------------------------------------------
+# Header PNGs in ``OpenLIFU/Resources/Icons/`` (see
+# scripts/generate_header_icons.py) ship as pure-white silhouettes with alpha.
+# We composite a per-state colour through the icon at load time using
+# ``QPainter.CompositionMode_SourceIn`` so a single PNG serves every visual
+# state (dim / active / success / warning / danger) on both Slicer's light
+# and dark themes without shipping a variant per state.
+_WHITE_PIXMAP_CACHE: dict = {}
+_TINTED_ICON_CACHE: dict = {}
+
+# Status colour palette. Matched to the ``_outline_style`` outline colours
+# so the icon glyph and its outline reinforce each other visually.
+ICON_COLOR_SUCCESS = "#2e7d32"   # Material green 800  (connected / logged in)
+ICON_COLOR_WARNING = "#f9a825"   # Material yellow 800 (partial / cloud broken)
+ICON_COLOR_DANGER = "#c62828"    # Material red 800    (missing / locked out)
+ICON_COLOR_INFO = "#ff84f9"      # Material pink 500   (simulated hardware)
+
+
+def _icon_path(filename: str) -> Optional[str]:
+    try:
+        host_module_dir = os.path.dirname(slicer.util.modulePath("OpenLIFU"))
+        path = os.path.join(host_module_dir, "Resources", "Icons", filename)
+        return path if os.path.exists(path) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _load_white_pixmap(filename: str) -> "qt.QPixmap":
+    cached = _WHITE_PIXMAP_CACHE.get(filename)
+    if cached is not None:
+        return cached
+    path = _icon_path(filename)
+    if not path:
+        logging.warning("Could not locate header icon %s", filename)
+        pm = qt.QPixmap()
+    else:
+        pm = qt.QPixmap(path)
+    _WHITE_PIXMAP_CACHE[filename] = pm
+    return pm
+
+
+def icon_color_neutral() -> "qt.QColor":
+    """Palette's normal button-text colour: light on dark themes, dark on light."""
+    return slicer.app.palette().color(qt.QPalette.Active, qt.QPalette.ButtonText)
+
+
+def icon_color_dim() -> "qt.QColor":
+    """Palette's disabled button-text colour: muted regardless of theme."""
+    return slicer.app.palette().color(qt.QPalette.Disabled, qt.QPalette.ButtonText)
+
+
+def tinted_icon(filename: str, color) -> "qt.QIcon":
+    """Return a cached ``qt.QIcon`` for ``filename`` re-tinted to ``color``.
+
+    ``filename`` refers to a white silhouette PNG in the host module's
+    ``Resources/Icons/`` folder. ``color`` may be a hex string, a
+    ``qt.QColor``, or any value ``qt.QColor()`` accepts.
+    """
+    qcolor = qt.QColor(color)
+    key = (filename, qcolor.name())
+    cached = _TINTED_ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
+    base = _load_white_pixmap(filename)
+    if base.isNull():
+        icon = qt.QIcon()
+    else:
+        canvas = qt.QPixmap(base.size())
+        canvas.fill(qt.Qt.transparent)
+        painter = qt.QPainter(canvas)
+        try:
+            painter.drawPixmap(0, 0, base)
+            painter.setCompositionMode(qt.QPainter.CompositionMode_SourceIn)
+            painter.fillRect(canvas.rect(), qcolor)
+        finally:
+            painter.end()
+        icon = qt.QIcon(canvas)
+    _TINTED_ICON_CACHE[key] = icon
+    return icon
+
 
 def _outline_style(object_name: str, hex_color: str) -> str:
-    """A 2px coloured border around an emoji button without overriding padding."""
+    """A 2px coloured border around a header button without overriding padding."""
     return (
         f"QPushButton#{object_name} {{ "
         f"border: 2px solid {hex_color}; "
@@ -42,18 +124,19 @@ def _outline_style(object_name: str, hex_color: str) -> str:
 
 
 def _strip_click_to(tooltip: str) -> str:
-    """Drop any trailing 'Click to ...' sentence from a status tooltip.
+    """Drop any trailing 'Click to ...' / 'Click for ...' sentence from a status tooltip.
 
     The interactive header tooltips end with phrases like
-    ``"... Click to open Account."`` or ``"... Click to view or change."``.
-    On a read-only header those phrases are misleading because the buttons
-    are disabled, so we strip them before appending the read-only note.
+    ``"... Click to view or change."`` or ``"... Click for details."``. On a
+    read-only header those phrases are misleading because the buttons are
+    disabled, so we strip them before appending the read-only note.
     """
     if not tooltip:
         return ""
-    # Walk backwards for the last "Click to ..." sentence (case-insensitive).
+    # Walk backwards for the last "Click to ..." / "Click for ..." sentence
+    # (case-insensitive) and drop everything from there onward.
     lower = tooltip.lower()
-    idx = lower.rfind("click to ")
+    idx = max(lower.rfind("click to "), lower.rfind("click for "))
     if idx == -1:
         return tooltip.rstrip()
     return tooltip[:idx].rstrip().rstrip(".").rstrip()
@@ -203,16 +286,20 @@ class ModuleHeaderWidget(qt.QWidget):
 
         self.databasePopupButton = _make_button(
             "databasePopupButton",
-            "📁",
+            "",
             "Open the database configuration panel",
         )
+        self.databasePopupButton.setIcon(tinted_icon("db.png", icon_color_neutral()))
+        self.databasePopupButton.setIconSize(qt.QSize(20, 20))
         layout.addWidget(self.databasePopupButton)
 
         self.loginPopupButton = _make_button(
             "loginPopupButton",
-            "👤",
+            "",
             "Open the user login / account panel",
         )
+        self.loginPopupButton.setIcon(tinted_icon("user.png", icon_color_neutral()))
+        self.loginPopupButton.setIconSize(qt.QSize(20, 20))
         layout.addWidget(self.loginPopupButton)
 
         self.devicePopupButton = _make_button(
@@ -220,21 +307,8 @@ class ModuleHeaderWidget(qt.QWidget):
             "",
             "Hardware device connection status",
         )
-        # The device button uses the PNG shipped with the host ``OpenLIFU``
-        # module (Round 5c-3 folded OpenLIFUData into the host, so
-        # ``device.png`` now lives at ``OpenLIFU/Resources/Icons/device.png``).
-        # We resolve the path through ``modulePath("OpenLIFU")`` so the icon
-        # survives any path layout.
-        try:
-            host_module_dir = os.path.dirname(
-                slicer.util.modulePath("OpenLIFU")
-            )
-            icon_path = os.path.join(host_module_dir, "Resources", "Icons", "device.png")
-            if os.path.exists(icon_path):
-                self.devicePopupButton.setIcon(qt.QIcon(icon_path))
-                self.devicePopupButton.setIconSize(qt.QSize(20, 20))
-        except Exception as e:  # noqa: BLE001
-            logging.warning("Could not load device button icon: %s", e)
+        self.devicePopupButton.setIcon(tinted_icon("device.png", icon_color_neutral()))
+        self.devicePopupButton.setIconSize(qt.QSize(20, 20))
         layout.addWidget(self.devicePopupButton)
 
         layout.addStretch(1)
@@ -392,18 +466,25 @@ class ModuleHeaderWidget(qt.QWidget):
         cloud_ok = cs_enabled and cs_running and cs_logged_in and not cs_failed
         cloud_broken = cs_enabled and not cloud_ok
 
-        if cs_enabled and cloud_ok:
-            self.databasePopupButton.setText("☁📁")
-        elif cloud_broken:
-            self.databasePopupButton.setText("🌩📁")
+        # Tint the folder glyph to match the outline colour so the icon
+        # itself reinforces the status signal.
+        if db_connected:
+            db_color = ICON_COLOR_WARNING if cloud_broken else ICON_COLOR_SUCCESS
+            if cs_enabled and cloud_ok:
+                db_icon_name = "db-cloud.png"
+            elif cloud_broken:
+                db_icon_name = "db-cloud-broken.png"
+            else:
+                db_icon_name = "db.png"
         else:
-            self.databasePopupButton.setText("📁")
+            db_color = ICON_COLOR_DANGER
+            db_icon_name = "db.png"
+        self.databasePopupButton.setIcon(tinted_icon(db_icon_name, db_color))
+        self.databasePopupButton.setStyleSheet(
+            _outline_style("databasePopupButton", db_color)
+        )
 
         if db_connected:
-            outline_color = "#f9a825" if cloud_broken else "#2e7d32"  # yellow / green
-            self.databasePopupButton.setStyleSheet(
-                _outline_style("databasePopupButton", outline_color)
-            )
             db_path = getattr(cur_db, "path", None) or "(unknown location)"
             tip = f"Database is connected at:\n{db_path}"
             if cs_enabled:
@@ -416,9 +497,6 @@ class ModuleHeaderWidget(qt.QWidget):
             tip += "\n\nClick to view or change."
             self.databasePopupButton.setToolTip(tip)
         else:
-            self.databasePopupButton.setStyleSheet(
-                _outline_style("databasePopupButton", "#c62828")
-            )
             self.databasePopupButton.setToolTip(
                 "No database is connected. Click to choose a database directory."
             )
@@ -439,37 +517,30 @@ class ModuleHeaderWidget(qt.QWidget):
         )
         user_roles = list(getattr(cur_user, "roles", None) or [])
         is_admin = is_real_user and "admin" in user_roles
-        # Crown for admins, plain bust silhouette otherwise. The crown
+        # Crown badge for admins, plain user silhouette otherwise. The crown
         # makes admin sessions visually distinct from operator sessions
-        # without needing a separate "admin warning" banner.
-        self.loginPopupButton.setText("\U0001F451" if is_admin else "\U0001F464")
+        # without needing a separate "admin warning" banner. Icon tint
+        # reinforces the outline: green when logged in, red when the user
+        # is expected to log in (UAM=on) but hasn't, neutral otherwise.
+        icon_file = "user-admin.png" if is_admin else "user.png"
         if is_real_user:
-            self.loginPopupButton.setStyleSheet(
-                _outline_style("loginPopupButton", "#2e7d32")
-            )
+            login_color = ICON_COLOR_SUCCESS
+            login_outline: Optional[str] = ICON_COLOR_SUCCESS
             who = getattr(cur_user, 'name', '') or user_id
-            if is_admin:
-                self.loginPopupButton.setToolTip(
-                    f"Signed in as {who} (admin).\n"
-                    f"You have access to high-risk features. "
-                    f"Click to open Account."
-                )
-            else:
-                self.loginPopupButton.setToolTip(
-                    f"Signed in as {who}. Click to open Account."
-                )
+            login_tooltip = f"Logged in as {who}. Click for details."
         elif uam:
-            self.loginPopupButton.setStyleSheet(
-                _outline_style("loginPopupButton", "#c62828")
-            )
-            self.loginPopupButton.setToolTip(
-                "Permissions is set to 'User'. Click to open Account and log in."
-            )
+            login_color = ICON_COLOR_DANGER
+            login_outline = ICON_COLOR_DANGER
+            login_tooltip = "Not Logged in. Click for details."
         else:
-            self.loginPopupButton.setStyleSheet("")
-            self.loginPopupButton.setToolTip(
-                "Not signed in. Click to open Account."
-            )
+            login_color = icon_color_neutral()
+            login_outline = None
+            login_tooltip = "Not Logged in. Click for details."
+        self.loginPopupButton.setIcon(tinted_icon(icon_file, login_color))
+        self.loginPopupButton.setStyleSheet(
+            _outline_style("loginPopupButton", login_outline) if login_outline else ""
+        )
+        self.loginPopupButton.setToolTip(login_tooltip)
         # Login requires a database to be useful. This applies even in
         # the read-only header for the opt-in modules (e.g. Home) that keep
         # the login button live; for fully read-only headers the button is
@@ -500,50 +571,48 @@ class ModuleHeaderWidget(qt.QWidget):
         # ``[LIFUInterface]`` info message on transitions). We deliberately
         # do NOT log here, otherwise every module page re-emits the same
         # transition message.
+        # Pick a status colour once and apply to both outline and icon
+        # tint. The "no device" case gets no outline (previously used
+        # ``#000000`` which is invisible on Slicer's dark theme) and a
+        # neutral tint that reads on both themes.
         if iface is None and in_use_pid is not None:
-            # Locked out: another process owns the hardware. Red outline
-            # (Material red 800) and a tooltip pointing the user at the
-            # device popup, where they can read the offending PID and
-            # click Retry once the other application has been closed.
-            self.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#c62828")
-            )
-            self.devicePopupButton.setToolTip(
+            device_color: Optional[str] = ICON_COLOR_DANGER
+            device_tooltip = (
                 f"LIFU hardware is in use by another process (PID {in_use_pid}). "
                 "Click for details and to retry connecting."
             )
         elif is_simulated:
-            # Pink outline so the simulated interface is visually
-            # distinct from a real connected device. (Material pink 500.)
-            self.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#ff84f9")
-            )
-            self.devicePopupButton.setToolTip(
+            device_color = ICON_COLOR_INFO
+            device_tooltip = (
                 "Simulated hardware device connected (no real device). "
                 "Click for details."
             )
         elif tx_conn and hv_conn:
-            self.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#2e7d32")
-            )
-            self.devicePopupButton.setToolTip(
+            device_color = ICON_COLOR_SUCCESS
+            device_tooltip = (
                 "Hardware device fully connected (TX + HV). Click for details."
             )
         elif tx_conn or hv_conn:
-            self.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#f9a825")
-            )
+            device_color = ICON_COLOR_WARNING
             half = "TX only" if tx_conn else "HV only"
-            self.devicePopupButton.setToolTip(
+            device_tooltip = (
                 f"Hardware partially connected ({half}). Click for details."
             )
         else:
+            device_color = None
+            device_tooltip = "No hardware device connected. Click for details."
+
+        if device_color is not None:
             self.devicePopupButton.setStyleSheet(
-                _outline_style("devicePopupButton", "#000000")
+                _outline_style("devicePopupButton", device_color)
             )
-            self.devicePopupButton.setToolTip(
-                "No hardware device connected. Click for details."
+            self.devicePopupButton.setIcon(tinted_icon("device.png", device_color))
+        else:
+            self.devicePopupButton.setStyleSheet("")
+            self.devicePopupButton.setIcon(
+                tinted_icon("device.png", icon_color_neutral())
             )
+        self.devicePopupButton.setToolTip(device_tooltip)
 
         # In read-only mode (every module page except OpenLIFU Data), the
         # login button is disabled (unless the host opted to keep it active).

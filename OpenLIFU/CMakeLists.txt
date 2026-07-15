@@ -36,6 +36,13 @@ set(MODULE_PYTHON_RESOURCES
   Resources/Icons/device.png
   Resources/Icons/qrcode.png
   Resources/Icons/sync.png
+  Resources/Icons/db.png
+  Resources/Icons/db-cloud.png
+  Resources/Icons/db-cloud-broken.png
+  Resources/Icons/user.png
+  Resources/Icons/user-admin.png
+  Resources/Icons/save.png
+  Resources/Icons/exit.png
   Resources/openlifu-database/empty_db/protocols/protocols.json
   Resources/openlifu-database/empty_db/subjects/subjects.json
   Resources/openlifu-database/empty_db/transducers/transducers.json

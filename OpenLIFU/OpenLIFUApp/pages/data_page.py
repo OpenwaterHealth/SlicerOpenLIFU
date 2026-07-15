@@ -5025,20 +5025,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.databasePopupButton.clicked.connect(self.onOpenDatabasePopup)
         self.ui.devicePopupButton.clicked.connect(self.onOpenDevicePopup)
 
-        # The device button uses a custom PNG icon
-        # (``OpenLIFU/Resources/Icons/device.png``) rather than an emoji glyph
-        # so we have a single piece of art that can be swapped in later.
-        # Loaded here in Python so we don't need a Qt resource (.qrc) file -
-        # matches the pattern used by the Home page's toolbar sync action.
-        # ``__file__`` sits under ``OpenLIFU/OpenLIFUApp/pages/`` so we walk
-        # up two levels to reach the host module's ``Resources`` dir.
-        try:
-            module_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            icon_path = os.path.join(module_dir, "Resources", "Icons", "device.png")
-            if os.path.exists(icon_path):
-                self.ui.devicePopupButton.setIcon(qt.QIcon(icon_path))
-        except Exception as e:
-            logging.warning("Could not load device button icon: %s", e)
+        # Device button icon and its per-state tinting are managed by
+        # ``ModuleHeaderWidget.updateStatusButtons`` -- ``self.ui.devicePopupButton``
+        # is the header widget's button aliased onto ``self.ui`` by
+        # ``apply_module_layout``, so any icon we set here would be
+        # immediately overwritten on the next state-refresh tick.
 
         # Dependencies collapsible section: status checks + install buttons.
         # These previously lived on the Login page; they are independent of the
