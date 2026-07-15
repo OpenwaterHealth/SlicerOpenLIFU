@@ -744,6 +744,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def onTargetsTableSelectionChanged(self):
         self.updateTargetsActionButtonsEnabled()
+        # In edit mode, only the currently-selected target is "edit-focused" (unlocked + tinted
+        # yellow). Selection change moves that focus so the visual/interaction affordances stay
+        # scoped to the row the user is working on (#583).
+        if self._targets_in_edit_mode:
+            self._apply_edit_focus_to_selection()
 
     def onTargetsTableItemChanged(self, item: qt.QTableWidgetItem):
         """Apply user edits in the targets table to the underlying fiducial node."""
@@ -842,15 +847,23 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._set_targets_edit_mode(checked)
 
     def _set_targets_edit_mode(self, enabled: bool) -> None:
-        """Toggle edit mode for the targets table: unlock the session's target fiducials and allow cell editing when on."""
+        """Toggle edit mode for the targets table: unlock the currently-selected session target
+        fiducial and allow cell editing when on. In edit mode, edit affordances (unlock + yellow
+        tint) are scoped to the actively-selected row (#583); the remaining targets stay locked
+        and show their original color. Selection changes move the focus via
+        ``onTargetsTableSelectionChanged``.
+        """
         self._targets_in_edit_mode = enabled
-        # Lock state on the fiducials mirrors edit mode -- when not editing, all targets are locked so
-        # they cannot be dragged in the 3D view either. We also tint the glyph color to indicate state.
+        # Reset every target to its non-edit state first (locked + original color). This handles
+        # both "entering edit mode" (baseline before applying focus to the selected row) and
+        # "leaving edit mode" (final state).
         session = get_app_state().loaded_session
         target_nodes = session.get_target_nodes() if session is not None else []
         for node in target_nodes:
-            node.SetLocked(not enabled)
-            self._apply_edit_mode_color(node, editing=enabled)
+            node.SetLocked(True)
+            self._apply_edit_mode_color(node, editing=False)
+        if enabled:
+            self._apply_edit_focus_to_selection()
         # Toggle table edit triggers so the cells become editable / read-only in sync with the mode.
         self.ui.targetsTableWidget.setEditTriggers(
             qt.QAbstractItemView.DoubleClicked | qt.QAbstractItemView.EditKeyPressed | qt.QAbstractItemView.AnyKeyPressed
@@ -860,6 +873,22 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateTargetsTable()
         self.updateVirtualFitSectionState()
         self.updateWorkflowControls()
+
+    def _apply_edit_focus_to_selection(self) -> None:
+        """Scope edit-mode affordances (unlock + yellow tint) to the currently-selected target.
+
+        No-op if edit mode is off. If nothing is selected in the table, every target ends up
+        locked and shown in its original color -- the user picks a row to start editing.
+        """
+        if not self._targets_in_edit_mode:
+            return
+        selected_node = self.getCurrentSelectedTarget()
+        session = get_app_state().loaded_session
+        target_nodes = session.get_target_nodes() if session is not None else []
+        for node in target_nodes:
+            is_focused = node is selected_node
+            node.SetLocked(not is_focused)
+            self._apply_edit_mode_color(node, editing=is_focused)
 
     def _apply_edit_mode_color(self, node: vtkMRMLMarkupsFiducialNode, editing: bool) -> None:
         """Tint the fiducial's selected glyph color to a fixed edit-mode color while editing; restore
@@ -962,12 +991,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             session.add_target(node)
 
         # A point was placed: enter edit mode (so the user can fine-tune by dragging) and select the
-        # new target in the table.
+        # new target in the table. Selecting the row triggers ``onTargetsTableSelectionChanged``,
+        # which is responsible for applying the scoped edit-mode affordances (unlock + yellow) to
+        # the newly-selected target under the #583 model.
         if not self._targets_in_edit_mode:
             self.ui.editTargetsButton.setChecked(True)  # triggers onEditTargetsToggled → _set_targets_edit_mode
         else:
-            # Already in edit mode: just make sure the new node has the edit-mode color applied.
-            self._apply_edit_mode_color(node, editing=True)
             self.updateTargetsTable()
 
         # Select the row of the newly-placed target.
