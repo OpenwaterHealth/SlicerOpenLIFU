@@ -1158,14 +1158,22 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         self.ui.meshroomStatusIcon.setText("")
 
         if meshroom_path:
+            from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION
+
             meshroom_dir = Path(meshroom_path).parent
             dir_name = meshroom_dir.name
             version_str = dir_name[len("Meshroom-"):] if dir_name.startswith("Meshroom-") else "installed"
-            self.ui.installMeshroomPushButton.setEnabled(False)
-            self.ui.installMeshroomPushButton.setText(f"Meshroom {version_str}")
+            if version_str == MESHROOM_VERSION:
+                self.ui.installMeshroomPushButton.setEnabled(False)
+                self.ui.installMeshroomPushButton.setText(f"Meshroom {version_str}")
+            else:
+                self.ui.installMeshroomPushButton.setEnabled(True)
+                self.ui.installMeshroomPushButton.setText(
+                    f"Install Meshroom {MESHROOM_VERSION} (current version: {version_str})"
+                )
         else:
             self.ui.installMeshroomPushButton.setEnabled(True)
-            self.ui.installMeshroomPushButton.setText("Install Meshroom 2025")
+            self.ui.installMeshroomPushButton.setText("Install Meshroom {MESHROOM_VERSION}")
 
     @display_errors
     def onInstallMeshroomClicked(self, checked: bool = False) -> None:
