@@ -60,6 +60,30 @@ def fiducial_to_openlifu_point_id(fiducial_node:vtkMRMLMarkupsFiducialNode) -> s
     """Get the openlifu point ID that we would use if we were to convert the given fiducial node to an openlifu Point"""
     return fiducial_node.GetName()
 
+def label_for_target_id(target_id: str) -> str:
+    """Return the user-facing display label associated to a target's openlifu point ID.
+
+    Target identity is split across two axes: an internal, immutable ``target_id`` (the fiducial
+    node's name — used as the record key for virtual fit results, solutions, session persistence,
+    etc.) and a user-facing display label (the control-point label, editable in the PrePlanning
+    targets table). Once the user renames a target, the internal id is no longer visible anywhere in
+    the UI; user-facing messages that still interpolate the raw id become unhelpful (see #594).
+
+    Prefer this helper anywhere a target is mentioned in a message, notification, or table cell:
+    it resolves ``target_id`` to the current display label. Falls back to ``target_id`` itself when
+    the mapping cannot be resolved (target no longer in scene, or the display label is empty).
+    """
+    if not target_id:
+        return target_id
+    nodes = slicer.util.getNodes(target_id, useLists=True).get(target_id, [])
+    for node in nodes:
+        if node.IsA("vtkMRMLMarkupsFiducialNode") and node.GetNumberOfControlPoints() >= 1:
+            label = node.GetNthControlPointLabel(0)
+            if label:
+                return label
+            break
+    return target_id
+
 def fiducial_to_openlifu_point_in_transducer_coords(fiducial_node:vtkMRMLMarkupsFiducialNode, transducer:"SlicerOpenLIFUTransducer", name:Optional[str] = None) -> "openlifu.geo.Point":
     """Given a fiducial node with at least one point, return an openlifu Point in the local coordinates of the given transducer.
     If name is provided then it will be used as the name of the openlifu Point. Otherwise we use the label on the control point.

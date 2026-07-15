@@ -16,6 +16,9 @@ def add_virtual_fit_result(
     rank: int = 1,
     replace = False,
     clone_node = False,
+    protocol_id: Optional[str] = None,
+    transducer_id: Optional[str] = None,
+    volume_id: Optional[str] = None,
 ) -> vtkMRMLTransformNode:
     """Add a "virtual fit result" by cloning or creating a transform node and giving it appropriate attributes.
 
@@ -47,6 +50,12 @@ def add_virtual_fit_result(
             If False then the node is taken and turned into a virtual fit result node (renamed, given attributes, etc.).
             Set clone_node to False if you no longer need the original `transform_node`; set it to True if you want to
             preserve the integrity of the original `transform_node`
+        protocol_id: The ID of the protocol that was used when this fit was computed. Optional; stored on
+            the node so the VF results table can display the per-fit computation context (see #585).
+        transducer_id: The ID of the transducer that was used when this fit was computed. Optional; see
+            ``protocol_id``.
+        volume_id: The ID of the volume that was used when this fit was computed. Optional; see
+            ``protocol_id``.
 
     Returns: The newly created virtual fit result transform node
     """
@@ -78,6 +87,15 @@ def add_virtual_fit_result(
     virtual_fit_result.SetAttribute("VF:approvalStatus", "1" if approval_status else "0")
     if session_id is not None:
         virtual_fit_result.SetAttribute("VF:sessionID", session_id)
+    # Optional per-fit context attributes (#585). Only written when provided so pre-existing VF nodes
+    # loaded from older sessions continue to work — the getters below return None when the
+    # attribute is missing.
+    if protocol_id is not None:
+        virtual_fit_result.SetAttribute("VF:protocolID", protocol_id)
+    if transducer_id is not None:
+        virtual_fit_result.SetAttribute("VF:transducerID", transducer_id)
+    if volume_id is not None:
+        virtual_fit_result.SetAttribute("VF:volumeID", volume_id)
     virtual_fit_result.CreateDefaultDisplayNodes()
 
     return virtual_fit_result
@@ -351,6 +369,18 @@ def get_target_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> s
     if node.GetAttribute("VF:targetID") is None:
         raise RuntimeError("Node does not have a target ID.")
     return node.GetAttribute("VF:targetID")
+
+def get_protocol_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> Optional[str]:
+    """Return the protocol ID stashed on a virtual fit result node, or None for pre-#585 nodes."""
+    return node.GetAttribute("VF:protocolID")
+
+def get_transducer_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> Optional[str]:
+    """Return the transducer ID stashed on a virtual fit result node, or None for pre-#585 nodes."""
+    return node.GetAttribute("VF:transducerID")
+
+def get_volume_id_from_virtual_fit_result_node(node : vtkMRMLTransformNode) -> Optional[str]:
+    """Return the volume ID stashed on a virtual fit result node, or None for pre-#585 nodes."""
+    return node.GetAttribute("VF:volumeID")
 
 def is_virtual_fit_result_node(node: vtkMRMLTransformNode) -> bool:
     """Returns True if the given node is a virtual fit result node"""

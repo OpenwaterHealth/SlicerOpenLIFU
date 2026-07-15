@@ -49,7 +49,7 @@ from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
-from OpenLIFULib.targets import fiducial_to_openlifu_point_id
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id, label_for_target_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
@@ -64,9 +64,12 @@ from OpenLIFULib.virtual_fit_results import (
     get_approved_target_ids,
     get_approval_from_virtual_fit_result_node,
     get_best_virtual_fit_result_node,
+    get_protocol_id_from_virtual_fit_result_node,
     get_target_id_from_virtual_fit_result_node,
+    get_transducer_id_from_virtual_fit_result_node,
     get_virtual_fit_approval_for_target,
     get_virtual_fit_result_nodes,
+    get_volume_id_from_virtual_fit_result_node,
     revoke_any_virtual_fit_approvals_for_target,
     set_approval_for_virtual_fit_result_node
 )
@@ -322,13 +325,22 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateVirtualFitResultsTable)
 
         # ---- Targets table ----
+        # Column layout (see .ui): 0=Color swatch, 1=Name, 2=ID, 3=R, 4=A, 5=S, 6=Show, 7=jump-to.
+        # ID column is hideable via right-click header menu (default hidden -- #594).
         targets_table = self.ui.targetsTableWidget
         targets_header = targets_table.horizontalHeader()
-        targets_header.setSectionResizeMode(0, qt.QHeaderView.Stretch)
-        for col in (1, 2, 3):
+        targets_header.setSectionResizeMode(0, qt.QHeaderView.ResizeToContents)  # color swatch
+        targets_header.setSectionResizeMode(1, qt.QHeaderView.Stretch)  # name
+        targets_header.setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)  # id
+        for col in (3, 4, 5):  # R, A, S
             targets_header.setSectionResizeMode(col, qt.QHeaderView.ResizeToContents)
-        targets_header.setSectionResizeMode(4, qt.QHeaderView.ResizeToContents)
-        targets_header.setSectionResizeMode(5, qt.QHeaderView.ResizeToContents)
+        targets_header.setSectionResizeMode(6, qt.QHeaderView.ResizeToContents)  # show
+        targets_header.setSectionResizeMode(7, qt.QHeaderView.ResizeToContents)  # jump
+        targets_table.setColumnHidden(2, True)  # default-hide the ID column
+        targets_header.setContextMenuPolicy(qt.Qt.CustomContextMenu)
+        targets_header.customContextMenuRequested.connect(
+            partial(self._on_table_header_context_menu, table=targets_table, hideable_columns=(2,))
+        )
         targets_table.itemSelectionChanged.connect(self.onTargetsTableSelectionChanged)
         targets_table.itemChanged.connect(self.onTargetsTableItemChanged)
 
@@ -349,11 +361,24 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.virtualfitButton.clicked.connect(self.onRunAutoFitClicked)
 
         # ---- Virtual fit result options ----
+        # Column layout (see .ui): 0=Name, 1=Approved (checkbox), 2=Target, 3=Protocol, 4=Transducer, 5=Volume.
+        # Sorting is enabled per user; per-fit context columns (2-5) are hideable via right-click header menu (#585).
         self.ui.virtualFitResultTable.itemSelectionChanged.connect(self.onVirtualFitResultSelected)
         self.ui.virtualFitResultTable.itemChanged.connect(self.onVirtualFitResultItemChanged)
+        self.ui.virtualFitResultTable.setSortingEnabled(True)
         vf_header = self.ui.virtualFitResultTable.horizontalHeader()
-        vf_header.setSectionResizeMode(0, qt.QHeaderView.Stretch)
-        vf_header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
+        vf_header.setSectionResizeMode(0, qt.QHeaderView.Stretch)  # name
+        vf_header.setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)  # approved checkbox
+        for col in (2, 3, 4, 5):  # target / protocol / transducer / volume
+            vf_header.setSectionResizeMode(col, qt.QHeaderView.ResizeToContents)
+        vf_header.setContextMenuPolicy(qt.Qt.CustomContextMenu)
+        vf_header.customContextMenuRequested.connect(
+            partial(
+                self._on_table_header_context_menu,
+                table=self.ui.virtualFitResultTable,
+                hideable_columns=(2, 3, 4, 5),
+            )
+        )
         self.ui.editTransformPushButton.clicked.connect(self.onEditTransformClicked)
         self.ui.editTransformPushButton.setStyleSheet("""
         QPushButton:checked {
@@ -552,7 +577,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if list(get_virtual_fit_result_nodes(target_id, session_id)):
             self.logic.clear_virtual_fit_results(target = target)
             self.updateWorkflowControls()
-            notify(f"Virtual fit results for {target_id} removed:\n{reason}")
+            notify(f"Virtual fit results for {label_for_target_id(target_id)} removed:\n{reason}")
 
     def revokeTargetApprovalIfAny(self, target : Union[str,vtkMRMLMarkupsFiducialNode], reason:str):
         """Revoke virtual fit approval for the target if there was an approval, and show a message dialog to that effect.
@@ -649,6 +674,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         Under the session-owns-all model, only fiducials registered with the session
         via ``session.add_target`` appear here. Loose scene fiducials are ignored.
+
+        Column layout (see ``OpenLIFUPrePlanning.ui``):
+        0=Color swatch, 1=Name (editable display label), 2=ID (internal target_id, default hidden),
+        3-5=R/A/S coordinates, 6=Show checkbox, 7=Jump-to-target button.
         """
         table = self.ui.targetsTableWidget
         currently_selected_row = table.currentRow()
@@ -666,25 +695,46 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             ) if self._targets_in_edit_mode else (
                 qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled
             )
+            readonly_flags = qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled
 
             for row, node in enumerate(target_nodes):
-                # Column 0: display name (control-point label). Editing here only renames; it does not
+                # Column 0: color swatch. Uses the fiducial's currently-assigned selected color so the
+                # row can be visually matched to the glyph in the 3D view / other tables (#594).
+                color_item = qt.QTableWidgetItem()
+                color_item.setFlags(readonly_flags)
+                display_node = node.GetDisplayNode()
+                if display_node is not None:
+                    r, g, b = display_node.GetSelectedColor()
+                    color_item.setBackground(
+                        qt.QBrush(qt.QColor(int(round(r * 255)), int(round(g * 255)), int(round(b * 255))))
+                    )
+                table.setItem(row, 0, color_item)
+
+                # Column 1: display name (control-point label). Editing here only renames; it does not
                 # affect the underlying openlifu Point ID (the node name), so virtual-fit results keyed
                 # off the target ID are preserved.
                 name_item = qt.QTableWidgetItem(node.GetNthControlPointLabel(0))
                 name_item.setData(qt.Qt.UserRole, node)
                 name_item.setFlags(editable_flags)
-                table.setItem(row, 0, name_item)
+                table.setItem(row, 1, name_item)
 
-                # Columns 1-3: R, A, S coordinates.
+                # Column 2: internal target ID (openlifu Point id, i.e. the fiducial node name). Read-only.
+                # Default-hidden via ``setColumnHidden`` in setup; user can un-hide via right-click header
+                # menu when they need to cross-reference id ↔ display name (#594).
+                id_item = qt.QTableWidgetItem(fiducial_to_openlifu_point_id(node))
+                id_item.setFlags(readonly_flags)
+                id_item.setForeground(qt.QBrush(qt.QColor(128, 128, 128)))
+                table.setItem(row, 2, id_item)
+
+                # Columns 3-5: R, A, S coordinates.
                 position = node.GetNthControlPointPosition(0)
-                for col, coord_value in enumerate(position, start=1):
+                for col, coord_value in enumerate(position, start=3):
                     coord_item = qt.QTableWidgetItem(f"{coord_value:0.2f}")
                     coord_item.setFlags(editable_flags)
                     coord_item.setTextAlignment(qt.Qt.AlignRight | qt.Qt.AlignVCenter)
                     table.setItem(row, col, coord_item)
 
-                # Column 4: Show checkbox.
+                # Column 6: Show checkbox.
                 show_item = qt.QTableWidgetItem()
                 show_item.setFlags(
                     qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable
@@ -693,15 +743,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 visible = bool(display_node and display_node.GetVisibility())
                 show_item.setCheckState(qt.Qt.Checked if visible else qt.Qt.Unchecked)
                 show_item.setTextAlignment(qt.Qt.AlignCenter)
-                table.setItem(row, 4, show_item)
+                table.setItem(row, 6, show_item)
 
-                # Column 5: jump-to-target button. Snaps all slice views to the target's position.
+                # Column 7: jump-to-target button. Snaps all slice views to the target's position.
                 jump_button = qt.QPushButton("\u2316")  # position indicator (crosshair) glyph
                 jump_button.setToolTip("Jump slice views to this target's position")
                 jump_button.setFlat(True)
                 jump_button.setFixedSize(qt.QSize(22, 18))
                 jump_button.clicked.connect(partial(self._jump_slices_to_node, node))
-                table.setCellWidget(row, 5, jump_button)
+                table.setCellWidget(row, 7, jump_button)
         finally:
             self._populating_targets_table = False
 
@@ -720,10 +770,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._populating_targets_table = True
         try:
             for row in range(table.rowCount):
-                item = table.item(row, 0)
+                item = table.item(row, 1)  # name column holds the node reference via UserRole
                 if item is not None and item.data(qt.Qt.UserRole) is node:
                     position = node.GetNthControlPointPosition(0)
-                    for col, coord_value in enumerate(position, start=1):
+                    for col, coord_value in enumerate(position, start=3):
                         coord_item = table.item(row, col)
                         if coord_item is not None:
                             coord_item.setText(f"{coord_value:0.2f}")
@@ -737,7 +787,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         row = table.currentRow()
         if row < 0:
             return None
-        item = table.item(row, 0)
+        item = table.item(row, 1)  # name column holds the node reference via UserRole
         if item is None:
             return None
         return item.data(qt.Qt.UserRole)
@@ -756,7 +806,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             return
         table = self.ui.targetsTableWidget
         row = item.row()
-        name_item = table.item(row, 0)
+        name_item = table.item(row, 1)  # name column holds the node reference via UserRole
         if name_item is None:
             return
         node : vtkMRMLMarkupsFiducialNode = name_item.data(qt.Qt.UserRole)
@@ -764,14 +814,14 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             return
 
         col = item.column()
-        if col == 0:
+        if col == 1:
             # Display-name edit: only update the control-point label and emit the name-modified event so
             # other modules can refresh their displays. We deliberately do NOT call node.SetName(), since
             # the node name is the openlifu Point ID that virtual-fit results are keyed on.
             new_label = item.text()
             node.SetNthControlPointLabel(0, new_label)
             node.InvokeEvent(SlicerOpenLIFUEvents.TARGET_NAME_MODIFIED_EVENT)
-        elif col in (1, 2, 3):
+        elif col in (3, 4, 5):
             try:
                 new_value = float(item.text())
             except ValueError:
@@ -779,13 +829,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 self._refresh_target_row_for_node(node)
                 return
             position = list(node.GetNthControlPointPosition(0))
-            position[col - 1] = new_value
+            position[col - 3] = new_value
             self._target_table_edit_in_progress = True
             try:
                 node.SetNthControlPointPosition(0, *position)
             finally:
                 self._target_table_edit_in_progress = False
-        elif col == 4:
+        elif col == 6:
             display_node = node.GetDisplayNode()
             if display_node is not None:
                 display_node.SetVisibility(item.checkState() == qt.Qt.Checked)
@@ -920,6 +970,33 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         markups_logic = slicer.modules.markups.logic()
         # JumpSlicesToLocation(r, a, s, centered) is supported across recent Slicer versions.
         markups_logic.JumpSlicesToLocation(position[0], position[1], position[2], True)
+
+    def _on_table_header_context_menu(
+        self,
+        pos: qt.QPoint,
+        table: qt.QTableWidget,
+        hideable_columns: tuple,
+    ) -> None:
+        """Show a right-click context menu on a table header letting the user toggle column visibility.
+
+        Only the columns whose indices are listed in ``hideable_columns`` are offered as toggle
+        actions; other columns (e.g. structural ones like Name or Approved) stay always-visible.
+        """
+        header = table.horizontalHeader()
+        menu = qt.QMenu(header)
+        for col in hideable_columns:
+            header_item = table.horizontalHeaderItem(col)
+            label = header_item.text() if header_item is not None else f"Column {col}"
+            if not label:
+                label = f"Column {col}"
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(not table.isColumnHidden(col))
+            action.toggled.connect(partial(self._set_column_visible, table=table, column=col))
+        menu.exec_(header.mapToGlobal(pos))
+
+    def _set_column_visible(self, checked: bool, table: qt.QTableWidget, column: int) -> None:
+        table.setColumnHidden(column, not checked)
 
     def _set_non_placement_controls_enabled(self, enabled: bool) -> None:
         """Enable/disable the rest of the targets+virtual-fit UI while a target is being placed."""
@@ -1184,7 +1261,13 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def updateVirtualFitResultsTable(self):
         """ Updates the list of virtual list results shown. This is dependent on the 
-        currently selected target in the algorithm inputs."""
+        currently selected target in the algorithm inputs.
+
+        Column layout (see ``OpenLIFUPrePlanning.ui``):
+        0=Name, 1=Approved (checkbox), 2=Target, 3=Protocol, 4=Transducer, 5=Volume.
+        Columns 2-5 are populated from per-fit attributes stashed on the VF node at creation time
+        (#585). Pre-#585 nodes lack those attributes and show a dash placeholder.
+        """
         
         # Ignore function calls while the algorithm inputs are updated.
         if self._input_update_in_progress:
@@ -1205,13 +1288,18 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         most_recent_selection = self.ui.virtualFitResultTable.currentRow()
         self._populating_vf_results_table = True
+        # Disable sorting during populate: with sorting enabled, ``setItem`` triggers a re-sort per cell,
+        # which reshuffles row indices mid-populate and corrupts row/item mappings.
+        self.ui.virtualFitResultTable.setSortingEnabled(False)
         try:
             self.ui.virtualFitResultTable.clearContents()
             self.ui.virtualFitResultTable.setRowCount(len(vf_results))
 
+            readonly_flags = qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled
+
             for row_idx, result in enumerate(vf_results):
                 result_item = qt.QTableWidgetItem(result.GetAttribute("DisplayName"))
-                result_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                result_item.setFlags(readonly_flags)
                 result_item.setData(qt.Qt.UserRole, result)
                 self.ui.virtualFitResultTable.setItem(row_idx, 0, result_item)
 
@@ -1231,11 +1319,26 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 approved_item.setTextAlignment(qt.Qt.AlignCenter)
                 self.ui.virtualFitResultTable.setItem(row_idx, 1, approved_item)
 
+                # Per-fit context columns (#585). Use display label for target (#594); protocol /
+                # transducer / volume fall back to a dash when the VF node is from before #585.
+                vf_target_id = get_target_id_from_virtual_fit_result_node(result)
+                target_display = label_for_target_id(vf_target_id) if vf_target_id else "\u2014"
+                for col, value in (
+                    (2, target_display),
+                    (3, get_protocol_id_from_virtual_fit_result_node(result) or "\u2014"),
+                    (4, get_transducer_id_from_virtual_fit_result_node(result) or "\u2014"),
+                    (5, get_volume_id_from_virtual_fit_result_node(result) or "\u2014"),
+                ):
+                    ctx_item = qt.QTableWidgetItem(value)
+                    ctx_item.setFlags(readonly_flags)
+                    self.ui.virtualFitResultTable.setItem(row_idx, col, ctx_item)
+
             if vf_results and 0 <= most_recent_selection < self.ui.virtualFitResultTable.rowCount:
                 self.ui.virtualFitResultTable.selectRow(most_recent_selection)
             if vf_results:
                 self.ui.virtualFitResultTable.resizeRowsToContents()
         finally:
+            self.ui.virtualFitResultTable.setSortingEnabled(True)
             self._populating_vf_results_table = False
 
         if not vf_results:
@@ -1324,6 +1427,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 return
         else:
             virtual_fit_result = self.logic.create_manual_virtual_fit_result(
+                protocol = protocol,
                 transducer = transducer,
                 volume = volume,
                 target = target)
@@ -1370,7 +1474,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             slicer.app.processEvents()
 
         target_id = fiducial_to_openlifu_point_id(target)
-        notify(f"Removing any existing virtual fit results for {target_id}.")
+        notify(f"Removing any existing virtual fit results for {label_for_target_id(target_id)}.")
 
         with BusyCursor():
             try:
@@ -1625,6 +1729,7 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
     def create_manual_virtual_fit_result(
         self,
+        protocol : SlicerOpenLIFUProtocol,
         transducer : SlicerOpenLIFUTransducer,
         volume: vtkMRMLScalarVolumeNode,
         target: vtkMRMLMarkupsFiducialNode,
@@ -1640,6 +1745,9 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
         session_id : Optional[str] = session.get_session_id() if session is not None else None
 
         target_id = fiducial_to_openlifu_point_id(target)
+        protocol_id = protocol.protocol.id
+        transducer_id = transducer.transducer.transducer.id
+        volume_id = volume.GetAttribute('OpenLIFUData.volume_id') or volume.GetName()
 
         existing_vf_results = list(get_virtual_fit_result_nodes(target_id=target_id, session_id=session_id, sort = True))
         
@@ -1655,7 +1763,10 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 session_id = session_id,
                 approval_status = False,
                 clone_node=True, # Important. Initialize based on the current transducer position
-                rank = rank, 
+                rank = rank,
+                protocol_id = protocol_id,
+                transducer_id = transducer_id,
+                volume_id = volume_id,
         )
 
         return vf_result_node
@@ -1719,6 +1830,10 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
 
         vf_result_nodes = []
 
+        protocol_id = protocol.protocol.id
+        transducer_id = transducer.transducer.transducer.id
+        volume_id = volume.GetAttribute('OpenLIFUData.volume_id') or volume.GetName()
+
         for i,vf_transform in enumerate(vf_transforms): 
             node = add_virtual_fit_result(
                 transform_node = transducer_transform_node_from_openlifu(vf_transform, transducer.transducer.transducer, "mm"),
@@ -1727,6 +1842,9 @@ class OpenLIFUPrePlanningLogic(ScriptedLoadableModuleLogic):
                 approval_status = False,
                 clone_node=False,
                 rank = current_lowest_rank+i+1,
+                protocol_id = protocol_id,
+                transducer_id = transducer_id,
+                volume_id = volume_id,
             )
             vf_result_nodes.append(node)
             transducer.move_node_into_transducer_sh_folder(node)

@@ -72,7 +72,7 @@
             <bool>false</bool>
            </property>
            <property name="columnCount">
-            <number>6</number>
+            <number>8</number>
            </property>
            <attribute name="horizontalHeaderHighlightSections">
             <bool>false</bool>
@@ -91,7 +91,23 @@
            </attribute>
            <column>
             <property name="text">
+             <string/>
+            </property>
+            <property name="toolTip">
+             <string>Fiducial color used to identify this target across the 3D view and related tables</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
              <string>Name</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>ID</string>
+            </property>
+            <property name="toolTip">
+             <string>Underlying target ID used internally for virtual fit results, solutions, and session persistence. Right-click a column header to show or hide this column.</string>
             </property>
            </column>
            <column>
@@ -260,10 +276,10 @@
             <bool>false</bool>
            </property>
            <property name="columnCount">
-            <number>2</number>
+            <number>6</number>
            </property>
            <attribute name="horizontalHeaderDefaultSectionSize">
-            <number>200</number>
+            <number>120</number>
            </attribute>
            <attribute name="horizontalHeaderStretchLastSection">
             <bool>false</bool>
@@ -282,6 +298,38 @@
            <column>
             <property name="text">
              <string>Approved</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Target</string>
+            </property>
+            <property name="toolTip">
+             <string>Target this fit was computed for</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Protocol</string>
+            </property>
+            <property name="toolTip">
+             <string>Protocol used when this fit was computed. Right-click a column header to show or hide columns.</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Transducer</string>
+            </property>
+            <property name="toolTip">
+             <string>Transducer used when this fit was computed. Right-click a column header to show or hide columns.</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Volume</string>
+            </property>
+            <property name="toolTip">
+             <string>Volume used when this fit was computed. Right-click a column header to show or hide columns.</string>
             </property>
            </column>
           </widget>

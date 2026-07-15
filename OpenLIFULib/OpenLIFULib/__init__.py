@@ -28,6 +28,7 @@ from OpenLIFULib.targets import (
     get_target_candidates,
     fiducial_to_openlifu_point,
     fiducial_to_openlifu_point_in_transducer_coords,
+    label_for_target_id,
     openlifu_point_to_fiducial,
 )
 from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget

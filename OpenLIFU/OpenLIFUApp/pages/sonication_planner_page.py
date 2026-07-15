@@ -44,6 +44,7 @@ from OpenLIFULib import (
     SlicerOpenLIFUTransducer,
     fiducial_to_openlifu_point_in_transducer_coords,
     get_app_state,
+    label_for_target_id,
     make_xarray_in_transducer_coords_from_volume,
 )
 from OpenLIFUApp.logic.app_state import get_app_state_signals
@@ -544,7 +545,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 target_box.setItemText(i, f"\u2713 {target_box.itemText(i)}")
                 target_box.setItemData(
                     i,
-                    f"Virtual Fit is approved for Target {target_id}",
+                    f"Virtual Fit is approved for Target {label_for_target_id(target_id)}",
                     qt.Qt.ToolTipRole,
                 )
 
