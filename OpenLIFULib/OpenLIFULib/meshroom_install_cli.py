@@ -102,7 +102,7 @@ def _extract_tarball(archive_path: Path, extraction_dir: Path, cancel_callback) 
             destination_path = (extraction_dir / member.name).resolve()
             if os.path.commonpath([str(extraction_dir_resolved), str(destination_path)]) != str(extraction_dir_resolved):
                 raise RuntimeError(f"Archive contains an unsafe path: {member.name}")
-            archive.extract(member, extraction_dir, filter="data")
+            archive.extract(member, extraction_dir, filter="tar")
             if i == total_members or i % report_every == 0:
                 _progress_callback(
                     f"Extracting Meshroom ({i} of {total_members} files)...",
