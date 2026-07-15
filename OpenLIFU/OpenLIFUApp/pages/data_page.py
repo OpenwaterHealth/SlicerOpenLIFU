@@ -6537,11 +6537,15 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     # this session later and restore its Solution.
                     self.clear_solution(clean_up_scene=True, update_session_link=False)
                 clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
-                for photocollection_id in list(loaded_session.get_affiliated_photocollection_ids()):
-                    # Pass the local session in explicitly: the parameter node has already been
-                    # nulled out above, so remove_photocollection cannot read the session back
-                    # through it.
-                    self.remove_photocollection(photocollection_id, loaded_session=loaded_session)
+
+                # Note: we intentionally do NOT call ``remove_photocollection`` here.
+                # Photocollections are pure list-bookkeeping on the outgoing
+                # ``SlicerOpenLIFUSession`` pack; the session is being unloaded, so the
+                # bookkeeping is moot. Worse, ``remove_photocollection`` mutates the pack
+                # via ``set_affiliated_photocollections``, which triggers ``@parameterPack``
+                # ``_save()`` and re-serializes the whole pack back into the same MRML
+                # ``loaded_session`` slot -- resurrecting the (now stub) session that
+                # ``self.getParameterNode().loaded_session = None`` above just cleared (#584).
 
                 for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
                     if photoscan_id in self.getParameterNode().loaded_photoscans:

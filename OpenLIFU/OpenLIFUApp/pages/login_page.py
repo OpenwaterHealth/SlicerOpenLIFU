@@ -55,6 +55,7 @@ from OpenLIFULib.util import (
     cleanup_module_callbacks,
     register_module_callback,
 )
+from OpenLIFUApp.logic.app_state import get_app_state_signals
 
 if TYPE_CHECKING:
     import openlifu
@@ -624,6 +625,14 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
+        # Refresh the Login/Logout button whenever the app-state parameter
+        # node changes (needed for the session-loaded gate in
+        # :py:meth:`updateLoginLogoutButton`: without this, entering the
+        # popup after ``clear_session`` can leave the button disabled because
+        # the login widget's own parameter node has not been modified since
+        # the gate was applied). See #584.
+        get_app_state_signals().dataChanged.connect(self.updateLoginLogoutButton)
+
         self.updateWidgetLoginState(LoginState.NOT_LOGGED_IN)
         self.onDatabaseChanged() # Call the routine to update from data parameter node
 
@@ -652,6 +661,10 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        try:
+            get_app_state_signals().dataChanged.disconnect(self.updateLoginLogoutButton)
+        except Exception:  # noqa: BLE001
+            pass
         cleanup_module_callbacks(self)
         self.removeObservers()
 
@@ -857,6 +870,20 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.loginLogoutButton.setToolTip("Logout to an account in the database.")
         elif self.ui.loginLogoutButton.text == "Login":
             self.updateLoginLogoutButtonAsLoginButton()
+
+        # Gate the Login/Logout button when a session is loaded (#584): the
+        # `active_user` setter's onActiveUserChanged handler unconditionally
+        # calls data_logic.clear_session(), so a logout mid-session silently
+        # discards it. The Account popup itself remains reachable so the
+        # user can view account details; only the mutating button is off.
+        # Re-evaluated on every AppState change via the dataChanged wiring
+        # in ``setup``.
+        if get_app_state().loaded_session is not None:
+            self.ui.loginLogoutButton.setEnabled(False)
+            self.ui.loginLogoutButton.setToolTip(
+                "Login/Logout disabled during a Session. "
+                "Return to the home page to Login/Logout."
+            )
 
     def updateAccountManagementButtons(self):
         # You only need a database loaded to be able to do this. User account
