@@ -34,15 +34,6 @@ set(MODULE_PYTHON_RESOURCES
   Resources/UI/TransducerLocalizationWizard.ui
   Resources/Icons/${MODULE_NAME}.png
   Resources/Icons/device.png
-  Resources/Icons/OpenLIFUData.png
-  Resources/Icons/OpenLIFUDatabase.png
-  Resources/Icons/OpenLIFUHome.png
-  Resources/Icons/OpenLIFULogin.png
-  Resources/Icons/OpenLIFUPrePlanning.png
-  Resources/Icons/OpenLIFUSession.png
-  Resources/Icons/OpenLIFUSonicationControl.png
-  Resources/Icons/OpenLIFUSonicationPlanner.png
-  Resources/Icons/OpenLIFUTransducerLocalization.png
   Resources/Icons/qrcode.png
   Resources/Icons/sync.png
   Resources/openlifu-database/empty_db/protocols/protocols.json
