@@ -319,7 +319,15 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         # Replace the placeholder algorithm input widget by the actual one
         algorithm_input_names = ["Protocol", "Transducer", "Volume", "Target"]
-        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(algorithm_input_names, parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget())
+        # hide_singleton_inputs collapses locked single-choice rows: with a session loaded there
+        # is always exactly one Protocol, Transducer, and Volume, so those rows disappear and only
+        # Target remains -- which is what we want, since the user still needs to pick which target
+        # the virtual-fit results table applies to when more than one target is defined (#585).
+        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(
+            algorithm_input_names,
+            parent = self.ui.algorithmInputWidgetPlaceholder.parentWidget(),
+            hide_singleton_inputs = True,
+        )
         replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
 
         self.algorithm_input_widget.inputs_dict["Target"].combo_box.currentIndexChanged.connect(self.updateVirtualFitResultsTable)

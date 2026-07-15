@@ -221,12 +221,9 @@
           <number>0</number>
          </property>
          <item>
-          <widget class="ctkCollapsibleButton" name="virtualfitInputsCollapsible">
-           <property name="text">
+          <widget class="QGroupBox" name="virtualfitInputsGroupBox">
+           <property name="title">
             <string>Inputs</string>
-           </property>
-           <property name="collapsed">
-            <bool>true</bool>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_9">
             <item>

@@ -40,13 +40,20 @@ class AlgorithmInput:
         self.combo_box.setDisabled(True)
 
 class OpenLIFUAlgorithmInputWidget(qt.QWidget):
-    def __init__(self, algorithm_input_names : List[str], parent=None):
+    def __init__(self, algorithm_input_names : List[str], parent=None, hide_singleton_inputs: bool = False):
         super().__init__(parent)
         """
         Creates a widget containing QComboBoxes for each of the input types specified by the user.
         Args:
             algorithm_input_names: Names of inputs required for the algorithm i.e. "Volume", "Transducer" etc
+            hide_singleton_inputs: If True, `update()` collapses the whole form row for any
+                input whose combo box holds exactly one real (data-bearing) option, so the
+                user is not shown a locked single-choice dropdown. Rows with zero valid options
+                (i.e. the disabled "No X objects" placeholder) remain visible so the user still
+                sees why the input is unavailable.
         """
+
+        self._hide_singleton_inputs = hide_singleton_inputs
 
         layout = qt.QFormLayout(self)
         self.setLayout(layout)
@@ -65,8 +72,12 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                     )
             else:
                 self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QLabel(f"{input_name}", self), ctk.ctkComboBox(self))
-                
+
+        # Track the QFormLayout row index for each input so we can toggle whole-row visibility
+        # via QFormLayout.setRowVisible (available since Qt 5.14).
+        self._row_index_by_input_name : Dict[str, int] = {}
         for input in self.inputs_dict.values():
+            row_index = layout.rowCount()
             if input.refresh_button is not None:
                 specialRow = qt.QHBoxLayout()
                 specialRow.addWidget(input.combo_box, 1)
@@ -74,6 +85,7 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 layout.addRow(input.label, specialRow)
             else:
                 layout.addRow(input.label, input.combo_box)
+            self._row_index_by_input_name[input.name] = row_index
 
     def add_protocol_to_combobox(self, protocol : SlicerOpenLIFUProtocol) -> None:
         self.inputs_dict["Protocol"].combo_box.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
@@ -239,11 +251,39 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 self.inputs_dict["Target"].indicate_no_options()
             else:
                 self.inputs_dict["Target"].combo_box.setEnabled(True)
+                # Local import to avoid a circular import at module load time.
+                from OpenLIFULib.targets import fiducial_to_openlifu_point_id
                 for target_node in target_nodes:
-                    self.inputs_dict["Target"].combo_box.addItem(target_node.GetName(), target_node)
+                    target_id = fiducial_to_openlifu_point_id(target_node)
+                    self.inputs_dict["Target"].combo_box.addItem(
+                        "{} (ID: {})".format(target_node.GetName(), target_id),
+                        target_node,
+                    )
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()
+
+        # Optionally collapse form rows whose combo is a locked single-option dropdown.
+        if self._hide_singleton_inputs:
+            self._refresh_input_visibility()
+
+    def _refresh_input_visibility(self) -> None:
+        """Hide/show each input's form row based on how many real options its combo box holds.
+
+        A row is hidden iff the combo has exactly one item and that item carries real user data
+        (i.e. it is not the disabled "No X objects" placeholder installed by `indicate_no_options`).
+        This lets pages that opt in via `hide_singleton_inputs=True` avoid presenting the user
+        with locked single-choice dropdowns while still surfacing the "no options" state.
+        """
+        layout : qt.QFormLayout = self.layout()
+        for input in self.inputs_dict.values():
+            count = input.combo_box.count
+            # A single item with non-None user data means one real, selectable option.
+            is_singleton_real = (count == 1 and input.combo_box.itemData(0) is not None)
+            row = self._row_index_by_input_name.get(input.name)
+            if row is None:
+                continue
+            layout.setRowVisible(row, not is_singleton_real)
 
     def has_valid_selections(self) -> bool:
         """Whether all options have been selected, so that get_current_data would return

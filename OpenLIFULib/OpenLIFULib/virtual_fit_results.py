@@ -181,6 +181,8 @@ def add_virtual_fit_results_from_openlifu_session_format(
     session_id:str,
     transducer:"Transducer",
     replace = False,
+    protocol_id: Optional[str] = None,
+    volume_id: Optional[str] = None,
 ) -> List[vtkMRMLTransformNode]:
     """Read the openlifu session format and load the data into the slicer scene as virtual fit result nodes.
 
@@ -189,16 +191,24 @@ def add_virtual_fit_results_from_openlifu_session_format(
             see the documentation of openlifu.db.Session.virtual_fit_results.
         session_id: The ID of the session with which to tag these virtual fit result nodes.
         transducer: The openlifu Transducer of the session. It is needed to configure transforms to be
-            in the correct units.
+            in the correct units. Its ID is also written onto each loaded VF-result node so the
+            PrePlanning VF-results table can show the Transducer column (#585).
         replace: Whether to replace any existing virtual fit results that have the
             same session ID, target ID, and rank. If this is off, then an error is raised
             in the event that there is already a matching virtual fit result in the scene.
+        protocol_id: Optional. Written onto each loaded VF-result node so the PrePlanning
+            VF-results table can show the Protocol column (#585). The openlifu session format
+            does not currently persist per-fit protocol/transducer/volume context, so callers
+            with session context available should backfill this from the session values.
+        volume_id: Optional. Same rationale as `protocol_id`, for the Volume column.
 
     Returns a list of the nodes that were added.
 
     See also the reverse function `get_virtual_fit_results_in_openlifu_session_format`
     """
     nodes_that_have_been_added = []
+    # The transducer id is always available since the transducer object is required.
+    transducer_id = transducer.id
     for target_id, list_of_transforms in vf_results_openlifu.items():
         for i, (is_approved, array_transform) in enumerate(list_of_transforms):
             virtual_fit_result_transform = transducer_transform_node_from_openlifu(
@@ -215,6 +225,9 @@ def add_virtual_fit_results_from_openlifu_session_format(
                 rank = i+1,
                 clone_node=False,
                 replace=replace,
+                protocol_id = protocol_id,
+                transducer_id = transducer_id,
+                volume_id = volume_id,
             )
             nodes_that_have_been_added.append(node)
     return nodes_that_have_been_added

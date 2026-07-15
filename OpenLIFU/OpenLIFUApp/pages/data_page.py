@@ -6985,6 +6985,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session_id = session_openlifu.id,
             transducer = newly_loaded_transducer.transducer.transducer,
             replace=True, # If there happen to already be some virtual fit result nodes that clash, loading a session will silently overwrite them.
+            # Backfill the per-fit context ids from the session, so the PrePlanning VF-results
+            # table shows Protocol/Transducer/Volume for loaded sessions too. The openlifu session
+            # format does not yet persist these per-fit; once openlifu.Session supports arrays of
+            # transducers/volumes (#585 follow-up) this backfill needs to be revisited.
+            protocol_id = session_openlifu.protocol_id,
+            volume_id = session_openlifu.volume_id,
         )
 
         for vf_node in newly_added_vf_result_nodes:
