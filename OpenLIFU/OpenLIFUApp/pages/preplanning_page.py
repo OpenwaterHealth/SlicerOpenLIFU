@@ -12,7 +12,7 @@ from __future__ import annotations
 # Standard library imports
 from collections import defaultdict
 from functools import partial
-from typing import Callable, Optional, TYPE_CHECKING, Dict, List, Union
+from typing import Callable, Optional, TYPE_CHECKING, Dict, List, Tuple, Union
 
 # Third-party imports
 import qt
@@ -706,17 +706,22 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             readonly_flags = qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled
 
             for row, node in enumerate(target_nodes):
-                # Column 0: color swatch. Uses the fiducial's currently-assigned selected color so the
-                # row can be visually matched to the glyph in the 3D view / other tables (#594).
+                # Column 0: color swatch. Rendered via a QWidget in the cell (rather than
+                # QTableWidgetItem.setBackground) so the color stays visible when the row is
+                # selected -- Qt's selection-highlight brush paints over item backgrounds but
+                # leaves cell widgets alone. We read the *canonical* fiducial color via
+                # ``_canonical_color_for_node`` so the swatch always reflects the assigned palette
+                # color even while the fiducial is temporarily tinted yellow by edit mode.
                 color_item = qt.QTableWidgetItem()
                 color_item.setFlags(readonly_flags)
-                display_node = node.GetDisplayNode()
-                if display_node is not None:
-                    r, g, b = display_node.GetSelectedColor()
-                    color_item.setBackground(
-                        qt.QBrush(qt.QColor(int(round(r * 255)), int(round(g * 255)), int(round(b * 255))))
-                    )
                 table.setItem(row, 0, color_item)
+                r, g, b = self._canonical_color_for_node(node)
+                color_widget = qt.QWidget()
+                color_widget.setAutoFillBackground(True)
+                color_widget.setStyleSheet(
+                    f"background-color: rgb({int(round(r * 255))},{int(round(g * 255))},{int(round(b * 255))});"
+                )
+                table.setCellWidget(row, 0, color_widget)
 
                 # Column 1: display name (control-point label). Editing here only renames; it does not
                 # affect the underlying openlifu Point ID (the node name), so virtual-fit results keyed
@@ -970,6 +975,28 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                     pass
                 node.RemoveAttribute(self._original_color_attr)
 
+    def _canonical_color_for_node(self, node: vtkMRMLMarkupsFiducialNode) -> Tuple[float, float, float]:
+        """Return the canonical (non-edit-mode) SelectedColor of a target fiducial.
+
+        In edit mode, ``_apply_edit_mode_color`` temporarily overwrites the focused fiducial's
+        SelectedColor with the yellow edit-mode tint, stashing the original in
+        ``self._original_color_attr``. The targets-table swatch should always show the assigned
+        palette color, not the transient yellow, so this helper transparently returns the stashed
+        original when it exists.
+        """
+        saved = node.GetAttribute(self._original_color_attr)
+        if saved:
+            try:
+                r, g, b = (float(x) for x in saved.split(","))
+                return (r, g, b)
+            except ValueError:
+                pass
+        display_node = node.GetDisplayNode()
+        if display_node is not None:
+            r, g, b = display_node.GetSelectedColor()
+            return (r, g, b)
+        return (1.0, 0.0, 0.0)
+
     def _jump_slices_to_node(self, node: vtkMRMLMarkupsFiducialNode, *args) -> None:
         """Snap all slice views to the position of the given target's first control point."""
         if node is None or node.GetNumberOfControlPoints() < 1:
@@ -1075,22 +1102,22 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if session is not None:
             session.add_target(node)
 
-        # A point was placed: enter edit mode (so the user can fine-tune by dragging) and select the
-        # new target in the table. Selecting the row triggers ``onTargetsTableSelectionChanged``,
-        # which is responsible for applying the scoped edit-mode affordances (unlock + yellow) to
-        # the newly-selected target under the #583 model.
-        if not self._targets_in_edit_mode:
-            self.ui.editTargetsButton.setChecked(True)  # triggers onEditTargetsToggled → _set_targets_edit_mode
-        else:
-            self.updateTargetsTable()
-
-        # Select the row of the newly-placed target.
+        # Rebuild the table so the new target has a row, then select that row BEFORE toggling into
+        # edit mode. Order matters: ``_set_targets_edit_mode(True)`` calls
+        # ``_apply_edit_focus_to_selection`` which uses the currently-selected row to decide which
+        # fiducial to unlock and tint yellow. Selecting the new row first ensures edit focus lands
+        # on the just-placed target instead of on whatever was previously selected.
+        self.updateTargetsTable()
         table = self.ui.targetsTableWidget
         for row in range(table.rowCount):
             name_item = table.item(row, 1)
             if name_item is not None and name_item.data(qt.Qt.UserRole) is node:
                 table.selectRow(row)
                 break
+
+        # A point was placed: enter edit mode (so the user can fine-tune by dragging).
+        if not self._targets_in_edit_mode:
+            self.ui.editTargetsButton.setChecked(True)  # triggers onEditTargetsToggled → _set_targets_edit_mode
 
         self.updateWorkflowControls()
 
