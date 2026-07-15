@@ -446,6 +446,17 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        # If a target placement is still in progress, cancel it before we leave -- otherwise the
+        # user would leave the app stuck in place mode with an empty placeholder fiducial that we
+        # created and still own. Switching interaction mode away from Place fires
+        # EndPlacementEvent, which routes through ``_onPlacementEnded`` and does the full cleanup
+        # (removes the empty node, releases the observer, re-enables controls). (#594)
+        if self._placement_in_progress:
+            interaction_node = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+            if interaction_node is not None:
+                interaction_node.SwitchToViewTransformMode()
+            notify("Target placement was cancelled because you left the PrePlanning page.")
+
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
