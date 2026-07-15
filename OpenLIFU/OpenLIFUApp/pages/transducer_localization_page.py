@@ -67,7 +67,7 @@ from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import get_guided_mode_state, GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
-from OpenLIFULib.targets import fiducial_to_openlifu_point_id, get_target_candidates
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id, get_target_candidates, label_for_target_id
 from OpenLIFULib.transform_conversion import transducer_transform_node_from_openlifu
 from OpenLIFULib.transducer import TRANSDUCER_MODEL_COLORS
 from OpenLIFULib.transducer_tracking_results import (
@@ -1064,10 +1064,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                 target_id = fiducial_to_openlifu_point_id(target_node)
                 if target_id not in approved_target_ids:
                     continue
-                label = (target_node.GetNthControlPointLabel(0)
-                         if target_node.GetNumberOfControlPoints() > 0 else None)
-                display = label or target_id
-                combo.addItem(display, target_id)
+                combo.addItem(label_for_target_id(target_id), target_id)
                 if target_id == current_target_id:
                     selected_index = combo.count - 1
             if selected_index >= 0:
@@ -3649,7 +3646,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             text_cells = [
                 str(result_index),
                 photoscan_id,
-                target_id if target_id else "\u2014",
+                label_for_target_id(target_id) if target_id else "\u2014",
                 distance_text,
             ]
             for col, text in enumerate(text_cells):
@@ -4953,7 +4950,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         selected_target = self.get_currently_selected_target_from_preplanning()
         if selected_target:
-            status += f"Selected Target: {fiducial_to_openlifu_point_id(selected_target)}"
+            selected_target_id = fiducial_to_openlifu_point_id(selected_target)
+            status += f"Selected Target: {label_for_target_id(selected_target_id)}"
             if vf_result_for_tracking:
                 status += f"\nVirtual Fit: {vf_result_for_tracking.GetAttribute("DisplayName")}"
                 vf_is_approved = get_approval_from_virtual_fit_result_node(vf_result_for_tracking)

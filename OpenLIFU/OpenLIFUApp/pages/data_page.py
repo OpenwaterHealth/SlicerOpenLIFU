@@ -83,6 +83,7 @@ from OpenLIFULib.class_definition_widgets import (
 )
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin, get_guided_mode_state, set_guided_mode_state
+from OpenLIFULib.targets import label_for_target_id
 from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
 from OpenLIFULib.transducer_tracking_wizard_utils import hide_displayable_nodes_from_view
 from OpenLIFULib.transducer_tracking_results import (
@@ -5605,7 +5606,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 if num_vf_approved > 0:
                     additional_info_messages.append(
                         "Virtual fit approved for "
-                        + (f"{num_vf_approved} targets" if num_vf_approved > 1 else f"target \"{approved_vf_targets[0]}\"")
+                        + (f"{num_vf_approved} targets" if num_vf_approved > 1 else f"target \"{label_for_target_id(approved_vf_targets[0])}\"")
                     )
 
                 approved_tt_photoscans = self.logic.get_transducer_tracking_approvals_in_session()

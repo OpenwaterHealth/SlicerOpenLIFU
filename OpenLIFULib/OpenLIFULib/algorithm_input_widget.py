@@ -250,11 +250,15 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             else:
                 self.inputs_dict["Target"].combo_box.setEnabled(True)
                 # Local import to avoid a circular import at module load time.
-                from OpenLIFULib.targets import fiducial_to_openlifu_point_id
+                from OpenLIFULib.targets import fiducial_to_openlifu_point_id, label_for_target_id
                 for target_node in target_nodes:
                     target_id = fiducial_to_openlifu_point_id(target_node)
+                    # Show the user-facing display label (via label_for_target_id) alongside the
+                    # internal id. Previously used target_node.GetName(), which returns the openlifu
+                    # Point id itself -- so the entry read "Target_1 (ID: Target_1)" until the user
+                    # renamed the target, at which point the label went stale (#594).
                     self.inputs_dict["Target"].combo_box.addItem(
-                        "{} (ID: {})".format(target_node.GetName(), target_id),
+                        "{} (ID: {})".format(label_for_target_id(target_id), target_id),
                         target_node,
                     )
 
