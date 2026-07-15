@@ -73,11 +73,10 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
             else:
                 self.inputs_dict[input_name] = AlgorithmInput(input_name, qt.QLabel(f"{input_name}", self), ctk.ctkComboBox(self))
 
-        # Track the QFormLayout row index for each input so we can toggle whole-row visibility
-        # via QFormLayout.setRowVisible (available since Qt 5.14).
-        self._row_index_by_input_name : Dict[str, int] = {}
+        # Track the QFormLayout row for each input via its label + combo (+ optional refresh
+        # button). We hide those directly in `_refresh_input_visibility` instead of using
+        # QFormLayout.setRowVisible (which is not exposed by Slicer's PythonQt binding).
         for input in self.inputs_dict.values():
-            row_index = layout.rowCount()
             if input.refresh_button is not None:
                 specialRow = qt.QHBoxLayout()
                 specialRow.addWidget(input.combo_box, 1)
@@ -85,7 +84,6 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 layout.addRow(input.label, specialRow)
             else:
                 layout.addRow(input.label, input.combo_box)
-            self._row_index_by_input_name[input.name] = row_index
 
     def add_protocol_to_combobox(self, protocol : SlicerOpenLIFUProtocol) -> None:
         self.inputs_dict["Protocol"].combo_box.addItem("{} (ID: {})".format(protocol.protocol.name,protocol.protocol.id), protocol)
@@ -274,16 +272,21 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         (i.e. it is not the disabled "No X objects" placeholder installed by `indicate_no_options`).
         This lets pages that opt in via `hide_singleton_inputs=True` avoid presenting the user
         with locked single-choice dropdowns while still surfacing the "no options" state.
+
+        Implementation note: we hide the label and combo (and refresh button, if any) directly
+        rather than calling QFormLayout.setRowVisible, because PythonQt in Slicer does not
+        currently expose setRowVisible from Qt 5.14+. QFormLayout collapses the row height when
+        both role widgets are hidden, which is the effect we want.
         """
-        layout : qt.QFormLayout = self.layout()
         for input in self.inputs_dict.values():
             count = input.combo_box.count
             # A single item with non-None user data means one real, selectable option.
             is_singleton_real = (count == 1 and input.combo_box.itemData(0) is not None)
-            row = self._row_index_by_input_name.get(input.name)
-            if row is None:
-                continue
-            layout.setRowVisible(row, not is_singleton_real)
+            show = not is_singleton_real
+            input.label.setVisible(show)
+            input.combo_box.setVisible(show)
+            if input.refresh_button is not None:
+                input.refresh_button.setVisible(show)
 
     def has_valid_selections(self) -> bool:
         """Whether all options have been selected, so that get_current_data would return
