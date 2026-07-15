@@ -13,6 +13,7 @@ from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, Slice
 from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
     fiducial_to_openlifu_point,
+    assign_unique_color_to_fiducial,
 )
 from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
@@ -234,6 +235,13 @@ class SlicerOpenLIFUSession:
         current = [n for n in self.target_nodes if n is not None]
         if node in current:
             return
+        # Assign a distinct display color from the palette before snapshotting the fiducial
+        # into the underlying openlifu.Session. This is the only path through which a fiducial
+        # becomes a session target for the first time (user placement, import-from-scene, and
+        # import-from-file all call this method); session-load creates fiducials directly via
+        # openlifu_point_to_fiducial with the previously-stored color, bypassing add_target,
+        # so we don't clobber persisted colors here.
+        assign_unique_color_to_fiducial(node, current)
         self.target_nodes = [*current, node]
         self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
 

@@ -1,4 +1,4 @@
-from typing import List, TYPE_CHECKING, Optional
+from typing import List, TYPE_CHECKING, Optional, Tuple
 import numpy as np
 import slicer
 from slicer import vtkMRMLMarkupsFiducialNode
@@ -8,6 +8,24 @@ if TYPE_CHECKING:
     import openlifu
     import openlifu.geo
     from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
+
+# Qualitative color palette for automatic per-target color assignment. Colors are 3-tuples of
+# floats in [0.0, 1.0] applied to the fiducial display node's SelectedColor (which is what the
+# targets table and 3D-view glyph read). Values are matplotlib "tab10" hues, chosen for
+# categorical distinguishability; the exact rounding is stable so equality comparisons in
+# `assign_unique_color_to_fiducial` work reliably across round-trips through openlifu Points.
+TARGET_COLOR_PALETTE: List[Tuple[float, float, float]] = [
+    (0.121, 0.466, 0.705),  # blue
+    (1.000, 0.498, 0.054),  # orange
+    (0.172, 0.627, 0.172),  # green
+    (0.839, 0.152, 0.156),  # red
+    (0.580, 0.403, 0.741),  # purple
+    (0.549, 0.337, 0.294),  # brown
+    (0.890, 0.466, 0.760),  # pink
+    (0.498, 0.498, 0.498),  # gray
+    (0.737, 0.741, 0.133),  # olive
+    (0.090, 0.745, 0.811),  # cyan
+]
 
 def get_target_candidates() -> List[vtkMRMLMarkupsFiducialNode]:
     """Get all fiducial nodes that could be considered openlifu targets, i.e. sonication targets.
@@ -110,10 +128,59 @@ def fiducial_to_openlifu_point(fiducial_node:vtkMRMLMarkupsFiducialNode) -> "ope
 
     if fiducial_node.GetNumberOfControlPoints() < 1:
         raise ValueError(f"Fiducial node {fiducial_node.GetID()} does not have any points.")
+
+    # Round-trip the display color into the openlifu Point so per-target colors persist to the
+    # underlying openlifu.Session (and therefore to disk on save). SelectedColor is what
+    # `openlifu_point_to_fiducial` writes in the other direction.
+    display_node = fiducial_node.GetDisplayNode()
+    color = tuple(display_node.GetSelectedColor()) if display_node is not None else (1.0, 0.0, 0.0)
+
     return openlifu.geo.Point(
         position = np.array(fiducial_node.GetNthControlPointPosition(0)),
         name = fiducial_node.GetNthControlPointLabel(0),
         id = fiducial_to_openlifu_point_id(fiducial_node),
+        color = color,
         dims=('R','A','S'),
         units = "mm",
     )
+
+def assign_unique_color_to_fiducial(
+    node: vtkMRMLMarkupsFiducialNode,
+    other_target_nodes: List[vtkMRMLMarkupsFiducialNode],
+) -> None:
+    """Set ``node``'s display SelectedColor to the first TARGET_COLOR_PALETTE entry that is not
+    already in use by any target in ``other_target_nodes``.
+
+    If every palette entry is already in use (more targets than palette length), falls back to
+    cycling by index (``len(other_target_nodes) % len(TARGET_COLOR_PALETTE)``); collisions past that
+    point are acceptable since the visual distinguishability guarantee only holds up to the palette
+    size.
+
+    ``other_target_nodes`` should be the set of already-registered targets, excluding ``node``.
+    No-op if ``node`` has no display node yet (rare -- can happen during construction).
+    """
+    display_node = node.GetDisplayNode()
+    if display_node is None:
+        return
+
+    def _round(color):
+        return tuple(round(c, 3) for c in color)
+
+    used = set()
+    for other in other_target_nodes:
+        if other is None or other is node:
+            continue
+        other_display = other.GetDisplayNode()
+        if other_display is None:
+            continue
+        used.add(_round(other_display.GetSelectedColor()))
+
+    chosen: Optional[Tuple[float, float, float]] = None
+    for candidate in TARGET_COLOR_PALETTE:
+        if _round(candidate) not in used:
+            chosen = candidate
+            break
+    if chosen is None:
+        chosen = TARGET_COLOR_PALETTE[len(other_target_nodes) % len(TARGET_COLOR_PALETTE)]
+
+    display_node.SetSelectedColor(*chosen)

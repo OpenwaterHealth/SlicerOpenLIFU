@@ -344,7 +344,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             targets_header.setSectionResizeMode(col, qt.QHeaderView.ResizeToContents)
         targets_header.setSectionResizeMode(6, qt.QHeaderView.ResizeToContents)  # show
         targets_header.setSectionResizeMode(7, qt.QHeaderView.ResizeToContents)  # jump
-        targets_table.setColumnHidden(2, True)  # default-hide the ID column
+        # ID column is visible by default (#594) but can be hidden via the header context menu.
         targets_header.setContextMenuPolicy(qt.Qt.CustomContextMenu)
         targets_header.customContextMenuRequested.connect(
             partial(self._on_table_header_context_menu, table=targets_table, hideable_columns=(2,))
@@ -1087,7 +1087,7 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Select the row of the newly-placed target.
         table = self.ui.targetsTableWidget
         for row in range(table.rowCount):
-            name_item = table.item(row, 0)
+            name_item = table.item(row, 1)
             if name_item is not None and name_item.data(qt.Qt.UserRole) is node:
                 table.selectRow(row)
                 break
