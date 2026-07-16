@@ -436,7 +436,7 @@ class PhotoscanMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from the ba
 
         if not self.wizard()._valid_tt_result_exists and self.facial_landmarks_fiducial_node is None:
             self.ui.pageLockButton.clicked() # Programtically unlock page
-        
+
         self.setupMarkupsWidget()
         self.updateLandmarkPlacementStatus()
         self.updatePageLock()
@@ -692,18 +692,19 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         if self.has_facial_landmarks:
             self.ui.initializePVRegistration.enabled = True
             self.ui.initializePVRegistration.setToolTip("Run fiducial-based registration between the photoscan mesh and skin surface.")
-            if self.photoscan_to_volume_transform_node:
-                self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
         else:
-            self.ui.initializePVRegistration.setText("Initialize photoscan-volume transform")
             self.ui.initializePVRegistration.enabled = False
             self.ui.initializePVRegistration.setToolTip("Please place fiducial landmarks on both the photoscan"
             " and skin surface mesh on the preceding pages to enable fiducial-based registration.")
+        # The Manual Alignment button and Manual Rescale slider share the same
+        # fiducial-landmark prerequisite as the Initialize step, because they
+        # auto-initialize on first click when there is no transform yet.
+        self.ui.enableManualPVRegistration.enabled = bool(self.has_facial_landmarks)
+        # Scaling only makes sense while manual alignment is active.
+        self.ui.scalingTransformWidget.enabled = False
 
         if self.photoscan_to_volume_transform_node:
             self.setupTransformNode()
-        else:
-            self.ui.ManualRegistrationGroupBox.enabled = False
 
         self.update_runICPRegistrationPV_button()
         self.updatePageLock()
@@ -738,9 +739,6 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
                 "Iterative Closest Point (ICP) registration of the face requires the user to"
                 " first define fiducial landmarks on the facial surface on the preceding pages to delineate the region of interest."
             )
-        elif not self.photoscan_to_volume_transform_node:
-            self.ui.runICPRegistrationPV.enabled = False
-            self.ui.runICPRegistrationPV.setToolTip("To run ICP, first initialize the transform via facial landmarks.")
         else:
             self.ui.runICPRegistrationPV.enabled = True
             self.ui.runICPRegistrationPV.setToolTip("Run Iterative Closest Point (ICP) registration of the face.")
@@ -785,11 +783,9 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
             self.photoscan_roi_submesh = None
 
         # self.updateTransformApprovalStatusLabel()
-        self.ui.initializePVRegistration.setText("Re-initialize photoscan-volume transform")
 
         # Enable approval and registration fine-tuning buttons
         self.update_runICPRegistrationPV_button()
-        self.ui.ManualRegistrationGroupBox.enabled = True
 
     def setupTransformNode(self):
 
@@ -829,6 +825,11 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.updateScaledTransformNode()
 
     def onRunICPRegistrationClicked(self):
+
+        # Auto-initialize the transform via fiducial registration on first
+        # interaction; the Initialize button is no longer a hard prerequisite.
+        if self.photoscan_to_volume_transform_node is None:
+            self.onInitializeRegistrationClicked()
 
         self.photoscan_to_volume_transform_node.HardenTransform()
         
@@ -939,6 +940,11 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def onManualRegistrationClicked(self):
         """ Enables the interaction handles on the transform, allowing the user to manually edit the photoscan-volume transform. """
 
+        # Auto-initialize the transform via fiducial registration on first
+        # interaction; the Initialize button is no longer a hard prerequisite.
+        if self.photoscan_to_volume_transform_node is None:
+            self.onInitializeRegistrationClicked()
+
         if not self.photoscan_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
             self.enable_manual_registration()
         else:
@@ -948,20 +954,23 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
         self.completeChanged()
     
     def enable_manual_registration(self):
-        self.ui.enableManualPVRegistration.text = "Disable manual transform interaction"
+        self.ui.enableManualPVRegistration.text = "Disable Manual Alignment"
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
         self.runningRegistration = True
 
         # For now, disable the approval and initialization button while in manual editing mode
         self.ui.initializePVRegistration.enabled = False
+        # Manual Rescale is only meaningful while manual alignment is active.
+        self.ui.scalingTransformWidget.enabled = True
 
         self.update_runICPRegistrationPV_button()
     
     def disable_manual_registration(self):
-        self.ui.enableManualPVRegistration.text = "Enable manual transform interaction"
+        self.ui.enableManualPVRegistration.text = "Manual Alignment"
         self.photoscan_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
         self.runningRegistration = False
         self.ui.initializePVRegistration.enabled = True if self.has_facial_landmarks else False
+        self.ui.scalingTransformWidget.enabled = False
 
         self.update_runICPRegistrationPV_button()
     
@@ -1125,17 +1134,12 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                 self.page_locked = False
 
         if self.transducer_to_volume_transform_node:
-            self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
             self.setupTransformNode()
-        else:
-            self.ui.initializeTPRegistration.setText("Initialize transducer-photoscan transform")
-            self.ui.runICPRegistrationTP.enabled = False
-            self.ui.enableManualTPRegistration.enabled = False
-        
+
         if self.wizard().transducer.cloned_virtual_fit_model is None:
             self.ui.viewVirtualFitCheckBox.enabled = False
             self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
-        
+
         self.updatePageLock()
 
     def togglePageLock(self):
@@ -1183,8 +1187,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         
         self.transducer_to_volume_transform_node.CreateDefaultDisplayNodes()
         self.setupTransformNode()
-        self.ui.initializeTPRegistration.setText("Re-initialize transducer-photoscan transform")
-        
+
         # Reset ICP results and display
         self.ui.TPICPRegistrationMetricLabel.text = ""
         self._update_distance_map_visibility(
@@ -1192,10 +1195,6 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
                 model = self.wizard().transducer_surface,
             )
 
-        # Enable approval and registration fine-tuning buttons
-        self.ui.runICPRegistrationTP.enabled = True
-        self.ui.enableManualTPRegistration.enabled = True
-            
     def setupTransformNode(self):
 
         self.wizard().transducer_surface.SetAndObserveTransformNodeID(self.transducer_to_volume_transform_node.GetID())
@@ -1209,17 +1208,22 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
 
     def onManualRegistrationClicked(self):
         """ This allows the user to manually edit the transducer-volume transform. """
-        
+
+        # Auto-initialize the transform to the virtual fit position on first
+        # interaction; the Initialize button is no longer a hard prerequisite.
+        if self.transducer_to_volume_transform_node is None:
+            self.onInitializeRegistrationClicked()
+
         if not self.transducer_to_volume_transform_node.GetDisplayNode().GetEditorVisibility():
             self.enable_manual_registration()
         else:
             self.disable_manual_registration()
-    
-        # Emit signal to update the enable/disable state of 'Finish' button. 
+
+        # Emit signal to update the enable/disable state of 'Finish' button.
         self.completeChanged()
-    
+
     def enable_manual_registration(self):
-        self.ui.enableManualTPRegistration.text = "Disable manual transform interaction"
+        self.ui.enableManualTPRegistration.text = "Disable Manual Alignment"
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(True)
         self.runningRegistration = True
         # For now, disable the approval and initialization button while in manual editing mode
@@ -1227,13 +1231,18 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.runICPRegistrationTP.enabled = False
 
     def disable_manual_registration(self):
-        self.ui.enableManualTPRegistration.text = "Enable manual transform interaction"
+        self.ui.enableManualTPRegistration.text = "Manual Alignment"
         self.transducer_to_volume_transform_node.GetDisplayNode().SetEditorVisibility(False)
         self.runningRegistration = False
         self.ui.initializeTPRegistration.enabled = True
         self.ui.runICPRegistrationTP.enabled = True
 
     def onRunICPRegistrationClicked(self):
+
+        # Auto-initialize the transform to the virtual fit position on first
+        # interaction; the Initialize button is no longer a hard prerequisite.
+        if self.transducer_to_volume_transform_node is None:
+            self.onInitializeRegistrationClicked()
 
         # The wizard's photoscan_to_volume_transform_node is the persistent PR transform; it
         # is already hardened on PR finalize and must NOT be hardened again here.
@@ -3438,26 +3447,74 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         """
         QHeaderView = qt.QHeaderView
 
+        # Unify header appearance across the three tables: normal (non-bold) weight
+        # with a bit of vertical padding, and let the header text wrap so multi-word
+        # column titles like "Photoscan Approved" / "Registration Approved" can span
+        # two lines instead of getting clipped or forcing the column wider.
+        #
+        # Root cause of the bold-header-only-on-some-tables oddity: Qt's default style
+        # bolds the section that contains the currently *selected* row/column when
+        # ``QHeaderView.highlightSections`` is true. The photocollections and
+        # photoscans tables have data selected on entry, so their headers rendered
+        # bold; the localizations table typically starts empty so its header looked
+        # non-bold. Slicer's global styling apparently leaves ``highlightSections``
+        # enabled, so we must turn it off explicitly. Belt-and-suspenders: we also
+        # apply a per-widget QSS *on the QTableWidget* targeting header sections
+        # (this survives style repolish better than a QSS set on the header), and
+        # force a non-bold font on each ``horizontalHeaderItem`` (per-item fonts
+        # otherwise override anything set on the QHeaderView itself).
+        table_stylesheet = (
+            "QHeaderView::section {"
+            " font-weight: normal;"
+            " padding: 4px 6px;"
+            " }"
+        )
+        wrap_alignment = qt.Qt.AlignCenter | qt.Qt.TextWordWrap
+
+        def _style_header(table: qt.QTableWidget) -> None:
+            table.setStyleSheet(table_stylesheet)
+            header = table.horizontalHeader()
+            header.setHighlightSections(False)
+            header.setDefaultAlignment(wrap_alignment)
+            header_font = qt.QFont(header.font)
+            header_font.setBold(False)
+            header.setFont(header_font)
+            # Per-column header items carry their own font that ``header.setFont``
+            # does not reach; override each one explicitly.
+            for col in range(table.columnCount):
+                item = table.horizontalHeaderItem(col)
+                if item is not None:
+                    item.setFont(header_font)
+                    item.setTextAlignment(wrap_alignment)
+            # QHeaderView doesn't auto-grow to fit wrapped text; fix its height at
+            # two lines of the header font plus a little vertical padding.
+            fm = qt.QFontMetrics(header_font)
+            header.setFixedHeight(fm.height() * 2 + 12)
+
         # Photocollections: Scan ID (stretch) | # of Photos (resize-to-contents)
         pc_table = self.ui.photocollectionsTable
+        _style_header(pc_table)
         pc_header = pc_table.horizontalHeader()
         pc_header.setStretchLastSection(False)
         pc_header.setSectionResizeMode(0, QHeaderView.Stretch)
         pc_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
 
-        # Photoscans: Scan ID | Scan Name (stretch) | Registration | Approved (narrow)
+        # Photoscans: Scan ID | Scan Name (stretch) | Photoscan Approved | Registration Approved (narrow)
         ph_table = self.ui.photoscansTable
         ph_table.setTextElideMode(qt.Qt.ElideRight)
+        _style_header(ph_table)
         ph_header = ph_table.horizontalHeader()
         ph_header.setStretchLastSection(False)
         ph_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         ph_header.setSectionResizeMode(1, QHeaderView.Stretch)
-        ph_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        ph_header.setSectionResizeMode(2, QHeaderView.Fixed)
         ph_header.setSectionResizeMode(3, QHeaderView.Fixed)
-        ph_table.setColumnWidth(3, 80)
+        ph_table.setColumnWidth(2, 110)
+        ph_table.setColumnWidth(3, 130)
 
         # Localizations: # | Photoscan ID | Target ID | Distance from VF (stretch) | Approved (narrow)
         loc_table = self.ui.localizationsTable
+        _style_header(loc_table)
         loc_header = loc_table.horizontalHeader()
         loc_header.setStretchLastSection(False)
         loc_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -3528,30 +3585,56 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             name_item.setToolTip(scan_name)
             table.setItem(row, 1, name_item)
 
-            has_pr = photoscan_id in approved_pr_ids
+            # Col 2: Photoscan Approved -- always user-toggleable when a photoscan row
+            # exists. Approving is a prerequisite for approving its Registration.
+            photoscan_approved = bool(getattr(ph_openlifu, "photoscan_approved", False))
+            photoscan_approval_item = qt.QTableWidgetItem("")
+            photoscan_approval_item.setFlags(
+                qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable,
+            )
+            photoscan_approval_item.setCheckState(qt.Qt.Checked if photoscan_approved else qt.Qt.Unchecked)
+            photoscan_approval_item.setTextAlignment(qt.Qt.AlignCenter)
+            photoscan_approval_item.setToolTip(
+                "Photoscan approval must be granted before its registration can be approved. "
+                "Unapproving the photoscan will also revoke any registration approval and delete "
+                "dependent localization results."
+            )
+            table.setItem(row, 2, photoscan_approval_item)
+
+            # Col 3: Registration Approved -- only meaningful when a PR exists AND
+            # the photoscan is approved. When either precondition fails the box is
+            # unchecked, disabled, and carries an explanatory tooltip.
+            has_approved_pr = photoscan_id in approved_pr_ids
             pr_nodes_for_id = None
-            if not has_pr:
+            if not has_approved_pr:
                 pr_nodes_for_id = get_photoscan_registration_nodes_in_scene(
                     session_id=session_id, photoscan_id=photoscan_id,
                 )
-            any_pr_exists = has_pr or bool(pr_nodes_for_id)
-            # Registration column reports presence (True/False) only; the Approved
-            # column on the right covers the approval state.
-            status_text = "True" if any_pr_exists else "False"
-            status_item = qt.QTableWidgetItem(status_text)
-            status_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
-            status_item.setTextAlignment(qt.Qt.AlignCenter)
-            table.setItem(row, 2, status_item)
-
-            approval_item = qt.QTableWidgetItem("")
-            if any_pr_exists:
-                approval_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable)
-                approval_item.setCheckState(qt.Qt.Checked if has_pr else qt.Qt.Unchecked)
+            any_pr_exists = has_approved_pr or bool(pr_nodes_for_id)
+            registration_approval_item = qt.QTableWidgetItem("")
+            registration_approval_item.setTextAlignment(qt.Qt.AlignCenter)
+            if any_pr_exists and photoscan_approved:
+                registration_approval_item.setFlags(
+                    qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable,
+                )
+                registration_approval_item.setCheckState(
+                    qt.Qt.Checked if has_approved_pr else qt.Qt.Unchecked,
+                )
+                registration_approval_item.setToolTip("Approval of the photoscan-to-volume registration.")
             else:
-                approval_item.setFlags(qt.Qt.ItemIsSelectable)
-                approval_item.setCheckState(qt.Qt.Unchecked)
-            approval_item.setTextAlignment(qt.Qt.AlignCenter)
-            table.setItem(row, 3, approval_item)
+                registration_approval_item.setFlags(qt.Qt.ItemIsSelectable)
+                registration_approval_item.setCheckState(qt.Qt.Unchecked)
+                if not any_pr_exists:
+                    registration_approval_item.setToolTip(
+                        "No photoscan-to-volume registration exists yet. Run the registration "
+                        "wizard first."
+                    )
+                else:
+                    registration_approval_item.setToolTip(
+                        "Approve the photoscan first (Photoscan Approved column) before "
+                        "approving its registration."
+                    )
+            table.setItem(row, 3, registration_approval_item)
 
             if photoscan_id == previously_selected:
                 table.selectRow(row)
@@ -3780,14 +3863,29 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         pr_node = self._get_selected_photoscan_registration_node()
 
-        # Register/Edit Registration button: enabled when a photoscan is selected,
-        # except that Edit is disabled for an approved PR -- the user must first
-        # uncheck the Approved column for the photoscan before editing.
+        # Register/Edit Registration button: enabled when a photoscan is selected AND
+        # the photoscan itself is approved, except that Edit is disabled for an
+        # approved PR -- the user must first uncheck the Approved column for the
+        # photoscan before editing.
         register_btn = self.ui.registerPhotoscanToVolumeButton
+        selected_photoscan_approved = False
+        if selected_photoscan_id is not None:
+            session = get_app_state().loaded_session
+            affiliated_photoscans = (getattr(session, "affiliated_photoscans", None) or {}) if session is not None else {}
+            ph_wrapper = affiliated_photoscans.get(selected_photoscan_id)
+            ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
+            selected_photoscan_approved = bool(getattr(ph_openlifu, "photoscan_approved", False))
         if selected_photoscan_id is None:
             register_btn.setText("Register to Volume")
             register_btn.setEnabled(False)
             register_btn.setToolTip("Select a photoscan to register.")
+        elif not selected_photoscan_approved:
+            register_btn.setText("Register to Volume" if pr_node is None else "Edit Registration")
+            register_btn.setEnabled(False)
+            register_btn.setToolTip(
+                "Approve the selected photoscan (Photoscan Approved column) before "
+                "running the registration wizard."
+            )
         elif pr_node is None:
             register_btn.setText("Register to Volume")
             register_btn.setEnabled(True)
@@ -3798,8 +3896,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             register_btn.setEnabled(not is_approved)
             if is_approved:
                 register_btn.setToolTip(
-                    "Unapprove this photoscan's registration (uncheck the Approved column) "
-                    "before editing it."
+                    "Unapprove this photoscan's registration (uncheck the Registration Approved "
+                    "column) before editing it."
                 )
             else:
                 register_btn.setToolTip("Edit the unapproved photoscan-to-volume registration.")
@@ -3971,6 +4069,22 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if initial_photoscan_id is None:
             return
 
+        # Photoscan approval is a prerequisite for running (or editing) the registration.
+        # See #593.
+        session = get_app_state().loaded_session
+        affiliated_photoscans = (getattr(session, "affiliated_photoscans", None) or {}) if session is not None else {}
+        ph_wrapper = affiliated_photoscans.get(initial_photoscan_id)
+        ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
+        if not bool(getattr(ph_openlifu, "photoscan_approved", False)):
+            slicer.util.warningDisplay(
+                text=(
+                    f"Photoscan '{initial_photoscan_id}' has not been approved. Approve it in "
+                    "the Photoscan Approved column before running its registration."
+                ),
+                windowTitle="Photoscan not approved",
+            )
+            return
+
         # If the existing PR is approved, force a cascade-aware revoke before re-editing
         # so dependent TTs are dropped exactly as they would be via the Approved checkbox.
         pr_node = self._get_selected_photoscan_registration_node()
@@ -4096,9 +4210,61 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         apply_module_view_state(LOCALIZATION)
         return True
 
+    def _apply_photoscan_approval(self, photoscan_id: str, new_state: bool) -> bool:
+        """Apply an approval state change for the photoscan itself.
+
+        Approving is unconditional. Revoking cascades to unapprove any PR that is currently
+        approved for this photoscan (which itself cascades to TT deletion via
+        _apply_photoscan_registration_approval), so this can result in a cascade-confirm
+        dialog. Returns True if the state change was applied, False if it was skipped or
+        canceled.
+        """
+        session = get_app_state().loaded_session
+        loaded_photoscans = get_app_state().loaded_photoscans
+        wrapper = loaded_photoscans.get(photoscan_id) if loaded_photoscans else None
+        ph_openlifu = wrapper.photoscan.photoscan if wrapper is not None else None
+        if ph_openlifu is None and session is not None:
+            # Fall back to the session's affiliated photoscans if the scene wrapper is missing.
+            aff = getattr(session, "affiliated_photoscans", None) or {}
+            ph_wrapper = aff.get(photoscan_id)
+            ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
+        if ph_openlifu is None:
+            # Nothing to update; refresh so the checkbox visual matches on-disk state.
+            self._refresh_photoscans_table()
+            return False
+        current_state = bool(getattr(ph_openlifu, "photoscan_approved", False))
+        if current_state == new_state:
+            return False
+
+        session_id = None if session is None else session.get_session_id()
+        pr_node = self._resolve_pr_node_for_photoscan(photoscan_id, session_id)
+        pr_is_approved = pr_node is not None and get_approval_from_photoscan_registration_node(pr_node)
+
+        if not new_state and pr_is_approved:
+            # Cascade path: revoke PR approval first via the shared helper so the user sees
+            # the same TT-deletion confirmation as unchecking the Registration Approved box.
+            applied = self._apply_photoscan_registration_approval(photoscan_id, new_state=False)
+            if not applied:
+                # User canceled the cascade confirmation; restore the photoscan checkbox visual.
+                self._refresh_photoscans_table()
+                return False
+
+        # Persist the photoscan approval flag (updates the loaded wrapper + session state).
+        self.logic.update_photoscan_approval(photoscan_id, new_state)
+        if session is not None:
+            slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
+        self._refresh_photoscans_table()
+        self._refresh_localizations_table()
+        self._update_manager_button_states()
+        self.checkCanRunTracking()
+        return True
+
     def _on_photoscans_table_item_changed(self, item):
-        """Handle Approved-column checkbox toggles in the Photoscans table."""
-        if item is None or item.column() != 3:
+        """Handle checkbox toggles in the Photoscans table (col 2 or col 3)."""
+        if item is None:
+            return
+        col = item.column()
+        if col not in (2, 3):
             return
         table = self.ui.photoscansTable
         row = item.row()
@@ -4107,7 +4273,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             return
         photoscan_id = id_item.text()
         desired_state = (item.checkState() == qt.Qt.Checked)
-        self._apply_photoscan_registration_approval(photoscan_id, desired_state)
+        if col == 2:
+            self._apply_photoscan_approval(photoscan_id, desired_state)
+        else:
+            self._apply_photoscan_registration_approval(photoscan_id, desired_state)
 
     def _on_photoscans_row_selected(self):
         """Photoscan-table row selection now drives which photoscan the main panel renders.
@@ -4939,33 +5108,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.updateAddPhotoscanButton()
         self.updateShowQRCodeButton()
 
-    def updateVirtualFitStatus(self):
-        """ Updates the status message that warns the user if virtual fit is not 
-        approved for the selected target or if the selected photoscan is not
-        approved for transducer localization"""
-        
-        vf_result_for_tracking = self._virtual_fit_transform_for_tracking
-        self.ui.approvalWarningLabel.styleSheet = "color:black;"
-        status = ''
-
-        selected_target = self.get_currently_selected_target_from_preplanning()
-        if selected_target:
-            selected_target_id = fiducial_to_openlifu_point_id(selected_target)
-            status += f"Selected Target: {label_for_target_id(selected_target_id)}"
-            if vf_result_for_tracking:
-                status += f"\nVirtual Fit: {vf_result_for_tracking.GetAttribute("DisplayName")}"
-                vf_is_approved = get_approval_from_virtual_fit_result_node(vf_result_for_tracking)
-                if vf_is_approved:
-                    self.ui.approvalWarningLabel.styleSheet = "color:green;"
-                else:
-                    status += '\nWARNING: Virtual fit is not approved for the selected target.'
-                    self.ui.approvalWarningLabel.styleSheet = "color:red;"
-            else:
-                status += f"\nNo virtual fit result available"
-        else:
-            status = "No target selected"
-        self.ui.approvalWarningLabel.text = status
-
     def setVirtualFitResultForTracking(self, vf_result: Optional[vtkMRMLTransformNode]):
 
         if self._running_wizard:
@@ -4981,9 +5123,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 best_virtual_fit_result_node = slicer.util.getModuleLogic("OpenLIFU").preplanning_logic.find_best_virtual_fit_result_for_target(
                     target_id = fiducial_to_openlifu_point_id(selected_target))
                 self._virtual_fit_transform_for_tracking = best_virtual_fit_result_node # Could be None
-        
+
         self.checkCanDisplayVirtualFitResult()
-        self.updateVirtualFitStatus()
 
     def showVirtualFitResult(self):
         """Toggles display of the transducer at the virtual fit result position.
@@ -5420,6 +5561,8 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             if photoscan_id not in photoscan_ids:
                 break
         photoscan_openlifu.id = photoscan_id
+        # A freshly generated photoscan defaults to approved (see #593).
+        photoscan_openlifu.photoscan_approved = True
         get_cur_db().write_photoscan(
             subject_id = subject_id,
             session_id = session_id,

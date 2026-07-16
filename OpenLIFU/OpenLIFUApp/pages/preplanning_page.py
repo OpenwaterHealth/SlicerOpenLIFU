@@ -883,7 +883,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         """When virtual fit approval is revoked or toggled, the messages displayed in the data module
         and transducer tracking module need to be updated."""
         slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUData").updateSessionStatus()
-        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").updateVirtualFitStatus()
 
     def updateTargetsActionButtonsEnabled(self):
         """Update enabled state and label of the targets action buttons (Add / Import / Edit / Remove)."""

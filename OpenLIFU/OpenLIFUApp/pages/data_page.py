@@ -7898,6 +7898,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         import openlifu.nav.photoscan
 
         newOpenLIFUPhotoscan = openlifu.nav.photoscan.Photoscan().from_dict(photoscan_parameters)
+        # A freshly added photoscan defaults to approved: approval is the gate on
+        # running registration, and requiring the user to explicitly re-check the
+        # box after every add would be pointless friction (they can always uncheck
+        # later). See #593.
+        newOpenLIFUPhotoscan.photoscan_approved = True
         get_cur_db().write_photoscan(subject_id, session_id, newOpenLIFUPhotoscan,
                                 model_abspath,
                                 texture_abspath,
