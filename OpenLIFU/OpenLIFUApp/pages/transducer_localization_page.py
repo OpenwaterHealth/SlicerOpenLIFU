@@ -13,6 +13,7 @@ from __future__ import annotations
 
 # Standard library imports
 from collections import defaultdict
+from dataclasses import dataclass
 import io
 import itertools
 import json
@@ -127,6 +128,69 @@ if TYPE_CHECKING:
     from openlifu.db import Database
     import openlifu.nav.photoscan
     from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _LocalizationRow:
+    """Immutable snapshot of one Localizations-table row. See :class:`_TLPageState`."""
+
+    result_id: str
+    result_index: int
+    photoscan_id: str
+    target_id: Optional[str]
+    target_label: str
+    distance_text: str
+    tt_approved: bool
+
+
+@dataclass(frozen=True)
+class _TLPageState:
+    """Immutable per-refresh snapshot for the Transducer Localization page.
+
+    This is the single source of truth for a ``refresh_display()`` pass: it is
+    built once by :meth:`OpenLIFUTransducerLocalizationWidget._compute_state`,
+    then read (never re-derived) by ``_apply_state_to_widgets`` and
+    ``_apply_state_to_scene``. See issue #602 for the motivating refactor.
+
+    Fields are added incrementally as sub-steps of Phase A lift reads out of
+    the existing update-helper cascade; each field must be computable without
+    mutating widget or scene state.
+    """
+
+    # ---- session presence ----
+    has_session: bool
+    session_id: Optional[str]
+    subject_id: Optional[str]
+
+    # ---- current algorithm-input selection (opaque handles; typed loosely to
+    # avoid pulling openlifu / MRML types into the module scope) ----
+    selected_protocol: Optional[Any] = None       # openlifu.plan.Protocol
+    selected_volume: Optional[Any] = None         # vtkMRMLScalarVolumeNode
+    selected_transducer: Optional[Any] = None     # SlicerOpenLIFUTransducer wrapper
+    selected_photoscan: Optional[Any] = None      # openlifu.nav.photoscan.Photoscan
+
+    # ---- Localizations table rows (id-keyed for selection persistence) ----
+    localization_rows: Tuple[_LocalizationRow, ...] = ()
+    selected_localization_result_id: Optional[str] = None
+
+    # ---- Item counts driving the initial-collapse stage decision.
+    #      Kept as counts (not full row lists) because the collapse logic only
+    #      needs cardinality; also lets us grow full photocollection/photoscan
+    #      row snapshots in later sub-steps without touching this field. ----
+    num_photocollections: int = 0
+    num_photoscans: int = 0
+    num_localizations: int = 0
+
+    # ---- Widget-lifecycle flags whose values feed into the derived output
+    #      state (e.g. we suppress input-combo rebuilds while the wizard owns
+    #      the scene). Mirrored from ``self._running_wizard``; kept in state
+    #      so ``_apply_*`` phases stay side-effect-free w.r.t. reading widget
+    #      internals. ----
+    running_wizard: bool = False
+
 
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def __init__(self, parent=None):
@@ -3121,6 +3185,291 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # when the relevant data state changes rather than every refresh.
         self._collapse_applied_for_session: Optional[Tuple[Optional[str], str]] = None
 
+        # Single top-level re-entrancy guard for :meth:`refresh_display`.
+        # See issue #602. Individual ``_apply_*`` phases inside ``refresh_display``
+        # may fire MRML NodeModified / itemSelectionChanged callbacks that would
+        # otherwise reenter ``refresh_display``; this flag short-circuits those.
+        self._refreshing = False
+
+        # Cached last-applied ``_TLPageState``. Populated at the end of every
+        # successful ``refresh_display``; used by the parallel-cascade diff check
+        # during the Phase A rollout so we can compare the new state-machine's
+        # output against the legacy per-helper cascade before removing the latter.
+        self._cached_state: Optional[_TLPageState] = None
+
+    # ------------------------------------------------------------------
+    # refresh_display() state machine (issue #602)
+    #
+    # Phase A.1 (this commit): skeleton only. ``_compute_state`` currently
+    # captures only session presence; ``refresh_display`` computes state and
+    # logs it but does not yet apply anything to widgets or the scene, and no
+    # signal handler is wired to call it. Subsequent commits within the
+    # Phase A PR grow ``_TLPageState`` and migrate one signal handler at a
+    # time, verified by a parallel-cascade diff check against ``_cached_state``.
+    # ------------------------------------------------------------------
+
+    def _compute_state(self) -> _TLPageState:
+        """Return an immutable snapshot of everything the page needs to render.
+
+        Pure: MUST NOT mutate widgets, MRML scene, parameter nodes, session
+        objects, or the on-disk database. Any read that today lives inside an
+        ``update*`` / ``_refresh_*_table`` / ``checkCan*`` / ``_apply_*``
+        helper is being lifted here incrementally.
+        """
+        session = get_app_state().loaded_session
+
+        if session is None:
+            has_session = False
+            session_id: Optional[str] = None
+            subject_id: Optional[str] = None
+        else:
+            has_session = True
+            session_id = session.get_session_id()
+            subject_id = session.get_subject_id()
+
+        # ---- Current algorithm-input selection.
+        # ``get_current_data`` returns a dict keyed by combo name. Wrapped in
+        # try/except because during setup() teardown / early enter() paths
+        # the widget may not yet be populated.
+        try:
+            current_data = self.algorithm_input_widget.get_current_data()
+        except Exception:  # noqa: BLE001
+            current_data = {}
+        selected_protocol = current_data.get("Protocol") if current_data else None
+        selected_volume = current_data.get("Volume") if current_data else None
+        selected_transducer = current_data.get("Transducer") if current_data else None
+        selected_photoscan = current_data.get("Photoscan") if current_data else None
+
+        # ---- Localizations table rows.
+        # Distance-to-VF is computed per row against that row's target's approved
+        # VF (fix for #601 lives in ``_approved_vf_node_for_target``); we call
+        # into the logic method the same way the legacy helper does.
+        current_target = self.get_currently_selected_target_from_preplanning()
+        current_target_id = (
+            fiducial_to_openlifu_point_id(current_target) if current_target is not None else None
+        )
+        tt_nodes = get_all_transducer_tracking_results(session_id)
+        localization_rows_list: List[_LocalizationRow] = []
+        for row, tv_node in enumerate(tt_nodes):
+            result_id = get_result_id_from_transducer_tracking_result_node(tv_node)
+            if result_id is None:
+                continue  # skip malformed entries; the row would be unselectable anyway
+            photoscan_id = tv_node.GetAttribute("TT:photoscanID") or "\u2014"
+            target_id = (
+                get_target_id_from_transducer_tracking_result_node(tv_node)
+                or current_target_id
+            )
+            result_index = get_result_index_from_transducer_tracking_result_node(tv_node)
+            if result_index is None:
+                result_index = row
+            tt_approved = bool(get_approval_from_transducer_tracking_result_node(tv_node))
+            row_vf_node = self._approved_vf_node_for_target(target_id)
+            if row_vf_node is not None:
+                try:
+                    distance = self.logic.calculate_transform_origin_distance(
+                        transform_node1=tv_node, transform_node2=row_vf_node,
+                    )
+                    distance_text = f"{distance:.2f}"
+                except Exception:  # noqa: BLE001
+                    # Never let a per-row math error bubble out of the state
+                    # computation; the legacy helper never crashed the whole
+                    # cascade for a single bad row either.
+                    distance_text = "\u2014"
+            else:
+                distance_text = "\u2014"
+            localization_rows_list.append(_LocalizationRow(
+                result_id=result_id,
+                result_index=int(result_index),
+                photoscan_id=photoscan_id,
+                target_id=target_id,
+                target_label=label_for_target_id(target_id) if target_id else "\u2014",
+                distance_text=distance_text,
+                tt_approved=tt_approved,
+            ))
+        localization_rows = tuple(localization_rows_list)
+
+        # ---- Selected localization result id (id-keyed selection survives refresh).
+        prev_selected_info = self._get_selected_localization_row_info()
+        selected_localization_result_id: Optional[str] = (
+            prev_selected_info[0] if prev_selected_info is not None else None
+        )
+        known_result_ids = {r.result_id for r in localization_rows}
+        if selected_localization_result_id not in known_result_ids:
+            # Prior selection was removed (e.g. row was just deleted) -- fall
+            # back to the first row so the transducer has something to render.
+            selected_localization_result_id = (
+                localization_rows[0].result_id if localization_rows else None
+            )
+
+        # ---- Counts driving the initial-collapse stage decision.
+        num_photocollections = len(self._get_photocollection_scan_ids())
+        num_photoscans = len(self._get_photoscan_ids())
+        num_localizations = len(localization_rows)
+
+        return _TLPageState(
+            has_session=has_session,
+            session_id=session_id,
+            subject_id=subject_id,
+            selected_protocol=selected_protocol,
+            selected_volume=selected_volume,
+            selected_transducer=selected_transducer,
+            selected_photoscan=selected_photoscan,
+            localization_rows=localization_rows,
+            selected_localization_result_id=selected_localization_result_id,
+            num_photocollections=num_photocollections,
+            num_photoscans=num_photoscans,
+            num_localizations=num_localizations,
+            running_wizard=bool(self._running_wizard),
+        )
+
+    def _apply_state_to_widgets(self, state: _TLPageState) -> None:
+        """Write ``state`` into Qt widget properties (``.enabled``, ``.text``,
+        table rows, etc.). Must not mutate persistent state.
+
+        Grown incrementally as each sub-step of Phase A lifts a slice of the
+        legacy update-helper cascade into the state machine.
+        """
+        self._apply_state_populate_localizations_table(state)
+        self._apply_state_section_collapse(state)
+
+    def _apply_state_populate_localizations_table(self, state: _TLPageState) -> None:
+        """Populate the Localizations table from ``state.localization_rows``.
+
+        Selection is restored by result-id (from ``state.selected_localization_result_id``);
+        if the previously-selected id is gone, ``_compute_state`` will have
+        already picked a fallback so we do not need a post-loop fallback here.
+
+        No reads from session / scene / other widgets: everything comes from
+        ``state``. Signals are blocked around ``setRowCount`` / ``setItem`` /
+        ``selectRow`` so Qt does not fire ``itemSelectionChanged``; we then
+        drive :meth:`_on_localization_row_selected` explicitly. That unified
+        path guarantees the transducer / VF display is reconciled even when Qt
+        would otherwise silently suppress the signal (``setRowCount(0)`` under
+        blocked signals; ``selectRow(N)`` where row ``N`` was already the
+        current row -- the cases behind the delete-selected, delete-last, and
+        return-from-other-page symptoms in issue #602).
+        """
+        table = self.ui.localizationsTable
+        not_approved_brush = qt.QBrush(qt.QColor("#FFE4B5"))
+        row_to_select = -1
+        table.blockSignals(True)
+        try:
+            table.setRowCount(len(state.localization_rows))
+            for row_idx, row in enumerate(state.localization_rows):
+                text_cells = [
+                    str(row.result_index),
+                    row.photoscan_id,
+                    row.target_label,
+                    row.distance_text,
+                ]
+                for col, text in enumerate(text_cells):
+                    item = qt.QTableWidgetItem(text)
+                    item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                    if not row.tt_approved:
+                        item.setBackground(not_approved_brush)
+                    table.setItem(row_idx, col, item)
+                approval_item = qt.QTableWidgetItem("")
+                approval_item.setFlags(
+                    qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable,
+                )
+                approval_item.setCheckState(
+                    qt.Qt.Checked if row.tt_approved else qt.Qt.Unchecked,
+                )
+                approval_item.setTextAlignment(qt.Qt.AlignCenter)
+                if not row.tt_approved:
+                    approval_item.setBackground(not_approved_brush)
+                table.setItem(row_idx, 4, approval_item)
+                table.item(row_idx, 0).setData(qt.Qt.UserRole, row.result_id)
+                table.item(row_idx, 2).setData(qt.Qt.UserRole, row.target_id)
+                if row.result_id == state.selected_localization_result_id:
+                    row_to_select = row_idx
+            # Apply the selection under blocked signals so Qt does not fire
+            # ``itemSelectionChanged``; we drive the handler once, explicitly,
+            # below. Without this, ``selectRow(N)`` on the already-current row
+            # is a no-op (return-from-page symptom) and ``setRowCount(0)``
+            # clears selection silently (delete-last symptom).
+            if row_to_select >= 0:
+                table.selectRow(row_to_select)
+            else:
+                table.clearSelection()
+                table.setCurrentCell(-1, -1)
+        finally:
+            table.blockSignals(False)
+        # Explicit, unconditional row-selection handler drive. Idempotent and
+        # guarded internally against reentrancy via ``_applying_vf_display``
+        # (which breaks the RemoveNode -> onNodeRemoved -> updateInputOptions
+        # -> _refresh_localizations_table loop for VF clones).
+        self._on_localization_row_selected()
+
+    def _apply_state_section_collapse(self, state: _TLPageState) -> None:
+        """Apply the initial collapse state for the three data sections.
+
+        Mirrors legacy :meth:`_apply_initial_section_collapse_state`. Cached by
+        (session, stage) via ``self._collapse_applied_for_session`` so we do
+        not repeatedly override the user's manual expand/collapse within a
+        given stage.
+        """
+        session_key: Optional[str] = None
+        if state.has_session:
+            session_key = f"{state.subject_id}|{state.session_id}"
+        if state.num_localizations > 0 or state.num_photoscans > 0:
+            stage = "localize"
+        elif state.num_photocollections > 0:
+            stage = "generate"
+        else:
+            stage = "capture"
+        cache_key = (session_key, stage)
+        if self._collapse_applied_for_session == cache_key:
+            return
+        self._collapse_applied_for_session = cache_key
+        if stage == "localize":
+            self.ui.photocollectionsCollapsible.collapsed = True
+            self.ui.photoscansCollapsible.collapsed = True
+            self.ui.localizationsCollapsible.collapsed = False
+        elif stage == "generate":
+            self.ui.photocollectionsCollapsible.collapsed = True
+            self.ui.photoscansCollapsible.collapsed = False
+            self.ui.localizationsCollapsible.collapsed = True
+        else:
+            self.ui.photocollectionsCollapsible.collapsed = False
+            self.ui.photoscansCollapsible.collapsed = False
+            self.ui.localizationsCollapsible.collapsed = True
+
+    def _apply_state_to_scene(self, state: _TLPageState) -> None:
+        """Write ``state`` into the MRML scene (visibility, transforms, clone
+        model lifecycle). Must not mutate persistent state (session /
+        database); those mutations belong in the signal handler that ran
+        before ``refresh_display``.
+
+        Phase A.1: no-op. Scene writes still live in the legacy update helpers
+        and ``_on_localization_row_selected`` / ``_apply_virtual_fit_display``.
+        """
+
+    def refresh_display(self) -> None:
+        """Single-owner entry point for updating the TL page's visible state.
+
+        Every signal handler on this widget will (post-migration) reduce to
+        (optional persistent-state mutation) + a single call to this method.
+        See issue #602.
+
+        Guarded by ``self._refreshing`` (re-entrancy) and ``self._entered``
+        (page-active in the custom app's ``QStackedWidget``): a refresh while
+        the page is off-screen or already in-flight is a silent no-op.
+        """
+        if self._refreshing:
+            return
+        if not self._entered:
+            return
+        self._refreshing = True
+        try:
+            state = self._compute_state()
+            logger.debug("TL refresh_display state: %r", state)
+            self._apply_state_to_widgets(state)
+            self._apply_state_to_scene(state)
+            self._cached_state = state
+        finally:
+            self._refreshing = False
+
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
@@ -3742,84 +4091,25 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         return info[1] if info is not None else None
 
     def _refresh_localizations_table(self):
-        table = self.ui.localizationsTable
-        previously_selected = self._get_selected_localization_row_info()
-        previously_selected_result_id = previously_selected[0] if previously_selected else None
+        """Rebuild the Localizations table from current session / scene state.
 
-        session = get_app_state().loaded_session
-        session_id = None if session is None else session.get_session_id()
-        current_target = self.get_currently_selected_target_from_preplanning()
-        current_target_id = fiducial_to_openlifu_point_id(current_target) if current_target is not None else None
+        Retained as the legacy entry point (many handlers call it); the actual
+        population lives in :meth:`_apply_state_populate_localizations_table`,
+        driven by :meth:`_compute_state`. See issue #602.
 
-        tt_nodes = get_all_transducer_tracking_results(session_id)
-
-        not_approved_brush = qt.QBrush(qt.QColor("#FFE4B5"))  # tracked-but-not-approved highlight
-
-        table.blockSignals(True)
-        table.setRowCount(len(tt_nodes))
-        row_to_select = -1
-        for row, tv_node in enumerate(tt_nodes):
-            photoscan_id = tv_node.GetAttribute("TT:photoscanID") or "\u2014"
-            target_id = get_target_id_from_transducer_tracking_result_node(tv_node) or current_target_id
-            result_id = get_result_id_from_transducer_tracking_result_node(tv_node)
-            result_index = get_result_index_from_transducer_tracking_result_node(tv_node)
-            if result_index is None:
-                result_index = row
-
-            # Post-split: approval is only TT-side here. The PR's approval is a separate axis;
-            # we show the row as approved iff the TT itself is approved. (Display callers that
-            # need PR status should query the PR module directly.)
-            both_approved = get_approval_from_transducer_tracking_result_node(tv_node)
-
-            # Distance is against the approved VF for THIS row's target so each row's number
-            # is meaningful on its own -- not against a cached global reference (#601).
-            row_vf_node = self._approved_vf_node_for_target(target_id)
-            if row_vf_node is not None:
-                distance = self.logic.calculate_transform_origin_distance(
-                    transform_node1=tv_node, transform_node2=row_vf_node)
-                distance_text = f"{distance:.2f}"
-            else:
-                distance_text = "\u2014"
-
-            text_cells = [
-                str(result_index),
-                photoscan_id,
-                label_for_target_id(target_id) if target_id else "\u2014",
-                distance_text,
-            ]
-            for col, text in enumerate(text_cells):
-                item = qt.QTableWidgetItem(text)
-                item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
-                if not both_approved:
-                    item.setBackground(not_approved_brush)
-                table.setItem(row, col, item)
-
-            approval_item = qt.QTableWidgetItem("")
-            approval_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsUserCheckable)
-            approval_item.setCheckState(qt.Qt.Checked if both_approved else qt.Qt.Unchecked)
-            approval_item.setTextAlignment(qt.Qt.AlignCenter)
-            if not both_approved:
-                approval_item.setBackground(not_approved_brush)
-            table.setItem(row, 4, approval_item)
-
-            table.item(row, 0).setData(qt.Qt.UserRole, result_id)
-            table.item(row, 2).setData(qt.Qt.UserRole, target_id)
-
-            if result_id is not None and result_id == previously_selected_result_id:
-                row_to_select = row
-        table.blockSignals(False)
-        if row_to_select >= 0:
-            table.selectRow(row_to_select)
-        elif table.currentRow() < 0 and table.rowCount > 0:
-            table.selectRow(0)
-
-        # Widget enable/tooltip state is a pure function of the row selection -- safe to
-        # reconcile here. We deliberately do NOT call ``_apply_virtual_fit_display`` from
-        # this method: that path mutates the scene (RemoveNode/clone), and this refresh
-        # runs from NodeAdded / NodeRemoved observers during session load. Coupling scene
-        # mutation to table-populate would re-enter through the observers and eventually
-        # blow the stack. The VF display is driven by the row-selection handler + the
-        # checkbox stateChanged handler instead.
+        This method deliberately does NOT call ``_apply_virtual_fit_display``:
+        that path mutates the scene (RemoveNode / clone) and this refresh runs
+        from NodeAdded / NodeRemoved observers during session load. Coupling
+        scene mutation to table-populate would re-enter through the observers
+        and eventually blow the stack. The VF display is driven by the row-
+        selection handler + the checkbox stateChanged handler instead.
+        """
+        state = self._compute_state()
+        self._apply_state_populate_localizations_table(state)
+        # Widget enable/tooltip state is a pure function of the row selection --
+        # reconcile here for the legacy contract. Will move into
+        # ``_apply_state_to_widgets`` once the View-VF checkbox migrates in a
+        # later Phase A sub-step.
         self.checkCanDisplayVirtualFitResult()
 
     def _on_localization_row_selected(self):
@@ -4018,46 +4308,18 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         return pr_nodes[0] if pr_nodes else None
 
     def _apply_initial_section_collapse_state(self):
-        """Re-apply collapse state whenever the workflow stage changes
-        (no data / collection only / scan or TT result available).
-        Cached by (session, stage) so the same stage doesn't repeatedly
-        override manual user expand/collapse within a session."""
-        loaded_session = get_app_state().loaded_session
-        session_key = None
-        if loaded_session is not None:
-            session_key = f"{loaded_session.get_subject_id()}|{loaded_session.get_session_id()}"
+        """Re-apply collapse state for the three data sections based on the
+        current workflow stage (no data / collections only / scan or TT
+        available). Cached by (session, stage) via
+        ``self._collapse_applied_for_session`` so the same stage does not
+        repeatedly override manual user expand/collapse within a session.
 
-        num_collections = len(self._get_photocollection_scan_ids())
-        num_scans = len(self._get_photoscan_ids())
-        num_localizations = len(self._get_localization_photoscan_ids())
-
-        if num_localizations > 0 or num_scans > 0:
-            stage = "localize"
-        elif num_collections > 0:
-            stage = "generate"
-        else:
-            stage = "capture"
-
-        cache_key = (session_key, stage)
-        if self._collapse_applied_for_session == cache_key:
-            return
-        self._collapse_applied_for_session = cache_key
-
-        if stage == "localize":
-            # Have a photoscan or a TT result: focus the user on localization.
-            self.ui.photocollectionsCollapsible.collapsed = True
-            self.ui.photoscansCollapsible.collapsed = True
-            self.ui.localizationsCollapsible.collapsed = False
-        elif stage == "generate":
-            # Have a collection, no scan yet: focus on generating a photoscan.
-            self.ui.photocollectionsCollapsible.collapsed = True
-            self.ui.photoscansCollapsible.collapsed = False
-            self.ui.localizationsCollapsible.collapsed = True
-        else:
-            # Nothing yet: invite the user to capture data.
-            self.ui.photocollectionsCollapsible.collapsed = False
-            self.ui.photoscansCollapsible.collapsed = False
-            self.ui.localizationsCollapsible.collapsed = True
+        Retained as the legacy entry point; the actual writes live in
+        :meth:`_apply_state_section_collapse`, driven by :meth:`_compute_state`.
+        See issue #602.
+        """
+        state = self._compute_state()
+        self._apply_state_section_collapse(state)
 
     @display_errors
     def onAddPhotocollectionClicked(self, checked: bool = False):
