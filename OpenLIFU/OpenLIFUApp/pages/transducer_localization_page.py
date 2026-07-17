@@ -1698,10 +1698,16 @@ class TransducerTrackingWizard(qt.QWizard):
 
         if isinstance(current_page, TransducerPhotoscanTrackingPage):
 
-            # Display the photoscan and transducer and hide the skin mesh
+            # Display the photoscan and transducer and hide the skin mesh.
+            # Explicitly assert visibility for every model the tracking page needs --
+            # do NOT inherit pre-wizard visibility from the main window, otherwise
+            # any page that hid the transducer (e.g. TL on an empty localizations
+            # table) leaks that hide into the wizard and the user sees only the
+            # transducer body without the surface / photoscan.
             self.skin_mesh_node.GetDisplayNode().SetVisibility(False)
             self.photoscan.model_node.GetDisplayNode().SetVisibility(True)
             self.transducer_body.GetDisplayNode().SetVisibility(True)
+            self.transducer_surface.GetDisplayNode().SetVisibility(True)
 
             self.photoscan.model_node.SetDisplayVisibility(self.transducerPhotoscanTrackingPage.ui.photoscanVisibilityCheckBox_2.isChecked())
             self.photoscan.model_node.GetDisplayNode().SetOpacity(self.transducerPhotoscanTrackingPage.ui.photoscanOpacitySlider_2.value)
