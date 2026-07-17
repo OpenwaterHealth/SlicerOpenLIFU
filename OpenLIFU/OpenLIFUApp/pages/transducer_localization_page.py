@@ -3487,13 +3487,19 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def refresh_display(self) -> None:
         """Single-owner entry point for updating the TL page's visible state.
 
-        Every signal handler on this widget will (post-migration) reduce to
-        (optional persistent-state mutation) + a single call to this method.
-        See issue #602.
+        Every signal handler on this widget reduces to (optional persistent-state
+        mutation) + a single call to this method. See issue #602.
 
         Guarded by ``self._refreshing`` (re-entrancy) and ``self._entered``
         (page-active in the custom app's ``QStackedWidget``): a refresh while
-        the page is off-screen or already in-flight is a silent no-op.
+        the page is off-screen or already in-flight is a silent no-op. Off-page
+        callers rely on ``enter()`` invoking ``refresh_display`` on re-entry to
+        catch up on any missed updates.
+
+        Body ordering matches the legacy ``onDataParameterNodeModified`` cascade
+        so behavior stays bit-for-bit compatible while call-site consolidation
+        moves. Individual helpers listed here are being folded into the
+        state-machine ``_apply_state_*`` methods incrementally; see #602.
         """
         if self._refreshing:
             return
@@ -3503,8 +3509,23 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         try:
             state = self._compute_state()
             logger.debug("TL refresh_display state: %r", state)
+            # State-machine applies (already migrated).
             self._apply_state_to_widgets(state)
             self._apply_state_to_scene(state)
+            # Legacy helpers still living on the widget. Each is idempotent
+            # and safe to call in this order. Kept out of ``_apply_state_*``
+            # only because they have not been rewritten yet.
+            self.updatePhotoscanGenerationButtons()
+            self._refresh_photocollections_table()
+            self._refresh_photoscans_table()
+            self._update_manager_button_states()
+            # ``updateInputOptions`` rebuilds the algorithm-input combos and
+            # cascades into ``updateInputRelatedWidgets`` -> checkCanRunTracking
+            # / checkCanDisplayVirtualFitResult / updateModelRenderingSettings
+            # / _refresh_localizations_table. Kept last so combo-driven state
+            # (e.g. per-row VF distance) reflects the freshly populated combos.
+            self.updateInputOptions()
+            self.updateWorkflowControls()
             self._cached_state = state
         finally:
             self._refreshing = False
@@ -3648,10 +3669,11 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # Our scene NodeAdded / NodeRemoved observers early-out while we are not the active
         # page (see ``onNodeAdded`` / ``onNodeRemoved``) to avoid running the full input /
         # localizations refresh cascade in the background whenever another page mutates the
-        # scene. That means on re-entry we may be looking at stale combo-box options; refresh
-        # once here so the panel is caught up before the user interacts with it.
-        self.updateInputOptions()
-        self.updateWorkflowControls()
+        # scene. Similarly, ``onDataParameterNodeModified`` routes through
+        # ``refresh_display`` which is a no-op off-page. So on re-entry we may be looking
+        # at stale combo-box options and table rows; ``refresh_display`` runs the full
+        # cascade to catch up.
+        self.refresh_display()
         from OpenLIFULib.view_state import apply_module_view_state, LOCALIZATION
         apply_module_view_state(LOCALIZATION)
 
@@ -3715,14 +3737,13 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
-        self.updatePhotoscanGenerationButtons()
-        self._refresh_photocollections_table()
-        self._refresh_photoscans_table()
-        self._refresh_localizations_table()
-        self._update_manager_button_states()
-        self._apply_initial_section_collapse_state()
-        self.updateInputOptions()
-        self.updateWorkflowControls()
+        """Cross-page ``dataChanged`` fanout entry point.
+
+        Reduces to a single ``refresh_display`` call. Off-page fanouts are
+        silently ignored by ``refresh_display``'s ``_entered`` guard; the next
+        ``enter()`` catches up.
+        """
+        self.refresh_display()
         
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -4224,8 +4245,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                     photoscan_id=photoscan_id, approval_state=True)
             if session is not None:
                 slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
-        self._refresh_localizations_table()
-        self.updateWorkflowControls()
+        self.refresh_display()
 
     def _on_localizations_table_item_changed(self, item):
         """Handle Approved-column checkbox toggles in the Localizations table."""
@@ -4262,8 +4282,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         reindex_transducer_tracking_results(session_id=session_id)
         if session is not None:
             slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
-        self._refresh_localizations_table()
-        self.updateWorkflowControls()
+        self.refresh_display()
 
     def _update_manager_button_states(self):
         selected_photocollection_id = self._get_selected_photocollection_scan_id()
@@ -4368,7 +4387,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         dialog = AddFromAppDialog(self, mode="photocollection")
         dialog.exec_()
         dialog.deleteLater()
-        self._refresh_photocollections_table()
+        self.refresh_display()
 
     @display_errors
     def onAddPhotoscanClicked(self, checked: bool = False):
@@ -4378,10 +4397,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         dialog = AddFromAppDialog(self, mode="photoscan")
         dialog.exec_()
         dialog.deleteLater()
-        self._refresh_photoscans_table()
-        self._refresh_photoscans_table()
-        self._update_manager_button_states()
-        self.updatePhotoscanGenerationButtons()
+        self.refresh_display()
 
     @display_errors
     def onViewPhotocollectionClicked(self, checked: bool = False):
@@ -4411,9 +4427,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         if get_app_state().loaded_session is not None:
             data_logic.update_photocollections_affiliated_with_loaded_session()
-        self._refresh_photocollections_table()
-        self._update_manager_button_states()
-        self.updatePhotoscanGenerationButtons()
+        self.refresh_display()
 
     @display_errors
     def onViewPhotoscanClicked(self, checked: bool = False):
@@ -4503,8 +4517,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.algorithm_input_widget.set_photoscan_selection(wizard_photoscan.photoscan.photoscan)
 
         self.ui.photoscanVisibilityCheckBox.checked = True if returncode else pre_wizard_photoscan_visible
-        self.updateModelRendering()
-        self.updateModelRenderingSettings()
 
         if returncode:
             if pr_node is None:
@@ -4512,14 +4524,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                     "Photoscan registration wizard was completed without producing a PV transform.")
             if wizard_volume is not None:
                 slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUPrePlanning").showSkin(wizard_volume)
-            self._refresh_localizations_table()
-            self._refresh_photoscans_table()
-            self.updateWorkflowControls()
-        self._update_manager_button_states()
-        self.checkCanRunTracking()
+        self.refresh_display()
         # Re-apply the module's view-state last so it has the final word on photoscan
         # visibility (a fresh PR with no TT would otherwise be hidden by side effects
-        # from the various refresh helpers above).
+        # of the refresh cascade above).
         from OpenLIFULib.view_state import apply_module_view_state, LOCALIZATION
         apply_module_view_state(LOCALIZATION)
 
@@ -4562,7 +4570,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         pr_node = self._resolve_pr_node_for_photoscan(photoscan_id, session_id)
         if pr_node is None:
             # No PR for this photoscan; nothing to do. Refresh to restore the checkbox visual.
-            self._refresh_photoscans_table()
+            self.refresh_display()
             return False
         registration_id = get_registration_id_from_photoscan_registration_node(pr_node)
         currently_approved = get_approval_from_photoscan_registration_node(pr_node)
@@ -4578,18 +4586,16 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 )
                 if not slicer.util.confirmYesNoDisplay(text=msg, windowTitle="Revoke registration"):
                     # User canceled; restore previous checkbox state on the next refresh.
-                    self._refresh_photoscans_table()
+                    self.refresh_display()
                     return False
         set_photoscan_registration_approval_by_id(new_state, registration_id, session_id)
         if not new_state:
             self._cascade_delete_tt_after_pr_unapproval(registration_id, session_id)
         if session is not None:
             slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
-        self._refresh_photoscans_table()
-        self._refresh_localizations_table()
-        self._update_manager_button_states()
-        self.checkCanRunTracking()
-        # Refresh the photoscan visibility based on the new approval state.
+        self.refresh_display()
+        # Refresh the photoscan visibility based on the new approval state. Runs after
+        # refresh_display so it has the final word on transducer / photoscan visibility.
         from OpenLIFULib.view_state import apply_module_view_state, LOCALIZATION
         apply_module_view_state(LOCALIZATION)
         return True
@@ -4614,7 +4620,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
         if ph_openlifu is None:
             # Nothing to update; refresh so the checkbox visual matches on-disk state.
-            self._refresh_photoscans_table()
+            self.refresh_display()
             return False
         current_state = bool(getattr(ph_openlifu, "photoscan_approved", False))
         if current_state == new_state:
@@ -4630,17 +4636,14 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             applied = self._apply_photoscan_registration_approval(photoscan_id, new_state=False)
             if not applied:
                 # User canceled the cascade confirmation; restore the photoscan checkbox visual.
-                self._refresh_photoscans_table()
+                self.refresh_display()
                 return False
 
         # Persist the photoscan approval flag (updates the loaded wrapper + session state).
         self.logic.update_photoscan_approval(photoscan_id, new_state)
         if session is not None:
             slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
-        self._refresh_photoscans_table()
-        self._refresh_localizations_table()
-        self._update_manager_button_states()
-        self.checkCanRunTracking()
+        self.refresh_display()
         return True
 
     def _on_photoscans_table_item_changed(self, item):
@@ -4723,9 +4726,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             return
         data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.remove_photocollection(scan_id)
-        self._refresh_photocollections_table()
-        self._update_manager_button_states()
-        self.updatePhotoscanGenerationButtons()
+        self.refresh_display()
 
     @display_errors
     def onDeletePhotoscanClicked(self, checked: bool = False):
@@ -4792,17 +4793,12 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         if session is not None:
             data_logic.update_underlying_openlifu_session()
-        self._refresh_photoscans_table()
-        self._refresh_localizations_table()
-        self._update_manager_button_states()
-        self.checkCanRunTracking()
-        self.updateWorkflowControls()
+        self.refresh_display()
 
     @display_errors
     def onRefreshPhotoscansClicked(self, checked: bool = False):
         self.refreshPhotoscanList()
-        self._refresh_photoscans_table()
-        self._update_manager_button_states()
+        self.refresh_display()
 
     # ---- end Manager helpers ----
 
@@ -4860,10 +4856,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             data_logic.add_photoscan_to_database(subject_id, session_id, photoscan_dict.copy())
             data_logic.update_photoscans_affiliated_with_loaded_session()
 
-            self.updateInputOptions()
-            self.updateWorkflowControls()
-            self._refresh_photoscans_table()
-            self._update_manager_button_states()
+            self.refresh_display()
 
             slicer.util.infoDisplay(
                 text=f"Photoscan '{cur_scan_id}' has been successfully imported from the Android device. You do not need to generate a photoscan locally.",
@@ -4895,9 +4888,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 return
 
             data_logic.update_photocollections_affiliated_with_loaded_session()
-            self._refresh_photocollections_table()
-            self._update_manager_button_states()
-            self.updatePhotoscanGenerationButtons()
+            self.refresh_display()
 
             slicer.util.infoDisplay(
                 text=f"Photo collection successfully imported ({len(imported_filepaths)} photos). You will need to generate a photoscan locally.",
@@ -4924,9 +4915,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         data_logic.add_photocollection_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photocollection_dict.copy())  # logic mutates the dict
 
         data_logic.update_photocollections_affiliated_with_loaded_session()
-        self._refresh_photocollections_table()
-        self._update_manager_button_states()
-        self.updatePhotoscanGenerationButtons()
+        self.refresh_display()
 
     @display_errors
     def onAddPhotoscanPressed(self, checked:bool) -> bool:
@@ -4951,10 +4940,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         new_photoscan = data_logic.add_photoscan_to_database(loaded_session.get_subject_id(), loaded_session.get_session_id(), photoscan_dict.copy())  # logic mutates the dict
         data_logic.update_photoscans_affiliated_with_loaded_session()
 
-        self.updateInputOptions()
-        self.updateWorkflowControls()
-        self._refresh_photoscans_table()
-        self._update_manager_button_states()
+        self.refresh_display()
 
         slicer.app.processEvents() # Ensure the input options are updated
         self.algorithm_input_widget.set_photoscan_selection(new_photoscan)
@@ -5048,10 +5034,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         data_logic : OpenLIFUDataLogic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         data_logic.update_photoscans_affiliated_with_loaded_session()
-        self.updateInputOptions()
-        self.updateWorkflowControls()
-        self._refresh_photoscans_table()
-        self._update_manager_button_states()
+        self.refresh_display()
 
         # Preview the generated photoscan
         if  photoscan_openlifu:
@@ -5351,10 +5334,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # rendering refresh applies it to the model.
         self.ui.photoscanVisibilityCheckBox.checked = True if returncode else pre_wizard_photoscan_visible
 
-        # Restore previous photoscan/skin segmentation visibility states
-        self.updateModelRendering()
-        self.updateModelRenderingSettings()
-
         if returncode:
             # This shouldn't be possible
             if transducer_to_volume_transform_node is None:
@@ -5373,9 +5352,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 wizard_transducer.set_current_transform_to_match_transform_node(transducer_to_volume_transform_node)
                 wizard_transducer.set_visibility(True)
 
-            self.updateWorkflowControls()
+        self.refresh_display()
 
-            self._refresh_localizations_table()
+        if returncode:
             # Select the row that was just created/edited so the user sees the new localization
             # (and so the row-selection handler snaps the transducer + refreshes the View-VF
             # display for the row's target).
@@ -5437,7 +5416,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         if self.logic.get_transducer_tracking_approval(result_id=result_id):
             notify(f"Tracking approval revoked:\n{reason}")
             self.logic.revoke_transducer_tracking_approval(result_id=result_id)
-            self._refresh_localizations_table()
+            self.refresh_display()
 
     def watchPhotoscanRegistrationNode(self, pr_transform_node: vtkMRMLTransformNode):
         """Watch a photoscan registration (PR) node to auto-revoke its approval on modification."""
@@ -5478,10 +5457,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 notify(f"Photoscan registration approval revoked:\n{reason}")
             if session is not None:
                 slicer.util.getModuleLogic("OpenLIFU").data_logic.update_underlying_openlifu_session()
-            self._refresh_localizations_table()
-            self._refresh_photoscans_table()
-            self._update_manager_button_states()
-            self.checkCanRunTracking()
+            self.refresh_display()
 
     def updateStartPhotoscanGenerationButton(self):
         button = self.ui.generatePhotoscanFromPhotocollectionButton
