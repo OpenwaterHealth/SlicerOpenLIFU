@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -16,10 +17,41 @@ MESHROOM_VERSION = "2025.1.0"
 MESHROOM_WINDOWS_URL = "https://zenodo.org/records/16887472/files/Meshroom-2025.1.0-Windows.zip"
 MESHROOM_LINUX_URL = "https://zenodo.org/records/16887472/files/Meshroom-2025.1.0-Linux.tar.gz"
 MESHROOM_EXTRACTED_DIR_NAME = "Meshroom-2025.1.0"
+MESHROOM_EXECUTABLE_SETTINGS_KEY = "OpenLIFU/meshroomExecutablePath" # The QSettings key used to persist the path to the installed meshroom_batch executable.
 
 
 def meshroom_install_cli_path() -> Path:
     return Path(__file__).resolve().with_name("meshroom_install_cli.py")
+
+
+def save_meshroom_path(executable: Path) -> None:
+    """Persist the path to the installed meshroom_batch executable in QSettings."""
+    qt.QSettings().setValue(MESHROOM_EXECUTABLE_SETTINGS_KEY, str(executable))
+
+
+def restore_meshroom_path() -> Optional[Path]:
+    """Look up the meshroom_batch executable saved by `save_meshroom_path`.
+
+    If found and still valid, ensures its directory is on the current process's
+    PATH and returns it. If the saved path no longer points to a real file, the
+    stale setting is cleared and None is returned.
+    """
+    settings = qt.QSettings()
+    saved_path = settings.value(MESHROOM_EXECUTABLE_SETTINGS_KEY, "")
+    if not saved_path:
+        return None
+
+    executable = Path(str(saved_path))
+    if not executable.is_file():
+        settings.remove(MESHROOM_EXECUTABLE_SETTINGS_KEY)
+        return None
+
+    meshroom_dir = str(executable.parent)
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if meshroom_dir not in path_entries:
+        os.environ["PATH"] = os.pathsep.join([meshroom_dir, *path_entries])
+
+    return executable
 
 
 class MeshroomInstallController:

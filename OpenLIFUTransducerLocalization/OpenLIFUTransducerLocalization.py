@@ -75,6 +75,7 @@ from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node
 from OpenLIFULib.notifications import notify
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
+from OpenLIFULib.meshroom_install_gui import restore_meshroom_path
 
 # These imports are for IDE and static analysis purposes only
 if TYPE_CHECKING:
@@ -3315,6 +3316,7 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
             sort_by = "filename",
             sampling_rate = sampling_rate,
         )
+        restore_meshroom_path()  # ensure meshroom_batch's directory is on PATH
         with BusyCursor():
             photoscan_openlifu, data_dir = openlifu.nav.photoscan.run_reconstruction(
                 images = photocollection_filepaths,

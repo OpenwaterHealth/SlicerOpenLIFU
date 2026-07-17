@@ -1150,18 +1150,22 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         )
 
     def _checkMeshroomStatus(self) -> None:
-        meshroom_path = shutil.which("meshroom_batch")
+        from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, restore_meshroom_path, save_meshroom_path
 
-        icon_name = qt.QStyle.SP_DialogApplyButton if meshroom_path else qt.QStyle.SP_DialogCancelButton
+        meshroom_executable = restore_meshroom_path()
+        if meshroom_executable is None:
+            which_result = shutil.which("meshroom_batch")
+            if which_result:
+                meshroom_executable = Path(which_result)
+                save_meshroom_path(meshroom_executable) # Since it was previously not saved
+
+        icon_name = qt.QStyle.SP_DialogApplyButton if meshroom_executable else qt.QStyle.SP_DialogCancelButton
         pixmap = slicer.app.style().standardIcon(icon_name).pixmap(qt.QSize(16, 16))
         self.ui.meshroomStatusIcon.setPixmap(pixmap)
         self.ui.meshroomStatusIcon.setText("")
 
-        if meshroom_path:
-            from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION
-
-            meshroom_dir = Path(meshroom_path).parent
-            dir_name = meshroom_dir.name
+        if meshroom_executable:
+            dir_name = meshroom_executable.parent.name
             version_str = dir_name[len("Meshroom-"):] if dir_name.startswith("Meshroom-") else "installed"
             if version_str == MESHROOM_VERSION:
                 self.ui.installMeshroomPushButton.setEnabled(False)
@@ -1173,7 +1177,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 )
         else:
             self.ui.installMeshroomPushButton.setEnabled(True)
-            self.ui.installMeshroomPushButton.setText("Install Meshroom {MESHROOM_VERSION}")
+            self.ui.installMeshroomPushButton.setText(f"Install Meshroom {MESHROOM_VERSION}")
 
     @display_errors
     def onInstallMeshroomClicked(self, checked: bool = False) -> None:
@@ -1233,8 +1237,11 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def _onMeshroomInstallFinished(self, succeeded: bool, install_dir: Path) -> None:
         if succeeded:
-            from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_EXTRACTED_DIR_NAME
-            meshroom_bin_path = str(install_dir / MESHROOM_EXTRACTED_DIR_NAME)
+            from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_EXTRACTED_DIR_NAME, save_meshroom_path
+            meshroom_bin_dir = install_dir / MESHROOM_EXTRACTED_DIR_NAME
+            meshroom_bin_path = str(meshroom_bin_dir)
+            meshroom_executable_name = "meshroom_batch.exe" if sys.platform.startswith("win") else "meshroom_batch"
+            save_meshroom_path(meshroom_bin_dir / meshroom_executable_name)
 
             os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + meshroom_bin_path
 
@@ -1275,9 +1282,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
                 )
             else:
                 slicer.util.infoDisplay(
-                    f"Meshroom {MESHROOM_VERSION} installed successfully.\n\n"
-                    f"To persist across sessions, add the following to your shell profile:\n"
-                    f"    export PATH=\"$PATH:{meshroom_bin_path}\""
+                    f"Meshroom {MESHROOM_VERSION} installed successfully."
                 )
 
         self._meshroom_install_controller = None
@@ -1609,3 +1614,58 @@ class OpenLIFULoginTest(ScriptedLoadableModuleTest):
                 self.assertFalse(result.get("succeeded", True))
             finally:
                 controller.cleanup()
+
+    def test_save_and_restore_meshroom_path(self):
+        from OpenLIFULib.meshroom_install_gui import (
+            MESHROOM_EXECUTABLE_SETTINGS_KEY,
+            save_meshroom_path,
+            restore_meshroom_path,
+        )
+
+        settings = qt.QSettings()
+        original_value = settings.value(MESHROOM_EXECUTABLE_SETTINGS_KEY, "")
+        original_path_env = os.environ.get("PATH", "")
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                executable = Path(temp_dir) / "meshroom_batch"
+                executable.write_text("fake executable")
+
+                save_meshroom_path(executable)
+                self.assertEqual(str(executable), settings.value(MESHROOM_EXECUTABLE_SETTINGS_KEY))
+
+                restored = restore_meshroom_path()
+
+                self.assertEqual(executable, restored)
+                self.assertIn(str(executable.parent), os.environ.get("PATH", "").split(os.pathsep))
+        finally:
+            if original_value:
+                settings.setValue(MESHROOM_EXECUTABLE_SETTINGS_KEY, original_value)
+            else:
+                settings.remove(MESHROOM_EXECUTABLE_SETTINGS_KEY)
+            os.environ["PATH"] = original_path_env
+
+    def test_restore_meshroom_path_clears_stale_entry(self):
+        from OpenLIFULib.meshroom_install_gui import (
+            MESHROOM_EXECUTABLE_SETTINGS_KEY,
+            save_meshroom_path,
+            restore_meshroom_path,
+        )
+
+        settings = qt.QSettings()
+        original_value = settings.value(MESHROOM_EXECUTABLE_SETTINGS_KEY, "")
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                executable = Path(temp_dir) / "meshroom_batch"
+                executable.write_text("fake executable")
+                save_meshroom_path(executable)
+                executable.unlink()
+
+                restored = restore_meshroom_path()
+
+            self.assertIsNone(restored)
+            self.assertEqual("", settings.value(MESHROOM_EXECUTABLE_SETTINGS_KEY, ""))
+        finally:
+            if original_value:
+                settings.setValue(MESHROOM_EXECUTABLE_SETTINGS_KEY, original_value)
+            else:
+                settings.remove(MESHROOM_EXECUTABLE_SETTINGS_KEY)
