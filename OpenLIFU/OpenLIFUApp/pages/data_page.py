@@ -6963,11 +6963,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         transducer_openlifu = get_cur_db().load_transducer(session_openlifu.transducer_id)
         transducer_abspaths_info = get_cur_db().get_transducer_absolute_filepaths(session_openlifu.transducer_id)
+        # There is no longer a single "the transducer pose" persisted on the session; each page
+        # renders the transducer at whichever approved VF / TT transform the user selects. Load the
+        # transducer at identity and let the pages drive its pose from row-selection.
         newly_loaded_transducer = self.load_transducer_from_openlifu(
             transducer = transducer_openlifu,
             transducer_abspaths_info = transducer_abspaths_info,
-            transducer_matrix = session_openlifu.array_transform.matrix,
-            transducer_matrix_units = session_openlifu.array_transform.units,
             replace_confirmed = True,
         )
         newly_loaded_transducer.set_visibility(False)
@@ -7000,12 +7001,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
             # Place virtual fit results under the transducer folder
             newly_loaded_transducer.move_node_into_transducer_sh_folder(vf_node)
-            
-            # Check if the current transducer transform matches the virtual fit result in terms of matrix values.
-            if newly_loaded_transducer.is_matching_transform(vf_node):
-                newly_loaded_transducer.set_matching_transform(vf_node)
-                newly_loaded_transducer.set_visibility(True)
-                slicer.util.getModuleLogic("OpenLIFU").preplanning_logic.chosen_virtual_fit = vf_node
 
         # === Load photoscan registrations ===
         # PRs must be loaded BEFORE the TT results below so that TT entries whose
@@ -7099,35 +7094,16 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     photoscan_id, e,
                 )
 
-        # If there are any *approved* transducer localization results that we have just loaded in newly_added_tt_result_nodes,
-        # then we check to see if any of them match the current transducer transform in terms of matrix values.
-        # If there is a match in matrix values, then the first such matching TT result that we encounter in the loop is
-        # "officially" linked to the current transform by setting the "matching_transform" attribute, thereby ensuring that
-        # TT approval is revoked if the transducer is moved.
-        # Additionally, any other transducer localization results whose matrix does not match current transducer get their approval revoked.
-        transducer_tracking_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
-        from OpenLIFULib.transducer_tracking_results import (
-            get_approval_from_transducer_tracking_result_node,
-            get_result_id_from_transducer_tracking_result_node,
-        )
-        matched_already = False
-        for tt_node in newly_added_tt_result_nodes:
-            if not get_approval_from_transducer_tracking_result_node(tt_node):
-                continue
-            result_id = get_result_id_from_transducer_tracking_result_node(tt_node)
-            if not matched_already and newly_loaded_transducer.is_matching_transform(tt_node):
-                newly_loaded_transducer.set_matching_transform(tt_node)
-                newly_loaded_transducer.set_visibility(True)
-                matched_already = True
-            else:
-                transducer_tracking_widget.revokeTransducerTrackingApprovalIfAny(
-                    result_id=result_id,
-                    reason="The transducer transform does not match the approved localization result."
-                )
+        # Approved TT results are trusted as loaded. There is no longer a single "the transducer
+        # position" to reconcile against, so we do not auto-revoke TT approvals or auto-select a
+        # "matching" TT on session load. The Localizations table lets the user pick which TT to
+        # snap the transducer to.
 
         # === Restore previously computed Solution + analysis (if any) ===
-        # session.solution_id is persisted and cleared whenever the array_transform changes, so if it's
-        # set here we know the on-disk Solution is still consistent with the current transducer pose.
+        # A persisted ``session.solution_id`` is trusted as still consistent with its approved
+        # VF / TT context: solution invalidation is driven by VF / TT approval changes
+        # (see ``_on_transducer_transform_modified`` and the approval-revoke cascades in
+        # PrePlanning / TransducerLocalization), not by a single-transducer-pose comparison.
         if session_openlifu.solution_id:
             self._restore_solution_for_loaded_session(
                 session_openlifu = session_openlifu,

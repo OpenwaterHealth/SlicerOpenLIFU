@@ -15,7 +15,6 @@ from OpenLIFULib.targets import (
     fiducial_to_openlifu_point,
     assign_unique_color_to_fiducial,
 )
-from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_results_in_openlifu_session_format
 from OpenLIFULib.skinseg import get_skin_segmentation, generate_skin_segmentation
 from OpenLIFULib.transducer_tracking_results import get_transducer_tracking_results_in_openlifu_session_format
@@ -285,11 +284,13 @@ class SlicerOpenLIFUSession:
         valid_target_nodes = self.get_target_nodes()
         self.session.session.targets = list(map(fiducial_to_openlifu_point, valid_target_nodes))
 
-        # Update transducer transform in the underlying Session
+        # We no longer sync the transducer's current scene pose back onto
+        # ``session.array_transform``. There is no single "the transducer position" anymore --
+        # each page (pre-planning, localization, solution) renders the transducer at whichever
+        # of the persisted VF / TT transforms the user has selected. The units of the loaded
+        # transducer are still needed below to serialize VF / TT results.
         transducer = get_app_state().loaded_transducers[self.get_transducer_id()]
         transducer_openlifu = transducer.transducer.transducer
-        transducer_transform_node : vtkMRMLTransformNode = transducer.transform_node
-        self.session.session.array_transform = transducer_transform_node_to_openlifu(transducer_transform_node, transducer_openlifu.units)
 
         # Update virtual fit results
         self.session.session.virtual_fit_results = get_virtual_fit_results_in_openlifu_session_format(
