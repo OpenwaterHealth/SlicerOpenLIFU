@@ -12,8 +12,9 @@ Session             farthest completed = approved TT,     visible unless     vis
                     else approved VF, else leave alone    approved TT (then  TT exists, else hidden
                                                           hidden)
 PrePlanning         left alone (combobox manages it)      visible            hidden
-TransducerLoc.      any TT result, else approved VF,      visible            visible when TT exists,
-                    else leave alone                                         else hidden
+TransducerLoc.      any TT result, else hide                              visible            visible when TT exists,
+                    (empty table -> hidden, no                                                 else hidden
+                    approved-VF fallback)
 SonicationPlanner   approved TT, else approved VF,        hidden             visible when approved
                     else leave alone                                         TT exists, else hidden
 SonicationControl   approved TT, else approved VF,        hidden             visible when approved
@@ -79,9 +80,17 @@ def apply_module_view_state(module_key: str) -> None:
     elif module_key == LOCALIZATION:
         # Prefer the approved TT (matches what Solution/Control display) so going Back
         # from later steps doesn't leave the view stuck on a stale or different pose.
-        pose_node = approved_tt_node or any_tt_node or approved_vf_node
+        # No approved-VF fallback here: TL is the page where the user *creates* TT
+        # results, so with an empty TT table there is nothing to represent. Falling back
+        # to the approved VF pose would leak Pre-Planning's virtual-fit visualization
+        # onto the TL page when returning to it from Pre-Planning with an empty table
+        # (issue #602). Explicitly hide the transducer instead, so the empty-table view
+        # matches the empty-table intent.
+        pose_node = approved_tt_node or any_tt_node
         if pose_node is not None:
             _apply_transducer_pose(transducer, pose_node)
+        elif transducer is not None:
+            transducer.set_visibility(False)
         _set_skin_visible(volume_node, True)
         # Show the registered photoscan whenever any TT or an approved PR exists. When
         # only a PR exists (e.g. the user just approved a registration but has not yet

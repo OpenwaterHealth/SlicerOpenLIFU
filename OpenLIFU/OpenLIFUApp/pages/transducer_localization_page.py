@@ -3341,13 +3341,22 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         No reads from session / scene / other widgets: everything comes from
         ``state``. Signals are blocked around ``setRowCount`` / ``setItem`` /
-        ``selectRow`` so Qt does not fire ``itemSelectionChanged``; we then
-        drive :meth:`_on_localization_row_selected` explicitly. That unified
-        path guarantees the transducer / VF display is reconciled even when Qt
-        would otherwise silently suppress the signal (``setRowCount(0)`` under
-        blocked signals; ``selectRow(N)`` where row ``N`` was already the
-        current row -- the cases behind the delete-selected, delete-last, and
-        return-from-other-page symptoms in issue #602).
+        ``selectRow`` so Qt does not fire ``itemSelectionChanged``. We then
+        drive :meth:`_on_localization_row_selected` explicitly, but only when
+        we actually need scene mutation:
+
+        * ``state.num_localizations > 0``: fire always. Handles return-to-page
+          (``selectRow(N)`` where ``N`` is already current is a Qt no-op) and
+          delete-selected-then-fallback. The handler is idempotent when the
+          selection did not change.
+        * transitioned non-empty -> empty: fire so the empty branch hides the
+          transducer (issue #602 symptom "delete last row").
+        * stable-empty: do NOT fire. The handler's empty branch calls
+          ``set_visibility(False)`` which also hides ``body_model_node`` /
+          ``surface_model_node``, and the tracking wizard on
+          ``TransducerPhotoscanTrackingPage`` inherits the surface's
+          pre-wizard visibility -- an aggressive hide here would leave the
+          wizard showing only the body mesh.
         """
         table = self.ui.localizationsTable
         not_approved_brush = qt.QBrush(qt.QColor("#FFE4B5"))
@@ -3395,11 +3404,35 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 table.setCurrentCell(-1, -1)
         finally:
             table.blockSignals(False)
-        # Explicit, unconditional row-selection handler drive. Idempotent and
-        # guarded internally against reentrancy via ``_applying_vf_display``
-        # (which breaks the RemoveNode -> onNodeRemoved -> updateInputOptions
-        # -> _refresh_localizations_table loop for VF clones).
-        self._on_localization_row_selected()
+        # Decide whether to drive the row-selection handler. It must fire when:
+        #   * State has rows -- covers return-to-page (selectRow(N) where N is
+        #     already current is a Qt no-op) and delete-selected-then-fallback.
+        #     The handler is idempotent when called with an unchanged selection.
+        #   * State just transitioned non-empty -> empty (delete-last) -- so the
+        #     empty-branch hides the transducer.
+        # It must NOT fire on stable-empty apply (e.g. entering TL for the first
+        # time in a session that has no TT results yet): the handler's empty
+        # branch calls ``set_visibility(False)``, which also hides the
+        # transducer's ``body_model_node`` / ``surface_model_node``. The
+        # tracking wizard on ``TransducerPhotoscanTrackingPage`` only sets body
+        # visible on entry and inherits the surface's pre-wizard visibility, so
+        # our aggressive hide leaves the wizard showing only the body mesh.
+        prev_num = 0 if self._cached_state is None else self._cached_state.num_localizations
+        if state.num_localizations > 0:
+            should_fire_row_handler = True
+        elif prev_num > 0:
+            should_fire_row_handler = True
+        else:
+            should_fire_row_handler = False
+        # Snapshot the applied state so the next apply can detect transitions.
+        # ``refresh_display`` also assigns ``_cached_state`` at its own tail;
+        # the two writes are idempotent because they use the same ``state``.
+        self._cached_state = state
+        if should_fire_row_handler:
+            # Guarded internally against reentrancy via ``_applying_vf_display``
+            # (which breaks the RemoveNode -> onNodeRemoved -> updateInputOptions
+            # -> _refresh_localizations_table loop for VF clones).
+            self._on_localization_row_selected()
 
     def _apply_state_section_collapse(self, state: _TLPageState) -> None:
         """Apply the initial collapse state for the three data sections.
