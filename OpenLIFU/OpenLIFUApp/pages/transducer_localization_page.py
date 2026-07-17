@@ -191,6 +191,16 @@ class _TLPageState:
     #      internals. ----
     running_wizard: bool = False
 
+    # ---- Virtual-fit preview (translucent transducer clone at the approved-VF
+    #      pose for the currently selected localization row's target).
+    #      * ``vf_preview_transform_node_id``: id of the VF transform to attach
+    #        the clone to, or None when no preview should exist (no row / no
+    #        approved VF for the row's target).
+    #      * ``vf_preview_visible``: mirrors the View-VF checkbox. Only affects
+    #        the clone's display node; does not create/destroy it. ----
+    vf_preview_transform_node_id: Optional[str] = None
+    vf_preview_visible: bool = False
+
 
 class FacialLandmarksMarkupPageBase(qt.QWizardPage):
     def __init__(self, parent=None):
@@ -3156,12 +3166,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.wizard = None
         self._running_wizard = False
 
-        # Re-entrancy guard for ``_apply_virtual_fit_display``. Cloning the VF model adds new
-        # MRML nodes to the scene, which fires NodeAdded observers that call back into
-        # ``updateInputOptions -> _refresh_localizations_table -> _apply_virtual_fit_display``.
-        # Without this guard we recurse until the stack blows up during session load.
-        self._applying_vf_display = False
-
         # Tracks whether this page is currently the active one in the host's QStackedWidget.
         # In vanilla Slicer, ``self.parent.isEntered`` on the ``qSlicerScriptedLoadableModuleWidget``
         # answers this question -- but in the custom app (openlifu-desktop-application) each
@@ -3307,6 +3311,21 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         num_photoscans = len(self._get_photoscan_ids())
         num_localizations = len(localization_rows)
 
+        # ---- Virtual-fit preview state (driven by the selected localization
+        #      row's target's approved VF + the View-VF checkbox). This is the
+        #      pure-read half of what used to live in ``_apply_virtual_fit_display``.
+        vf_preview_transform_node_id: Optional[str] = None
+        if selected_localization_result_id is not None:
+            selected_row = next(
+                (r for r in localization_rows if r.result_id == selected_localization_result_id),
+                None,
+            )
+            if selected_row is not None:
+                vf_node = self._approved_vf_node_for_target(selected_row.target_id)
+                if vf_node is not None:
+                    vf_preview_transform_node_id = vf_node.GetID()
+        vf_preview_visible = bool(self.ui.viewVirtualFitCheckBox.isChecked())
+
         return _TLPageState(
             has_session=has_session,
             session_id=session_id,
@@ -3321,6 +3340,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             num_photoscans=num_photoscans,
             num_localizations=num_localizations,
             running_wizard=bool(self._running_wizard),
+            vf_preview_transform_node_id=vf_preview_transform_node_id,
+            vf_preview_visible=vf_preview_visible,
         )
 
     def _apply_state_to_widgets(self, state: _TLPageState) -> None:
@@ -3394,10 +3415,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 if row.result_id == state.selected_localization_result_id:
                     row_to_select = row_idx
             # Apply the selection under blocked signals so Qt does not fire
-            # ``itemSelectionChanged``; we drive the handler once, explicitly,
-            # below. Without this, ``selectRow(N)`` on the already-current row
-            # is a no-op (return-from-page symptom) and ``setRowCount(0)``
-            # clears selection silently (delete-last symptom).
+            # ``itemSelectionChanged``; the state-machine's
+            # ``_apply_state_to_scene`` reconciles pose + VF-clone from the
+            # already-known ``state.selected_localization_result_id``, so we
+            # don't need to drive the row handler ourselves.
             if row_to_select >= 0:
                 table.selectRow(row_to_select)
             else:
@@ -3405,35 +3426,6 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                 table.setCurrentCell(-1, -1)
         finally:
             table.blockSignals(False)
-        # Decide whether to drive the row-selection handler. It must fire when:
-        #   * State has rows -- covers return-to-page (selectRow(N) where N is
-        #     already current is a Qt no-op) and delete-selected-then-fallback.
-        #     The handler is idempotent when called with an unchanged selection.
-        #   * State just transitioned non-empty -> empty (delete-last) -- so the
-        #     empty-branch hides the transducer.
-        # It must NOT fire on stable-empty apply (e.g. entering TL for the first
-        # time in a session that has no TT results yet): the handler's empty
-        # branch calls ``set_visibility(False)``, which also hides the
-        # transducer's ``body_model_node`` / ``surface_model_node``. The
-        # tracking wizard on ``TransducerPhotoscanTrackingPage`` only sets body
-        # visible on entry and inherits the surface's pre-wizard visibility, so
-        # our aggressive hide leaves the wizard showing only the body mesh.
-        prev_num = 0 if self._cached_state is None else self._cached_state.num_localizations
-        if state.num_localizations > 0:
-            should_fire_row_handler = True
-        elif prev_num > 0:
-            should_fire_row_handler = True
-        else:
-            should_fire_row_handler = False
-        # Snapshot the applied state so the next apply can detect transitions.
-        # ``refresh_display`` also assigns ``_cached_state`` at its own tail;
-        # the two writes are idempotent because they use the same ``state``.
-        self._cached_state = state
-        if should_fire_row_handler:
-            # Guarded internally against reentrancy via ``_applying_vf_display``
-            # (which breaks the RemoveNode -> onNodeRemoved -> updateInputOptions
-            # -> _refresh_localizations_table loop for VF clones).
-            self._on_localization_row_selected()
 
     def _apply_state_section_collapse(self, state: _TLPageState) -> None:
         """Apply the initial collapse state for the three data sections.
@@ -3470,30 +3462,37 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.ui.localizationsCollapsible.collapsed = True
 
     def _apply_state_to_scene(self, state: _TLPageState) -> None:
-        """Write ``state`` into the MRML scene (visibility, transforms, clone
-        model lifecycle). Must not mutate persistent state (session /
-        database); those mutations belong in the signal handler that ran
-        before ``refresh_display``.
+        """Own the VF-preview clone lifecycle for the selected row.
 
-        Currently reconciles the VF-preview clone lifecycle when the state
-        says nothing should be shown (empty table or unselected row). The
-        clone-create/update path still lives in :meth:`_apply_virtual_fit_display`
-        because it also depends on the View-VF checkbox which is not yet in
-        state; folding that in is Phase A.5 (#602). This defensive teardown
-        catches the delete-last-row case where the row-selection handler's
-        trailing ``_apply_virtual_fit_display`` call was insufficient to
-        clear a stale clone left over from the previous row selection.
+        The live-transducer pose (i.e. snapping the transducer's transform to
+        a specific TT result) still lives in :meth:`_on_localization_row_selected`
+        because the wizard flow relies on the surface-visibility inheritance
+        established at row-select time; folding that in here would require
+        also plumbing wizard state into ``_apply_*`` and is out of scope for
+        the state-machine sweep in issue #602.
+
+        Single owner of the VF-clone lifecycle: create/update when
+        ``state.vf_preview_transform_node_id`` is set, remove otherwise. This
+        replaced the old ``_apply_virtual_fit_display`` + re-entrancy-guard
+        pattern -- because the create/update path is now driven purely by
+        state rather than by an ad-hoc signal cascade, the guards are
+        unnecessary.
         """
         selected_transducer = state.selected_transducer
         if selected_transducer is None:
             return
-        # Nothing selected in the localizations table -> no VF preview should
-        # be visible. Remove any lingering clone unconditionally: cheaper and
-        # more predictable than probing the various guard flags used by
-        # ``_apply_virtual_fit_display`` to decide whether to run.
-        if state.selected_localization_result_id is None:
-            if selected_transducer.has_cloned_virtual_fit():
-                selected_transducer.remove_cloned_virtual_fit()
+        if state.vf_preview_transform_node_id is None:
+            selected_transducer.remove_cloned_virtual_fit()
+            return
+        vf_node = slicer.mrmlScene.GetNodeByID(state.vf_preview_transform_node_id)
+        if vf_node is None:
+            # State said we had a VF node, but the id is stale (e.g. removed
+            # between compute and apply). Fail safe: tear down any existing
+            # clone rather than leaving one attached to a dead transform.
+            selected_transducer.remove_cloned_virtual_fit()
+            return
+        selected_transducer.set_cloned_virtual_fit_model(vf_node)
+        selected_transducer.set_cloned_virtual_fit_visibility(state.vf_preview_visible)
 
     def refresh_display(self) -> None:
         """Single-owner entry point for updating the TL page's visible state.
@@ -3634,7 +3633,10 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.algorithm_input_widget.connect_refresh_button_signal(self.refreshPhotoscanList, input_type = "Photoscan")
 
         # ---- Model rendering options ----
-        self.ui.viewVirtualFitCheckBox.stateChanged.connect(self._apply_virtual_fit_display)
+        # View-VF is a pure state input: the checkbox value is read in
+        # ``_compute_state`` (as ``vf_preview_visible``) and applied in
+        # ``_apply_state_to_scene``. No separate handler needed.
+        self.ui.viewVirtualFitCheckBox.stateChanged.connect(lambda _state: self.refresh_display())
         self.ui.photoscanVisibilityCheckBox.stateChanged.connect(self.updateModelRendering)
         self.ui.skinMeshVisibilityCheckBox.stateChanged.connect(self.updateModelRendering)
         self.ui.skinMeshOpacitySlider.valueChanged.connect(self.updateModelRendering)
@@ -3703,7 +3705,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # itself is called from a module-switch context -- has been observed to produce
         # ``vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode: Invalid scene given``
         # warnings. Hiding is cheap and reversible; the clone will be reused (or replaced)
-        # next time ``_apply_virtual_fit_display`` runs.
+        # next time ``_apply_state_to_scene`` runs on re-entry.
         try:
             current_data = self.algorithm_input_widget.get_current_data()
         except Exception:  # noqa: BLE001
@@ -4165,12 +4167,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         population lives in :meth:`_apply_state_populate_localizations_table`,
         driven by :meth:`_compute_state`. See issue #602.
 
-        This method deliberately does NOT call ``_apply_virtual_fit_display``:
-        that path mutates the scene (RemoveNode / clone) and this refresh runs
-        from NodeAdded / NodeRemoved observers during session load. Coupling
-        scene mutation to table-populate would re-enter through the observers
-        and eventually blow the stack. The VF display is driven by the row-
-        selection handler + the checkbox stateChanged handler instead.
+        Scene mutation (VF-clone lifecycle, live-transducer pose) is owned by
+        :meth:`_apply_state_to_scene` and driven from ``refresh_display``; this
+        helper only rebuilds the table + reconciles widget enable state.
         """
         state = self._compute_state()
         self._apply_state_populate_localizations_table(state)
@@ -4181,40 +4180,41 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.checkCanDisplayVirtualFitResult()
 
     def _on_localization_row_selected(self):
-        info = self._get_selected_localization_row_info()
-        current_data = self.algorithm_input_widget.get_current_data()
-        selected_transducer = current_data.get("Transducer")
+        """Snap the live transducer to the selected row's TT pose, then refresh.
 
-        # Only mutate the scene (transducer pose / visibility) when TL is the active page.
-        # Cross-page ``dataChanged`` fan-out can call ``_refresh_localizations_table`` while
-        # we sit on Pre-Planning etc., and re-selecting a row from that path must not steal
-        # the transducer's visibility or transform from the page the user is actually on.
-        # (``self._entered`` is set by ``enter()``/``exit()``; ``self.parent.isEntered`` from
-        # vanilla Slicer does not exist on the plain QWidget parent used by the custom app.)
+        Live-transducer pose lives here (not in :meth:`_apply_state_to_scene`)
+        because ``TransducerPhotoscanTrackingPage`` in the wizard inherits the
+        pre-wizard surface visibility, and hiding it aggressively on
+        stable-empty applies leaves the wizard rendering only the body mesh
+        (see #602 history). We therefore only touch visibility on real user
+        row-selection changes rather than on every ``refresh_display``.
+
+        The VF-preview clone lifecycle is owned entirely by
+        :meth:`_apply_state_to_scene` and is applied via the trailing
+        ``refresh_display`` call.
+        """
+        # Only mutate the scene when TL is the active page. Cross-page
+        # ``dataChanged`` fan-out can invoke selection-driven code paths while
+        # the user sits on Pre-Planning etc., and re-snapping the transducer
+        # from that path would steal its pose from the page the user is on.
         if self._entered:
+            info = self._get_selected_localization_row_info()
+            current_data = self.algorithm_input_widget.get_current_data()
+            selected_transducer = current_data.get("Transducer")
             if info is not None:
                 result_id, _, _, _ = info
                 session = get_app_state().loaded_session
                 session_id = None if session is None else session.get_session_id()
-
-                # Photoscan selection is now driven by the Photoscan table, not the TT row. We only
-                # snap the transducer to the row's TT pose so the 3D view reflects that result.
                 tv_node = get_transducer_tracking_result_by_id(result_id, session_id) if result_id else None
                 if selected_transducer is not None and tv_node is not None:
                     selected_transducer.set_current_transform_to_match_transform_node(tv_node)
                     selected_transducer.set_visibility(True)
             else:
-                # No localization row is selected (empty table, or explicit clear). There is no
-                # meaningful transducer pose to show on this page until the user has a result to
-                # point at, so keep the transducer hidden.
+                # Explicit clear-selection -> no meaningful pose; hide.
                 if selected_transducer is not None:
                     selected_transducer.set_visibility(False)
-
-        # Row change (or clear-selection) reshapes both the checkbox enable state and the
-        # cloned-VF display -- keep them in lockstep in one place. ``_apply_virtual_fit_display``
-        # itself no-ops when we are not the active page (see its own guard), so this is safe.
-        self.checkCanDisplayVirtualFitResult()
-        self._apply_virtual_fit_display()
+        # Reconcile VF-preview clone + checkbox enable state via the state pipeline.
+        self.refresh_display()
 
     @display_errors
     def onToggleLocalizationApprovalClicked(self, checked: bool = False):
@@ -5503,71 +5503,13 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.updateAddPhotoscanButton()
         self.updateShowQRCodeButton()
 
-    def showVirtualFitResult(self):
-        # Legacy shim: the .ui may still reference this slot name in old setups. The real
-        # display logic lives in ``_apply_virtual_fit_display``; forward here to avoid
-        # any AttributeError if an out-of-tree caller still holds a reference.
-        self._apply_virtual_fit_display()
-
-    def _apply_virtual_fit_display(self, *_args):
-        """Sync the cloned virtual-fit transducer model to the selected Localizations row.
-
-        - Row -> VF transform: the clone is re-parented onto the approved VF for that row's
-          target. When no row is selected, or the row's target has no approved VF, any
-          existing clone is removed.
-        - Checkbox -> visibility only: the View-VF checkbox's checked state controls whether
-          the clone is shown; it does not create or destroy the clone.
-        """
-        if self._input_update_in_progress or self._running_wizard:
-            # The wizard manages its own clone lifecycle while it is open; stay out of its
-            # way. ``_input_update_in_progress`` guards against combo-box-change churn.
-            return
-
-        # Do not mutate the scene when TL is not the active page. Pre-Planning (and other
-        # pages) can trigger our ``onDataParameterNodeModified`` -> refresh -> row-selection
-        # cascade via the shared ``dataChanged`` signal; if we cloned / removed VF models
-        # from that path we'd both leave stale visible clones on the other page and stack
-        # up subject-hierarchy ``NodeAboutToBeRemoved`` warnings. (``self._entered`` is set
-        # by ``enter()``/``exit()``; ``self.parent.isEntered`` from vanilla Slicer does not
-        # exist on the plain QWidget parent used by the custom app.)
-        if not self._entered:
-            return
-
-        if self._applying_vf_display:
-            # Cloning / removing the VF model fires NodeAdded / NodeRemoved observers that
-            # loop back through ``updateInputOptions -> _refresh_localizations_table``. Break
-            # the loop -- the outer call is already establishing the correct state.
-            return
-
-        self._applying_vf_display = True
-        try:
-            current_data = self.algorithm_input_widget.get_current_data()
-            selected_transducer = current_data.get("Transducer")
-            if selected_transducer is None:
-                return
-
-            vf_node = self._approved_vf_node_for_selected_localization_row()
-            if vf_node is None:
-                # Nothing to preview; drop any lingering clone so it doesn't sit at a stale pose.
-                selected_transducer.remove_cloned_virtual_fit()
-                return
-
-            # ``set_cloned_virtual_fit_model`` is idempotent: it re-uses the existing clones when they
-            # already observe ``vf_node``, and otherwise removes-and-re-creates. That keeps this
-            # method safe to call on every row-selection change without churn.
-            selected_transducer.set_cloned_virtual_fit_model(vf_node)
-            selected_transducer.set_cloned_virtual_fit_visibility(
-                self.ui.viewVirtualFitCheckBox.isChecked()
-            )
-        finally:
-            self._applying_vf_display = False
-
     def checkCanDisplayVirtualFitResult(self):
         """Set enable state + tooltip on the View-VF checkbox based on the selected row.
 
         Does not touch the checkbox's ``checked`` state -- that is the user's visibility
         intent and must be preserved across row changes. Whether the clone is actually
-        displayed is decided in :meth:`_apply_virtual_fit_display`.
+        displayed is decided in :meth:`_apply_state_to_scene` from
+        ``state.vf_preview_transform_node_id`` + ``state.vf_preview_visible``.
         """
 
         # Prevents a recursive loop when NodeAdded/Removed (when cloning VF result)

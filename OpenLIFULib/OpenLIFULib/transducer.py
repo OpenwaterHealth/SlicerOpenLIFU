@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING, Callable, Any, List
+from typing import Optional, TYPE_CHECKING, Callable, Any
 import numpy as np
 from pathlib import Path
 import vtk
@@ -13,7 +13,6 @@ from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUTransducerWrapper
 from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
 from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix, transducer_transform_node_from_openlifu
 from OpenLIFULib.transducer_tracking_results import is_transducer_tracking_result_node
-from OpenLIFULib.util import get_cloned_node
 from OpenLIFULib.virtual_fit_results import is_virtual_fit_result_node
 
 if TYPE_CHECKING:
@@ -37,15 +36,15 @@ class SlicerOpenLIFUTransducer:
     transform_node : vtkMRMLTransformNode
     body_model_node : Optional[vtkMRMLModelNode] = None
     surface_model_node : Optional[vtkMRMLModelNode] = None
-    # Cloned copies of ``body_model_node`` and ``surface_model_node`` positioned at
-    # a virtual-fit transform, used to show a translucent "where would the
-    # transducer land" preview alongside the live transducer. When only one of
-    # body/surface is available on the transducer, only the corresponding clone
-    # is populated; when neither exists we clone ``model_node`` into the body
-    # slot. Manage as a pair via :meth:`set_cloned_virtual_fit_model`,
-    # :meth:`set_cloned_virtual_fit_visibility`, and :meth:`remove_cloned_virtual_fit`.
+    # Translucent "where would the transducer land" preview clone positioned at
+    # a virtual-fit transform. Its polydata is the union (via ``vtkAppendPolyData``)
+    # of ``body_model_node`` + ``surface_model_node`` (falling back to whichever
+    # is present, and finally to ``model_node``) so a single MRML node carries
+    # the whole visual signature -- no split fields for the parameterPack to
+    # drop-then-restore behind our back on scene events. Manage via
+    # :meth:`set_cloned_virtual_fit_model`, :meth:`set_cloned_virtual_fit_visibility`,
+    # :meth:`set_cloned_virtual_fit_view_node_ids`, :meth:`remove_cloned_virtual_fit`.
     cloned_virtual_fit_model: Optional[vtkMRMLModelNode] = None
-    cloned_virtual_fit_surface_model: Optional[vtkMRMLModelNode] = None
 
     @staticmethod
     def initialize_from_openlifu_transducer(
@@ -266,31 +265,17 @@ class SlicerOpenLIFUTransducer:
             self.surface_model_node.GetDisplayNode().SetVisibility(visibility)    
     
     def set_cloned_virtual_fit_model(self, virtual_fit_transform: vtkMRMLTransformNode):
+        """Create (or reuse) a translucent VF-preview clone at ``virtual_fit_transform``.
+
+        The clone is a single model node whose polydata unions body + surface via
+        ``vtkAppendPolyData`` (falling back to whichever mesh exists, and finally
+        to :attr:`model_node`). Storing one node keeps parameterPack persistence
+        trivially correct across scene / data events.
+
+        Idempotent: if the existing clone already observes ``virtual_fit_transform``
+        it is returned as-is; otherwise the old clone is removed and a fresh one
+        is built.
         """
-        Create clones of :attr:`body_model_node` AND :attr:`surface_model_node`
-        (each when present; falls back to :attr:`model_node` when neither exists)
-        and set their transform to follow ``virtual_fit_transform``. This gives
-        a secondary visualization of the transducer at the position defined by
-        the virtual fit result. Any previously cloned virtual-fit models are
-        removed before creating new ones.
-
-        Idempotent: if a body clone already exists and is observing
-        ``virtual_fit_transform``, the whole pair is left in place.
-
-        Args:
-            virtual_fit_transform: The transform node representing the virtual fit result.
-
-        Returns:
-            vtkMRMLModelNode: The body clone (or the sole clone when there is
-            no body/surface distinction). Callers that need both should read
-            :attr:`cloned_virtual_fit_model` and
-            :attr:`cloned_virtual_fit_surface_model`, or use
-            :meth:`set_cloned_virtual_fit_visibility` /
-            :meth:`set_cloned_virtual_fit_view_node_ids` to operate on both.
-        """
-
-        # If the body clone (the primary anchor) already observes this transform,
-        # leave the pair untouched.
         if (
             self.cloned_virtual_fit_model is not None
             and self.cloned_virtual_fit_model.GetTransformNodeID() == virtual_fit_transform.GetID()
@@ -298,60 +283,64 @@ class SlicerOpenLIFUTransducer:
             return self.cloned_virtual_fit_model
         self.remove_cloned_virtual_fit()
 
-        normalized_color = [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["virtual_fit_result"]] # Normalize color to 0-1 range
+        # Build the union polydata. Prefer body+surface; fall back to whichever
+        # is present; last resort is ``model_node``. We DEEP COPY the source
+        # polydata so the clone's polydata is independent of any later edits
+        # to the live meshes.
+        append = vtk.vtkAppendPolyData()
+        for source in (self.body_model_node, self.surface_model_node):
+            if source is not None and source.GetPolyData() is not None:
+                copy = vtk.vtkPolyData()
+                copy.DeepCopy(source.GetPolyData())
+                append.AddInputData(copy)
+        if append.GetNumberOfInputConnections(0) == 0:
+            # Neither body nor surface -- use ``model_node`` as a last resort.
+            src_polydata = self.model_node.GetPolyData()
+            if src_polydata is None:
+                return None
+            merged_polydata = vtk.vtkPolyData()
+            merged_polydata.DeepCopy(src_polydata)
+        else:
+            append.Update()
+            merged_polydata = append.GetOutput()
 
-        def _make_clone(source: vtkMRMLModelNode) -> vtkMRMLModelNode:
-            clone = get_cloned_node(source)
-            clone.SetAndObserveTransformNodeID(virtual_fit_transform.GetID())
-            clone.SetName(f"{source.GetName()}-{virtual_fit_transform.GetName()}")
-            clone.GetDisplayNode().SetColor(normalized_color)
-            clone.GetDisplayNode().SetVisibility(False)
-            clone.GetDisplayNode().SetOpacity(0.5)
-            return clone
+        clone = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        clone.SetName(f"{self.name}-VF-{virtual_fit_transform.GetName()}")
+        clone.SetAndObservePolyData(merged_polydata)
+        clone.CreateDefaultDisplayNodes()
+        clone.SetAndObserveTransformNodeID(virtual_fit_transform.GetID())
+        # Mark as a clone so ``onNodeAdded`` observers in pages skip the full
+        # combo-refresh cascade (see ``util.get_cloned_node`` for the shared
+        # convention).
+        clone.SetAttribute("cloned", "True")
+        normalized_color = [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["virtual_fit_result"]]
+        display_node = clone.GetDisplayNode()
+        display_node.SetColor(*normalized_color)
+        display_node.SetOpacity(0.5)
+        display_node.SetVisibility(False)
 
-        # Prefer body+surface; fall back to whichever exists; fall back to the
-        # merged ``model_node`` as a last resort.
-        body_source = self.body_model_node or (None if self.surface_model_node else self.model_node)
-        if body_source is not None:
-            self.cloned_virtual_fit_model = _make_clone(body_source)
-        if self.surface_model_node is not None:
-            self.cloned_virtual_fit_surface_model = _make_clone(self.surface_model_node)
-            # When there is no separate body, use the surface clone as the primary
-            # anchor so ``has_cloned_virtual_fit`` and the idempotency check above
-            # both agree with the visible state.
-            if self.cloned_virtual_fit_model is None:
-                self.cloned_virtual_fit_model = self.cloned_virtual_fit_surface_model
-                self.cloned_virtual_fit_surface_model = None
-
-        return self.cloned_virtual_fit_model
+        self.cloned_virtual_fit_model = clone
+        return clone
 
     def has_cloned_virtual_fit(self) -> bool:
-        """True when at least one virtual-fit clone (body or surface) exists."""
-        return (
-            self.cloned_virtual_fit_model is not None
-            or self.cloned_virtual_fit_surface_model is not None
-        )
-
-    def _cloned_virtual_fit_nodes(self) -> List[vtkMRMLModelNode]:
-        """Return the non-None VF clones (body first, then surface)."""
-        return [
-            node for node in (self.cloned_virtual_fit_model, self.cloned_virtual_fit_surface_model)
-            if node is not None
-        ]
+        """True when the virtual-fit preview clone exists."""
+        return self.cloned_virtual_fit_model is not None
 
     def set_cloned_virtual_fit_visibility(self, visibility: bool) -> None:
-        """Set display visibility on every virtual-fit clone (body + surface)."""
-        for clone in self._cloned_virtual_fit_nodes():
-            clone.GetDisplayNode().SetVisibility(visibility)
+        """Toggle the VF-preview clone's display visibility (no-op when absent)."""
+        if self.cloned_virtual_fit_model is None:
+            return
+        self.cloned_virtual_fit_model.SetDisplayVisibility(visibility)
 
     def set_cloned_virtual_fit_view_node_ids(self, view_node_ids) -> None:
-        """Set ``SetViewNodeIDs`` on every virtual-fit clone (body + surface)."""
-        for clone in self._cloned_virtual_fit_nodes():
-            clone.GetDisplayNode().SetViewNodeIDs(view_node_ids)
+        """Restrict the VF-preview clone to the given views (empty = all views)."""
+        if self.cloned_virtual_fit_model is None:
+            return
+        self.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(view_node_ids)
 
     def remove_cloned_virtual_fit(self) -> None:
-        """Remove every virtual-fit clone from the scene and clear both attrs."""
-        for clone in self._cloned_virtual_fit_nodes():
-            slicer.mrmlScene.RemoveNode(clone)
+        """Remove the VF-preview clone from the scene (no-op when absent)."""
+        if self.cloned_virtual_fit_model is None:
+            return
+        slicer.mrmlScene.RemoveNode(self.cloned_virtual_fit_model)
         self.cloned_virtual_fit_model = None
-        self.cloned_virtual_fit_surface_model = None
