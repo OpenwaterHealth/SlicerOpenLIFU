@@ -1082,7 +1082,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         self.ui.registrationSurfaceVisibilityCheckBox.stateChanged.connect(
             lambda state: self.wizard().transducer_surface.SetDisplayVisibility(state == qt.Qt.Checked))
         self.ui.viewVirtualFitCheckBox.stateChanged.connect(
-            lambda state: self.wizard().transducer.cloned_virtual_fit_model.SetDisplayVisibility(state == qt.Qt.Checked))
+            lambda state: self.wizard().transducer.set_cloned_virtual_fit_visibility(state == qt.Qt.Checked))
 
         self.runningRegistration = False 
         self.transducer_to_volume_transform_node: vtkMRMLTransformNode = None
@@ -1201,7 +1201,7 @@ class TransducerPhotoscanTrackingPage(qt.QWizardPage):
         if self.transducer_to_volume_transform_node:
             self.setupTransformNode()
 
-        if self.wizard().transducer.cloned_virtual_fit_model is None:
+        if not self.wizard().transducer.has_cloned_virtual_fit():
             self.ui.viewVirtualFitCheckBox.enabled = False
             self.ui.viewVirtualFitCheckBox.setToolTip("No virtual fit result available for the selected target.")
 
@@ -1620,9 +1620,7 @@ class TransducerTrackingWizard(qt.QWizard):
                 self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
             if self.transducer_body is not None:
                 self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
-            if self.transducer.cloned_virtual_fit_model is not None:
-                slicer.mrmlScene.RemoveNode(self.transducer.cloned_virtual_fit_model)
-                self.transducer.cloned_virtual_fit_model = None
+            self.transducer.remove_cloned_virtual_fit()
 
         # A swap implies the result key (photoscan + target) has changed; the pre-loaded
         # TT for the old key no longer applies.
@@ -1870,8 +1868,7 @@ class TransducerTrackingWizard(qt.QWizard):
         self.transducer_body.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
         self.transducer_body.GetDisplayNode().SetColor( [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]])
 
-        if self.transducer.cloned_virtual_fit_model:
-            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs([self.volume_view_node.GetID()])
+        self.transducer.set_cloned_virtual_fit_view_node_ids([self.volume_view_node.GetID()])
 
         self.photoscan.set_view_nodes(wizard_view_nodes)
         self.photoscan.model_node.GetDisplayNode().SetOpacity(1.0)
@@ -1888,8 +1885,7 @@ class TransducerTrackingWizard(qt.QWizard):
         # Restore previous view settings
         self.transducer_surface.GetDisplayNode().SetViewNodeIDs(self.current_transducer_surface_viewnodes)
         self.transducer_surface.GetDisplayNode().SetVisibility(self.current_transducer_surface_visibility) 
-        if self.transducer.cloned_virtual_fit_model:
-            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(())
+        self.transducer.set_cloned_virtual_fit_view_node_ids(())
     
         self.transducer_body.GetDisplayNode().SetViewNodeIDs(self.current_transducer_body_viewnodes)
         self.transducer_body.GetDisplayNode().SetVisibility(self.current_transducer_body_visibility) 
@@ -1905,8 +1901,7 @@ class TransducerTrackingWizard(qt.QWizard):
             skin_facial_landmarks_node.GetDisplayNode().SetVisibility(False)
             skin_facial_landmarks_node.GetDisplayNode().SetViewNodeIDs(())
 
-        if self.transducer.cloned_virtual_fit_model:
-            self.transducer.cloned_virtual_fit_model.GetDisplayNode().SetViewNodeIDs(()) 
+        self.transducer.set_cloned_virtual_fit_view_node_ids(())
 
 class PhotoscanRegistrationWizard(qt.QWizard):
     """Target-independent photoscan-to-volume registration wizard.
@@ -3497,10 +3492,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # more predictable than probing the various guard flags used by
         # ``_apply_virtual_fit_display`` to decide whether to run.
         if state.selected_localization_result_id is None:
-            clone = getattr(selected_transducer, "cloned_virtual_fit_model", None)
-            if clone is not None:
-                slicer.mrmlScene.RemoveNode(clone)
-                selected_transducer.cloned_virtual_fit_model = None
+            if selected_transducer.has_cloned_virtual_fit():
+                selected_transducer.remove_cloned_virtual_fit()
 
     def refresh_display(self) -> None:
         """Single-owner entry point for updating the TL page's visible state.
@@ -3716,11 +3709,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         except Exception:  # noqa: BLE001
             current_data = {}
         selected_transducer = current_data.get("Transducer") if current_data else None
-        if (
-            selected_transducer is not None
-            and getattr(selected_transducer, "cloned_virtual_fit_model", None) is not None
-        ):
-            selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(False)
+        if selected_transducer is not None and selected_transducer.has_cloned_virtual_fit():
+            selected_transducer.set_cloned_virtual_fit_visibility(False)
 
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
@@ -5559,16 +5549,14 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             vf_node = self._approved_vf_node_for_selected_localization_row()
             if vf_node is None:
                 # Nothing to preview; drop any lingering clone so it doesn't sit at a stale pose.
-                if selected_transducer.cloned_virtual_fit_model is not None:
-                    slicer.mrmlScene.RemoveNode(selected_transducer.cloned_virtual_fit_model)
-                    selected_transducer.cloned_virtual_fit_model = None
+                selected_transducer.remove_cloned_virtual_fit()
                 return
 
-            # ``set_cloned_virtual_fit_model`` is idempotent: it re-uses the existing clone when it
-            # already observes ``vf_node``, and otherwise removes-and-re-creates. That keeps this
+            # ``set_cloned_virtual_fit_model`` is idempotent: it re-uses the existing clones when they
+            # already observe ``vf_node``, and otherwise removes-and-re-creates. That keeps this
             # method safe to call on every row-selection change without churn.
             selected_transducer.set_cloned_virtual_fit_model(vf_node)
-            selected_transducer.cloned_virtual_fit_model.SetDisplayVisibility(
+            selected_transducer.set_cloned_virtual_fit_visibility(
                 self.ui.viewVirtualFitCheckBox.isChecked()
             )
         finally:
