@@ -3480,9 +3480,27 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         database); those mutations belong in the signal handler that ran
         before ``refresh_display``.
 
-        Phase A.1: no-op. Scene writes still live in the legacy update helpers
-        and ``_on_localization_row_selected`` / ``_apply_virtual_fit_display``.
+        Currently reconciles the VF-preview clone lifecycle when the state
+        says nothing should be shown (empty table or unselected row). The
+        clone-create/update path still lives in :meth:`_apply_virtual_fit_display`
+        because it also depends on the View-VF checkbox which is not yet in
+        state; folding that in is Phase A.5 (#602). This defensive teardown
+        catches the delete-last-row case where the row-selection handler's
+        trailing ``_apply_virtual_fit_display`` call was insufficient to
+        clear a stale clone left over from the previous row selection.
         """
+        selected_transducer = state.selected_transducer
+        if selected_transducer is None:
+            return
+        # Nothing selected in the localizations table -> no VF preview should
+        # be visible. Remove any lingering clone unconditionally: cheaper and
+        # more predictable than probing the various guard flags used by
+        # ``_apply_virtual_fit_display`` to decide whether to run.
+        if state.selected_localization_result_id is None:
+            clone = getattr(selected_transducer, "cloned_virtual_fit_model", None)
+            if clone is not None:
+                slicer.mrmlScene.RemoveNode(clone)
+                selected_transducer.cloned_virtual_fit_model = None
 
     def refresh_display(self) -> None:
         """Single-owner entry point for updating the TL page's visible state.
