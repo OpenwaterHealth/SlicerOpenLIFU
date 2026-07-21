@@ -3363,22 +3363,11 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
         No reads from session / scene / other widgets: everything comes from
         ``state``. Signals are blocked around ``setRowCount`` / ``setItem`` /
-        ``selectRow`` so Qt does not fire ``itemSelectionChanged``. We then
-        drive :meth:`_on_localization_row_selected` explicitly, but only when
-        we actually need scene mutation:
-
-        * ``state.num_localizations > 0``: fire always. Handles return-to-page
-          (``selectRow(N)`` where ``N`` is already current is a Qt no-op) and
-          delete-selected-then-fallback. The handler is idempotent when the
-          selection did not change.
-        * transitioned non-empty -> empty: fire so the empty branch hides the
-          transducer (issue #602 symptom "delete last row").
-        * stable-empty: do NOT fire. The handler's empty branch calls
-          ``set_visibility(False)`` which also hides ``body_model_node`` /
-          ``surface_model_node``, and the tracking wizard on
-          ``TransducerPhotoscanTrackingPage`` inherits the surface's
-          pre-wizard visibility -- an aggressive hide here would leave the
-          wizard showing only the body mesh.
+        ``selectRow`` so Qt does not fire ``itemSelectionChanged`` -- scene
+        mutation for the selected row (live-transducer pose + VF preview) is
+        owned by :meth:`_apply_state_to_scene`, which runs later in the same
+        ``refresh_display`` pass, so we do not need to drive the row handler
+        from here.
         """
         table = self.ui.localizationsTable
         not_approved_brush = qt.QBrush(qt.QColor("#FFE4B5"))
@@ -3462,25 +3451,48 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self.ui.localizationsCollapsible.collapsed = True
 
     def _apply_state_to_scene(self, state: _TLPageState) -> None:
-        """Own the VF-preview clone lifecycle for the selected row.
+        """Reconcile the MRML scene against ``state``.
 
-        The live-transducer pose (i.e. snapping the transducer's transform to
-        a specific TT result) still lives in :meth:`_on_localization_row_selected`
-        because the wizard flow relies on the surface-visibility inheritance
-        established at row-select time; folding that in here would require
-        also plumbing wizard state into ``_apply_*`` and is out of scope for
-        the state-machine sweep in issue #602.
+        Owns two things for the TL page:
 
-        Single owner of the VF-clone lifecycle: create/update when
-        ``state.vf_preview_transform_node_id`` is set, remove otherwise. This
-        replaced the old ``_apply_virtual_fit_display`` + re-entrancy-guard
-        pattern -- because the create/update path is now driven purely by
-        state rather than by an ad-hoc signal cascade, the guards are
-        unnecessary.
+        * **Live-transducer pose + visibility** — snap the transducer's
+          transform to the selected TT row's pose (and show it), or hide it
+          when no row is selected. Deletes / row-selection changes flow
+          through here rather than through the row-selection signal handler.
+        * **VF-preview clone lifecycle** — create / update when
+          ``state.vf_preview_transform_node_id`` is set, remove otherwise.
+          This replaced the old ``_apply_virtual_fit_display`` +
+          re-entrancy-guard pattern: because the create/update path is now
+          driven purely by state, the guard existed only to break loops that
+          the state-driven flow does not create.
+
+        Skipped entirely while the tracking wizard is running: the wizard
+        owns both the transducer transform and the model visibilities on
+        its pages and asserts them explicitly on page-changed (see
+        ``TransducerPhotoscanTrackingPage`` initialization), so any
+        reconciliation from here would fight the wizard.
         """
+        if state.running_wizard:
+            return
         selected_transducer = state.selected_transducer
         if selected_transducer is None:
             return
+
+        # ---- Live-transducer pose + visibility for the selected TT row.
+        if state.selected_localization_result_id is not None:
+            tv_node = get_transducer_tracking_result_by_id(
+                state.selected_localization_result_id, state.session_id,
+            )
+            if tv_node is not None:
+                selected_transducer.set_current_transform_to_match_transform_node(tv_node)
+                selected_transducer.set_visibility(True)
+        else:
+            # No row selected -> no meaningful pose to render on this page.
+            # (Wizard hides body+surface / re-asserts them on entry, so this
+            # no longer leaks into the wizard's initial visibility state.)
+            selected_transducer.set_visibility(False)
+
+        # ---- VF-preview clone: create / update or tear down, driven by state.
         if state.vf_preview_transform_node_id is None:
             selected_transducer.remove_cloned_virtual_fit()
             return
@@ -4180,40 +4192,13 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         self.checkCanDisplayVirtualFitResult()
 
     def _on_localization_row_selected(self):
-        """Snap the live transducer to the selected row's TT pose, then refresh.
+        """Row-selection handler: nothing to mutate; let the state pipeline apply.
 
-        Live-transducer pose lives here (not in :meth:`_apply_state_to_scene`)
-        because ``TransducerPhotoscanTrackingPage`` in the wizard inherits the
-        pre-wizard surface visibility, and hiding it aggressively on
-        stable-empty applies leaves the wizard rendering only the body mesh
-        (see #602 history). We therefore only touch visibility on real user
-        row-selection changes rather than on every ``refresh_display``.
-
-        The VF-preview clone lifecycle is owned entirely by
-        :meth:`_apply_state_to_scene` and is applied via the trailing
-        ``refresh_display`` call.
+        Scene mutation for the selected row (live-transducer pose+visibility
+        and VF-preview clone lifecycle) lives entirely in
+        :meth:`_apply_state_to_scene`. This handler just triggers a state
+        recompute+apply so the newly-selected row's target is picked up.
         """
-        # Only mutate the scene when TL is the active page. Cross-page
-        # ``dataChanged`` fan-out can invoke selection-driven code paths while
-        # the user sits on Pre-Planning etc., and re-snapping the transducer
-        # from that path would steal its pose from the page the user is on.
-        if self._entered:
-            info = self._get_selected_localization_row_info()
-            current_data = self.algorithm_input_widget.get_current_data()
-            selected_transducer = current_data.get("Transducer")
-            if info is not None:
-                result_id, _, _, _ = info
-                session = get_app_state().loaded_session
-                session_id = None if session is None else session.get_session_id()
-                tv_node = get_transducer_tracking_result_by_id(result_id, session_id) if result_id else None
-                if selected_transducer is not None and tv_node is not None:
-                    selected_transducer.set_current_transform_to_match_transform_node(tv_node)
-                    selected_transducer.set_visibility(True)
-            else:
-                # Explicit clear-selection -> no meaningful pose; hide.
-                if selected_transducer is not None:
-                    selected_transducer.set_visibility(False)
-        # Reconcile VF-preview clone + checkbox enable state via the state pipeline.
         self.refresh_display()
 
     @display_errors
