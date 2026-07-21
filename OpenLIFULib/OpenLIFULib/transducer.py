@@ -101,6 +101,7 @@ class SlicerOpenLIFUTransducer:
             model_node.SetAndObserveTransformNodeID(transform_node.GetID())
             shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
             model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+            model_node.GetDisplayNode().SetVisibility2D(True)
 
             if transducer_abspaths_info['transducer_body_abspath'] is not None:
                 if transducer.transducer_body_filename != Path(transducer_abspaths_info['transducer_body_abspath']).name:
@@ -108,6 +109,7 @@ class SlicerOpenLIFUTransducer:
                 body_model_node = slicer.util.loadModel(transducer_abspaths_info['transducer_body_abspath'])
                 body_model_node.SetName(f"{slicer_transducer_name}-body")
                 body_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
+                body_model_node.GetDisplayNode().SetVisibility2D(True)
                 shNode.SetItemParent(shNode.GetItemByDataNode(body_model_node), parentFolderItem)
             else:
                 body_model_node = None
@@ -119,6 +121,7 @@ class SlicerOpenLIFUTransducer:
                 shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
                 surface_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
                 surface_model_node.SetName(f"{slicer_transducer_name}-surface")
+                surface_model_node.GetDisplayNode().SetVisibility2D(True)
             else:
                 surface_model_node = None
         finally:
@@ -318,6 +321,7 @@ class SlicerOpenLIFUTransducer:
         display_node.SetColor(*normalized_color)
         display_node.SetOpacity(0.5)
         display_node.SetVisibility(False)
+        display_node.SetVisibility2D(True)
 
         self.cloned_virtual_fit_model = clone
         return clone
