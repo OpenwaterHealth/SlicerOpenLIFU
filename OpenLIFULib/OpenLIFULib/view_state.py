@@ -108,12 +108,25 @@ def apply_module_view_state(module_key: str) -> None:
             _set_photoscan_registered_visible_for_tt(None, False)
 
     elif module_key in (SONICATION_PLANNER, SONICATION_CONTROL):
-        pose_node = approved_tt_node or approved_vf_node
+        # If the currently loaded solution is a pre-solution (i.e. computed
+        # against a virtual-fit pose rather than a tracked pose; see #609),
+        # prefer the approved VF pose so the transducer visualization matches
+        # the pose that was actually simulated. Otherwise, prefer the tracked
+        # (TT) pose as usual.
+        loaded_solution = get_app_state().loaded_solution
+        is_pre_solution = (
+            loaded_solution is not None
+            and loaded_solution.solution.solution.id.startswith("presolution_")
+        )
+        if is_pre_solution:
+            pose_node = approved_vf_node or approved_tt_node
+        else:
+            pose_node = approved_tt_node or approved_vf_node
         if pose_node is not None:
             _apply_transducer_pose(transducer, pose_node)
         _set_skin_visible(volume_node, False)
         _set_photoscan_registered_visible_for_tt(
-            approved_tt_node, approved_tt_node is not None, opacity=0.25,
+            approved_tt_node, approved_tt_node is not None and not is_pre_solution, opacity=0.25,
         )
 
 

@@ -614,6 +614,29 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
         logging.debug("onSendSonicationSolutionToDevicePushButtonClicked() called")
 
+        # Pre-solution gate: solutions whose id starts with "presolution_" were computed
+        # against a virtual-fit-derived transducer transform rather than an approved
+        # transducer-tracking result (see #609). Require explicit user confirmation
+        # before sending one to the device.
+        loaded_solution = get_app_state().loaded_solution
+        if (
+            loaded_solution is not None
+            and loaded_solution.solution.solution.id.startswith("presolution_")
+        ):
+            reply = qt.QMessageBox.warning(
+                slicer.util.mainWindow(),
+                "Pre-Solution",
+                (
+                    "This is a Pre-Solution computed from a virtual-fit transform, not an "
+                    "approved transducer-tracking result. Are you sure you want to send it "
+                    "to the device?"
+                ),
+                qt.QMessageBox.Yes | qt.QMessageBox.No,
+                qt.QMessageBox.No,
+            )
+            if reply != qt.QMessageBox.Yes:
+                return
+
         # Compatibility gate: defense in depth. The button-enable logic
         # already disables on ERROR, but re-check here to defend against
         # programmatic / keyboard activations.

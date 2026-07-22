@@ -31,7 +31,7 @@ from OpenLIFULib.targets import (
     label_for_target_id,
     openlifu_point_to_fiducial,
 )
-from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget
+from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget, TargetSelection
 from OpenLIFULib.session import SlicerOpenLIFUSession, assign_openlifu_metadata_to_volume_node
 from OpenLIFULib.simulation import (
     make_volume_from_xarray_in_transducer_coords,
@@ -54,6 +54,7 @@ __all__ = [
     "BusyCursor",
     "get_target_candidates",
     "OpenLIFUAlgorithmInputWidget",
+    "TargetSelection",
     "SlicerOpenLIFUSession",
     "make_volume_from_xarray_in_transducer_coords",
     "make_xarray_in_transducer_coords_from_volume",
