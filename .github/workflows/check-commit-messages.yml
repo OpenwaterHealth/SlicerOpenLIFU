@@ -2,6 +2,10 @@ name: Check commit messages
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
+      - "release/**"
 
 jobs:
   check-commit-messages:
@@ -11,12 +15,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check all PR commits reference a GitHub issue
+      - name: Check all new commits reference a GitHub issue
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          pattern='(#[0-9]+|github\.com/[^/]+/[^/]+/issues/[0-9]+|^Bump |^Merge |^Revert |^fixup! |^squash! |^amend! )'
+          pattern='(#[0-9]+|github\.com/[^/]+/[^/]+/issues/[0-9]+|^Bump |^Merge |^Release |^Revert |^fixup! |^squash! |^amend! )'
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA=$(git rev-parse "$HEAD_SHA^" 2>/dev/null || printf '%s' "$HEAD_SHA")
+          fi
           failed=0
           for sha in $(git log --format="%H" "$BASE_SHA".."$HEAD_SHA"); do
             msg=$(git log -1 --format="%B" "$sha")
@@ -30,6 +37,6 @@ jobs:
           if [ "$failed" -eq 1 ]; then
             echo ""
             echo "Every commit must reference a GitHub issue (e.g., #123 or full issue URL)."
-            echo "Exceptions: Bump, Merge, Revert, fixup!, squash!, amend! commits."
+            echo "Exceptions: Bump, Merge, Release, Revert, fixup!, squash!, amend! commits."
             exit 1
           fi
