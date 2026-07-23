@@ -7585,7 +7585,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             return
         solution_id = solution.solution.solution.id
         loaded_solutions = state.loaded_solutions
-        loaded_solutions.pop(solution_id, None)
+        # ``state.loaded_solutions`` is a Slicer ``ObservedDict``, whose ``pop`` only accepts a
+        # single argument (no default). Guard the membership check ourselves.
+        if solution_id in loaded_solutions:
+            loaded_solutions.pop(solution_id)
         state.loaded_solutions = loaded_solutions
         set_active_solution("")
         if update_session_link:
