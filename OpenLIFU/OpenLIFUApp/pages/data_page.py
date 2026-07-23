@@ -6588,6 +6588,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             session_openlifu.photocollections,
         )
 
+        # Purge on-disk solutions no longer tracked by ``session_openlifu.solutions``
+        # (SlicerOpenLIFU#611). ``update_underlying_openlifu_session`` already pruned
+        # SolutionInfo entries whose target was deleted; this call removes the corresponding
+        # ``{session_dir}/solutions/{sid}/`` directories and trims ``solutions.json``.
+        # For legacy sessions (empty ``solutions`` list) this deletes every on-disk solution.
+        purged = get_cur_db().purge_orphaned_solutions(session_openlifu)
+        if purged:
+            logging.info(
+                "Purged %d orphaned solution(s) from session %s: %s",
+                len(purged), session_openlifu.id, purged,
+            )
+
     def _cleanup_orphaned_photoscans_and_photocollections_in_db(
         self,
         subject_id: str,

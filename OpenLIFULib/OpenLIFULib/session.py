@@ -310,6 +310,17 @@ class SlicerOpenLIFUSession:
             transducer_units = transducer_openlifu.units,
         )
 
+        # Cascade-prune SolutionInfo entries whose referenced target no longer exists
+        # (SlicerOpenLIFU#611). Target deletion is the primary cascade trigger; a solution
+        # that targets a point that is no longer in the session has no meaning. The on-disk
+        # purge of the corresponding solution directory happens in
+        # ``OpenLIFUDataLogic.save_session`` via ``db.purge_orphaned_solutions``.
+        current_target_ids = {p.id for p in self.session.session.targets}
+        self.session.session.solutions = [
+            si for si in self.session.session.solutions
+            if si.target_id in current_target_ids
+        ]
+
         return self.session.session
 
     def get_transducer_tracking_approvals(self) -> List[str]:
