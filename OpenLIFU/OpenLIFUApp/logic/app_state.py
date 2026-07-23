@@ -30,7 +30,13 @@ class OpenLIFUAppState:
     """
     loaded_protocols : "Dict[str,SlicerOpenLIFUProtocol]"
     loaded_transducers : "Dict[str,SlicerOpenLIFUTransducer]"
-    loaded_solution : "Optional[SlicerOpenLIFUSolution]"
+    # Multi-solution support (SlicerOpenLIFU#611): the app can hold any number of loaded solutions,
+    # keyed by their openlifu ``Solution.id``. ``active_solution_id`` names the one that is currently
+    # ``get_active_solution()``’s target (analysis panel, PNP MIP, transducer-pose selection, etc.).
+    # An empty ``active_solution_id`` (the default) means “no active solution” and is treated by
+    # ``get_active_solution()`` as ``None``.
+    loaded_solutions : "Dict[str,SlicerOpenLIFUSolution]"
+    active_solution_id : str
     loaded_session : "Optional[SlicerOpenLIFUSession]"
     loaded_run: "Optional[SlicerOpenLIFURun]"
     loaded_photoscans: "Dict[str,SlicerOpenLIFUPhotoscan]"

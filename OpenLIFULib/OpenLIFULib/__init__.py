@@ -22,6 +22,8 @@ from OpenLIFULib.util import (
         get_openlifu_database_parameter_node,
         get_cur_db,
         get_app_state,
+        get_active_solution,
+        set_active_solution,
         BusyCursor,
 )
 from OpenLIFULib.targets import (
@@ -51,6 +53,8 @@ __all__ = [
     "get_cur_db",
     "get_openlifu_database_parameter_node",
     "get_app_state",
+    "get_active_solution",
+    "set_active_solution",
     "BusyCursor",
     "get_target_candidates",
     "OpenLIFUAlgorithmInputWidget",

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from OpenLIFUApp.logic.app_state import OpenLIFUAppState
     from OpenLIFUApp.pages.login_page import OpenLIFULoginParameterNode
     from OpenLIFUApp.pages.login_page import OpenLIFULoginLogic
+    from OpenLIFULib.solution import SlicerOpenLIFUSolution
 
 # Use this to ensure compatibility in Python 3.9
 get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext
@@ -37,6 +38,33 @@ def get_cur_db() -> "Optional[Database]":
 def get_app_state() -> "OpenLIFUAppState":
     """Get the OpenLIFU app-state parameter node (owned by the host module)."""
     return slicer.util.getModuleLogic('OpenLIFU').getParameterNode()
+
+def get_active_solution() -> "Optional[SlicerOpenLIFUSolution]":
+    """Return the currently active :class:`SlicerOpenLIFUSolution`, or ``None``.
+
+    The app can hold any number of solutions in :attr:`OpenLIFUAppState.loaded_solutions`
+    at once (SlicerOpenLIFU#611). :attr:`OpenLIFUAppState.active_solution_id` names the
+    one that page-level UI (analysis panel, PNP MIP, transducer-pose selection, sonication
+    control) should treat as *the* current solution. An empty ``active_solution_id`` --
+    the default -- means there is no active solution and this returns ``None``. It is
+    also safe (and returns ``None``) if the id points at something that is not in the
+    dict, which can happen briefly during load/unload transitions.
+    """
+    state = get_app_state()
+    sid = state.active_solution_id
+    if not sid:
+        return None
+    return state.loaded_solutions.get(sid)
+
+def set_active_solution(solution_id: str) -> None:
+    """Set the active solution by id.
+
+    Pass an empty string to indicate \u201cno active solution\u201d. Callers are responsible for
+    ensuring the id already exists in :attr:`OpenLIFUAppState.loaded_solutions` (or is
+    ``""``); this helper does not validate, so that transient states during a coordinated
+    dict + id update do not need to be linearized.
+    """
+    get_app_state().active_solution_id = solution_id
 
 def get_openlifu_login_parameter_node() -> "OpenLIFULoginParameterNode":
     """Get the parameter node of the OpenLIFU Login module"""

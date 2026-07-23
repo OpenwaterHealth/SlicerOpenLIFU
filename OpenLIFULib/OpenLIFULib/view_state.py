@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from OpenLIFULib.util import get_app_state
+from OpenLIFULib.util import get_active_solution, get_app_state
 
 if TYPE_CHECKING:
     from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
@@ -108,15 +108,14 @@ def apply_module_view_state(module_key: str) -> None:
             _set_photoscan_registered_visible_for_tt(None, False)
 
     elif module_key in (SONICATION_PLANNER, SONICATION_CONTROL):
-        # If the currently loaded solution is a pre-solution (i.e. computed
-        # against a virtual-fit pose rather than a tracked pose; see #609),
-        # prefer the approved VF pose so the transducer visualization matches
-        # the pose that was actually simulated. Otherwise, prefer the tracked
-        # (TT) pose as usual.
-        loaded_solution = get_app_state().loaded_solution
+        # If the active solution is a pre-solution (i.e. computed against a virtual-fit pose
+        # rather than a tracked pose; see #609), prefer the approved VF pose so the transducer
+        # visualization matches the pose that was actually simulated. Otherwise, prefer the
+        # tracked (TT) pose as usual.
+        active_solution = get_active_solution()
         is_pre_solution = (
-            loaded_solution is not None
-            and loaded_solution.solution.solution.id.startswith("presolution_")
+            active_solution is not None
+            and active_solution.solution.solution.id.startswith("presolution_")
         )
         if is_pre_solution:
             pose_node = approved_vf_node or approved_tt_node

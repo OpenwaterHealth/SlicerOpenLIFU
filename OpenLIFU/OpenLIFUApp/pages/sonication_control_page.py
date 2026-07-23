@@ -39,6 +39,7 @@ from slicer.util import VTKObservationMixin
 from OpenLIFULib import (
     SlicerOpenLIFURun,
     ensure_python_requirements_for_module_enter,
+    get_active_solution,
     get_app_state,
 )
 from OpenLIFUApp.logic.app_state import get_app_state_signals
@@ -471,7 +472,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         logging.debug("onDataParameterNodeModified() called")
         self.updateAllButtonsEnabled()
-        if (solution_parameter_pack := get_app_state().loaded_solution) is None:
+        if (solution_parameter_pack := get_active_solution()) is None:
             self._cur_solution_id = None
             self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
         elif solution_parameter_pack.solution.solution.id != self._cur_solution_id:
@@ -508,7 +509,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             return False
 
     def updateSendSonicationSolutionToDevicePushButtonEnabled(self):
-        solution = get_app_state().loaded_solution
+        solution = get_active_solution()
 
         if solution is None:
             enabled = False
@@ -535,7 +536,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.sendSonicationSolutionToDevicePushButton.setToolTip(tooltip)
 
     def updateRunEnabled(self):
-        solution = get_app_state().loaded_solution
+        solution = get_active_solution()
         if solution is None:
             self.ui.runPushButton.enabled = False
             self.ui.runPushButton.setToolTip("To run a sonication, first generate and approve a solution in the sonication planning module.")
@@ -618,7 +619,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # against a virtual-fit-derived transducer transform rather than an approved
         # transducer-tracking result (see #609). Require explicit user confirmation
         # before sending one to the device.
-        loaded_solution = get_app_state().loaded_solution
+        loaded_solution = get_active_solution()
         if (
             loaded_solution is not None
             and loaded_solution.solution.solution.id.startswith("presolution_")
@@ -666,10 +667,10 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         try:
             import openlifu_sdk
 
-            self.logic.cur_lifu_interface.set_solution(get_app_state().loaded_solution.solution.solution.to_dict())
+            self.logic.cur_lifu_interface.set_solution(get_active_solution().solution.solution.to_dict())
             if self.logic.cur_lifu_interface.get_status() != openlifu_sdk.LIFUInterfaceStatus.STATUS_READY:
                 raise RuntimeError("Interface not ready")
-            self.logic.cur_solution_on_hardware = get_app_state().loaded_solution.solution.solution
+            self.logic.cur_solution_on_hardware = get_active_solution().solution.solution
             logging.debug("Solution successfully sent to device")
             success = True
         except LIFUCommunicationError as e:
@@ -1631,7 +1632,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         if self.cur_lifu_interface is None:
             raise RuntimeError("LIFUInterface has not been initialized. Enter the module before running sonication.")
 
-        if get_app_state().loaded_solution is None:
+        if get_active_solution() is None:
             raise RuntimeError("No solution loaded; cannot run sonication.")
 
         self.run_progress = 0
@@ -1688,7 +1689,7 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         logging.debug(f" create_openlifu_run() called with success_flag={run_parameters.get('success_flag')}")
 
         loaded_session = get_app_state().loaded_session
-        loaded_solution = get_app_state().loaded_solution
+        loaded_solution = get_active_solution()
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         run_id = timestamp
@@ -1772,12 +1773,12 @@ class OpenLIFUSonicationControlTest(ScriptedLoadableModuleTest):
         sc_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationControl")
         sc_logic = sc_widget.logic 
 
-        loaded_solution = get_app_state().loaded_solution
+        loaded_solution = get_active_solution()
         assert loaded_solution is not None
         if not loaded_solution.is_approved():
             slicer.util.getModuleLogic("OpenLIFU").data_logic.toggle_solution_approval()
             slicer.app.processEvents()
-            loaded_solution = get_app_state().loaded_solution
+            loaded_solution = get_active_solution()
         assert loaded_solution.is_approved()
         solution_id = loaded_solution.solution.solution.id
 

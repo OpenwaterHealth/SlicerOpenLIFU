@@ -110,9 +110,11 @@ from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
     display_errors,
     ensure_list,
+    get_active_solution,
     get_app_state,
     register_module_callback,
     replace_widget,
+    set_active_solution,
 )
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
 from OpenLIFULib.virtual_fit_results import (
@@ -4023,7 +4025,7 @@ class SolutionManagerDialog(qt.QDialog):
 
     def _loaded_solution_id(self) -> Optional[str]:
         try:
-            sol = get_app_state().loaded_solution
+            sol = get_active_solution()
             if sol is None:
                 return None
             return sol.solution.solution.id
@@ -5462,8 +5464,8 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
                 [fiducial_node.GetName(), points_type, fiducial_node.GetID()]
             ))
             self.loadedObjectsItemModel.appendRow(row)
-        if parameter_node.loaded_solution is not None:
-            solution_openlifu = parameter_node.loaded_solution.solution.solution
+        for solution_slicer in parameter_node.loaded_solutions.values():
+            solution_openlifu = solution_slicer.solution.solution
             row = list(map(
                 create_noneditable_QStandardItem,
                 [solution_openlifu.name, "Solution", solution_openlifu.id]
@@ -6521,13 +6523,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     self.remove_transducer(loaded_session.get_transducer_id())
                 if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
                     self.remove_protocol(loaded_session.get_protocol_id())
-                if (
-                    self.getParameterNode().loaded_solution is not None
-                    and loaded_session.session.session.solution_id == self.getParameterNode().loaded_solution.solution.solution.id
-                ):
-                    # Don't clear the persisted session.solution_id link: we want to be able to reload
-                    # this session later and restore its Solution.
-                    self.clear_solution(clean_up_scene=True, update_session_link=False)
+                # All loaded solutions belong to this session; unload them all. We intentionally do NOT
+                # touch the persisted ``session.solution_id`` on disk here -- we want to be able to
+                # reload this session later and restore whichever solution it was linked to.
+                self.clear_solutions(clean_up_scene=True)
                 clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
 
                 # Note: we intentionally do NOT call ``remove_photocollection`` here.
@@ -6713,25 +6712,51 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         return True
 
     def validate_solution(self) -> bool:
-        """Check to ensure that the currently active solution is in a valid state, clearing out the solution
-        if it is not and returning whether there is an active valid solution."""
+        """Check every loaded solution and unload any whose scene nodes have gone missing.
 
-        solution = self.getParameterNode().loaded_solution
+        Returns whether there is still a valid *active* solution after validation. A ``False`` result
+        can mean either that there was no active solution to begin with or that the active one was
+        invalidated and cleared. Non-active loaded solutions that are invalidated are silently dropped
+        from :attr:`OpenLIFUAppState.loaded_solutions` (they are not the user's current focus, so we
+        do not surface a dialog for each one).
+        """
+        state = self.getParameterNode()
+        loaded_solutions = state.loaded_solutions
+        if not loaded_solutions:
+            return False
+        active_id = state.active_solution_id
+        invalidated_ids: List[str] = []
+        for sid, sol in list(loaded_solutions.items()):
+            missing = any(
+                vn is None or slicer.mrmlScene.GetNodeByID(vn.GetID()) is None
+                for vn in [sol.intensity, sol.pnp]
+            )
+            if missing:
+                invalidated_ids.append(sid)
+        if not invalidated_ids:
+            return active_id != ""
 
-        if solution is None:
-            return False # There is no active solution, no problem
+        # Prompt only about the active solution -- background solutions are silently dropped.
+        active_invalidated = active_id in invalidated_ids
+        clean_up_scene = True
+        if active_invalidated:
+            clean_up_scene = ObjectBeingUnloadedMessageBox(
+                message="A volume that was in use by the active solution is now missing. The solution will be unloaded.",
+                title="Solution invalidated",
+            ).customexec_()
 
-        # Check volumes are present
-        for volume_node in [solution.intensity, solution.pnp]:
-            if volume_node is None or slicer.mrmlScene.GetNodeByID(volume_node.GetID()) is None:
-                clean_up_scene = ObjectBeingUnloadedMessageBox(
-                    message="A volume that was in use by the active solution is now missing. The solution will be unloaded.",
-                    title="Solution invalidated",
-                ).customexec_()
-                self.clear_solution(clean_up_scene=clean_up_scene)
-                return False
+        # Drop invalidated non-active solutions directly from the dict without touching session links.
+        new_dict = {sid: sol for sid, sol in loaded_solutions.items() if sid not in invalidated_ids}
+        state.loaded_solutions = new_dict
 
-        return True
+        if active_invalidated:
+            # Active is already removed from ``new_dict``; go through clear_solution to preserve the
+            # existing session-link cleanup and scene teardown semantics (it re-checks get_active_solution
+            # against the new dict).
+            self.clear_solution(clean_up_scene=clean_up_scene)
+            return False
+
+        return active_id != ""
 
     def get_subject(self, subject_id:str) -> "openlifu.db.subject.Subject":
         """Get the Subject with a given ID"""
@@ -7099,65 +7124,109 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # "matching" TT on session load. The Localizations table lets the user pick which TT to
         # snap the transducer to.
 
-        # === Restore previously computed Solution + analysis (if any) ===
+        # === Restore previously computed Solutions + analysis for the active one (if any) ===
+        # Multi-solution (SlicerOpenLIFU#611): load every solution stored under this session into
+        # ``loaded_solutions``; the one named by ``session.solution_id`` (if any) becomes active.
         # A persisted ``session.solution_id`` is trusted as still consistent with its approved
         # VF / TT context: solution invalidation is driven by VF / TT approval changes
         # (see ``_on_transducer_transform_modified`` and the approval-revoke cascades in
         # PrePlanning / TransducerLocalization), not by a single-transducer-pose comparison.
-        if session_openlifu.solution_id:
-            self._restore_solution_for_loaded_session(
-                session_openlifu = session_openlifu,
-                transducer = newly_loaded_transducer,
-            )
+        self._restore_solutions_for_loaded_session(
+            session_openlifu = session_openlifu,
+            transducer = newly_loaded_transducer,
+        )
 
         self.session_loading_unloading_in_progress = False  
 
-    def _restore_solution_for_loaded_session(
+    def _restore_solutions_for_loaded_session(
         self,
         session_openlifu: "openlifu.db.Session",
         transducer: SlicerOpenLIFUTransducer,
     ) -> None:
-        """Load the Solution (and analysis) linked to a freshly-loaded session into the scene.
+        """Load every persisted Solution for a freshly-loaded session into ``loaded_solutions``.
 
-        On any failure (missing files, etc.) we warn but otherwise let session loading proceed; the
-        ``session.solution_id`` is left alone so the user can investigate.
+        Multi-solution (SlicerOpenLIFU#611): every solution the database has for this session is
+        loaded into the scene / into :attr:`OpenLIFUAppState.loaded_solutions`. The one named by
+        ``session.solution_id`` (if any and if it loaded successfully) is made active and its
+        analysis is fetched for the planner panel. Other loaded solutions sit dormant until the
+        user selects them via the Solutions Table.
+
+        On any failure (missing files, etc.) for a specific solution we warn but otherwise let
+        session loading proceed; the ``session.solution_id`` is left alone so the user can
+        investigate.
         """
         db = get_cur_db()
         if db is None:
             return
-        solution_id = session_openlifu.solution_id
+        subject_id = session_openlifu.subject_id
+        session_id = session_openlifu.id
         try:
-            solution_openlifu = db.load_solution(session_openlifu, solution_id)
-        except FileNotFoundError:
-            slicer.util.warningDisplay(
-                f"Session is linked to solution '{solution_id}' but the solution files were not found"
-                " in the database. The session will be loaded without restoring the solution.",
-                "Solution not found",
+            solution_ids = list(db.get_solution_ids(subject_id, session_id) or [])
+        except Exception as e:  # noqa: BLE001
+            logging.warning("Could not enumerate solutions for session '%s': %s", session_id, e)
+            solution_ids = []
+
+        linked_id = session_openlifu.solution_id or ""
+        # Ensure the linked id (if any) is in the list even if the index file is out of sync.
+        if linked_id and linked_id not in solution_ids:
+            solution_ids.append(linked_id)
+
+        transducer_transform_id = transducer.transform_node.GetID()
+        loaded_wrappers: Dict[str, SlicerOpenLIFUSolution] = {}
+        for sid in solution_ids:
+            try:
+                solution_openlifu = db.load_solution(session_openlifu, sid)
+            except FileNotFoundError:
+                if sid == linked_id:
+                    slicer.util.warningDisplay(
+                        f"Session is linked to solution '{sid}' but the solution files were not found"
+                        " in the database. The session will be loaded without restoring that solution.",
+                        "Solution not found",
+                    )
+                else:
+                    logging.warning(
+                        "Solution '%s' listed for session '%s' but files not found; skipping.",
+                        sid, session_id,
+                    )
+                continue
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not load solution '%s' for session '%s': %s", sid, session_id, e)
+                continue
+
+            slicer_solution = SlicerOpenLIFUSolution.initialize_from_loaded_openlifu_solution(
+                solution=solution_openlifu,
+                transducer=transducer,
             )
+            # Make sure the restored pnp/intensity volumes follow the transducer's transform so they render
+            # in the correct pose (otherwise they sit at the world origin).
+            slicer_solution.pnp.SetAndObserveTransformNodeID(transducer_transform_id)
+            slicer_solution.intensity.SetAndObserveTransformNodeID(transducer_transform_id)
+            loaded_wrappers[sid] = slicer_solution
+
+        if not loaded_wrappers:
             return
 
-        slicer_solution = SlicerOpenLIFUSolution.initialize_from_loaded_openlifu_solution(
-            solution=solution_openlifu,
-            transducer=transducer,
-        )
-        # Make sure the restored pnp/intensity volumes follow the transducer's transform so they render
-        # in the correct pose (otherwise they sit at the world origin).
-        transducer_transform_id = transducer.transform_node.GetID()
-        slicer_solution.pnp.SetAndObserveTransformNodeID(transducer_transform_id)
-        slicer_solution.intensity.SetAndObserveTransformNodeID(transducer_transform_id)
-        # write_to_db=False: we just loaded the solution from disk, nothing new to write.
-        self.set_solution(slicer_solution, write_to_db=False)
+        # Insert all loaded solutions into the app state in one write.
+        state = self.getParameterNode()
+        state.loaded_solutions = loaded_wrappers
 
+        # Pick the active one: prefer ``session.solution_id`` if it loaded, else fall back to any
+        # one that did (deterministic pick: first in load order).
+        active_id = linked_id if linked_id in loaded_wrappers else next(iter(loaded_wrappers))
+        set_active_solution(active_id)
+
+        # Load the analysis for the active solution only (planner panel is per-active-solution).
         planner_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_planner_logic
+        active_slicer_solution = loaded_wrappers[active_id]
         analysis_openlifu = None
         try:
-            analysis_openlifu = db.load_solution_analysis(session_openlifu, solution_id)
+            analysis_openlifu = db.load_solution_analysis(session_openlifu, active_id)
         except FileNotFoundError:
             pass  # Older databases may not have the analysis persisted; recompute below.
         if analysis_openlifu is not None:
             slicer_analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
         else:
-            slicer_analysis = planner_logic.compute_analysis_from_solution(slicer_solution)
+            slicer_analysis = planner_logic.compute_analysis_from_solution(active_slicer_solution)
         if slicer_analysis is not None:
             planner_logic.getParameterNode().solution_analysis = slicer_analysis
 
@@ -7408,19 +7477,30 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         analysis: "Optional[SlicerOpenLIFUSolutionAnalysis]" = None,
         write_to_db: bool = True,
     ):
-        """Set a solution to be the currently active solution.
+        """Add ``solution`` to :attr:`OpenLIFUAppState.loaded_solutions` and make it active.
+
+        Multi-solution semantics (SlicerOpenLIFU#611): the solution is inserted into the dict
+        (replacing any prior entry with the same ``solution.id``) and ``active_solution_id`` is
+        set to it. Other loaded solutions are left alone. Callers wanting to unload old solutions
+        must delete them explicitly (see :meth:`clear_solution` / :meth:`clear_solutions`).
 
         If there is an active session and ``write_to_db`` is True, persist the solution (and analysis, if
         supplied) to the database and link the session to it by updating ``session.solution_id``. Pass
         ``write_to_db=False`` when the solution was just loaded from disk and there is nothing new to write.
 
         Args:
-            solution: The solution to set as active.
+            solution: The solution to add and make active.
             analysis: Optional analysis to persist alongside the solution. Only written when ``write_to_db``
                 is True and there is an active session.
             write_to_db: Whether to write the solution (and analysis) and the updated session to the database.
         """
-        self.getParameterNode().loaded_solution = solution
+        state = self.getParameterNode()
+        loaded_solutions = state.loaded_solutions
+        loaded_solutions[solution.solution.solution.id] = solution
+        # Reassign the whole dict so ``@parameterNodeWrapper`` picks up the change (mutating in place
+        # does not trigger a write hook / ModifiedEvent).
+        state.loaded_solutions = loaded_solutions
+        set_active_solution(solution.solution.solution.id)
         if not write_to_db:
             return
         if self.validate_session():
@@ -7448,7 +7528,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
 
     def clear_solution(self, clean_up_scene: bool = True, update_session_link: bool = True) -> None:
-        """Unload the current solution if there is one loaded.
+        """Unload the currently active solution if there is one.
+
+        The active solution is removed from :attr:`OpenLIFUAppState.loaded_solutions` and
+        :attr:`OpenLIFUAppState.active_solution_id` is cleared. Other loaded solutions are left
+        alone; use :meth:`clear_solutions` to unload everything.
 
         Args:
             clean_up_scene: Whether to remove the solution's affiliated scene content.
@@ -7460,16 +7544,23 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 ``solution_id`` to remain on disk so the Solution can be restored next time the session is
                 loaded.
         """
-        solution = self.getParameterNode().loaded_solution
-        self.getParameterNode().loaded_solution = None
+        solution = get_active_solution()
+        state = self.getParameterNode()
         if solution is None:
+            # Still clear the id in case it points at a stale entry that was already removed.
+            set_active_solution("")
             return
+        solution_id = solution.solution.solution.id
+        loaded_solutions = state.loaded_solutions
+        loaded_solutions.pop(solution_id, None)
+        state.loaded_solutions = loaded_solutions
+        set_active_solution("")
         if update_session_link:
             loaded_session = self.getParameterNode().loaded_session
             if (
                 loaded_session is not None
                 and get_cur_db() is not None
-                and loaded_session.session.session.solution_id == solution.solution.solution.id
+                and loaded_session.session.session.solution_id == solution_id
             ):
                 import openlifu.db.database
                 OnConflictOpts = openlifu.db.database.OnConflictOpts
@@ -7483,6 +7574,25 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 )
         if clean_up_scene:
             solution.clear_nodes()
+
+    def clear_solutions(self, clean_up_scene: bool = True) -> None:
+        """Unload every loaded solution.
+
+        Used when a session is unloaded: all solutions belonged to that session, so they all go.
+        The persisted ``session.solution_id`` link on disk is intentionally left alone (as with the
+        ``update_session_link=False`` code path in :meth:`clear_solution`), so reloading the session
+        can restore the active solution.
+        """
+        state = self.getParameterNode()
+        loaded_solutions = state.loaded_solutions
+        if clean_up_scene:
+            for solution in list(loaded_solutions.values()):
+                try:
+                    solution.clear_nodes()
+                except Exception as e:  # noqa: BLE001
+                    logging.warning("Could not clear scene nodes for solution: %s", e)
+        state.loaded_solutions = {}
+        set_active_solution("")
 
     def set_run(self, run:SlicerOpenLIFURun):
         """Set a run to be the currently active run. If there is an active session, write that run to the database."""
@@ -7895,7 +8005,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         Raises runtime error if there is no active solution, or if there appears to be an active session to which the solution is
         affiliated but no connected database to enable writing.
         """
-        solution = self.getParameterNode().loaded_solution
+        solution = get_active_solution()
         session = self.getParameterNode().loaded_session
         if solution is None: # We should never be calling toggle_solution_approval if there's no active solution
             raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
@@ -7920,7 +8030,13 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     ),
                     windowTitle="Not saving approval state"
                 )
-        self.getParameterNode().loaded_solution = solution # remember to write the updated solution object into the parameter node
+        # Re-insert the mutated wrapper into the dict so parameterNode serialization picks up the
+        # new approval flag. Assigning to the dict entry alone does not fire ``@parameterNodeWrapper``\u2019s
+        # write hook; reassigning the whole dict does.
+        state = self.getParameterNode()
+        loaded_solutions = state.loaded_solutions
+        loaded_solutions[solution.solution.solution.id] = solution
+        state.loaded_solutions = loaded_solutions
 
 
 #
