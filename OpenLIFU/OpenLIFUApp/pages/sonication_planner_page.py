@@ -994,7 +994,10 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             inputVolume,
         )
         if pre_solution:
-            solution_openlifu.id = f"presolution_{solution_openlifu.id}"
+            # Provenance is carried on the Session's SolutionInfo entry (transducer_transform_source =
+            # "virtual_fit"), so the id itself no longer needs a "presolution_" prefix
+            # (SlicerOpenLIFU#611). The display name is still decorated so pre-solutions are visually
+            # distinct in the UI.
             solution_openlifu.name = f"Pre-Solution for {solution_openlifu.name}"
         solution = SlicerOpenLIFUSolution.initialize_from_openlifu_data(
             solution = solution_openlifu,

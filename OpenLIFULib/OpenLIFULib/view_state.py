@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from OpenLIFULib.util import get_active_solution, get_app_state
+from OpenLIFULib.util import active_solution_is_pre_solution, get_app_state
 
 if TYPE_CHECKING:
     from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
@@ -111,12 +111,9 @@ def apply_module_view_state(module_key: str) -> None:
         # If the active solution is a pre-solution (i.e. computed against a virtual-fit pose
         # rather than a tracked pose; see #609), prefer the approved VF pose so the transducer
         # visualization matches the pose that was actually simulated. Otherwise, prefer the
-        # tracked (TT) pose as usual.
-        active_solution = get_active_solution()
-        is_pre_solution = (
-            active_solution is not None
-            and active_solution.solution.solution.id.startswith("presolution_")
-        )
+        # tracked (TT) pose as usual. Provenance is read from session.solutions via
+        # active_solution_is_pre_solution (SlicerOpenLIFU#611).
+        is_pre_solution = active_solution_is_pre_solution()
         if is_pre_solution:
             pose_node = approved_vf_node or approved_tt_node
         else:

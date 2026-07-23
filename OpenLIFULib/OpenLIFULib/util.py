@@ -66,6 +66,33 @@ def set_active_solution(solution_id: str) -> None:
     """
     get_app_state().active_solution_id = solution_id
 
+def active_solution_is_pre_solution() -> bool:
+    """Return ``True`` iff the active solution was computed against a virtual-fit-derived transducer pose.
+
+    Consults ``session.solutions`` (see SlicerOpenLIFU#611): the :class:`openlifu.db.session.SolutionInfo`
+    entry whose ``solution_id`` matches the active solution is authoritative. A source of
+    ``"virtual_fit"`` means pre-solution; ``"localization"`` means not. Solutions saved before
+    per-solution provenance existed have no matching entry, in which case this falls back to the
+    legacy ``"presolution_"`` id-prefix check that Phase 4a of #611 introduced provenance for.
+
+    Returns ``False`` when there is no active solution.
+    """
+    active = get_active_solution()
+    if active is None:
+        return False
+    active_id = active.solution.solution.id
+    loaded_session = get_app_state().loaded_session
+    if loaded_session is not None:
+        for entry in loaded_session.session.session.solutions:
+            if entry.solution_id == active_id:
+                return entry.transducer_transform_source == "virtual_fit"
+    # Legacy: session predates SlicerOpenLIFU#611 and has no matching SolutionInfo entry.
+    # Fall back to the historical id-prefix convention (see #609) so approvals from
+    # older databases still gate the send-to-device flow / drive pose-visualization
+    # correctly. Phase 4c's cascade-delete purges these orphans on save, at which
+    # point this fallback becomes dead code and can be removed.
+    return active_id.startswith("presolution_")
+
 def get_openlifu_login_parameter_node() -> "OpenLIFULoginParameterNode":
     """Get the parameter node of the OpenLIFU Login module"""
     return slicer.util.getModuleLogic("OpenLIFU").login_logic.getParameterNode()

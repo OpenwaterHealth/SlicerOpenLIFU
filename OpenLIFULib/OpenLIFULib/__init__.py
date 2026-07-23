@@ -24,6 +24,7 @@ from OpenLIFULib.util import (
         get_app_state,
         get_active_solution,
         set_active_solution,
+        active_solution_is_pre_solution,
         BusyCursor,
 )
 from OpenLIFULib.targets import (
@@ -55,6 +56,7 @@ __all__ = [
     "get_app_state",
     "get_active_solution",
     "set_active_solution",
+    "active_solution_is_pre_solution",
     "BusyCursor",
     "get_target_candidates",
     "OpenLIFUAlgorithmInputWidget",

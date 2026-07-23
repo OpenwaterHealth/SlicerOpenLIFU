@@ -38,6 +38,7 @@ from slicer.util import VTKObservationMixin
 # OpenLIFULib imports
 from OpenLIFULib import (
     SlicerOpenLIFURun,
+    active_solution_is_pre_solution,
     ensure_python_requirements_for_module_enter,
     get_active_solution,
     get_app_state,
@@ -615,15 +616,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onSendSonicationSolutionToDevicePushButtonClicked(self, checked=False):
         logging.debug("onSendSonicationSolutionToDevicePushButtonClicked() called")
 
-        # Pre-solution gate: solutions whose id starts with "presolution_" were computed
-        # against a virtual-fit-derived transducer transform rather than an approved
-        # transducer-tracking result (see #609). Require explicit user confirmation
-        # before sending one to the device.
-        loaded_solution = get_active_solution()
-        if (
-            loaded_solution is not None
-            and loaded_solution.solution.solution.id.startswith("presolution_")
-        ):
+        # Pre-solution gate: solutions computed against a virtual-fit-derived transducer
+        # transform rather than an approved transducer-tracking result (see #609) require
+        # explicit user confirmation before being sent to the device. Provenance is read
+        # from session.solutions (SlicerOpenLIFU#611) via active_solution_is_pre_solution.
+        if active_solution_is_pre_solution():
             reply = qt.QMessageBox.warning(
                 slicer.util.mainWindow(),
                 "Pre-Solution",
