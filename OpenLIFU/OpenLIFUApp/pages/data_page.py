@@ -130,6 +130,7 @@ if TYPE_CHECKING:
     import openlifu.bf.apod_methods
     import openlifu.bf.delay_methods
     import openlifu.db.database
+    import openlifu.db.session
     import openlifu.nav.photoscan
     import openlifu.plan
     import openlifu.plan.solution_analysis
@@ -7476,6 +7477,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         solution: SlicerOpenLIFUSolution,
         analysis: "Optional[SlicerOpenLIFUSolutionAnalysis]" = None,
         write_to_db: bool = True,
+        solution_info: "Optional[openlifu.db.session.SolutionInfo]" = None,
     ):
         """Add ``solution`` to :attr:`OpenLIFUAppState.loaded_solutions` and make it active.
 
@@ -7493,6 +7495,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             analysis: Optional analysis to persist alongside the solution. Only written when ``write_to_db``
                 is True and there is an active session.
             write_to_db: Whether to write the solution (and analysis) and the updated session to the database.
+            solution_info: Optional provenance record to attach to the active session's
+                ``session.solutions`` list (target / transducer / protocol / pose source). Only
+                applied when ``write_to_db`` is True and there is an active session. When an
+                entry with the same ``solution_id`` already exists on the session it is replaced
+                in place, preserving list order; otherwise the new entry is appended. See
+                SlicerOpenLIFU#611.
         """
         state = self.getParameterNode()
         loaded_solutions = state.loaded_solutions
@@ -7519,6 +7527,19 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     analysis.analysis,
                     on_conflict=OnConflictOpts.OVERWRITE,
                 )
+            # Attach or refresh the provenance record on the session (SlicerOpenLIFU#611).
+            if solution_info is not None:
+                if solution_info.solution_id != solution_openlifu.id:
+                    raise ValueError(
+                        f"solution_info.solution_id ({solution_info.solution_id!r}) does not match "
+                        f"solution.id ({solution_openlifu.id!r})"
+                    )
+                for i, existing in enumerate(session_openlifu.solutions):
+                    if existing.solution_id == solution_info.solution_id:
+                        session_openlifu.solutions[i] = solution_info
+                        break
+                else:
+                    session_openlifu.solutions.append(solution_info)
             # Link the session to this solution and persist that link.
             session_openlifu.solution_id = solution_openlifu.id
             # Write the pack back so the parameterNode's serialized JSON reflects the new solution_id;

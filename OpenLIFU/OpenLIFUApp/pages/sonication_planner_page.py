@@ -53,6 +53,7 @@ from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.events import SlicerOpenLIFUEvents
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wire_passive_module_header
+from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
     create_noneditable_QStandardItem,
@@ -1002,7 +1003,27 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             transducer=inputTransducer,
         )
         analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
-        slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(solution, analysis=analysis)
+
+        # Build the provenance record that will be attached to the Session so consumers can
+        # later trace this Solution back to its target / transducer / protocol / pose source
+        # (SlicerOpenLIFU#611). ``transducer_transform_source`` follows the "VF" / "TT" split of
+        # the algorithm-input widget's Target row (#609): VF rows produce pre-solutions computed
+        # against a virtual-fit transform; the standard flow uses the live transducer transform,
+        # which is driven by a transducer-tracking result and is therefore recorded as
+        # ``"localization"``.
+        import openlifu.db.session
+        solution_info = openlifu.db.session.SolutionInfo(
+            solution_id=solution_openlifu.id,
+            protocol_id=inputProtocol.protocol.id,
+            target_id=fiducial_to_openlifu_point_id(inputTarget),
+            transducer_id=inputTransducer.transducer.transducer.id,
+            transducer_transform_source="virtual_fit" if pre_solution else "localization",
+        )
+        slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(
+            solution,
+            analysis=analysis,
+            solution_info=solution_info,
+        )
         self.getParameterNode().solution_analysis = analysis
         return solution, analysis
 
