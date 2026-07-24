@@ -132,10 +132,14 @@ class _NewSolutionPickerDialog(qt.QDialog):
         self._list.setCurrentRow(0)
         self._list.itemDoubleClicked.connect(lambda *_: self.accept())
         layout.addWidget(self._list)
-        btns = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        btns.button(qt.QDialogButtonBox.Ok).setText("Compute")
+        # PythonQt's ``QDialogButtonBox.button(StandardButton)`` returns None, so we can't
+        # construct with the standard-buttons mask and then rename the OK button. Instead
+        # create the two buttons explicitly and add them with the appropriate roles.
+        btns = qt.QDialogButtonBox()
+        compute_button = qt.QPushButton("Compute")
+        compute_button.setDefault(True)
+        btns.addButton(compute_button, qt.QDialogButtonBox.AcceptRole)
+        btns.addButton(qt.QPushButton("Cancel"), qt.QDialogButtonBox.RejectRole)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
