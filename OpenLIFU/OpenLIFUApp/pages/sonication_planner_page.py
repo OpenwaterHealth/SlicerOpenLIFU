@@ -13,6 +13,7 @@ from __future__ import annotations
 # Standard library imports
 import warnings
 from dataclasses import fields
+from datetime import datetime
 import math
 from pathlib import Path
 from typing import Optional, Union, Tuple, TYPE_CHECKING, get_origin, get_args
@@ -1021,6 +1022,8 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             target_id=fiducial_to_openlifu_point_id(inputTarget),
             transducer_id=inputTransducer.transducer.transducer.id,
             transducer_transform_source="virtual_fit" if pre_solution else "localization",
+            approved=False,
+            computed_at=datetime.now(),
         )
         slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(
             solution,
