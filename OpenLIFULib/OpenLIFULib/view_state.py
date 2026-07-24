@@ -8,6 +8,7 @@ matrix of behaviors is:
 ==================  ====================================  =================  =====================
 Module              Transducer pose                       Skin surface       Registered photoscan
 ==================  ====================================  =================  =====================
+Home                hidden                                 hidden             hidden
 Session             farthest completed = approved TT,     visible unless     visible when approved
                     else approved VF, else leave alone    approved TT (then  TT exists, else hidden
                                                           hidden)
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from OpenLIFULib.transducer import SlicerOpenLIFUTransducer
 
 # Module keys for the dispatch in apply_module_view_state.
+HOME = "home"
 SESSION = "session"
 PREPLANNING = "preplanning"
 LOCALIZATION = "localization"
@@ -55,7 +57,18 @@ def apply_module_view_state(module_key: str) -> None:
     any_tt_node = approved_tt_node or _find_any_tt_transducer_node()
     approved_vf_node = _find_approved_vf_node()
 
-    if module_key == SESSION:
+    if module_key == HOME:
+        # Home is a status / landing page and does not visualize any scene content.
+        # A loaded session's segmentation, photoscan, and transducer must not leak
+        # into Home's 3D view; hide everything the view-state layer knows about.
+        # The nodes stay in the scene (Home does not unload the session), only their
+        # visibility is toggled off (#618).
+        if transducer is not None:
+            transducer.set_visibility(False)
+        _set_skin_visible(volume_node, False)
+        _set_photoscan_registered_visible_for_tt(None, False)
+
+    elif module_key == SESSION:
         if approved_tt_node is not None:
             _apply_transducer_pose(transducer, approved_tt_node)
             _set_skin_visible(volume_node, False)

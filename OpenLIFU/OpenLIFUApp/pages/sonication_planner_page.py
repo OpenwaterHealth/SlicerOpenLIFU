@@ -811,7 +811,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # If the active solution was the one we just deleted, clear it. This drives the
         # analysis section back to the "No solution" page and hides the PNP.
         if state.active_solution_id == sid:
-            set_active_solution(None)
+            # Hide the PNP BEFORE dropping the active-solution reference: ``hide_pnp``
+            # resolves the pnp volume through ``get_active_solution()``, so once the active
+            # id is cleared it can no longer find the node to hide. Toggling the checkbox
+            # off also drives ``onrenderPNPCheckBoxToggled(False)`` -> ``hide_pnp``.
+            self.ui.renderPNPCheckBox.checked = False
+            self.logic.hide_pnp()
+            # ``active_solution_id`` is a non-None string field on the parameter node; use
+            # the empty-string sentinel documented on ``set_active_solution``. Passing None
+            # crashes at the parameter-node write with "Value must not be None".
+            set_active_solution("")
 
     def _selected_solution_id(self) -> Optional[str]:
         """Return the solution id of the currently selected Solutions-table row, or None."""

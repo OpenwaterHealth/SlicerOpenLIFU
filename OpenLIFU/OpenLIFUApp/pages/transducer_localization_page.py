@@ -5531,19 +5531,37 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
         photoscans_with_approved_tt = self.logic.get_photoscan_ids_with_approved_tt_results(approved_photoscans_only = True)
-        
+
+        # Outside kiosk mode we support the "VF-only" workflow: skip localization entirely
+        # and go straight to Sonication Planner as long as the session has at least one
+        # approved virtual-fit result. The Planner will offer that VF as a pre-solution
+        # option. In kiosk / guided mode we still require an approved TT result (#620).
+        from OpenLIFULib.kiosk_util import get_user_mode
+        has_approved_vf = (
+            session is not None
+            and bool(get_approved_target_ids(session_id=session_id))
+        )
+        vf_only_path_available = has_approved_vf and not get_user_mode()
+
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
+        elif photoscans_with_approved_tt:
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = "Approved transducer localization result detected, proceed to the next step."
+        elif vf_only_path_available:
+            # Non-kiosk: an approved VF is enough to move on. We do not require a photoscan
+            # selection in this path because the user is skipping the TT step altogether.
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = (
+                "Approved virtual-fit result detected, proceed to compute a pre-solution."
+            )
         elif not selected_photoscan_openlifu:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Select a photoscan to proceed."
-        elif not photoscans_with_approved_tt:
+        else:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Run transducer localization to proceed."
-        else:
-            self.workflow_controls.can_proceed = True
-            self.workflow_controls.status_text = "Approved transducer localization result detected, proceed to the next step."
 
 #
 # OpenLIFUTransducerLocalizationLogic

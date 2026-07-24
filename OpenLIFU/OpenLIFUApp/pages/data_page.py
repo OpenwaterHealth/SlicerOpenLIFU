@@ -6749,6 +6749,16 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         from :attr:`OpenLIFUAppState.loaded_solutions` (they are not the user's current focus, so we
         do not surface a dialog for each one).
         """
+        # Mirror the guard on ``validate_session``: while a session load or unload is in
+        # progress, the scene is a transient sequence of intermediate states as volumes /
+        # transducers / solutions are torn down and rebuilt. In particular ``clear_session``
+        # removes the session's volume node before it clears ``loaded_solutions``, and the
+        # resulting ``onNodeRemoved`` fanout would otherwise pop the
+        # "A volume that was in use by the active solution is now missing" dialog on every
+        # reload of a session that owns a solution (#617).
+        if self.session_loading_unloading_in_progress:
+            return False
+
         state = self.getParameterNode()
         loaded_solutions = state.loaded_solutions
         if not loaded_solutions:

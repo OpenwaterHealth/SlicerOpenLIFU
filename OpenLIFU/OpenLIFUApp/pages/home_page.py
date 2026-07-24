@@ -187,6 +187,12 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
         self._apply_env_locked_modes()
         self._refresh_status_rows()
+        # Home is a status / landing page; a loaded session's skin segmentation,
+        # photoscan, and transducer must not leak into Home's 3D view. Every other
+        # page drives its own scene visibility via ``apply_module_view_state``;
+        # Home does the same (hiding everything) so navigation is symmetric (#618).
+        from OpenLIFULib.view_state import apply_module_view_state, HOME
+        apply_module_view_state(HOME)
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
