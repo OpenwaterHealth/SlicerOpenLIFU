@@ -6600,6 +6600,22 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 len(purged), session_openlifu.id, purged,
             )
 
+        # Persist in-memory Solution edits (e.g. Name changes from the Solutions table --
+        # SlicerOpenLIFU#611) back to disk. Re-writing is idempotent for unchanged solutions
+        # and is the only place that catches metadata edits since Session-level save alone
+        # only writes the Session JSON. Iterating ``loaded_solutions`` intentionally excludes
+        # solutions that are on disk but not loaded (e.g. a solution that was unloaded and
+        # then re-computed on top -- we do not want the stale unloaded copy to overwrite the
+        # newly computed one).
+        loaded_solutions = self.getParameterNode().loaded_solutions
+        for sid in list(loaded_solutions.keys()):
+            slicer_solution = loaded_solutions[sid]
+            get_cur_db().write_solution(
+                session_openlifu,
+                slicer_solution.solution.solution,
+                on_conflict=OnConflictOpts.OVERWRITE,
+            )
+
     def _cleanup_orphaned_photoscans_and_photocollections_in_db(
         self,
         subject_id: str,

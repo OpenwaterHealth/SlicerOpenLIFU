@@ -106,6 +106,37 @@
     </widget>
    </item>
    <item>
+    <widget class="ctkCollapsibleButton" name="solutionsCollapsibleButton">
+     <property name="text">
+      <string>Solutions</string>
+     </property>
+     <property name="collapsed">
+      <bool>false</bool>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_solutions">
+      <item>
+       <widget class="QTableWidget" name="solutionsTableWidget">
+        <property name="toolTip">
+         <string>Solutions attached to the loaded session. Double-click a row to make it the shown solution. Check the Approved box to record session-side approval. Names are editable in place.</string>
+        </property>
+        <property name="selectionBehavior">
+         <enum>QAbstractItemView::SelectRows</enum>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SingleSelection</enum>
+        </property>
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <attribute name="verticalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="analysisCollapsible">
      <property name="text">
       <string>Solution analysis</string>
@@ -114,6 +145,19 @@
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QLabel" name="nowShowingLabel">
+        <property name="text">
+         <string>No solution shown.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">font-style: italic; color: #555;</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QStackedWidget" name="analysisStackedWidget">
         <property name="currentIndex">

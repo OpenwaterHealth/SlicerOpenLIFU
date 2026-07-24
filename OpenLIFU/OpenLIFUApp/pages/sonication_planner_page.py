@@ -49,6 +49,7 @@ from OpenLIFULib import (
     get_app_state,
     label_for_target_id,
     make_xarray_in_transducer_coords_from_volume,
+    set_active_solution,
 )
 from OpenLIFUApp.logic.app_state import get_app_state_signals
 from OpenLIFULib.events import SlicerOpenLIFUEvents
@@ -103,6 +104,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Flag to help prevent recursive event when onParameterNodeModified causes the parameter node to be modified"""
         self._updating_gui_from_sliders = False
         """Flag to prevent recursive updates when setting slider values programmatically."""
+        self._refreshing_solutions_table = False
+        """Guard flag: True while we are programmatically rebuilding the solutions table so
+        that our own cell writes do not re-enter ``_on_solutions_table_item_changed``."""
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -187,6 +191,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.approveButton.clicked.connect(self.onApproveClicked)
         self.ui.exportButton.clicked.connect(self.onExportClicked)
 
+        # Solutions table (SlicerOpenLIFU#611): shows every SolutionInfo record on the loaded
+        # Session. Interactive columns are Show (single-row checkbox that drives the active
+        # solution), Name (editable in place; mutates the in-memory Solution.name and is
+        # persisted on the next session save), and Approved (per-row session-side approval on
+        # SolutionInfo.approved -- independent of the safety-gated Solution.approved axis).
+        # Double-clicking any row also promotes it to the shown solution.
+        self._configure_solutions_table_columns()
+        self.ui.solutionsTableWidget.itemChanged.connect(self._on_solutions_table_item_changed)
+        self.ui.solutionsTableWidget.itemDoubleClicked.connect(self._on_solutions_table_item_double_clicked)
+
         # Refresh approval-status tooltips on the Target/Transducer comboboxes
         # whenever the user changes their selection.
         for _input_name in ("Target", "Transducer"):
@@ -220,6 +234,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionAnalysis()
 
         self.updateWorkflowControls()
+
+        # Populate the Solutions table + "Now showing" label from initial app state.
+        # ``onDataParameterNodeModified`` will handle subsequent refreshes.
+        self._refresh_solutions_table()
+        self._update_now_showing_label()
 
     def _lift_approve_widget_out_of_scroll_area(self, uiWidget) -> None:
         """Reparent ``approvePermissionsWidget`` from the scrollable body into
@@ -445,6 +464,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.getParameterNode().solution_analysis = None
 
         self.updateWorkflowControls()
+        # The Solutions table and its accompanying "Now showing" label mirror app state
+        # (Session.solutions + loaded_solutions + active_solution_id), so they must be
+        # refreshed whenever the app-state parameter node fires ModifiedEvent (session
+        # load/unload, solution add/remove, active-solution change, etc.) (#611).
+        self._refresh_solutions_table()
+        self._update_now_showing_label()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -872,6 +897,247 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.workflow_controls.can_proceed = True
             self.workflow_controls.status_text = "Approved sonication solution detected, proceed to the next step."
+
+    # ------------------------------------------------------------------
+    # Solutions table (SlicerOpenLIFU#611)
+    # ------------------------------------------------------------------
+    # The Solutions table is the primary surface for the multi-solution session model. It
+    # renders every ``SolutionInfo`` on ``Session.solutions`` as a row and lets the user pick
+    # which one is currently shown (drives the analysis section, PNP rendering, and hardware
+    # send in the Sonication Control page), edit its user-facing Name, and toggle its
+    # session-side Approved flag. Legacy solutions on disk that lack a ``SolutionInfo`` entry
+    # on the loaded session are intentionally not shown (see #613).
+
+    #: 0-based column indices, kept in one place so ``_refresh_solutions_table`` and
+    #: ``_on_solutions_table_item_changed`` agree.
+    _COL_SHOW = 0
+    _COL_NAME = 1
+    _COL_ID = 2
+    _COL_TARGET = 3
+    _COL_TYPE = 4
+    _COL_PROTOCOL = 5
+    _COL_COMPUTED = 6
+    _COL_APPROVED = 7
+
+    def _configure_solutions_table_columns(self) -> None:
+        """One-time setup of the Solutions table columns, headers, and resize policy."""
+        tbl = self.ui.solutionsTableWidget
+        tbl.setColumnCount(8)
+        tbl.setHorizontalHeaderLabels(
+            ["Show", "Name", "ID", "Target", "Type", "Protocol", "Compute time", "Approved"]
+        )
+        header = tbl.horizontalHeader()
+        header.setSectionResizeMode(qt.QHeaderView.ResizeToContents)
+        header.setStretchLastSection(False)
+        # Let Name stretch so long solution names do not force the panel wider.
+        header.setSectionResizeMode(self._COL_NAME, qt.QHeaderView.Stretch)
+
+    def _refresh_solutions_table(self) -> None:
+        """Rebuild the Solutions table from app state.
+
+        Data flow:
+          * ``Session.solutions`` is the authoritative list of provenance records
+            (:class:`openlifu.db.session.SolutionInfo`).
+          * ``loaded_solutions`` supplies each row's editable ``Name`` (mirroring the
+            openlifu ``Solution.name`` for the same id).
+          * ``active_solution_id`` drives the single "Show" checkbox.
+
+        Guarded by ``self._refreshing_solutions_table`` so our own ``setItem`` calls do not
+        re-enter :meth:`_on_solutions_table_item_changed`.
+        """
+        tbl = self.ui.solutionsTableWidget
+        self._refreshing_solutions_table = True
+        try:
+            tbl.clearContents()
+            state = get_app_state()
+            loaded_session = state.loaded_session
+            if loaded_session is None:
+                tbl.setRowCount(0)
+                return
+            session_openlifu = loaded_session.session.session
+            loaded_solutions = state.loaded_solutions
+            active_id = state.active_solution_id
+            rows = list(session_openlifu.solutions)
+            tbl.setRowCount(len(rows))
+            for row_idx, info in enumerate(rows):
+                sid = info.solution_id
+                # ``loaded_solutions`` is an ObservedDict wrapping a dict[str, SlicerOpenLIFUSolution].
+                slicer_solution = loaded_solutions[sid] if sid in loaded_solutions else None
+                name = (
+                    slicer_solution.solution.solution.name
+                    if slicer_solution is not None
+                    else "(unloaded)"
+                )
+                target_label = label_for_target_id(info.target_id) or info.target_id
+                type_label = (
+                    "Virtual fit" if info.transducer_transform_source == "virtual_fit"
+                    else "Localization"
+                )
+                computed_label = (
+                    info.computed_at.strftime("%Y-%m-%d %H:%M:%S")
+                    if info.computed_at is not None
+                    else "\u2014"  # em-dash for legacy entries that predate ``computed_at``
+                )
+
+                # Show
+                show_item = qt.QTableWidgetItem()
+                show_item.setFlags(
+                    qt.Qt.ItemIsUserCheckable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable
+                )
+                show_item.setCheckState(qt.Qt.Checked if sid == active_id else qt.Qt.Unchecked)
+                # Stash the solution id so handlers can recover it from any cell in the row.
+                show_item.setData(qt.Qt.UserRole, sid)
+                tbl.setItem(row_idx, self._COL_SHOW, show_item)
+
+                # Name (editable when the underlying Solution object is loaded)
+                name_item = qt.QTableWidgetItem(name)
+                if slicer_solution is None:
+                    name_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                else:
+                    name_item.setFlags(
+                        qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsEditable
+                    )
+                name_item.setData(qt.Qt.UserRole, sid)
+                tbl.setItem(row_idx, self._COL_NAME, name_item)
+
+                # ID
+                id_item = qt.QTableWidgetItem(sid)
+                id_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                tbl.setItem(row_idx, self._COL_ID, id_item)
+
+                # Target
+                target_item = qt.QTableWidgetItem(target_label)
+                target_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                tbl.setItem(row_idx, self._COL_TARGET, target_item)
+
+                # Type
+                type_item = qt.QTableWidgetItem(type_label)
+                type_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                tbl.setItem(row_idx, self._COL_TYPE, type_item)
+
+                # Protocol
+                protocol_item = qt.QTableWidgetItem(info.protocol_id)
+                protocol_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                tbl.setItem(row_idx, self._COL_PROTOCOL, protocol_item)
+
+                # Compute time
+                computed_item = qt.QTableWidgetItem(computed_label)
+                computed_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                tbl.setItem(row_idx, self._COL_COMPUTED, computed_item)
+
+                # Approved (checkbox drives SolutionInfo.approved)
+                approved_item = qt.QTableWidgetItem()
+                approved_item.setFlags(
+                    qt.Qt.ItemIsUserCheckable | qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable
+                )
+                approved_item.setCheckState(qt.Qt.Checked if info.approved else qt.Qt.Unchecked)
+                approved_item.setData(qt.Qt.UserRole, sid)
+                tbl.setItem(row_idx, self._COL_APPROVED, approved_item)
+        finally:
+            self._refreshing_solutions_table = False
+
+    def _row_solution_id(self, row: int) -> Optional[str]:
+        """Recover the solution id stashed on the Show cell of the given row, or ``None``."""
+        tbl = self.ui.solutionsTableWidget
+        sid_item = tbl.item(row, self._COL_SHOW)
+        if sid_item is None:
+            return None
+        sid = sid_item.data(qt.Qt.UserRole)
+        return sid or None
+
+    def _on_solutions_table_item_changed(self, item) -> None:
+        """Route user edits on interactive columns.
+
+        * Show   -> sets ``active_solution_id`` (single-selection is enforced by the
+          resulting table refresh, which rebuilds every row's checkbox from the new id).
+          Un-checking the shown row directly is disallowed and reverted.
+        * Name   -> mutates the in-memory ``Solution.name`` for the row's solution; the change
+          is persisted to disk the next time the user saves the session.
+        * Approved -> flips ``SolutionInfo.approved`` for the row's solution on the loaded
+          session; also persisted on save.
+
+        Guarded by ``self._refreshing_solutions_table`` to ignore our own ``setItem`` calls.
+        """
+        if self._refreshing_solutions_table:
+            return
+        col = item.column()
+        row = item.row()
+        sid = self._row_solution_id(row)
+        if sid is None:
+            return
+        state = get_app_state()
+
+        if col == self._COL_SHOW:
+            if item.checkState() == qt.Qt.Checked:
+                # Reassigning ``active_solution_id`` fires the data-parameter-node
+                # ModifiedEvent, which triggers ``_refresh_solutions_table`` and clears the
+                # checkboxes on all other rows.
+                set_active_solution(sid)
+            else:
+                # There is no "no solution shown" state -- one row must always be checked.
+                # Rebuild to revert the visual.
+                self._refresh_solutions_table()
+            return
+
+        if col == self._COL_NAME:
+            loaded_solutions = state.loaded_solutions
+            if sid not in loaded_solutions:
+                # Shouldn't happen (Name is only editable for loaded rows), but be defensive.
+                self._refresh_solutions_table()
+                return
+            slicer_solution = loaded_solutions[sid]
+            new_name = item.text()
+            if slicer_solution.solution.solution.name == new_name:
+                return
+            slicer_solution.solution.solution.name = new_name
+            # Re-insert to trigger the parameterNodeWrapper's write hook (in-place mutation
+            # of the pack does not fire it; reassigning the whole dict does).
+            loaded_solutions[sid] = slicer_solution
+            state.loaded_solutions = loaded_solutions
+            self._update_now_showing_label()
+            return
+
+        if col == self._COL_APPROVED:
+            loaded_session = state.loaded_session
+            if loaded_session is None:
+                self._refresh_solutions_table()
+                return
+            session_openlifu = loaded_session.session.session
+            checked = item.checkState() == qt.Qt.Checked
+            for info in session_openlifu.solutions:
+                if info.solution_id == sid:
+                    if info.approved == checked:
+                        return
+                    info.approved = checked
+                    break
+            else:
+                self._refresh_solutions_table()
+                return
+            # Reassign the pack so ``@parameterNodeWrapper`` serializes the mutation.
+            state.loaded_session = loaded_session
+            # If this row is the active one, the approve button label may need to update.
+            self.updateApproveButton()
+            return
+
+    def _on_solutions_table_item_double_clicked(self, item) -> None:
+        """Double-clicking any cell in a row promotes that row to the shown solution."""
+        sid = self._row_solution_id(item.row())
+        if sid:
+            set_active_solution(sid)
+
+    def _update_now_showing_label(self) -> None:
+        """Refresh the "Now showing" info label above the Solution analysis section.
+
+        The Solutions table decouples "which solution is on disk" from "which solution the
+        analysis / PNP rendering / hardware-send flow is looking at". This label removes any
+        ambiguity by naming the currently shown solution.
+        """
+        active_solution = get_active_solution()
+        if active_solution is None:
+            self.ui.nowShowingLabel.setText("No solution shown.")
+            return
+        sol = active_solution.solution.solution
+        self.ui.nowShowingLabel.setText(f"Now showing: {sol.name}   (ID: {sol.id})")
 
     def clear_solution_analysis_tables(self) -> None:
         """Clear out the solution analysis tables, removing all rows and column headers"""
