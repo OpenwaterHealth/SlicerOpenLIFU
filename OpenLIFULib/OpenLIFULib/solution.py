@@ -86,7 +86,50 @@ class SlicerOpenLIFUSolution:
         slicer.mrmlScene.RemoveNode(self.intensity)
 
     def is_approved(self) -> bool:
-        return self.solution.solution.approved
+        """Whether the matching SolutionInfo on the loaded session is marked approved.
+
+        Approval lives on ``SolutionInfo.approved`` at the session-provenance layer
+        (SlicerOpenLIFU#611): the openlifu ``Solution`` object itself no longer carries
+        an ``approved`` field. Returns ``False`` if there is no loaded session or if the
+        session has no ``SolutionInfo`` record for this solution's id.
+        """
+        # Imported lazily to avoid a circular import at OpenLIFULib load time.
+        from OpenLIFULib.util import get_app_state
+        loaded_session = get_app_state().loaded_session
+        if loaded_session is None:
+            return False
+        sid = self.solution.solution.id
+        for info in loaded_session.session.session.solutions:
+            if info.solution_id == sid:
+                return info.approved
+        return False
 
     def toggle_approval(self) -> None:
-        self.solution.solution.approved = not self.solution.solution.approved
+        """Flip the approval flag on the matching SolutionInfo on the loaded session.
+
+        Approval lives on ``SolutionInfo.approved`` (SlicerOpenLIFU#611). This mutates the
+        in-memory openlifu ``Session`` object and reassigns ``loaded_session`` so the
+        ``@parameterNodeWrapper`` picks up the change. Persistence to disk is the caller's
+        responsibility (typically ``OpenLIFUDataLogic.toggle_solution_approval``).
+
+        Raises ``RuntimeError`` if there is no loaded session, or if the loaded session has
+        no ``SolutionInfo`` record for this solution's id.
+        """
+        from OpenLIFULib.util import get_app_state
+        state = get_app_state()
+        loaded_session = state.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot toggle solution approval: no session is loaded.")
+        sid = self.solution.solution.id
+        session_openlifu = loaded_session.session.session
+        for info in session_openlifu.solutions:
+            if info.solution_id == sid:
+                info.approved = not info.approved
+                break
+        else:
+            raise RuntimeError(
+                f"Cannot toggle solution approval: solution {sid!r} has no SolutionInfo record "
+                "on the loaded session."
+            )
+        # Reassign the pack so ``@parameterNodeWrapper`` serializes the mutation.
+        state.loaded_session = loaded_session

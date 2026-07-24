@@ -8034,45 +8034,39 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         return newOpenLIFUPhotoscan
 
     def toggle_solution_approval(self):
-        """Approve the currently active solution if it was not approved. Revoke approval if it was approved.
-        This will write the approval to the solution in memory and, if there is an active session from which this solution was generated,
-        we will also write the solution approval to the database.
+        """Toggle the session-side approval flag of the currently active solution.
 
-        Raises runtime error if there is no active solution, or if there appears to be an active session to which the solution is
-        affiliated but no connected database to enable writing.
+        Approval now lives on ``SolutionInfo.approved`` for the matching entry in the loaded
+        session's ``solutions`` list (SlicerOpenLIFU#611). ``SlicerOpenLIFUSolution.toggle_approval``
+        mutates the in-memory ``Session`` object and reassigns ``loaded_session`` so the
+        parameterNode-wrapped pack notices the change. This method then persists the change by
+        re-writing the session JSON.
+
+        Raises RuntimeError if there is no active solution, no loaded session, or no database
+        connection to write the session with.
         """
         solution = get_active_solution()
-        session = self.getParameterNode().loaded_session
-        if solution is None: # We should never be calling toggle_solution_approval if there's no active solution
+        if solution is None:
             raise RuntimeError("Cannot toggle solution approval because there is no active solution.")
-        solution.toggle_approval() # apply or revoke approval
-        if session is not None:
-            if session.session.session.solution_id == solution.solution.solution.id:
-                if get_cur_db() is None: # This shouldn't happen
-                    raise RuntimeError("Cannot toggle solution approval because there is a session but no database connection to write the approval.")
-                import openlifu.db.database
-
-                OnConflictOpts : "openlifu.db.database.OnConflictOpts" = openlifu.db.database.OnConflictOpts
-                get_cur_db().write_solution(session.session.session, solution.solution.solution, on_conflict=OnConflictOpts.OVERWRITE)
-            else:
-                # This can happen if, for example, a solution is generated from a session and then a new session is loaded and the user
-                # tries to toggle approval on the old solution. The user would have to have kept the old solution around by
-                # invalidating the previous session while keeping its affiliated data around in an orphaned state.
-                # Weird case, but it can happen if someone is awkwardly switching between the manual and treatment workflows.
-                slicer.util.infoDisplay(
-                    text= (
-                        "There is an active session but it is not the one that generated this solution."
-                        " Since this solution has lost its session link, any approval state change will not be saved into the database."
-                    ),
-                    windowTitle="Not saving approval state"
-                )
-        # Re-insert the mutated wrapper into the dict so parameterNode serialization picks up the
-        # new approval flag. Assigning to the dict entry alone does not fire ``@parameterNodeWrapper``\u2019s
-        # write hook; reassigning the whole dict does.
-        state = self.getParameterNode()
-        loaded_solutions = state.loaded_solutions
-        loaded_solutions[solution.solution.solution.id] = solution
-        state.loaded_solutions = loaded_solutions
+        session = self.getParameterNode().loaded_session
+        if session is None:
+            raise RuntimeError("Cannot toggle solution approval because there is no loaded session.")
+        # Mutates SolutionInfo.approved on the in-memory session and reassigns loaded_session.
+        # Raises RuntimeError if the active solution has no matching SolutionInfo record.
+        solution.toggle_approval()
+        if get_cur_db() is None:
+            raise RuntimeError(
+                "Cannot persist solution approval because there is no database connection."
+            )
+        import openlifu.db.database
+        OnConflictOpts: "openlifu.db.database.OnConflictOpts" = openlifu.db.database.OnConflictOpts
+        # Re-read loaded_session after toggle_approval reassigned it, to write the current pack.
+        session = self.getParameterNode().loaded_session
+        get_cur_db().write_session(
+            self.subject,
+            session.session.session,
+            on_conflict=OnConflictOpts.OVERWRITE,
+        )
 
 
 #
