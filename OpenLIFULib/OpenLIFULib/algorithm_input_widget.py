@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Callable, Literal, TYPE_CHECKING, Optional
+from typing import Dict, Any, List, Callable, TYPE_CHECKING, Optional
 from dataclasses import dataclass
 
 import ctk
@@ -6,7 +6,7 @@ from enum import Enum
 import qt
 import slicer
 
-from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode, vtkMRMLTransformNode
+from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUProtocol
 from OpenLIFULib.util import get_app_state
 from OpenLIFULib import SlicerOpenLIFUTransducer
@@ -21,24 +21,6 @@ class InputType(Enum):
     VOLUME = "Volume"
     TARGET = "Target"
     PHOTOSCAN = "Photoscan"
-
-@dataclass
-class TargetSelection:
-    """A single selectable row in the Target combobox.
-
-    Bundles the target fiducial with the transducer transform that should be used
-    when computing a solution for this row. See issue #609.
-
-    - ``kind="TT"``: the transform node is the live transducer's transform, whose
-      matrix reflects whichever transducer-tracking result is currently applied.
-    - ``kind="VF"``: the transform node is an approved virtual-fit result node.
-      Selecting this row is a deviation from the standard user-mode-enforced flow;
-      it is only offered when ``OpenLIFULib.kiosk_util.get_user_mode()`` is False.
-      Computing against a VF row yields a "pre-solution" (see #609).
-    """
-    target_node: vtkMRMLMarkupsFiducialNode
-    transform_node: vtkMRMLTransformNode
-    kind: Literal["TT", "VF"] = "TT"
 
 @dataclass
 class AlgorithmInput:
@@ -63,7 +45,6 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
         algorithm_input_names : List[str],
         parent=None,
         hide_singleton_inputs: bool = False,
-        use_target_selection: bool = False,
     ):
         super().__init__(parent)
         """
@@ -75,16 +56,9 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 user is not shown a locked single-choice dropdown. Rows with zero valid options
                 (i.e. the disabled "No X objects" placeholder) remain visible so the user still
                 sees why the input is unavailable.
-            use_target_selection: If True (opt-in), the Target combobox stores each row's user
-                data as a ``TargetSelection`` (bundling target fiducial + transform + kind), and
-                when ``OpenLIFULib.kiosk_util.get_user_mode()`` is False the combobox additionally
-                lists a "Virtual Fit for {label}" row per target that has an approved virtual-fit
-                result. When False (default), each Target row's user data is just the fiducial
-                node (legacy behavior).
         """
 
         self._hide_singleton_inputs = hide_singleton_inputs
-        self._use_target_selection = use_target_selection
 
         layout = qt.QFormLayout(self)
         self.setLayout(layout)
@@ -282,25 +256,6 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                 self.inputs_dict["Target"].combo_box.setEnabled(True)
                 # Local imports to avoid circular imports at module load time.
                 from OpenLIFULib.targets import fiducial_to_openlifu_point_id, label_for_target_id
-                # Snapshot the live transducer's transform node once; every TT row shares it.
-                # When ``use_target_selection`` is off this is unused.
-                tt_transform_node = None
-                approved_vf_by_target: Dict[str, vtkMRMLTransformNode] = {}
-                if self._use_target_selection and session is not None:
-                    from OpenLIFULib.kiosk_util import get_user_mode
-                    from OpenLIFULib.virtual_fit_results import get_virtual_fit_result_nodes
-                    tt_transform_node = session.get_transducer().transform_node
-                    if not get_user_mode():
-                        # Precompute {target_id -> approved VF transform node} for this session.
-                        # sort=True is ascending rank (best first); keep only the first hit per target.
-                        for vf_node in get_virtual_fit_result_nodes(
-                            session_id=session.get_session_id(),
-                            approved_only=True,
-                            sort=True,
-                        ):
-                            approved_vf_by_target.setdefault(
-                                vf_node.GetAttribute("VF:targetID"), vf_node,
-                            )
                 for target_node in target_nodes:
                     target_id = fiducial_to_openlifu_point_id(target_node)
                     # Show the user-facing display label (via label_for_target_id) alongside the
@@ -308,32 +263,10 @@ class OpenLIFUAlgorithmInputWidget(qt.QWidget):
                     # Point id itself -- so the entry read "Target_1 (ID: Target_1)" until the user
                     # renamed the target, at which point the label went stale (#594).
                     label = label_for_target_id(target_id)
-                    if self._use_target_selection:
-                        self.inputs_dict["Target"].combo_box.addItem(
-                            "{} (ID: {})".format(label, target_id),
-                            TargetSelection(
-                                target_node=target_node,
-                                transform_node=tt_transform_node,
-                                kind="TT",
-                            ),
-                        )
-                        # If pre-solutions are enabled for this session and this target has an
-                        # approved VF result, add an extra "Virtual Fit for ..." row that will
-                        # snap the transducer to the VF transform on selection (#609).
-                        if target_id in approved_vf_by_target:
-                            self.inputs_dict["Target"].combo_box.addItem(
-                                "Virtual Fit for {} (ID: {})".format(label, target_id),
-                                TargetSelection(
-                                    target_node=target_node,
-                                    transform_node=approved_vf_by_target[target_id],
-                                    kind="VF",
-                                ),
-                            )
-                    else:
-                        self.inputs_dict["Target"].combo_box.addItem(
-                            "{} (ID: {})".format(label, target_id),
-                            target_node,
-                        )
+                    self.inputs_dict["Target"].combo_box.addItem(
+                        "{} (ID: {})".format(label, target_id),
+                        target_node,
+                    )
 
         # Set selections to the previous ones when they exist
         self._set_most_recent_selections()

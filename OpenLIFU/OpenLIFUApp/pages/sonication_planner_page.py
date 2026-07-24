@@ -12,11 +12,11 @@ from __future__ import annotations
 
 # Standard library imports
 import warnings
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from datetime import datetime
 import math
 from pathlib import Path
-from typing import Optional, Union, Tuple, TYPE_CHECKING, get_origin, get_args
+from typing import Dict, List, Literal, Optional, Union, Tuple, TYPE_CHECKING, get_origin, get_args
 
 # Third-party imports
 import qt
@@ -24,7 +24,7 @@ import vtk
 
 # Slicer imports
 import slicer
-from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode
+from slicer import vtkMRMLMarkupsFiducialNode, vtkMRMLScalarVolumeNode, vtkMRMLTransformNode
 from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleWidget,
     ScriptedLoadableModuleLogic,
@@ -38,12 +38,10 @@ from OpenLIFULib import (
     BusyCursor,
     check_and_install_kwave_binaries,
     ensure_python_requirements_for_module_enter,
-    OpenLIFUAlgorithmInputWidget,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFUSolution,
     SlicerOpenLIFUSolutionAnalysis,
     SlicerOpenLIFUTransducer,
-    TargetSelection,
     fiducial_to_openlifu_point_in_transducer_coords,
     get_active_solution,
     get_app_state,
@@ -58,9 +56,9 @@ from OpenLIFULib.module_layout import apply_module_layout, navigate_to_page, wir
 from OpenLIFULib.targets import fiducial_to_openlifu_point_id
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import (
+    active_solution_is_pre_solution,
     create_noneditable_QStandardItem,
     display_errors,
-    replace_widget,
 )
 from OpenLIFULib.notifications import notify
 
@@ -79,6 +77,75 @@ if TYPE_CHECKING:
 @parameterNodeWrapper
 class OpenLIFUSonicationPlannerParameterNode:
     solution_analysis : Optional[SlicerOpenLIFUSolutionAnalysis] = None
+
+
+# ---------------------------------------------------------------------------
+# New-Solution picker
+# ---------------------------------------------------------------------------
+#
+# The Sonication Planner used to expose a Protocol/Transducer/Volume/Target
+# inputs section whose Target combobox doubled as the picker for which
+# transducer-transform source (transducer tracking vs. virtual fit) drove the
+# compute. That silently competed with the Solutions table for control of the
+# live transducer pose, so we dropped the inputs section entirely (SlicerOpenLIFU
+# #611). The session pins Protocol/Transducer/Volume unambiguously; Target and
+# transform source are now selected via an explicit modal picker enumerating
+# each eligible (target x transducer-transform source) combo. See #609 for the
+# VF -> pre-solution semantic.
+
+
+@dataclass(frozen=True)
+class _NewSolutionOption:
+    """One eligible (target, transducer-transform source) row in the New Solution picker."""
+
+    target_node: vtkMRMLMarkupsFiducialNode
+    target_label: str
+    target_id: str
+    kind: Literal["TT", "VF"]
+    transform_node: vtkMRMLTransformNode
+
+    @property
+    def is_pre_solution(self) -> bool:
+        return self.kind == "VF"
+
+    @property
+    def display_text(self) -> str:
+        source_label = "Tracked (localization)" if self.kind == "TT" else "Virtual Fit (pre-solution)"
+        return f"{self.target_label} \u00b7 {source_label}"
+
+
+class _NewSolutionPickerDialog(qt.QDialog):
+    """Modal picker shown when the New Solution toolbar button is clicked and more
+    than one eligible (target x transducer-transform source) option is available."""
+
+    def __init__(self, options: List[_NewSolutionOption], parent: Optional[qt.QWidget] = None):
+        super().__init__(parent if parent is not None else slicer.util.mainWindow())
+        self.setWindowTitle("New Solution")
+        self._options = options
+        layout = qt.QVBoxLayout(self)
+        layout.addWidget(qt.QLabel(
+            "Choose the target and transducer-transform source for the new solution:"
+        ))
+        self._list = qt.QListWidget()
+        for opt in options:
+            self._list.addItem(qt.QListWidgetItem(opt.display_text))
+        self._list.setCurrentRow(0)
+        self._list.itemDoubleClicked.connect(lambda *_: self.accept())
+        layout.addWidget(self._list)
+        btns = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        btns.button(qt.QDialogButtonBox.Ok).setText("Compute")
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def selected(self) -> Optional[_NewSolutionOption]:
+        row = self._list.currentRow
+        if row < 0 or row >= len(self._options):
+            return None
+        return self._options[row]
+
 
 #
 # OpenLIFUSonicationPlannerWidget
@@ -154,21 +221,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # Replace the placeholder algorithm input widget by the actual one.
-        # ``use_target_selection=True`` opts this page in to the composite Target rows
-        # (fiducial + snapped transducer transform + kind), which enables the pre-solution
-        # (VF-transform-derived) flow when the OPENLIFU_USER_MODE env var is not set. See
-        # #609.
-        algorithm_input_names = ["Protocol", "Transducer", "Volume", "Target"]
-        self.algorithm_input_widget = OpenLIFUAlgorithmInputWidget(
-            algorithm_input_names,
-            parent=self.ui.algorithmInputWidgetPlaceholder.parentWidget(),
-            use_target_selection=True,
-        )
-        replace_widget(self.ui.algorithmInputWidgetPlaceholder, self.algorithm_input_widget, self.ui)
-
         # Initialize UI
-        self.updateInputOptions()
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updatePNPSliders()
@@ -200,20 +253,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # The toolbar buttons (Show / Export / Delete) act on the currently selected row, so
         # their enabled state must track selection changes.
         self.ui.solutionsTableWidget.itemSelectionChanged.connect(self._update_solutions_toolbar)
-
-        # Refresh approval-status tooltips on the Target/Transducer comboboxes
-        # whenever the user changes their selection.
-        for _input_name in ("Target", "Transducer"):
-            self.algorithm_input_widget.connect_combobox_indexchanged_signal(
-                self._update_input_combobox_tooltips, input_type=_input_name
-            )
-
-        # When the Target selection changes, snap the live transducer to that row's
-        # transform and, if the row is a pre-solution (VF) row, swap the compute
-        # button + analysis section labels. See #609.
-        self.algorithm_input_widget.connect_combobox_indexchanged_signal(
-            self._on_target_selection_changed, input_type="Target"
-        )
 
         # Connect PNP sliders
         self.ui.pnpColorSlider.valuesChanged.connect(self.onPnpColorSliderChanged)
@@ -305,16 +344,31 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.onParameterNodeModified)
 
-    def checkCanComputeSolution(self, caller = None, event = None) -> None:
+    def checkCanComputeSolution(self, caller=None, event=None) -> None:
+        """Enable/disable the New Solution toolbar button.
 
-        # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
-        # This means that the compute solution button can be enabled
-        if self.algorithm_input_widget.has_valid_selections():
-            self.ui.newSolutionButton.enabled = True
-            self.ui.newSolutionButton.setToolTip("Compute a new sonication solution for the target under this protocol and subject-transducer scene")
-        else:
+        Enabled iff there is at least one eligible ``(target, transducer-transform source)``
+        option on the loaded session. The picker enumerates the eligible options when the
+        button is clicked; when only one is eligible the picker is auto-skipped (see
+        ``onComputeSolutionClicked``).
+        """
+        state = get_app_state()
+        session = state.loaded_session if state is not None else None
+        if session is None:
             self.ui.newSolutionButton.enabled = False
-            self.ui.newSolutionButton.setToolTip("Please specify the required inputs")
+            self.ui.newSolutionButton.setToolTip("Load a session before computing a solution.")
+            return
+        if not self._build_new_solution_options():
+            self.ui.newSolutionButton.enabled = False
+            self.ui.newSolutionButton.setToolTip(
+                "No approved transducer-transform results (transducer tracking or virtual fit) "
+                "are available on this session."
+            )
+            return
+        self.ui.newSolutionButton.enabled = True
+        self.ui.newSolutionButton.setToolTip(
+            "Compute a new sonication solution against a target and an approved transducer pose."
+        )
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -333,11 +387,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
 
     def updateInputOptions(self):
-        """Update the comboboxes, forcing some of them to take values derived from the active session if there is one"""
-        self.algorithm_input_widget.update()
-        self._decorate_approval_status_in_comboboxes()
+        """Refresh input-dependent UI state after data-source changes.
 
-        # Determine whether solution can be computed based on the status of combo boxes
+        Post-#611 there is no algorithm-input widget on this page; the eligible
+        ``(target, transducer-transform source)`` set is queried on demand by
+        ``checkCanComputeSolution`` and by the New-Solution picker itself.
+        """
         self.checkCanComputeSolution()
 
     def updateSolutionProgressBar(self):
@@ -452,6 +507,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._refresh_solutions_table()
         self._update_now_showing_label()
         self._update_solutions_toolbar()
+        self._update_analysis_collapsible_label()
+        # Re-drive the transducer pose + photoscan visibility from the *active* solution
+        # (SolutionInfo.transducer_transform_source), so the Solutions table is the sole
+        # driver of what the user sees in the 3D view on this page (SlicerOpenLIFU#611).
+        # Guarded on ``self.parent.isEntered`` so app-state mutations from other pages
+        # (e.g. TT approval on the localization page) do not silently move the transducer
+        # around while the user is looking somewhere else.
+        if getattr(self.parent, "isEntered", False):
+            from OpenLIFULib.view_state import apply_module_view_state, SONICATION_PLANNER
+            apply_module_view_state(SONICATION_PLANNER)
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -471,19 +536,139 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateInputOptions()
 
     @display_errors
-    def onComputeSolutionClicked(self, checked:bool):
-        activeData = self.algorithm_input_widget.get_current_data()
+    def onComputeSolutionClicked(self, checked: bool):
+        """Show the New Solution picker (auto-skipped when only one option is on offer),
+        then compute the solution against the chosen (target, transducer-transform source).
 
+        Options are enumerated from the loaded session's approved transducer transforms:
+        one row per session target for TT (when the session has any approved TT result), plus
+        one row per session target that has an approved VF result (VF rows are suppressed in
+        kiosk / user mode; see #609). See ``_build_new_solution_options``.
+        """
         if not check_and_install_kwave_binaries():
             raise RuntimeError("Cannot find kwave binaries required to compute sonication solutions.")
+        state = get_app_state()
+        session = state.loaded_session if state is not None else None
+        if session is None:
+            raise RuntimeError("Cannot compute a new solution: no session is loaded.")
 
-        # Unpack the composite Target selection: this row's fiducial + the (already-
-        # snapped) transducer transform + the row's kind. VF-kind rows are the
-        # pre-solution flow enabled outside user mode (#609).
-        target_selection: TargetSelection = activeData["Target"]
-        is_pre_solution = target_selection.kind == "VF"
+        options = self._build_new_solution_options()
+        if not options:
+            slicer.util.errorDisplay(
+                "No approved transducer transforms are available on this session. Please "
+                "approve at least one transducer-tracking result (or, outside kiosk mode, "
+                "one virtual-fit result) before computing a solution.",
+                "No approved transforms",
+            )
+            return
 
-        # In case a PNP was previously being displayed, hide it since it is about to no longer belong to the active solution.
+        # Kiosk auto-skip: when only one option is on offer -- typically because VF rows have
+        # been filtered out for user mode and only a single target has an approved TT -- take
+        # it directly without prompting (per the #611 clarification).
+        if len(options) == 1:
+            chosen = options[0]
+        else:
+            dialog = _NewSolutionPickerDialog(options, parent=slicer.util.mainWindow())
+            if not dialog.exec_():
+                return
+            chosen = dialog.selected()
+            if chosen is None:
+                return
+
+        self._compute_solution_for_option(chosen)
+
+    def _build_new_solution_options(self) -> List[_NewSolutionOption]:
+        """Enumerate eligible ``(target, transducer-transform source)`` rows.
+
+        Rules:
+          * TT rows: one per session target when the session has any approved
+            transducer-tracking result. The pose node is the approved
+            transducer_to_volume TT result node (there is at most one under the
+            one-approval rule).
+          * VF rows: one per session target that has an approved virtual-fit
+            result (highest-ranked approved VF is used as the pose node).
+            Suppressed in kiosk / user mode, since VF-derived solutions are the
+            deviation-from-standard flow (#609).
+        """
+        from OpenLIFULib.kiosk_util import get_user_mode
+        from OpenLIFULib.transducer_tracking_results import (
+            get_transducer_tracking_result_nodes_in_scene,
+        )
+        from OpenLIFULib.virtual_fit_results import get_virtual_fit_result_nodes
+
+        state = get_app_state()
+        session = state.loaded_session if state is not None else None
+        if session is None:
+            return []
+        target_nodes = session.get_target_nodes()
+        if not target_nodes:
+            return []
+        session_id = session.get_session_id()
+
+        # Approved TT result node for this session's transducer_to_volume (at most one under
+        # the one-approval rule). We match the view_state pattern (see
+        # OpenLIFULib.view_state._find_approved_tt_transducer_node) rather than call it
+        # directly since it is underscore-prefixed.
+        tt_nodes = list(get_transducer_tracking_result_nodes_in_scene(
+            session_id=session_id,
+            photoscan_id=None,
+        ))
+        if session_id is None:
+            tt_nodes = [n for n in tt_nodes if n.GetAttribute("TT:sessionID") is None]
+        approved_tt_node = next(
+            (n for n in tt_nodes if n.GetAttribute("TT:approvalStatus") == "1"),
+            None,
+        )
+
+        # Approved VF result node per target (best-ranked first).
+        approved_vf_by_target: Dict[str, vtkMRMLTransformNode] = {}
+        if not get_user_mode():
+            for vf_node in get_virtual_fit_result_nodes(
+                session_id=session_id,
+                approved_only=True,
+                sort=True,  # ascending by rank; best first
+            ):
+                approved_vf_by_target.setdefault(vf_node.GetAttribute("VF:targetID"), vf_node)
+
+        options: List[_NewSolutionOption] = []
+        for target_node in target_nodes:
+            target_id = fiducial_to_openlifu_point_id(target_node)
+            target_label = label_for_target_id(target_id) or target_id
+            if approved_tt_node is not None:
+                options.append(_NewSolutionOption(
+                    target_node=target_node,
+                    target_label=target_label,
+                    target_id=target_id,
+                    kind="TT",
+                    transform_node=approved_tt_node,
+                ))
+            if target_id in approved_vf_by_target:
+                options.append(_NewSolutionOption(
+                    target_node=target_node,
+                    target_label=target_label,
+                    target_id=target_id,
+                    kind="VF",
+                    transform_node=approved_vf_by_target[target_id],
+                ))
+        return options
+
+    def _compute_solution_for_option(self, option: _NewSolutionOption) -> None:
+        """Snap the live transducer to the option's pose, then run the compute.
+
+        Shared entry point for the picker path and the module Test class so both go through
+        exactly the same pose-snap + compute sequence.
+        """
+        state = get_app_state()
+        session = state.loaded_session if state is not None else None
+        if session is None:
+            raise RuntimeError("Cannot compute a new solution: no session is loaded.")
+        # Snap the live transducer to the chosen pose so the compute (and the PNP
+        # visualization that follows) matches what the user picked.
+        live_tx = session.get_transducer()
+        live_tx.set_current_transform_to_match_transform_node(option.transform_node)
+
+        # In case a PNP was previously being displayed, hide it since it is about to no
+        # longer belong to the active solution.
         self.ui.renderPNPCheckBox.checked = False
         self.logic.hide_pnp()
 
@@ -492,15 +677,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 self.ui.solutionProgressBar.maximum = 0
                 slicer.app.processEvents()
                 self.logic.computeSolution(
-                    activeData["Volume"], target_selection.target_node,
-                    activeData["Transducer"], activeData["Protocol"],
-                    pre_solution=is_pre_solution,
+                    session.volume_node,
+                    option.target_node,
+                    live_tx,
+                    session.get_protocol(),
+                    pre_solution=option.is_pre_solution,
                 )
             finally:
                 self.updateSolutionProgressBar()
 
         self.ui.renderPNPCheckBox.checked = True
-
         self.updateWorkflowControls()
 
     def onrenderPNPCheckBoxToggled(self, checked:bool):
@@ -548,110 +734,14 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNode.solution_analysis = None
             notify(f"Solution deleted:\n{reason}")
 
-    def _decorate_approval_status_in_comboboxes(self) -> None:
-        """Decorate Target and Transducer combobox items with a check-mark
-        prefix and a tooltip describing the approval status, then refresh the
-        comboboxes' own tooltips. Should be called after
-        ``self.algorithm_input_widget.update()``, which rebuilds the items
-        from scratch (so we always start from undecorated text).
-        """
-        loaded_session = get_app_state().loaded_session
-        approved_target_ids = (
-            set(loaded_session.get_virtual_fit_approvals())
-            if loaded_session is not None else set()
-        )
-        approved_photoscan_ids = (
-            set(loaded_session.get_transducer_tracking_approvals())
-            if loaded_session is not None else set()
-        )
-        # Transducer-tracking approvals are stored per photoscan within a
-        # session; a session's transducer is considered tracking-approved if
-        # any of its affiliated photoscans is approved.
-        has_tracking_approval = loaded_session is not None and len(approved_photoscan_ids) > 0
-
-        # --- Target combobox ---
-        # Rows carry ``TargetSelection`` payloads (see #609). Decorate TT rows for targets
-        # that have an approved virtual-fit result. VF rows are already self-labeled
-        # ("Virtual Fit for ...") and represent the deviation-from-standard-flow path,
-        # so we deliberately leave them undecorated.
-        target_box = self.algorithm_input_widget.inputs_dict["Target"].combo_box
-        for i in range(target_box.count):
-            sel = target_box.itemData(i)
-            if not isinstance(sel, TargetSelection):
-                continue
-            if sel.kind != "TT":
-                continue
-            target_id = sel.target_node.GetName()
-            if target_id in approved_target_ids:
-                target_box.setItemText(i, f"\u2713 {target_box.itemText(i)}")
-                target_box.setItemData(
-                    i,
-                    f"Virtual Fit is approved for Target {label_for_target_id(target_id)}",
-                    qt.Qt.ToolTipRole,
-                )
-
-        # --- Transducer combobox ---
-        tx_box = self.algorithm_input_widget.inputs_dict["Transducer"].combo_box
-        for i in range(tx_box.count):
-            slicer_tx = tx_box.itemData(i)
-            if slicer_tx is None:
-                continue
-            if has_tracking_approval:
-                tx_name = slicer_tx.transducer.transducer.name
-                tx_box.setItemText(i, f"\u2713 {tx_box.itemText(i)}")
-                tx_box.setItemData(
-                    i,
-                    f"Transducer Localization is approved for Transducer {tx_name}",
-                    qt.Qt.ToolTipRole,
-                )
-
-        self._update_input_combobox_tooltips()
-
-    def _update_input_combobox_tooltips(self, *args) -> None:
-        """Mirror the current Target/Transducer item's tooltip onto the
-        combobox itself, so the approval message is shown on hover when the
-        dropdown is collapsed. If the current item has no per-item tooltip,
-        the combobox tooltip is cleared.
-        """
-        for input_name in ("Target", "Transducer"):
-            if input_name not in self.algorithm_input_widget.inputs_dict:
-                continue
-            box = self.algorithm_input_widget.inputs_dict[input_name].combo_box
-            idx = box.currentIndex
-            item_tooltip = box.itemData(idx, qt.Qt.ToolTipRole) if idx >= 0 else None
-            box.setToolTip(item_tooltip or "")
-
-    def _current_target_selection(self) -> Optional[TargetSelection]:
-        """Return the currently selected Target row's ``TargetSelection``, or None."""
-        box = self.algorithm_input_widget.inputs_dict["Target"].combo_box
-        sel = box.currentData
-        return sel if isinstance(sel, TargetSelection) else None
-
-    def _on_target_selection_changed(self, *args) -> None:
-        """Snap the live transducer to the selected Target row's transform and swap
-        the compute button + analysis section labels for pre-solution rows (#609)."""
-        sel = self._current_target_selection()
-        if sel is None:
-            self._apply_pre_solution_labels(is_pre_solution=False)
-            return
-        # Snap the live transducer's transform to the row's snapshotted transform.
-        # For TT rows these are the same node (no-op); for VF rows this moves the
-        # transducer to the approved virtual-fit pose so the scene matches what
-        # will be simulated.
-        session = get_app_state().loaded_session
-        if session is not None:
-            live_tx = session.get_transducer()
-            live_tx.set_current_transform_to_match_transform_node(sel.transform_node)
-        self._apply_pre_solution_labels(is_pre_solution=(sel.kind == "VF"))
-
-    def _apply_pre_solution_labels(self, is_pre_solution: bool) -> None:
-        """Swap the compute button text and the analysis section title so the UI reflects
-        whether the current Target selection produces a Solution or a Pre-Solution."""
-        if is_pre_solution:
-            self.ui.newSolutionButton.setText("New pre-solution")
+    def _update_analysis_collapsible_label(self) -> None:
+        """Reflect whether the currently shown solution is a pre-solution in the analysis
+        section header. VF-derived (pre-)solutions carry
+        ``transducer_transform_source == "virtual_fit"`` on their SolutionInfo record; see
+        ``active_solution_is_pre_solution`` and #609."""
+        if active_solution_is_pre_solution():
             self.ui.analysisCollapsible.setText("Pre-solution analysis")
         else:
-            self.ui.newSolutionButton.setText("New solution")
             self.ui.analysisCollapsible.setText("Solution analysis")
 
     @display_errors
@@ -1500,22 +1590,30 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
 
         import numpy as np
         from scipy.linalg import expm
-        
+
         navigate_to_page("OpenLIFUSonicationPlanner")
         sp_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner")
-        sp_logic = sp_widget.logic 
- 
-        activeData = sp_widget.algorithm_input_widget.get_current_data()
-        # ``activeData["Target"]`` is a ``TargetSelection`` on this page (#609).
-        target_selection: TargetSelection = activeData["Target"]
-        selected_target = target_selection.target_node
-        selected_transducer = activeData["Transducer"]
+        sp_logic = sp_widget.logic
 
-        sp_widget.onComputeSolutionClicked(True)
+        # Post-#611: the page no longer has an algorithm-input widget. Session provides
+        # Protocol/Transducer/Volume unambiguously; target + transducer-transform source come
+        # from the New-Solution picker. We drive the same code path here by picking the first
+        # eligible option and invoking the picker's shared compute helper.
+        session = get_app_state().loaded_session
+        assert session is not None, "Test setup: expected a loaded session on the app state."
+        options = sp_widget._build_new_solution_options()
+        assert options, "Test setup: expected at least one eligible (target, transform) option."
+        chosen = options[0]
+        selected_target = chosen.target_node
+        selected_transducer = session.get_transducer()
+        selected_volume = session.volume_node
+        selected_protocol = session.get_protocol()
+
+        sp_widget._compute_solution_for_option(chosen)
         assert get_active_solution() is not None
-    
+
         # Test that moving the target clears the solution
-        curr_pos =  selected_target.GetNthControlPointPositionWorld(0)
+        curr_pos = selected_target.GetNthControlPointPositionWorld(0)
 
         selected_target.SetNthControlPointPositionWorld(0, (curr_pos[0], curr_pos[1], curr_pos[2]+0.1)) # this should clear the results
         slicer.app.processEvents()
@@ -1523,8 +1621,8 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
 
         # Test that moving the transducer clears the solution
         solution, analysis = sp_logic.computeSolution(
-            activeData["Volume"], selected_target,
-            activeData["Transducer"], activeData["Protocol"]
+            selected_volume, selected_target,
+            selected_transducer, selected_protocol,
             )
         assert get_active_solution() is not None
 
@@ -1547,8 +1645,8 @@ class OpenLIFUSonicationPlannerTest(ScriptedLoadableModuleTest):
         selected_transducer.transform_node.SetMatrixTransformToParent(original_transducer_transform)
         slicer.app.processEvents()
         solution, analysis = sp_logic.computeSolution(
-            activeData["Volume"], selected_target,
-            activeData["Transducer"], activeData["Protocol"]
+            selected_volume, selected_target,
+            selected_transducer, selected_protocol,
         )
         solution.solution.solution.id = "TestSolutionID"
         slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(solution)
