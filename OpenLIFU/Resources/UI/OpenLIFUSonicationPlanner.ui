@@ -62,50 +62,6 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="computeSolutionPermissionsWidget" native="true">
-     <property name="slicer.openlifu.allowed-roles" stdset="0">
-      <stringlist>
-       <string>admin</string>
-       <string>operator</string>
-      </stringlist>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_compute">
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <item>
-       <widget class="QPushButton" name="solutionPushButton">
-        <property name="text">
-         <string>Compute sonication solution</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QProgressBar" name="solutionProgressBar">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="maximum">
-         <number>1</number>
-        </property>
-        <property name="value">
-         <number>0</number>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="solutionsCollapsibleButton">
      <property name="text">
       <string>Solutions</string>
@@ -114,6 +70,78 @@
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_solutions">
+      <item>
+       <layout class="QHBoxLayout" name="solutionsToolbarLayout">
+        <item>
+         <widget class="QPushButton" name="newSolutionButton">
+          <property name="slicer.openlifu.allowed-roles" stdset="0">
+           <stringlist>
+            <string>admin</string>
+            <string>operator</string>
+           </stringlist>
+          </property>
+          <property name="text">
+           <string>New</string>
+          </property>
+          <property name="toolTip">
+           <string>Compute a new sonication solution for the currently selected inputs</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="showSolutionButton">
+          <property name="text">
+           <string>Show</string>
+          </property>
+          <property name="toolTip">
+           <string>Show the selected solution (make it the active solution driving the analysis, PNP rendering, and hardware send)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="exportSolutionButton">
+          <property name="text">
+           <string>Export</string>
+          </property>
+          <property name="toolTip">
+           <string>Export the selected solution to a JSON file (with optional simulation data .nc file)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="deleteSolutionButton">
+          <property name="slicer.openlifu.allowed-roles" stdset="0">
+           <stringlist>
+            <string>admin</string>
+            <string>operator</string>
+           </stringlist>
+          </property>
+          <property name="text">
+           <string>Delete</string>
+          </property>
+          <property name="toolTip">
+           <string>Delete the selected solution from the session (removed from disk on next session save)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QProgressBar" name="solutionProgressBar">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="maximum">
+           <number>1</number>
+          </property>
+          <property name="value">
+           <number>0</number>
+          </property>
+          <property name="toolTip">
+           <string>Solution compute progress</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
       <item>
        <widget class="QTableWidget" name="solutionsTableWidget">
         <property name="toolTip">
@@ -308,47 +336,6 @@ analysis.</string>
         </property>
         <property name="invertedAppearance">
          <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QWidget" name="approvePermissionsWidget" native="true">
-     <property name="slicer.openlifu.allowed-roles" stdset="0">
-      <stringlist>
-       <string>admin</string>
-       <string>operator</string>
-      </stringlist>
-     </property>
-     <layout class="QHBoxLayout" name="verticalLayout_approve">
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <item>
-       <widget class="QPushButton" name="approveButton">
-        <property name="text">
-         <string>Approve solution</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="exportButton">
-        <property name="toolTip">
-         <string>Export the active solution to a JSON file (with optional simulation data .nc file)</string>
-        </property>
-        <property name="text">
-         <string>Export solution</string>
         </property>
        </widget>
       </item>

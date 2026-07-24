@@ -124,10 +124,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             uiWidget, ui_namespace=self.ui, header_read_only=True
         )
 
-        # Lift the "Approve solution" button out of the scrollable body so it
-        # stays pinned just above the workflow controls.
-        self._lift_approve_widget_out_of_scroll_area(uiWidget)
-
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -186,10 +182,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeRemovedEvent, self.onNodeRemoved)
 
 
-        self.ui.solutionPushButton.clicked.connect(self.onComputeSolutionClicked)
+        self.ui.newSolutionButton.clicked.connect(self.onComputeSolutionClicked)
         self.ui.renderPNPCheckBox.toggled.connect(self.onrenderPNPCheckBoxToggled)
-        self.ui.approveButton.clicked.connect(self.onApproveClicked)
-        self.ui.exportButton.clicked.connect(self.onExportClicked)
+        self.ui.showSolutionButton.clicked.connect(self.onShowSelectedClicked)
+        self.ui.exportSolutionButton.clicked.connect(self.onExportClicked)
+        self.ui.deleteSolutionButton.clicked.connect(self.onDeleteSelectedClicked)
 
         # Solutions table (SlicerOpenLIFU#611): shows every SolutionInfo record on the loaded
         # Session. Interactive columns are Show (single-row checkbox that drives the active
@@ -200,6 +197,9 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._configure_solutions_table_columns()
         self.ui.solutionsTableWidget.itemChanged.connect(self._on_solutions_table_item_changed)
         self.ui.solutionsTableWidget.itemDoubleClicked.connect(self._on_solutions_table_item_double_clicked)
+        # The toolbar buttons (Show / Export / Delete) act on the currently selected row, so
+        # their enabled state must track selection changes.
+        self.ui.solutionsTableWidget.itemSelectionChanged.connect(self._update_solutions_toolbar)
 
         # Refresh approval-status tooltips on the Target/Transducer comboboxes
         # whenever the user changes their selection.
@@ -220,7 +220,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.pnpOpacitySlider.valueChanged.connect(self.onPnpOpacitySliderChanged)
 
         self.checkCanComputeSolution()
-        self.updateApproveButton()
+        self._update_solutions_toolbar()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -239,24 +239,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # ``onDataParameterNodeModified`` will handle subsequent refreshes.
         self._refresh_solutions_table()
         self._update_now_showing_label()
-
-    def _lift_approve_widget_out_of_scroll_area(self, uiWidget) -> None:
-        """Reparent ``approvePermissionsWidget`` from the scrollable body into
-        the top-level layout, just above the workflow-controls placeholder, so
-        the Approve button stays visible without scrolling.
-        """
-        approve_widget = self.ui.approvePermissionsWidget
-        workflow_placeholder = self.ui.workflowControlsPlaceholder
-        top_layout = uiWidget.layout()
-        workflow_index = -1
-        for i in range(top_layout.count()):
-            if top_layout.itemAt(i).widget() is workflow_placeholder:
-                workflow_index = i
-                break
-        if workflow_index < 0:
-            return
-        approve_widget.setParent(uiWidget)
-        top_layout.insertWidget(workflow_index, approve_widget)
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -328,11 +310,11 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # If all the needed objects/nodes are loaded within the Slicer scene, all of the combo boxes will have valid data selected
         # This means that the compute solution button can be enabled
         if self.algorithm_input_widget.has_valid_selections():
-            self.ui.solutionPushButton.enabled = True
-            self.ui.solutionPushButton.setToolTip("Compute a sonication solution for the target under this protocol and subject-transducer scene")
+            self.ui.newSolutionButton.enabled = True
+            self.ui.newSolutionButton.setToolTip("Compute a new sonication solution for the target under this protocol and subject-transducer scene")
         else:
-            self.ui.solutionPushButton.enabled = False
-            self.ui.solutionPushButton.setToolTip("Please specify the required inputs")
+            self.ui.newSolutionButton.enabled = False
+            self.ui.newSolutionButton.setToolTip("Please specify the required inputs")
 
     @vtk.calldata_type(vtk.VTK_OBJECT)
     def onNodeRemoved(self, caller, event, node : slicer.vtkMRMLNode) -> None:
@@ -458,7 +440,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
         self.updatePNPSliders()
-        self.updateApproveButton()
 
         if get_active_solution() is None:
             self.logic.getParameterNode().solution_analysis = None
@@ -470,6 +451,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # load/unload, solution add/remove, active-solution change, etc.) (#611).
         self._refresh_solutions_table()
         self._update_now_showing_label()
+        self._update_solutions_toolbar()
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""
@@ -666,92 +648,149 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Swap the compute button text and the analysis section title so the UI reflects
         whether the current Target selection produces a Solution or a Pre-Solution."""
         if is_pre_solution:
-            self.ui.solutionPushButton.setText("Compute pre-solution")
+            self.ui.newSolutionButton.setText("New pre-solution")
             self.ui.analysisCollapsible.setText("Pre-solution analysis")
         else:
-            self.ui.solutionPushButton.setText("Compute sonication solution")
+            self.ui.newSolutionButton.setText("New solution")
             self.ui.analysisCollapsible.setText("Solution analysis")
 
-    def updateApproveButton(self):
-        data_parameter_node = get_app_state()
-        active_solution = get_active_solution()
-        if active_solution is None:
-            self.ui.approveButton.setEnabled(False)
-            self.ui.approveButton.setToolTip("There is no active solution to write the approval")
-            self.ui.approveButton.setText("Approve solution")
-            self.ui.exportButton.setEnabled(False)
-            self.ui.exportButton.setToolTip("There is no active solution to export")
-        elif not self.logic.solution_analysis_exists():
-            self.ui.approveButton.setEnabled(False)
-            self.ui.approveButton.setToolTip("The solution cannot be approved because there is no solution analysis.")
-            self.ui.approveButton.setText("Approve solution")
-            self.ui.exportButton.setEnabled(True)
-            self.ui.exportButton.setToolTip("Export the active solution to a JSON file (with optional simulation data .nc file)")
-        elif self.logic.solution_analysis_has_errors():
-            self.ui.approveButton.setEnabled(False)
-            self.ui.approveButton.setToolTip("The solution cannot be approved because the solution analysis has errors.")
-            self.ui.approveButton.setText("Approve solution")
-            self.ui.exportButton.setEnabled(True)
-            self.ui.exportButton.setToolTip("Export the active solution to a JSON file (with optional simulation data .nc file)")
+    @display_errors
+    def onShowSelectedClicked(self, checked: bool) -> None:
+        """Promote the selected Solutions-table row to the shown / active solution."""
+        sid = self._selected_solution_id()
+        if sid is None:
+            raise RuntimeError("Cannot show solution: no row is selected in the Solutions table.")
+        set_active_solution(sid)
+
+    @display_errors
+    def onDeleteSelectedClicked(self, checked: bool) -> None:
+        """Remove the selected row's SolutionInfo from the loaded Session.
+
+        The on-disk solution directory is left in place until the next
+        ``save_session``, at which point ``purge_orphaned_solutions`` reconciles the on-disk
+        state against ``Session.solutions``. The in-memory ``loaded_solutions`` entry is
+        dropped immediately; if the deleted solution was the active one, ``active_solution_id``
+        is cleared.
+        """
+        sid = self._selected_solution_id()
+        if sid is None:
+            raise RuntimeError("Cannot delete solution: no row is selected in the Solutions table.")
+        state = get_app_state()
+        loaded_session = state.loaded_session
+        if loaded_session is None:
+            raise RuntimeError("Cannot delete solution: no session is loaded.")
+        session_openlifu = loaded_session.session.session
+        # Find the SolutionInfo (needed for the confirm-dialog label; also for a clean
+        # error message if the row is somehow stale).
+        info = next((si for si in session_openlifu.solutions if si.solution_id == sid), None)
+        if info is None:
+            raise RuntimeError(f"Cannot delete solution: {sid!r} is not on the loaded session.")
+
+        # Human-friendly label: prefer the loaded openlifu Solution.name over the raw id.
+        loaded_solutions = state.loaded_solutions
+        label = (
+            loaded_solutions[sid].solution.solution.name
+            if sid in loaded_solutions
+            else sid
+        )
+        if not slicer.util.confirmYesNoDisplay(
+            text=(
+                f"Delete solution '{label}' (ID: {sid}) from this session?\n\n"
+                "The associated files will be removed from disk the next time the session is saved."
+            ),
+            windowTitle="Delete solution?",
+        ):
+            return
+
+        # Drop the SolutionInfo entry. Reassigning the pack fires the write hook so the
+        # cross-module observers (and our own ``_refresh_solutions_table``) run.
+        session_openlifu.solutions = [
+            si for si in session_openlifu.solutions if si.solution_id != sid
+        ]
+        state.loaded_session = loaded_session
+
+        # Drop the in-memory Solution wrapper.
+        if sid in loaded_solutions:
+            loaded_solutions.pop(sid)
+            state.loaded_solutions = loaded_solutions
+
+        # If the active solution was the one we just deleted, clear it. This drives the
+        # analysis section back to the "No solution" page and hides the PNP.
+        if state.active_solution_id == sid:
+            set_active_solution(None)
+
+    def _selected_solution_id(self) -> Optional[str]:
+        """Return the solution id of the currently selected Solutions-table row, or None."""
+        tbl = self.ui.solutionsTableWidget
+        rows = tbl.selectionModel().selectedRows() if tbl.selectionModel() is not None else []
+        if not rows:
+            return None
+        return self._row_solution_id(rows[0].row())
+
+    def _update_solutions_toolbar(self) -> None:
+        """Update enabled state + tooltips of the Solutions toolbar buttons.
+
+        * New   -- driven by ``checkCanComputeSolution`` (input completeness).
+        * Show  -- enabled when a non-active row is selected.
+        * Export -- enabled when the selected row's solution is loaded.
+        * Delete -- enabled when a row is selected.
+        """
+        sid = self._selected_solution_id()
+        state = get_app_state()
+        loaded_solutions = state.loaded_solutions if state is not None else {}
+        active_id = state.active_solution_id if state is not None else None
+
+        if sid is None:
+            self.ui.showSolutionButton.setEnabled(False)
+            self.ui.showSolutionButton.setToolTip("Select a solution in the table first")
+            self.ui.exportSolutionButton.setEnabled(False)
+            self.ui.exportSolutionButton.setToolTip("Select a solution in the table first")
+            self.ui.deleteSolutionButton.setEnabled(False)
+            self.ui.deleteSolutionButton.setToolTip("Select a solution in the table first")
+            return
+
+        # Show
+        if sid == active_id:
+            self.ui.showSolutionButton.setEnabled(False)
+            self.ui.showSolutionButton.setToolTip("The selected solution is already the shown solution")
         else:
-            self.ui.approveButton.setEnabled(True)
-            self.ui.exportButton.setEnabled(True)
-            self.ui.exportButton.setToolTip("Export the active solution to a JSON file (with optional simulation data .nc file)")
-            if active_solution.is_approved():
-                self.ui.approveButton.setText("Unapprove solution")
-                self.ui.approveButton.setToolTip(
-                    "Revoke approval for the sonication solution"
-                )
-            else:
-                self.ui.approveButton.setText("Approve solution")
-                self.ui.approveButton.setToolTip(
-                    "Approve the sonication solution"
-                )
+            self.ui.showSolutionButton.setEnabled(True)
+            self.ui.showSolutionButton.setToolTip(
+                "Show the selected solution (make it the active solution driving the analysis, PNP rendering, and hardware send)"
+            )
 
-    def onApproveClicked(self):
-        solution = get_active_solution()
-        if solution is None:
-            raise RuntimeError("Cannot approve/unapprove solution because there is no solution.")
+        # Export
+        if sid in loaded_solutions:
+            self.ui.exportSolutionButton.setEnabled(True)
+            self.ui.exportSolutionButton.setToolTip(
+                "Export the selected solution to a JSON file (with optional simulation data .nc file)"
+            )
+        else:
+            self.ui.exportSolutionButton.setEnabled(False)
+            self.ui.exportSolutionButton.setToolTip(
+                "The selected solution is not loaded into memory; cannot export"
+            )
 
-        if not solution.is_approved():
-
-            # Check if solution analysis exists, return if not
-            if not self.logic.solution_analysis_exists():
-                slicer.util.errorDisplay(
-                    "The solution could not be approved because there is no solution analysis.",
-                    "Solution not approved",
-                )
-                return
-
-            # Check for errors in solution analysis, return if so
-            if self.logic.solution_analysis_has_errors():
-                slicer.util.errorDisplay(
-                    "The solution could not be approved because the solution analysis had values outside its allowed constraints.",
-                    "Solution not approved",
-                )
-                return
-
-            # Check for warnings in solution analysis and warn
-            if self.logic.solution_analysis_has_warnings():
-                if not slicer.util.confirmYesNoDisplay(
-                    text="Warning: The solution analysis has values outside of recommended constraints. Are you sure you want to approve?",
-                    windowTitle="Solution approval warning",
-                ):
-                    return
-
-        with BusyCursor():
-            self.logic.toggle_solution_approval()
-
-        self.updateWorkflowControls()
+        # Delete
+        self.ui.deleteSolutionButton.setEnabled(True)
+        self.ui.deleteSolutionButton.setToolTip(
+            "Delete the selected solution from the session (removed from disk on next session save)"
+        )
 
     @display_errors
     def onExportClicked(self, checked: bool):
-        """Export the active solution to a JSON file (and optionally a .nc
+        """Export the selected Solutions-table row to a JSON file (and optionally a .nc
         file with the simulation data) chosen by the user."""
-        loaded_solution = get_active_solution()
-        if loaded_solution is None:
-            raise RuntimeError("Cannot export solution because there is no active solution.")
-        solution_openlifu: "openlifu.plan.Solution" = loaded_solution.solution.solution
+        sid = self._selected_solution_id()
+        if sid is None:
+            raise RuntimeError("Cannot export solution: no row is selected in the Solutions table.")
+        state = get_app_state()
+        loaded_solutions = state.loaded_solutions
+        if sid not in loaded_solutions:
+            raise RuntimeError(
+                f"Cannot export solution {sid!r}: the underlying Solution object is not loaded."
+            )
+        solution_openlifu: "openlifu.plan.Solution" = loaded_solutions[sid].solution.solution
 
         # Build a save dialog with an extra "Also export simulation data"
         # checkbox embedded directly in the file picker.
@@ -831,7 +870,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._updating_solution_analysis = True
             self.updateSolutionAnalysis()
             self._updating_solution_analysis = False
-        self.updateApproveButton()
 
         # ---- Revoke the solution approval in certain cases ----
         active_solution = get_active_solution()
@@ -1115,8 +1153,6 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 return
             # Reassign the pack so ``@parameterNodeWrapper`` serializes the mutation.
             state.loaded_session = loaded_session
-            # If this row is the active one, the approve button label may need to update.
-            self.updateApproveButton()
             return
 
     def _on_solutions_table_item_double_clicked(self, item) -> None:
