@@ -1420,7 +1420,19 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
         # against a virtual-fit transform; the standard flow uses the live transducer transform,
         # which is driven by a transducer-tracking result and is therefore recorded as
         # ``"localization"``.
+        #
+        # ``array_transform`` (SlicerOpenLIFU#622) captures the exact transducer array-to-volume
+        # transform matrix used at this compute time. The PNP / intensity volumes are stored in
+        # transducer-local coordinates and parented under ``transducer.transform_node``; showing
+        # this solution later must reproduce this same pose, otherwise the PNP moves with
+        # whichever VF / TT is currently approved -- which is especially catastrophic for a
+        # pre-solution whose backing VF approval is later revoked.
         import openlifu.db.session
+        from OpenLIFULib.transform_conversion import transducer_transform_node_to_openlifu
+        array_transform_openlifu = transducer_transform_node_to_openlifu(
+            transform_node=inputTransducer.transform_node,
+            transducer_units=inputTransducer.transducer.transducer.units,
+        )
         solution_info = openlifu.db.session.SolutionInfo(
             solution_id=solution_openlifu.id,
             protocol_id=inputProtocol.protocol.id,
@@ -1429,6 +1441,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             transducer_transform_source="virtual_fit" if pre_solution else "localization",
             approved=False,
             computed_at=datetime.now(),
+            array_transform=array_transform_openlifu,
         )
         slicer.util.getModuleLogic("OpenLIFU").data_logic.set_solution(
             solution,

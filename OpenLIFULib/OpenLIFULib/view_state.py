@@ -16,10 +16,13 @@ PrePlanning         left alone (combobox manages it)      visible            hid
 TransducerLoc.      any TT result, else hide                              visible            visible when TT exists,
                     (empty table -> hidden, no                                                 else hidden
                     approved-VF fallback)
-SonicationPlanner   approved TT, else approved VF,        hidden             visible when approved
-                    else leave alone                                         TT exists, else hidden
-SonicationControl   approved TT, else approved VF,        hidden             visible when approved
-                    else leave alone                                         TT exists, else hidden
+SonicationPlanner   active Solution.array_transform       hidden             visible when approved
+                    (see #622), else legacy fallback:                        TT exists, else hidden
+                    approved TT for a normal solution,
+                    approved VF for a pre-solution,
+                    else leave alone
+SonicationControl   same as SonicationPlanner             hidden             visible when approved
+                                                                             TT exists, else hidden
 ==================  ====================================  =================  =====================
 
 PNP / pressure overlay visibility is intentionally NOT touched here -- it stays
@@ -121,18 +124,25 @@ def apply_module_view_state(module_key: str) -> None:
             _set_photoscan_registered_visible_for_tt(None, False)
 
     elif module_key in (SONICATION_PLANNER, SONICATION_CONTROL):
-        # If the active solution is a pre-solution (i.e. computed against a virtual-fit pose
-        # rather than a tracked pose; see #609), prefer the approved VF pose so the transducer
-        # visualization matches the pose that was actually simulated. Otherwise, prefer the
-        # tracked (TT) pose as usual. Provenance is read from session.solutions via
-        # active_solution_is_pre_solution (SlicerOpenLIFU#611).
+        # SlicerOpenLIFU#622: prefer the transducer pose that was actually used when the
+        # active Solution was computed (persisted on ``SolutionInfo.array_transform``). This
+        # pins the PNP / intensity volume rendering to the compute-time pose so it stays
+        # invariant under later approval churn (a VF whose approval was revoked, or a fresh
+        # TT that displaced the earlier approved one). Legacy solutions saved before this
+        # field existed have ``array_transform is None``; fall back to the previous
+        # "best-current-approved VF/TT" behavior in that case.
         is_pre_solution = active_solution_is_pre_solution()
-        if is_pre_solution:
-            pose_node = approved_vf_node or approved_tt_node
+        active_array_transform = _get_active_solution_array_transform()
+        if active_array_transform is not None:
+            _apply_transducer_pose_from_openlifu_array_transform(transducer, active_array_transform)
         else:
-            pose_node = approved_tt_node or approved_vf_node
-        if pose_node is not None:
-            _apply_transducer_pose(transducer, pose_node)
+            # Legacy fallback path (pre-#622): pick approved VF for pre-solutions, else TT.
+            if is_pre_solution:
+                pose_node = approved_vf_node or approved_tt_node
+            else:
+                pose_node = approved_tt_node or approved_vf_node
+            if pose_node is not None:
+                _apply_transducer_pose(transducer, pose_node)
         _set_skin_visible(volume_node, False)
         _set_photoscan_registered_visible_for_tt(
             approved_tt_node, approved_tt_node is not None and not is_pre_solution, opacity=0.25,
@@ -254,6 +264,53 @@ def _apply_transducer_pose(transducer, source_transform_node) -> None:
         return
     transducer.set_current_transform_to_match_transform_node(source_transform_node)
     transducer.set_visibility(True)
+
+
+def _apply_transducer_pose_from_openlifu_array_transform(transducer, array_transform) -> None:
+    """Snap ``transducer.transform_node`` to the given openlifu ``ArrayTransform``.
+
+    ``array_transform`` is stored in openlifu conventions (LPS coords, transducer native units);
+    a Slicer transform node stores in RAS + mm, so we convert with the same matrix used in
+    :func:`OpenLIFULib.transform_conversion.transducer_transform_node_to_openlifu`. Also clears
+    the "matching_transform" attribute so the transducer's color reverts to the neutral
+    solution-mode color (rather than showing VF-blue or TT-green as if it were parented under
+    that specific result node) -- the pose came from a persisted matrix on the SolutionInfo,
+    not from a currently-live VF / TT transform node.
+    """
+    if transducer is None or array_transform is None:
+        return
+    import vtk
+    from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
+    from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix
+
+    openlifu2slicer = create_openlifu2slicer_matrix(array_transform.units)
+    slicer_matrix = openlifu2slicer @ array_transform.matrix
+    transducer.transform_node.SetMatrixTransformToParent(numpy_to_vtk_4x4(slicer_matrix))
+    transducer.set_matching_transform(None)
+    transducer.set_visibility(True)
+
+
+def _get_active_solution_array_transform():
+    """Return the ``array_transform`` on the active Solution's :class:`SolutionInfo`, or None.
+
+    Reads ``session.solutions`` (list of ``openlifu.db.session.SolutionInfo``) for the entry
+    whose ``solution_id`` matches the active solution id and returns its ``array_transform``.
+    Returns ``None`` when there is no active solution, no matching SolutionInfo entry (e.g.
+    legacy sessions saved before SlicerOpenLIFU#611 provenance), or the field is ``None``
+    (legacy solutions saved before openlifu-python#491 introduced this field).
+    """
+    from OpenLIFULib.util import get_active_solution
+    active = get_active_solution()
+    if active is None:
+        return None
+    active_id = active.solution.solution.id
+    loaded_session = get_app_state().loaded_session
+    if loaded_session is None:
+        return None
+    for entry in loaded_session.session.session.solutions:
+        if entry.solution_id == active_id:
+            return getattr(entry, "array_transform", None)
+    return None
 
 
 def _set_skin_visible(volume_node, visible: bool) -> None:
