@@ -11,6 +11,7 @@ page navigation into the host.
 from __future__ import annotations
 
 # Standard library imports
+import logging
 import warnings
 from dataclasses import dataclass, fields
 from datetime import datetime
@@ -899,23 +900,50 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         ]
         state.loaded_session = loaded_session
 
-        # Drop the in-memory Solution wrapper.
+        # Drop the in-memory Solution wrapper and its scene nodes (PNP / intensity volumes).
+        # Previously we popped from ``loaded_solutions`` without calling ``clear_nodes()``, so
+        # the volumes were orphaned in the scene -- they survived even a full session unload
+        # because ``OpenLIFUDataLogic.clear_solutions`` iterates the (now empty)
+        # ``loaded_solutions`` dict to find nodes to remove.
+        was_active = state.active_solution_id == sid
+        popped_solution = None
         if sid in loaded_solutions:
-            loaded_solutions.pop(sid)
+            popped_solution = loaded_solutions.pop(sid)
             state.loaded_solutions = loaded_solutions
+        if popped_solution is not None:
+            try:
+                popped_solution.clear_nodes()
+            except Exception as e:  # noqa: BLE001
+                logging.warning("Could not remove scene nodes for deleted solution %s: %s", sid, e)
 
-        # If the active solution was the one we just deleted, clear it. This drives the
-        # analysis section back to the "No solution" page and hides the PNP.
-        if state.active_solution_id == sid:
-            # Hide the PNP BEFORE dropping the active-solution reference: ``hide_pnp``
-            # resolves the pnp volume through ``get_active_solution()``, so once the active
-            # id is cleared it can no longer find the node to hide. Toggling the checkbox
-            # off also drives ``onrenderPNPCheckBoxToggled(False)`` -> ``hide_pnp``.
-            self.ui.renderPNPCheckBox.checked = False
-            self.logic.hide_pnp()
-            # ``active_solution_id`` is a non-None string field on the parameter node; use
-            # the empty-string sentinel documented on ``set_active_solution``. Passing None
-            # crashes at the parameter-node write with "Value must not be None".
+        # If the deleted solution was NOT the active one, we're done -- the Solutions table
+        # will refresh via the ``state.loaded_session`` write above.
+        if not was_active:
+            return
+
+        # Deleted the shown solution. Prefer promoting another loaded solution (via the atomic
+        # activation entry point) rather than dropping to "no active solution": that keeps the
+        # Sonication Planner page in a consistent shown-solution state for the user, and moves
+        # the row-checkmark to the newly-active row via ``_refresh_solutions_table``.
+        remaining_ids_in_session_order = [
+            si.solution_id for si in session_openlifu.solutions
+            if si.solution_id in loaded_solutions
+        ]
+        if remaining_ids_in_session_order:
+            # Activate the first remaining. Force PNP render True so the user immediately sees
+            # the promoted solution's volume (same UX as compute-time).
+            self._activate_solution(remaining_ids_in_session_order[0], render_pnp_override=True)
+        else:
+            # No remaining solutions. Hide the (already-cleared) checkbox and drop active.
+            # ``hide_pnp`` is a no-op here because the popped solution's PNP volume was already
+            # removed above, but we still toggle the checkbox to keep the widget state coherent.
+            self.ui.renderPNPCheckBox.blockSignals(True)
+            try:
+                self.ui.renderPNPCheckBox.checked = False
+            finally:
+                self.ui.renderPNPCheckBox.blockSignals(False)
+            # ``active_solution_id`` is a non-None string field on the parameter node; use the
+            # empty-string sentinel documented on ``set_active_solution``.
             set_active_solution("")
 
     def _selected_solution_id(self) -> Optional[str]:

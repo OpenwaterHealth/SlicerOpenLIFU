@@ -7711,6 +7711,16 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                     solution.clear_nodes()
                 except Exception as e:  # noqa: BLE001
                     logging.warning("Could not clear scene nodes for solution: %s", e)
+            # Belt-and-suspenders sweep: any volume node marked as a solution volume
+            # (``isOpenLIFUSolution`` attribute) that isn't referenced by a currently-loaded
+            # solution wrapper is an orphan and should be removed too. This catches PNPs /
+            # intensity volumes from solutions that were deleted individually via the
+            # Sonication Planner UI (see ``onDeleteSelectedClicked``) but happened to leak
+            # through an earlier code path, and also cleans up if the app crashed mid-teardown
+            # last run.
+            for volume_node in list(slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')):
+                if volume_node.GetAttribute('isOpenLIFUSolution') == 'True':
+                    slicer.mrmlScene.RemoveNode(volume_node)
         state.loaded_solutions = {}
         set_active_solution("")
 
