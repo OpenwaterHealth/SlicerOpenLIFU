@@ -418,7 +418,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-        self.updateWorkflowControls()
+        # Full reconstruction from current app state. Previously entry only did a subset
+        # of the updates (updateWorkflowControls + view state); off-page changes to inputs,
+        # targets, or VF results relied on the cross-page dataChanged fanout to refresh
+        # this page. Now that dataChanged is guarded on ``isEntered``, ``enter()`` owns
+        # the first-render state for this page.
+        self._refresh_from_app_state()
         from OpenLIFULib.view_state import apply_module_view_state, PREPLANNING
         apply_module_view_state(PREPLANNING)
 
@@ -846,8 +851,27 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.updateInputOptions()
 
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
+        # Cross-page fanout guard: dataChanged fires for every app-state mutation regardless
+        # of which page is visible. Only refresh when PrePlanning is the active page; entry
+        # via ``enter()`` re-runs the full cascade (see also the ``updateVirtualFitRelatedLabels``
+        # cross-page reach into Data below -- that's a follow-up cleanup, tracked separately).
+        if not getattr(self.parent, "isEntered", False):
+            return
+        self._refresh_from_app_state()
+
+    def _refresh_from_app_state(self) -> None:
+        """Rebuild all app-state-derived UI on this page.
+
+        Single entry point used by ``enter()`` and by ``onDataParameterNodeModified`` (the
+        latter guarded on ``isEntered``). Consolidates the previous per-observer fanout so
+        both entry paths update the same slice of state.
+        """
         self.updateInputOptions()
         self.updateWorkflowControls()
+        # Cross-page reach: refreshes the Data page's session status card. Ideally Data would
+        # observe its own inputs, but for now keep this so the status card doesn't go stale
+        # while the user works in PrePlanning. Data's own ``enter()`` also calls
+        # ``updateSessionStatus`` so users returning to Data see the current state either way.
         self.updateVirtualFitRelatedLabels()
         # Targets are now session-owned, so target-list changes come through the
         # data parameter node's ModifiedEvent (assignment to session.target_nodes)

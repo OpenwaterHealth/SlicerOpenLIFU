@@ -421,8 +421,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-        self.updateAllButtonsEnabled()
-        self.updateWorkflowControls()
+        # Full reconstruction from current app state. Off-page changes (session load, TT
+        # approval, active-solution flip in the Sonication Planner) are ignored by the
+        # ``dataChanged`` observer now that it's ``isEntered``-guarded, so ``enter()`` owns
+        # first-render state on this page.
+        self._refresh_from_app_state()
         from OpenLIFULib.view_state import apply_module_view_state, SONICATION_CONTROL
         apply_module_view_state(SONICATION_CONTROL)
 
@@ -472,6 +475,21 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
         logging.debug("onDataParameterNodeModified() called")
+        # Cross-page fanout guard: only react when Sonication Control is the active page.
+        # Off-page changes (session load in Data, TT approval in TL, etc.) are picked up
+        # on next ``enter()``.
+        if not getattr(self.parent, "isEntered", False):
+            return
+        self._refresh_from_app_state()
+
+    def _refresh_from_app_state(self) -> None:
+        """Rebuild all app-state-derived UI on this page.
+
+        Single entry point used by ``enter()`` and by ``onDataParameterNodeModified`` (the
+        latter guarded on ``isEntered``). Tracks whether the active Solution changed under us
+        while off-page so the "Sent / Not sent" hardware-state indicator resets when the user
+        activates a different Solution elsewhere.
+        """
         self.updateAllButtonsEnabled()
         if (solution_parameter_pack := get_active_solution()) is None:
             self._cur_solution_id = None

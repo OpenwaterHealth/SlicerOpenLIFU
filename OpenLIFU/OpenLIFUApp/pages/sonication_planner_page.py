@@ -296,9 +296,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
-        self.updateWorkflowControls()
-        from OpenLIFULib.view_state import apply_module_view_state, SONICATION_PLANNER
-        apply_module_view_state(SONICATION_PLANNER)
+        # Full reconstruction from current app state. This subsumes the previous piecemeal
+        # calls to updateWorkflowControls / apply_module_view_state and adds the
+        # Solutions-table / analysis-header / render-PNP-checkbox refreshes that were
+        # previously only fired through the ``dataChanged`` observer -- now that that
+        # observer is guarded on ``isEntered``, ``enter()`` is the source of truth for
+        # first-render state on this page.
+        self._refresh_from_app_state()
 
         # Default-on Render PNP whenever a solution is already loaded on entry.
         if (
@@ -495,6 +499,21 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.onPnpOpacitySliderChanged(self.ui.pnpOpacitySlider.value)
 
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
+        # Cross-page fanout guard: only refresh when the Sonication Planner is the active
+        # page. Session load in Data, TT approvals in TL, target edits in PrePlanning etc.
+        # all fire this observer; we pick them up next time the user re-enters this page.
+        if not getattr(self.parent, "isEntered", False):
+            return
+        self._refresh_from_app_state()
+
+    def _refresh_from_app_state(self) -> None:
+        """Rebuild all app-state-derived UI on this page.
+
+        Single entry point used by ``enter()`` and by ``onDataParameterNodeModified``
+        (the latter is guarded on ``isEntered`` so it only fires when this page is
+        actually on screen). Consolidates the previous per-observer fanout so both
+        entry paths update the same slice of state.
+        """
         self.updateInputOptions()
         self.updateSolutionProgressBar()
         self.updateRenderPNPCheckBox()
@@ -505,22 +524,16 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         self.updateWorkflowControls()
         # The Solutions table and its accompanying "Now showing" label mirror app state
-        # (Session.solutions + loaded_solutions + active_solution_id), so they must be
-        # refreshed whenever the app-state parameter node fires ModifiedEvent (session
-        # load/unload, solution add/remove, active-solution change, etc.) (#611).
+        # (Session.solutions + loaded_solutions + active_solution_id) (#611).
         self._refresh_solutions_table()
         self._update_now_showing_label()
         self._update_solutions_toolbar()
         self._update_analysis_collapsible_label()
-        # Re-drive the transducer pose + photoscan visibility from the *active* solution
-        # (SolutionInfo.transducer_transform_source), so the Solutions table is the sole
-        # driver of what the user sees in the 3D view on this page (SlicerOpenLIFU#611).
-        # Guarded on ``self.parent.isEntered`` so app-state mutations from other pages
-        # (e.g. TT approval on the localization page) do not silently move the transducer
-        # around while the user is looking somewhere else.
-        if getattr(self.parent, "isEntered", False):
-            from OpenLIFULib.view_state import apply_module_view_state, SONICATION_PLANNER
-            apply_module_view_state(SONICATION_PLANNER)
+        # Snap the transducer pose to the active Solution's array_transform (#622) and set
+        # the derived photoscan visibility. Safe to call unconditionally here because this
+        # method only runs from ``enter()`` (page is on screen) or from the guarded observer.
+        from OpenLIFULib.view_state import apply_module_view_state, SONICATION_PLANNER
+        apply_module_view_state(SONICATION_PLANNER)
 
     def watch_fiducial_node(self, node:vtkMRMLMarkupsFiducialNode):
         """Add observers so that point-list changes in this fiducial node are tracked by the module."""

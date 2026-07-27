@@ -160,6 +160,12 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
 
     @display_errors
     def onDataParameterNodeModified(self, caller=None, event=None) -> None:
+        # Cross-page fanout guard: dataChanged fires whenever ANY page mutates the app-state
+        # parameter node. We only want to do work when the Session page is actually on
+        # screen; when the user re-enters this page ``enter()`` calls ``updateSessionDashboard``
+        # (via ``apply_module_view_state`` + refresh), so we don't miss anything.
+        if not getattr(self.parent, "isEntered", False):
+            return
         self.updateSessionDashboard()
 
     # ---- View / preview popups ------------------------------------------

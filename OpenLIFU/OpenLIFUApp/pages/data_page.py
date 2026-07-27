@@ -6290,6 +6290,11 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         # permissions, status buttons) in one call.
         self.module_header.refresh_all()
         self.updatePermissionsGating()
+        # Rebuild the session status card from current app state so the user always sees
+        # the current session on entry. Previously this was only refreshed via cross-page
+        # reach from PrePlanning's ``updateVirtualFitRelatedLabels``; now Data owns its own
+        # entry refresh (cross-page reach is on the way out).
+        self.updateSessionStatus()
         self._logDeviceStateTransition()
         # If a database directory was remembered but auto-connect did not run
         # at startup (e.g. the Database logic wasn't reachable yet), try again
@@ -7184,9 +7189,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # Multi-solution (SlicerOpenLIFU#611): load every solution stored under this session into
         # ``loaded_solutions``; the one named by ``session.solution_id`` (if any) becomes active.
         # A persisted ``session.solution_id`` is trusted as still consistent with its approved
-        # VF / TT context: solution invalidation is driven by VF / TT approval changes
-        # (see ``_on_transducer_transform_modified`` and the approval-revoke cascades in
-        # PrePlanning / TransducerLocalization), not by a single-transducer-pose comparison.
+        # VF / TT context: solution invalidation is driven by explicit VF / TT approval-change
+        # handlers (revokeVirtualFitApprovalIfAny in PrePlanning, revoke_transducer_tracking_approval
+        # in TransducerLocalization), not by scene-observer cascades.
         self._restore_solutions_for_loaded_session(
             session_openlifu = session_openlifu,
             transducer = newly_loaded_transducer,
@@ -7296,23 +7301,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         active_id = linked_id if linked_id in loaded_wrappers else next(iter(loaded_wrappers))
         set_active_solution(active_id)
 
-    # TODO: This should be a widget level function
-    def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
-
-        # Solution invalidation is now driven by VF/TT approval changes, not by transducer-transform
-        # changes (e.g. navigating back from the planner to the localization page no longer wipes
-        # an existing solution).
-        slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization").checkCanDisplayVirtualFitResult()
-
-        # Transducer-tracking approval is no longer auto-revoked when the transducer transform
-        # changes. With the one-approved-VF / one-approved-TT model, TT approval is tied to its
-        # underlying VF approval: it is cleared from revokeVirtualFitApprovalIfAny /
-        # revoke_virtual_fit_approval in OpenLIFUPrePlanning. That way, simply clicking around
-        # different virtual fit results in PrePlanning does not invalidate a valid TT approval.
-        matching_transform_id = transducer.transform_node.GetAttribute("matching_transform")
-        if matching_transform_id:
-            transducer.set_matching_transform(None)
-
 
     def load_protocol_from_file(self, filepath:str) -> None:
         import openlifu.plan
@@ -7411,7 +7399,17 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         )
         self.getParameterNode().loaded_transducers[transducer.id] = newly_loaded_transducer
 
-        newly_loaded_transducer.observe_transform_modified(self._on_transducer_transform_modified)
+        # Note: we intentionally do NOT install a ``TransformModifiedEvent`` observer on the
+        # transducer's transform node here. Historically ``_on_transducer_transform_modified``
+        # cleared the transducer's ``matching_transform`` color-source attribute and pinged
+        # TransducerLocalization to refresh its VF-checkbox enable state on ANY transform
+        # change. That was a classic auto-invalidation anti-pattern: programmatic pose
+        # snaps (VF selection, Solution-pose apply) triggered the same observer as manual
+        # scene mutations, forcing every call site to re-set the color afterwards. It also
+        # created cross-page coupling (TL widget reacted to Data page actions).
+        # Color-source is now managed explicitly at each pose-change call site
+        # (``set_matching_transform`` / ``set_matching_source_kind``); TL refresh is
+        # driven by TL's own ``enter()`` / user actions rather than by scene observers.
 
         return newly_loaded_transducer
 
