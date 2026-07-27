@@ -1,10 +1,11 @@
-from typing import List, NamedTuple, TYPE_CHECKING
+from typing import List, NamedTuple, Optional, TYPE_CHECKING
 import numpy as np
 import slicer
 from slicer import vtkMRMLScalarVolumeNode
 from slicer.parameterNodeWrapper import parameterPack
 from OpenLIFULib.parameter_node_utils import (
     SlicerOpenLIFUSolutionWrapper,
+    SlicerOpenLIFUSolutionAnalysis,
 )
 from OpenLIFULib.simulation import (
     make_volume_from_xarray_in_transducer_coords,
@@ -30,12 +31,23 @@ class SlicerOpenLIFUSolution:
     intensity : vtkMRMLScalarVolumeNode
     """Average intensity volume, aggregated over the results from each focus point"""
 
+    analysis : Optional[SlicerOpenLIFUSolutionAnalysis] = None
+    """Solution analysis (PNP / ISPPA / ISPTA / MI / TIC / beamwidths / temperature).
+
+    Owned by the solution so switching the active solution atomically brings its own
+    analysis with it (no separate planner-parameter-node bookkeeping). Populated at
+    compute time (see :meth:`OpenLIFUSonicationPlannerLogic.computeSolution`) and at
+    session-load time (see :meth:`OpenLIFUDataLogic._restore_solutions_for_loaded_session`);
+    ``None`` only for solutions that predate this field or whose analysis file is missing.
+    """
+
     @staticmethod
     def initialize_from_openlifu_data(
         solution : "openlifu.plan.Solution",
         pnp_datarray : "xarray.DataArray",
         intensity_dataarray : "xarray.DataArray",
         transducer : SlicerOpenLIFUTransducer,
+        analysis : Optional[SlicerOpenLIFUSolutionAnalysis] = None,
     ) -> "SlicerOpenLIFUSolution":
         """Create a SlicerOpenLIFUSolution from an openlifu Solution and aggregated data arrays to visualize,
         loading those data arrays into the scene as volume nodes.
@@ -45,6 +57,7 @@ class SlicerOpenLIFUSolution:
             pnp_datarray: Peak negative pressure volumetric data array to visualize
             intensity_dataarray: Intensity volumetric data array to visualize
             transducer: SlicerOpenLIFUTransducer, needed to put simulation outputs in the right coordinate system
+            analysis: Optional pre-computed analysis to attach; the analysis field can also be assigned later.
         """
 
         pnp_volume_node = make_volume_from_xarray_in_transducer_coords(pnp_datarray, transducer)
@@ -57,12 +70,18 @@ class SlicerOpenLIFUSolution:
         pnp_volume_node.SetAttribute('isOpenLIFUSolution', 'True')
         intensity_volume_node.SetAttribute('isOpenLIFUSolution', 'True')
 
-        return SlicerOpenLIFUSolution(SlicerOpenLIFUSolutionWrapper(solution),pnp_volume_node,intensity_volume_node)
+        return SlicerOpenLIFUSolution(
+            SlicerOpenLIFUSolutionWrapper(solution),
+            pnp_volume_node,
+            intensity_volume_node,
+            analysis,
+        )
 
     @staticmethod
     def initialize_from_loaded_openlifu_solution(
         solution : "openlifu.plan.Solution",
         transducer : SlicerOpenLIFUTransducer,
+        analysis : Optional[SlicerOpenLIFUSolutionAnalysis] = None,
     ) -> "SlicerOpenLIFUSolution":
         """Create a SlicerOpenLIFUSolution from an openlifu Solution loaded from disk.
 
@@ -78,6 +97,7 @@ class SlicerOpenLIFUSolution:
             pnp_datarray=pnp_datarray,
             intensity_dataarray=intensity_dataarray,
             transducer=transducer,
+            analysis=analysis,
         )
 
     def clear_nodes(self) -> None:

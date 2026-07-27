@@ -671,16 +671,15 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         live_tx = session.get_transducer()
         live_tx.set_current_transform_to_match_transform_node(option.transform_node)
 
-        # In case a PNP was previously being displayed, hide it since it is about to no
-        # longer belong to the active solution.
-        self.ui.renderPNPCheckBox.checked = False
+        # Hide any PNP that was previously being displayed for the outgoing active solution
+        # before compute runs; the outgoing solution's volume is about to stop being active.
         self.logic.hide_pnp()
 
         with BusyCursor():
             try:
                 self.ui.solutionProgressBar.maximum = 0
                 slicer.app.processEvents()
-                self.logic.computeSolution(
+                new_solution, _analysis = self.logic.computeSolution(
                     session.volume_node,
                     option.target_node,
                     live_tx,
@@ -690,7 +689,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
             finally:
                 self.updateSolutionProgressBar()
 
-        self.ui.renderPNPCheckBox.checked = True
+        # Route through the single atomic activation entry point so the analysis table,
+        # the transducer pose, and the PNP render all switch together. ``computeSolution``
+        # already flipped ``active_solution_id`` (via ``set_solution``) and installed the
+        # planner-parameter-node analysis; ``_activate_solution`` here is idempotent w.r.t.
+        # those and additionally renders the PNP (force True on compute so the user sees
+        # the just-computed volume immediately).
+        self._activate_solution(new_solution.solution.solution.id, render_pnp_override=True)
         self.updateWorkflowControls()
 
     def onrenderPNPCheckBoxToggled(self, checked:bool):
@@ -754,7 +759,75 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         sid = self._selected_solution_id()
         if sid is None:
             raise RuntimeError("Cannot show solution: no row is selected in the Solutions table.")
+        self._activate_solution(sid)
+
+    def _activate_solution(
+        self,
+        sid: str,
+        render_pnp_override: Optional[bool] = None,
+    ) -> None:
+        """Atomically switch which Solution is the shown / active one.
+
+        Handles, in order:
+
+        1. Hide the outgoing solution's PNP (resolved via ``get_active_solution().pnp`` BEFORE
+           we flip active, so the correct volume is hidden).
+        2. Flip ``active_solution_id`` on the app state. The parameter-node ``ModifiedEvent``
+           fanout (``onDataParameterNodeModified``) then refreshes the Solutions table, the
+           workflow controls, and the transducer pose (via ``apply_module_view_state``).
+        3. Install the incoming solution's ``analysis`` on the planner's own parameter node.
+           This triggers ``updateSolutionAnalysis`` which populates the analysis table with
+           the new content -- previously only the collapsible header updated on switch and
+           the table stayed stale (#622-adjacent Show bug).
+        4. Render the incoming PNP if desired. The default is "preserve the previous checkbox
+           state" (if the user was viewing PNP, keep viewing it for the new solution);
+           ``render_pnp_override`` lets callers force a specific state (compute-time forces
+           ``True`` so the user immediately sees the just-computed volume).
+
+        Single entry point for both the "New" (compute) path and the "Show" table action, so
+        the same state transitions happen the same way regardless of how the user got here.
+        """
+        state = get_app_state()
+        if sid not in state.loaded_solutions:
+            raise RuntimeError(f"Cannot activate solution {sid!r}: not in loaded_solutions.")
+
+        # Capture desired PNP visibility before we change any state.
+        should_render_pnp = (
+            render_pnp_override
+            if render_pnp_override is not None
+            else self.ui.renderPNPCheckBox.checked
+        )
+
+        # (1) Hide the outgoing PNP. ``hide_pnp`` short-circuits if there is no PNP or the
+        # active solution has none. It resolves through ``get_active_solution()`` which is
+        # still pointing at the OUTGOING solution at this point.
+        self.logic.hide_pnp()
+
+        # (2) Flip active. Fires the standard fanout (see onDataParameterNodeModified).
         set_active_solution(sid)
+
+        # (3) Install the incoming solution's analysis on the planner parameter node so the
+        # analysis table refreshes. ``updateSolutionAnalysis`` will recompute-and-cache if
+        # the incoming's ``analysis`` is None (e.g. legacy solution without a persisted
+        # analysis on disk).
+        incoming = state.loaded_solutions[sid]
+        self.logic.getParameterNode().solution_analysis = incoming.analysis
+
+        # (4) Render the incoming PNP (or explicitly hide, if the caller forced False). Keep
+        # the checkbox state consistent with what is actually shown.
+        can_render = incoming.pnp is not None
+        will_render = should_render_pnp and can_render
+        if will_render:
+            self.logic.render_pnp()
+        else:
+            # The outgoing PNP was already hidden in (1); nothing more to hide.
+            pass
+        if self.ui.renderPNPCheckBox.checked != will_render:
+            self.ui.renderPNPCheckBox.blockSignals(True)
+            try:
+                self.ui.renderPNPCheckBox.checked = will_render
+            finally:
+                self.ui.renderPNPCheckBox.blockSignals(False)
 
     @display_errors
     def onDeleteSelectedClicked(self, checked: bool) -> None:
@@ -1405,13 +1478,14 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             # (SlicerOpenLIFU#611). The display name is still decorated so pre-solutions are visually
             # distinct in the UI.
             solution_openlifu.name = f"Pre-Solution for {solution_openlifu.name}"
+        analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
         solution = SlicerOpenLIFUSolution.initialize_from_openlifu_data(
             solution = solution_openlifu,
             pnp_datarray=pnp_aggregated,
             intensity_dataarray=intensity_aggregated,
             transducer=inputTransducer,
+            analysis=analysis,
         )
-        analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
 
         # Build the provenance record that will be attached to the Session so consumers can
         # later trace this Solution back to its target / transducer / protocol / pose source

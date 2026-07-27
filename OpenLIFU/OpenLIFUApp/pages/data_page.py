@@ -7228,6 +7228,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
             solution_ids.append(linked_id)
 
         transducer_transform_id = transducer.transform_node.GetID()
+        planner_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_planner_logic
         loaded_wrappers: Dict[str, SlicerOpenLIFUSolution] = {}
         for sid in solution_ids:
             try:
@@ -7249,14 +7250,38 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 logging.warning("Could not load solution '%s' for session '%s': %s", sid, session_id, e)
                 continue
 
+            # Fetch (or recompute) the analysis so it travels on the wrapper. The planner
+            # analysis panel reads it directly off the wrapper of the active solution --
+            # switching the active solution atomically brings its own analysis with it (see
+            # ``OpenLIFUSonicationPlannerWidget._activate_solution``), no separate planner-
+            # parameter-node bookkeeping.
+            analysis_openlifu = None
+            try:
+                analysis_openlifu = db.load_solution_analysis(session_openlifu, sid)
+            except FileNotFoundError:
+                pass  # Older databases may not have the analysis persisted; recompute below.
+            except Exception as e:  # noqa: BLE001
+                logging.warning(
+                    "Could not load analysis for solution '%s': %s (will attempt to recompute)",
+                    sid, e,
+                )
+
             slicer_solution = SlicerOpenLIFUSolution.initialize_from_loaded_openlifu_solution(
                 solution=solution_openlifu,
                 transducer=transducer,
+                analysis=SlicerOpenLIFUSolutionAnalysis(analysis_openlifu) if analysis_openlifu is not None else None,
             )
             # Make sure the restored pnp/intensity volumes follow the transducer's transform so they render
             # in the correct pose (otherwise they sit at the world origin).
             slicer_solution.pnp.SetAndObserveTransformNodeID(transducer_transform_id)
             slicer_solution.intensity.SetAndObserveTransformNodeID(transducer_transform_id)
+
+            # Recompute analysis if it was missing on disk; harmless when we already loaded it.
+            if slicer_solution.analysis is None:
+                recomputed = planner_logic.compute_analysis_from_solution(slicer_solution)
+                if recomputed is not None:
+                    slicer_solution.analysis = recomputed
+
             loaded_wrappers[sid] = slicer_solution
 
         if not loaded_wrappers:
@@ -7270,21 +7295,6 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # one that did (deterministic pick: first in load order).
         active_id = linked_id if linked_id in loaded_wrappers else next(iter(loaded_wrappers))
         set_active_solution(active_id)
-
-        # Load the analysis for the active solution only (planner panel is per-active-solution).
-        planner_logic = slicer.util.getModuleLogic("OpenLIFU").sonication_planner_logic
-        active_slicer_solution = loaded_wrappers[active_id]
-        analysis_openlifu = None
-        try:
-            analysis_openlifu = db.load_solution_analysis(session_openlifu, active_id)
-        except FileNotFoundError:
-            pass  # Older databases may not have the analysis persisted; recompute below.
-        if analysis_openlifu is not None:
-            slicer_analysis = SlicerOpenLIFUSolutionAnalysis(analysis_openlifu)
-        else:
-            slicer_analysis = planner_logic.compute_analysis_from_solution(active_slicer_solution)
-        if slicer_analysis is not None:
-            planner_logic.getParameterNode().solution_analysis = slicer_analysis
 
     # TODO: This should be a widget level function
     def _on_transducer_transform_modified(self, transducer: SlicerOpenLIFUTransducer) -> None:
@@ -7559,6 +7569,12 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """
         state = self.getParameterNode()
         loaded_solutions = state.loaded_solutions
+        # Attach the analysis to the wrapper so switching active solutions atomically brings the
+        # analysis with them (see ``OpenLIFUSonicationPlannerWidget._activate_solution``). Callers
+        # that pass ``analysis=None`` are opting out (e.g. session-load path where the caller
+        # constructs the wrapper with the analysis already populated).
+        if analysis is not None:
+            solution.analysis = analysis
         loaded_solutions[solution.solution.solution.id] = solution
         # Reassign the whole dict so ``@parameterNodeWrapper`` picks up the change (mutating in place
         # does not trigger a write hook / ModifiedEvent).
