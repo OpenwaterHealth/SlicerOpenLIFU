@@ -25,6 +25,7 @@ TRANSDUCER_MODEL_COLORS = {
     "default": [230, 230, 77], # YELLOW
     "virtual_fit_result": [0, 85, 255], # BLUE
     "transducer_tracking_result": [0, 170, 0], # GREEN
+    "solution_pose": [180, 80, 220], # PURPLE -- transducer at an active Solution's compute-time pose
 }
 
 @parameterPack
@@ -208,24 +209,59 @@ class SlicerOpenLIFUTransducer:
         else:
             self.transform_node.RemoveAttribute("matching_transform")
 
+        # Setting a matching-transform node is mutually exclusive with the "explicit kind"
+        # override -- clear it so ``update_color`` picks the node-based color.
+        self.transform_node.RemoveAttribute("matching_source_kind")
+
+        self.update_color()
+
+    def set_matching_source_kind(self, kind: Optional[str]) -> None:
+        """Override the transducer's display color to reflect a source that is not a live
+        VF / TT transform node.
+
+        Used e.g. when the transducer is snapped to an active Solution's compute-time pose
+        (stored as an ``ArrayTransform`` on ``SolutionInfo.array_transform``, not as a live
+        MRML node -- see #622): the pose isn't backed by a VF or TT node, so
+        ``matching_transform`` cannot be used to drive the color. Pass a key from
+        :data:`TRANSDUCER_MODEL_COLORS` (typically ``"solution_pose"``) to force that
+        color; pass ``None`` to clear the override and let ``update_color`` fall back to
+        ``matching_transform`` / default.
+
+        Note: setting a kind here clears ``matching_transform``, since the transducer can
+        represent at most one "why is it here" at a time.
+        """
+        if kind:
+            self.transform_node.SetAttribute("matching_source_kind", kind)
+            self.transform_node.RemoveAttribute("matching_transform")
+        else:
+            self.transform_node.RemoveAttribute("matching_source_kind")
         self.update_color()
 
     def update_color(self) -> None:
         """ Updates the color of the transducer model nodes based on the transform node
-         specified using the "matching_transform" attribute."""
+         specified using the "matching_transform" attribute (a live VF / TT node id) or,
+         when set, the higher-precedence "matching_source_kind" attribute (an explicit
+         color key -- e.g. ``"solution_pose"`` -- for cases where the pose is not backed
+         by a live transform node)."""
 
-        matching_node_id = self.transform_node.GetAttribute("matching_transform")
-        # Set the color of the transdcer model to indicate whether it matches a virtual fit result or tt result
         model_color = TRANSDUCER_MODEL_COLORS["default"]
-        if matching_node_id:
-            node = slicer.mrmlScene.GetNodeByID(matching_node_id)
-            if node is None:
-                # Stale reference -- the matched node was removed from the scene. Clear the attribute.
-                self.transform_node.RemoveAttribute("matching_transform")
-            elif is_virtual_fit_result_node(node):
-                model_color = TRANSDUCER_MODEL_COLORS["virtual_fit_result"]
-            elif is_transducer_tracking_result_node(node):
-                model_color = TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]
+
+        # Explicit kind override (e.g. Solution-pose display; see set_matching_source_kind).
+        source_kind = self.transform_node.GetAttribute("matching_source_kind")
+        if source_kind and source_kind in TRANSDUCER_MODEL_COLORS:
+            model_color = TRANSDUCER_MODEL_COLORS[source_kind]
+        else:
+            matching_node_id = self.transform_node.GetAttribute("matching_transform")
+            # Set the color of the transdcer model to indicate whether it matches a virtual fit result or tt result
+            if matching_node_id:
+                node = slicer.mrmlScene.GetNodeByID(matching_node_id)
+                if node is None:
+                    # Stale reference -- the matched node was removed from the scene. Clear the attribute.
+                    self.transform_node.RemoveAttribute("matching_transform")
+                elif is_virtual_fit_result_node(node):
+                    model_color = TRANSDUCER_MODEL_COLORS["virtual_fit_result"]
+                elif is_transducer_tracking_result_node(node):
+                    model_color = TRANSDUCER_MODEL_COLORS["transducer_tracking_result"]
 
         # Normalize color to 0-1 range
         normalized_color = [c / 255.0 for c in model_color]

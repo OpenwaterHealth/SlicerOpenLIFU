@@ -271,22 +271,23 @@ def _apply_transducer_pose_from_openlifu_array_transform(transducer, array_trans
 
     ``array_transform`` is stored in openlifu conventions (LPS coords, transducer native units);
     a Slicer transform node stores in RAS + mm, so we convert with the same matrix used in
-    :func:`OpenLIFULib.transform_conversion.transducer_transform_node_to_openlifu`. Also clears
-    the "matching_transform" attribute so the transducer's color reverts to the neutral
-    solution-mode color (rather than showing VF-blue or TT-green as if it were parented under
-    that specific result node) -- the pose came from a persisted matrix on the SolutionInfo,
-    not from a currently-live VF / TT transform node.
+    :func:`OpenLIFULib.transform_conversion.transducer_transform_node_to_openlifu`. The pose
+    came from a persisted matrix on ``SolutionInfo.array_transform``, not from a currently-live
+    VF / TT transform node, so we drive the transducer color via the explicit
+    ``matching_source_kind == "solution_pose"`` override rather than
+    ``matching_transform`` (which requires a live node). The Solution pose gets its own
+    distinctive color to signal that the transducer is at "the pose the active solution was
+    computed against", not at the currently-approved VF / TT.
     """
     if transducer is None or array_transform is None:
         return
-    import vtk
     from OpenLIFULib.coordinate_system_utils import numpy_to_vtk_4x4
     from OpenLIFULib.transform_conversion import create_openlifu2slicer_matrix
 
     openlifu2slicer = create_openlifu2slicer_matrix(array_transform.units)
     slicer_matrix = openlifu2slicer @ array_transform.matrix
     transducer.transform_node.SetMatrixTransformToParent(numpy_to_vtk_4x4(slicer_matrix))
-    transducer.set_matching_transform(None)
+    transducer.set_matching_source_kind("solution_pose")
     transducer.set_visibility(True)
 
 
