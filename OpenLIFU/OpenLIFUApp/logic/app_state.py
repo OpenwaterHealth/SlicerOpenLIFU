@@ -41,6 +41,14 @@ class OpenLIFUAppState:
     loaded_run: "Optional[SlicerOpenLIFURun]"
     loaded_photoscans: "Dict[str,SlicerOpenLIFUPhotoscan]"
 
+    # Set True whenever an in-memory session mutation happens that has NOT been written
+    # to ``{session_dir}/{session_id}.json`` on disk. Cleared by :meth:`OpenLIFUDataLogic.save_session`.
+    # Consulted by :meth:`clear_session` to prompt the user to save (or discard) unsaved
+    # changes before unloading. Solutions and photoscans have their own on-disk artifacts
+    # written eagerly by ``set_solution`` / ``write_photoscan`` and are not tracked here;
+    # this flag reflects only the state that lives in the session's own JSON.
+    session_is_dirty : bool = False
+
 
 class AppStateSignals(qt.QObject):
     """Qt-signal facade over :class:`OpenLIFUAppState`.

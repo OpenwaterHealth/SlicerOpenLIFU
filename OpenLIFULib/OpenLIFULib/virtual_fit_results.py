@@ -334,6 +334,11 @@ def set_approval_for_virtual_fit_result_node(
         vf_result_node: virtual fit transform node
     """
     vf_result_node.SetAttribute("VF:approvalStatus", "1" if approval_state else "0")
+    # Approval state on VF result nodes lives in the session JSON (serialized by
+    # ``get_virtual_fit_results_in_openlifu_session_format`` on save); flag the session as
+    # dirty so the user is prompted to save before unloading.
+    from OpenLIFULib.util import mark_session_dirty
+    mark_session_dirty()
 
 def revoke_any_virtual_fit_approvals_for_target(
     target_id : str,

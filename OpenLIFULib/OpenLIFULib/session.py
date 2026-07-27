@@ -7,7 +7,7 @@ from slicer import (
     vtkMRMLMarkupsFiducialNode,
 )
 from slicer.parameterNodeWrapper import parameterPack
-from OpenLIFULib.util import get_app_state, BusyCursor
+from OpenLIFULib.util import get_app_state, BusyCursor, mark_session_dirty
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
 from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper, SlicerOpenLIFUPhotoscanWrapper
 from OpenLIFULib.targets import (
@@ -295,6 +295,10 @@ class SlicerOpenLIFUSession:
         # Reassign the dict entry to fire the parameterNodeWrapper write hook.
         loaded_photoscans[photoscan.id] = slicer_photoscan
         get_app_state().loaded_photoscans = loaded_photoscans
+        # Photoscan objects are written to disk by ``save_session`` (which iterates the
+        # session's affiliated photoscans and calls ``write_photoscan`` for each). So an
+        # in-memory field edit here is an unsaved change until the user Saves.
+        mark_session_dirty()
 
     def add_target(self, node: vtkMRMLMarkupsFiducialNode) -> None:
         """Register ``node`` as a session-owned target.
@@ -321,6 +325,7 @@ class SlicerOpenLIFUSession:
         assign_unique_color_to_fiducial(node, current)
         self.target_nodes = [*current, node]
         self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
+        mark_session_dirty()
 
     def remove_target(self, node: vtkMRMLMarkupsFiducialNode) -> bool:
         """Deregister ``node`` from this session's targets.
@@ -339,9 +344,11 @@ class SlicerOpenLIFUSession:
             if len(current) != len(self.target_nodes):
                 self.target_nodes = current
                 self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
+                mark_session_dirty()
             return False
         self.target_nodes = [n for n in current if n is not node]
         self.session.session.targets = list(map(fiducial_to_openlifu_point, self.target_nodes))
+        mark_session_dirty()
         return True
 
     def update_underlying_openlifu_session(self) -> "openlifu.db.Session":

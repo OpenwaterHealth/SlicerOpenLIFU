@@ -66,6 +66,40 @@ def set_active_solution(solution_id: str) -> None:
     """
     get_app_state().active_solution_id = solution_id
 
+
+def mark_session_dirty() -> None:
+    """Flag the loaded session as having unsaved in-memory changes.
+
+    Called by any in-memory mutation that will only be persisted to
+    ``{session_dir}/{session_id}.json`` when :meth:`OpenLIFUDataLogic.save_session`
+    runs (target edits, VF / TT / PR approvals, photoscan approvals, etc.). Solutions
+    and photoscan objects have their own on-disk artifacts written eagerly by
+    ``set_solution`` / ``write_photoscan``, so mutations to *those* don't need to be
+    flagged here -- only mutations to state that lives in the session JSON itself.
+    Silently no-ops if no session is loaded (there's nothing to be dirty).
+
+    Cleared by :meth:`OpenLIFUDataLogic.save_session`; consulted by
+    :meth:`clear_session` to prompt the user before discarding unsaved changes.
+    """
+    state = get_app_state()
+    if state.loaded_session is None:
+        return
+    if not state.session_is_dirty:
+        state.session_is_dirty = True
+
+
+def session_is_dirty() -> bool:
+    """Return whether the loaded session has unsaved in-memory changes.
+
+    See :func:`mark_session_dirty` for what counts as dirty. Returns ``False`` when
+    no session is loaded.
+    """
+    state = get_app_state()
+    if state.loaded_session is None:
+        return False
+    return bool(state.session_is_dirty)
+
+
 def active_solution_is_pre_solution() -> bool:
     """Return ``True`` iff the active solution was computed against a virtual-fit-derived transducer pose.
 

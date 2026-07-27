@@ -318,6 +318,10 @@ def set_transducer_tracking_approval_for_node(approval_state: bool, transform_no
     if not is_transducer_tracking_result_node(transform_node):
         raise ValueError("The specified transform node is not a transducer localization result node")
     transform_node.SetAttribute(_ATTR_APPROVAL, "1" if approval_state else "0")
+    # Approval state on TT result nodes is serialized into the session JSON on save; flag
+    # the session as dirty so the user is prompted to save before unloading.
+    from OpenLIFULib.util import mark_session_dirty
+    mark_session_dirty()
 
 
 def set_transducer_tracking_approval_by_id(

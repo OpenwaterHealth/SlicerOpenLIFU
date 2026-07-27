@@ -1,7 +1,7 @@
 from typing import Callable, Optional, TYPE_CHECKING, Dict
 import qt
 import slicer
-from OpenLIFULib.util import display_errors, replace_widget
+from OpenLIFULib.util import display_errors, replace_widget, session_is_dirty
 from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget
 from OpenLIFULib.module_layout import navigate_to_page
 
@@ -28,11 +28,19 @@ def confirm_exit_session_dialog(
 ) -> str:
     """Show a Save & Exit / Discard & Exit / Cancel dialog for exiting a session.
 
+    If the loaded session has no unsaved in-memory changes (see
+    :func:`OpenLIFULib.util.session_is_dirty`), the dialog is skipped and this
+    returns ``"discard"`` (nothing to save, exit is safe). Otherwise:
+
     Returns one of:
         "save":    user chose to save and exit
         "discard": user chose to discard changes and exit
         "cancel":  user cancelled; caller should treat as no-op
     """
+    # Skip the prompt entirely if nothing is dirty -- the user hasn't made changes that
+    # would be lost, so there's nothing to save and no need to interrupt the exit.
+    if not session_is_dirty():
+        return "discard"
     mb = qt.QMessageBox()
     mb.setIcon(qt.QMessageBox.Question)
     mb.setWindowTitle(window_title)

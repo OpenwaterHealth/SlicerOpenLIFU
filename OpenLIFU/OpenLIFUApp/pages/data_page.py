@@ -5349,6 +5349,23 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         if not new_session_id:
             return False
 
+        # Prompt for save-before-unload if the currently loaded session has unsaved changes.
+        # ``confirm_exit_session_dialog`` silently returns "discard" when nothing is dirty,
+        # so this is a no-op prompt-wise when the outgoing session is clean.
+        if self.logic.getParameterNode().loaded_session is not None:
+            from OpenLIFULib.guided_mode_util import confirm_exit_session_dialog
+            choice = confirm_exit_session_dialog(
+                message=(
+                    "The currently loaded session has unsaved changes. "
+                    "Save them before loading a different session?"
+                ),
+                window_title="Unsaved Changes",
+            )
+            if choice == "cancel":
+                return False
+            if choice == "save":
+                self.logic.save_session()
+
         self.logic.clear_session(clean_up_scene=True)
         self.logic.load_session(self.logic.subject.id, new_session_id)
         return True
@@ -6620,6 +6637,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                 slicer_solution.solution.solution,
                 on_conflict=OnConflictOpts.OVERWRITE,
             )
+
+        # All in-memory edits have now been flushed to disk; clear the dirty flag.
+        self.getParameterNode().session_is_dirty = False
 
     def _cleanup_orphaned_photoscans_and_photocollections_in_db(
         self,
