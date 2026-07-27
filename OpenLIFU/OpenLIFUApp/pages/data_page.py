@@ -6874,8 +6874,18 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # Read the authoritative catalog from disk and assign it via the wrapper setter.
         # An empty dict is a valid state and must overwrite any prior contents (e.g. a
         # photoscan that was deleted from disk between refreshes).
+        previously_affiliated_ids = set(loaded_session.get_affiliated_photoscan_ids())
         affiliated_photoscans = {id:get_cur_db().load_photoscan(subject_id, session_id, id) for id in get_cur_db().get_photoscan_ids(subject_id, session_id)}
         loaded_session.set_affiliated_photoscans(affiliated_photoscans)
+
+        # Unload from the scene any photoscans that used to be affiliated but are no longer
+        # (e.g. deleted from disk between refreshes). This keeps ``state.loaded_photoscans``
+        # in sync with the authoritative disk catalog; standalone (non-session-affiliated)
+        # photoscans are unaffected.
+        current_affiliated_ids = set(affiliated_photoscans.keys())
+        for orphan_id in previously_affiliated_ids - current_affiliated_ids:
+            if orphan_id in self.getParameterNode().loaded_photoscans:
+                self.remove_photoscan(orphan_id, clean_up_scene=True)
 
         # Eagerly load each affiliated photoscan into the scene (with visibility off by
         # default; see SlicerOpenLIFUPhotoscan.set_model_display_settings). This means
@@ -7140,13 +7150,20 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         # need to lazily load on first click. Pass subject_id and session_id explicitly so
         # load_photoscan_from_openlifu doesn't need to re-read loaded_session out of the
         # parameter node during this observer-active window.
+        #
+        # ``affiliated_photoscans_openlifu`` is the disk catalog we assembled before
+        # constructing ``new_session``; per #619 the session pack no longer holds a
+        # ``affiliated_photoscans`` Dict, so we iterate the source catalog directly. The
+        # session's list of affiliated IDs (``session.photoscans``) matches
+        # ``affiliated_photoscans_openlifu.keys()`` by construction (see
+        # ``initialize_from_openlifu_session``).
         already_loaded = self.getParameterNode().loaded_photoscans
-        for photoscan_id, wrapped_photoscan in new_session.affiliated_photoscans.items():
+        for photoscan_id, photoscan_openlifu in affiliated_photoscans_openlifu.items():
             if photoscan_id in already_loaded:
                 continue
             try:
                 self.load_photoscan_from_openlifu(
-                    wrapped_photoscan.photoscan,
+                    photoscan_openlifu,
                     load_from_active_session=True,
                     subject_id=subject_id,
                     session_id=session_id,

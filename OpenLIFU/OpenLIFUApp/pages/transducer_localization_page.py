@@ -3911,15 +3911,11 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         return list(loaded_session.get_affiliated_photocollection_ids() or [])
 
     def _get_photoscan_ids(self) -> List[str]:
-        data_parameter_node = get_app_state()
-        loaded_session = data_parameter_node.loaded_session
+        loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             return []
-        photoscans = getattr(loaded_session, "affiliated_photoscans", None) or {}
-        try:
-            return sorted(photoscans.keys())
-        except AttributeError:
-            return list(photoscans)
+        # Source of truth is the openlifu Session's ``photoscans`` list (see #619).
+        return sorted(loaded_session.get_affiliated_photoscan_ids())
 
     def _configure_manager_table_column_widths(self):
         """One-time header configuration for the three manager tables.
@@ -4051,7 +4047,11 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         session = get_app_state().loaded_session
         session_id = None if session is None else session.get_session_id()
         approved_pr_ids = set(get_photoscan_ids_with_approved_registrations(session_id))
-        affiliated_photoscans = (getattr(session, "affiliated_photoscans", None) or {}) if session is not None else {}
+        # Photoscan objects live in ``OpenLIFUAppState.loaded_photoscans`` (single source of
+        # truth per #619). We only display rows for the session's affiliated ids
+        # (``photoscan_ids``); the lookup here just resolves the openlifu Photoscan for the
+        # name / approval columns.
+        loaded_photoscans = get_app_state().loaded_photoscans
         table.blockSignals(True)
         table.setRowCount(len(photoscan_ids))
         for row, photoscan_id in enumerate(photoscan_ids):
@@ -4059,10 +4059,12 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             id_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
             table.setItem(row, 0, id_item)
 
-            ph_obj = affiliated_photoscans.get(photoscan_id)
-            # ``affiliated_photoscans`` maps photoscan_id -> SlicerOpenLIFUPhotoscanWrapper;
-            # the openlifu Photoscan (which carries the ``name`` field) is one level deeper.
-            ph_openlifu = getattr(ph_obj, "photoscan", None) if ph_obj is not None else None
+            slicer_photoscan = loaded_photoscans.get(photoscan_id)
+            ph_openlifu = (
+                slicer_photoscan.photoscan.photoscan
+                if slicer_photoscan is not None
+                else None
+            )
             scan_name = (getattr(ph_openlifu, "name", None) or photoscan_id)
             name_item = qt.QTableWidgetItem(scan_name)
             name_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
@@ -4294,10 +4296,14 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         register_btn = self.ui.registerPhotoscanToVolumeButton
         selected_photoscan_approved = False
         if selected_photoscan_id is not None:
-            session = get_app_state().loaded_session
-            affiliated_photoscans = (getattr(session, "affiliated_photoscans", None) or {}) if session is not None else {}
-            ph_wrapper = affiliated_photoscans.get(selected_photoscan_id)
-            ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
+            # #619: session no longer stores photoscan wrappers on its parameter pack; resolve
+            # the openlifu Photoscan via the canonical ``state.loaded_photoscans``.
+            slicer_photoscan = get_app_state().loaded_photoscans.get(selected_photoscan_id)
+            ph_openlifu = (
+                slicer_photoscan.photoscan.photoscan
+                if slicer_photoscan is not None
+                else None
+            )
             selected_photoscan_approved = bool(getattr(ph_openlifu, "photoscan_approved", False))
         if selected_photoscan_id is None:
             register_btn.setText("Register to Volume")
@@ -4430,16 +4436,16 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         loaded_session = get_app_state().loaded_session
         if loaded_session is None:
             return
-        photoscans = getattr(loaded_session, "affiliated_photoscans", None) or {}
-        wrapper = photoscans.get(photoscan_id) if hasattr(photoscans, "get") else None
-        if wrapper is None:
+        # #619: resolve the openlifu Photoscan through ``state.loaded_photoscans`` (single
+        # source of truth). If the id is affiliated but not loaded (eager-load failure),
+        # surface the same "not found" error as before.
+        photoscan_openlifu = loaded_session.get_affiliated_openlifu_photoscan(photoscan_id)
+        if photoscan_openlifu is None:
             slicer.util.errorDisplay(
                 text=f"Could not find photoscan '{photoscan_id}' on the loaded session.",
                 windowTitle="Photoscan Not Found",
             )
             return
-        # Unwrap to the openlifu Photoscan, then drive the existing preview flow.
-        photoscan_openlifu = getattr(wrapper, "photoscan", wrapper)
         self.algorithm_input_widget.set_photoscan_selection(photoscan_openlifu)
         self.onPreviewPhotoscanClicked(checked=True)
 
@@ -4461,11 +4467,14 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             return
 
         # Photoscan approval is a prerequisite for running (or editing) the registration.
-        # See #593.
-        session = get_app_state().loaded_session
-        affiliated_photoscans = (getattr(session, "affiliated_photoscans", None) or {}) if session is not None else {}
-        ph_wrapper = affiliated_photoscans.get(initial_photoscan_id)
-        ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
+        # See #593. Resolve the openlifu Photoscan via ``state.loaded_photoscans`` (single
+        # source of truth per #619).
+        slicer_photoscan = get_app_state().loaded_photoscans.get(initial_photoscan_id)
+        ph_openlifu = (
+            slicer_photoscan.photoscan.photoscan
+            if slicer_photoscan is not None
+            else None
+        )
         if not bool(getattr(ph_openlifu, "photoscan_approved", False)):
             slicer.util.warningDisplay(
                 text=(
@@ -4606,11 +4615,9 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         loaded_photoscans = get_app_state().loaded_photoscans
         wrapper = loaded_photoscans.get(photoscan_id) if loaded_photoscans else None
         ph_openlifu = wrapper.photoscan.photoscan if wrapper is not None else None
-        if ph_openlifu is None and session is not None:
-            # Fall back to the session's affiliated photoscans if the scene wrapper is missing.
-            aff = getattr(session, "affiliated_photoscans", None) or {}
-            ph_wrapper = aff.get(photoscan_id)
-            ph_openlifu = getattr(ph_wrapper, "photoscan", None) if ph_wrapper is not None else None
+        # #619: session no longer holds an affiliated-photoscans Dict; there is no separate
+        # "session-affiliated but not loaded" state to fall back to (eager-load runs on
+        # session load). If ``loaded_photoscans`` does not have the id, we cannot recover.
         if ph_openlifu is None:
             # Nothing to update; refresh so the checkbox visual matches on-disk state.
             self.refresh_display()
@@ -4781,8 +4788,14 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         data_logic = slicer.util.getModuleLogic("OpenLIFU").data_logic
         if photoscan_id in get_app_state().loaded_photoscans:
             data_logic.remove_photoscan(photoscan_id, clean_up_scene=True)
-        if session is not None and photoscan_id in session.affiliated_photoscans:
-            del session.affiliated_photoscans[photoscan_id]
+        if session is not None and photoscan_id in session.get_affiliated_photoscan_ids():
+            # #619: session pack no longer holds a Dict of photoscans. The authoritative list
+            # is ``self.session.session.photoscans`` (openlifu-side). Remove the id and
+            # re-persist the wrapper so the change survives across parameterPack reads.
+            remaining_ids = [pid for pid in session.session.session.photoscans if pid != photoscan_id]
+            session.session.session.photoscans = remaining_ids
+            from OpenLIFULib.parameter_node_utils import SlicerOpenLIFUSessionWrapper
+            session.session = SlicerOpenLIFUSessionWrapper(session.session.session)
 
         if session is not None:
             data_logic.update_underlying_openlifu_session()
@@ -6027,14 +6040,19 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
     def get_photoscan_ids_with_approval(self) -> List[str]:
         """Return a list of photoscan IDs that are approved for transducer localization"""
         session = get_app_state().loaded_session
-        approved_photoscans = []
-        if not session and not get_app_state().loaded_photoscans:
-            return approved_photoscans
+        loaded_photoscans = get_app_state().loaded_photoscans
+        if not session and not loaded_photoscans:
+            return []
         if session:
-            approved_photoscans = [id for id, wrapped_photoscan in session.affiliated_photoscans.items() if wrapped_photoscan.photoscan.photoscan_approved]
-        elif get_app_state().loaded_photoscans:
-            approved_photoscans = [id for id, slicer_photoscan in get_app_state().loaded_photoscans.items() if slicer_photoscan.is_approved()]
-        return approved_photoscans
+            # #619: resolve openlifu Photoscan through ``state.loaded_photoscans`` (single
+            # source of truth). Photoscans that are affiliated with the session but not
+            # currently loaded (e.g. eager-load failure) can't have an approval to inspect.
+            affiliated_ids = set(session.get_affiliated_photoscan_ids())
+            return [
+                pid for pid, slicer_photoscan in loaded_photoscans.items()
+                if pid in affiliated_ids and slicer_photoscan.photoscan.photoscan.photoscan_approved
+            ]
+        return [pid for pid, slicer_photoscan in loaded_photoscans.items() if slicer_photoscan.is_approved()]
     
     def load_openlifu_photoscan(self, photoscan: "openlifu.nav.photoscan.Photoscan") -> SlicerOpenLIFUPhotoscan:
 
