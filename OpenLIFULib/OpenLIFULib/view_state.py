@@ -134,7 +134,16 @@ def apply_module_view_state(module_key: str) -> None:
         is_pre_solution = active_solution_is_pre_solution()
         active_array_transform = _get_active_solution_array_transform()
         if active_array_transform is not None:
-            _apply_transducer_pose_from_openlifu_array_transform(transducer, active_array_transform)
+            # Color the transducer according to the SOURCE the solution was computed against
+            # (VF -> blue, TT -> green), even though the pose itself came from a persisted
+            # matrix rather than a live VF / TT node -- this keeps the color scheme intuitive
+            # (users don't need a third color to interpret; see #624 discussion).
+            source_kind = (
+                "virtual_fit_result" if is_pre_solution else "transducer_tracking_result"
+            )
+            _apply_transducer_pose_from_openlifu_array_transform(
+                transducer, active_array_transform, source_kind=source_kind,
+            )
         else:
             # Legacy fallback path (pre-#622): pick approved VF for pre-solutions, else TT.
             if is_pre_solution:
@@ -266,7 +275,7 @@ def _apply_transducer_pose(transducer, source_transform_node) -> None:
     transducer.set_visibility(True)
 
 
-def _apply_transducer_pose_from_openlifu_array_transform(transducer, array_transform) -> None:
+def _apply_transducer_pose_from_openlifu_array_transform(transducer, array_transform, source_kind: str = "virtual_fit_result") -> None:
     """Snap ``transducer.transform_node`` to the given openlifu ``ArrayTransform``.
 
     ``array_transform`` is stored in openlifu conventions (LPS coords, transducer native units);
@@ -274,10 +283,12 @@ def _apply_transducer_pose_from_openlifu_array_transform(transducer, array_trans
     :func:`OpenLIFULib.transform_conversion.transducer_transform_node_to_openlifu`. The pose
     came from a persisted matrix on ``SolutionInfo.array_transform``, not from a currently-live
     VF / TT transform node, so we drive the transducer color via the explicit
-    ``matching_source_kind == "solution_pose"`` override rather than
-    ``matching_transform`` (which requires a live node). The Solution pose gets its own
-    distinctive color to signal that the transducer is at "the pose the active solution was
-    computed against", not at the currently-approved VF / TT.
+    ``matching_source_kind`` override (a key into :data:`TRANSDUCER_MODEL_COLORS`) rather
+    than ``matching_transform`` (which requires a live node). ``source_kind`` is what to color
+    with -- typically ``"virtual_fit_result"`` (blue) for pre-solutions and
+    ``"transducer_tracking_result"`` (green) for solutions computed off a tracking pose,
+    matching the color the transducer would show if the live VF / TT node had been the
+    pose source (#624 discussion: users prefer keeping the two-color scheme).
     """
     if transducer is None or array_transform is None:
         return
@@ -287,7 +298,7 @@ def _apply_transducer_pose_from_openlifu_array_transform(transducer, array_trans
     openlifu2slicer = create_openlifu2slicer_matrix(array_transform.units)
     slicer_matrix = openlifu2slicer @ array_transform.matrix
     transducer.transform_node.SetMatrixTransformToParent(numpy_to_vtk_4x4(slicer_matrix))
-    transducer.set_matching_source_kind("solution_pose")
+    transducer.set_matching_source_kind(source_kind)
     transducer.set_visibility(True)
 
 

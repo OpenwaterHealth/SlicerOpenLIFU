@@ -69,6 +69,11 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         # at most once per session (on the first entry where it has items).
         self._auto_expanded_collapsibles_for_session: Dict[str, set] = {}
 
+        # See :func:`OpenLIFULib.util.page_is_entered`: mirrored bool tracking whether this
+        # page is currently on-screen. Toggled in ``enter()`` / ``exit()`` so cross-page
+        # observer guards can consult it (works in both vanilla Slicer and the custom app).
+        self._entered = False
+
     def setup(self) -> None:
         ScriptedLoadableModuleWidget.setup(self)
 
@@ -129,12 +134,14 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         self.removeObservers()
 
     def enter(self) -> None:
+        self._entered = True
         self.initializeParameterNode()
         self.updateSessionDashboard()
         from OpenLIFULib.view_state import apply_module_view_state, SESSION
         apply_module_view_state(SESSION)
 
     def exit(self) -> None:
+        self._entered = False
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
@@ -143,7 +150,8 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         self.setParameterNode(None)
 
     def onSceneEndClose(self, caller, event) -> None:
-        if self.parent.isEntered:
+        from OpenLIFULib.util import page_is_entered
+        if page_is_entered(self):
             self.initializeParameterNode()
             self.updateSessionDashboard()
 
@@ -164,7 +172,8 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         # parameter node. We only want to do work when the Session page is actually on
         # screen; when the user re-enters this page ``enter()`` calls ``updateSessionDashboard``
         # (via ``apply_module_view_state`` + refresh), so we don't miss anything.
-        if not getattr(self.parent, "isEntered", False):
+        from OpenLIFULib.util import page_is_entered
+        if not page_is_entered(self):
             return
         self.updateSessionDashboard()
 

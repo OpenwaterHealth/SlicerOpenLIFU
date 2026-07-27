@@ -179,6 +179,12 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Guard flag: True while we are programmatically rebuilding the solutions table so
         that our own cell writes do not re-enter ``_on_solutions_table_item_changed``."""
 
+        # See :func:`OpenLIFULib.util.page_is_entered`: the host's ``_delegate_enter`` /
+        # ``_delegate_exit`` toggles this in ``enter()`` / ``exit()`` so cross-page
+        # ``dataChanged`` observers can short-circuit when this page is off-screen. Needed
+        # because in the custom app ``self.parent`` is a plain QWidget with no ``isEntered``.
+        self._entered = False
+
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
@@ -294,14 +300,15 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def enter(self) -> None:
         """Called each time the user opens this module."""
         ensure_python_requirements_for_module_enter()
+        self._entered = True
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         # Full reconstruction from current app state. This subsumes the previous piecemeal
         # calls to updateWorkflowControls / apply_module_view_state and adds the
         # Solutions-table / analysis-header / render-PNP-checkbox refreshes that were
         # previously only fired through the ``dataChanged`` observer -- now that that
-        # observer is guarded on ``isEntered``, ``enter()`` is the source of truth for
-        # first-render state on this page.
+        # observer is guarded on ``page_is_entered``, ``enter()`` is the source of truth
+        # for first-render state on this page.
         self._refresh_from_app_state()
 
         # Default-on Render PNP whenever a solution is already loaded on entry.
@@ -313,6 +320,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
@@ -326,7 +334,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        from OpenLIFULib.util import page_is_entered
+        if page_is_entered(self):
             self.initializeParameterNode()
 
     def initializeParameterNode(self) -> None:
@@ -502,7 +511,8 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Cross-page fanout guard: only refresh when the Sonication Planner is the active
         # page. Session load in Data, TT approvals in TL, target edits in PrePlanning etc.
         # all fire this observer; we pick them up next time the user re-enters this page.
-        if not getattr(self.parent, "isEntered", False):
+        from OpenLIFULib.util import page_is_entered
+        if not page_is_entered(self):
             return
         self._refresh_from_app_state()
 

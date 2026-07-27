@@ -186,10 +186,26 @@ class SlicerOpenLIFUSession:
         return slicer_photoscan.photoscan.photoscan
 
     def clear_volume_and_target_nodes(self) -> None:
-        """Clear the session's affiliated volume and target nodes from the scene."""
+        """Clear the session's affiliated volume, target nodes, and skin segmentation from the scene.
+
+        The skin segmentation is derived from the volume (via
+        :func:`OpenLIFULib.skinseg.generate_skin_segmentation`) and is bound to the volume
+        by an ``OpenLIFUData.volume_id`` attribute; if we don't drop it here it stays in the
+        scene with a stale volume-id reference, and the NEXT session's volume load sits at a
+        different world position while the OLD skin mesh remains at the old volume's pose --
+        the user sees a misaligned skin outline against the new volume. See the "skin surface
+        mesh not being aligned with the new session's volume" report following #625.
+        """
+        # Grab the skin segmentation BEFORE we remove the volume node -- ``get_skin_segmentation``
+        # looks it up by the volume's MRML id, which goes invalid once the volume is removed.
+        skin_mesh_node = None
+        if self.volume_node is not None:
+            skin_mesh_node = get_skin_segmentation(self.volume_node)
         for node in [self.volume_node, *self.target_nodes]:
             if node is not None:
                 slicer.mrmlScene.RemoveNode(node)
+        if skin_mesh_node is not None:
+            slicer.mrmlScene.RemoveNode(skin_mesh_node)
 
     def get_initial_center_point(self) -> Tuple[float]:
         """Get a point in slicer RAS space that would be reasonable to start slices centered on when first loading this session.

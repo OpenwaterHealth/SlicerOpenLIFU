@@ -25,7 +25,6 @@ TRANSDUCER_MODEL_COLORS = {
     "default": [230, 230, 77], # YELLOW
     "virtual_fit_result": [0, 85, 255], # BLUE
     "transducer_tracking_result": [0, 170, 0], # GREEN
-    "solution_pose": [180, 80, 220], # PURPLE -- transducer at an active Solution's compute-time pose
 }
 
 @parameterPack

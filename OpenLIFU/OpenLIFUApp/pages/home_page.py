@@ -95,6 +95,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
+        # See :func:`OpenLIFULib.util.page_is_entered`.
+        self._entered = False
+
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
         ScriptedLoadableModuleWidget.setup(self)
@@ -184,6 +187,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def enter(self) -> None:
         """Called each time the user opens this module."""
         ensure_python_requirements_for_module_enter()
+        self._entered = True
         self.initializeParameterNode()
         self._apply_env_locked_modes()
         self._refresh_status_rows()
@@ -196,6 +200,7 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
@@ -206,7 +211,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
-        if self.parent.isEntered:
+        from OpenLIFULib.util import page_is_entered
+        if page_is_entered(self):
             self.initializeParameterNode()
             self._refresh_status_rows()
 

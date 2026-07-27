@@ -242,6 +242,12 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._target_table_edit_in_progress = False
         # True while the user is in "edit targets" mode (cells editable, fiducials unlocked)
         self._targets_in_edit_mode = False
+
+        # See :func:`OpenLIFULib.util.page_is_entered`: mirrored bool tracking whether this
+        # page is currently on-screen. Toggled in ``enter()`` / ``exit()``. Cross-page
+        # observer guards consult this via ``page_is_entered(self)`` so they work in both
+        # vanilla Slicer (``self.parent.isEntered``) and the custom app.
+        self._entered = False
         # State tracking for the "Add Target" → click-to-place workflow. While placement is in progress,
         # other controls are disabled and the placement-end observer fires once.
         self._placement_in_progress = False
@@ -416,19 +422,21 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def enter(self) -> None:
         """Called each time the user opens this module."""
         ensure_python_requirements_for_module_enter()
+        self._entered = True
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         # Full reconstruction from current app state. Previously entry only did a subset
         # of the updates (updateWorkflowControls + view state); off-page changes to inputs,
         # targets, or VF results relied on the cross-page dataChanged fanout to refresh
-        # this page. Now that dataChanged is guarded on ``isEntered``, ``enter()`` owns
-        # the first-render state for this page.
+        # this page. Now that dataChanged is guarded on ``page_is_entered``, ``enter()``
+        # owns the first-render state for this page.
         self._refresh_from_app_state()
         from OpenLIFULib.view_state import apply_module_view_state, PREPLANNING
         apply_module_view_state(PREPLANNING)
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
         # If a target placement is still in progress, cancel it before we leave -- otherwise the
         # user would leave the app stuck in place mode with an empty placeholder fiducial that we
         # created and still own. Switching interaction mode away from Place fires
@@ -453,7 +461,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        from OpenLIFULib.util import page_is_entered
+        if page_is_entered(self):
             self.initializeParameterNode()
 
     def initializeParameterNode(self) -> None:
@@ -855,7 +864,8 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # of which page is visible. Only refresh when PrePlanning is the active page; entry
         # via ``enter()`` re-runs the full cascade (see also the ``updateVirtualFitRelatedLabels``
         # cross-page reach into Data below -- that's a follow-up cleanup, tracked separately).
-        if not getattr(self.parent, "isEntered", False):
+        from OpenLIFULib.util import page_is_entered
+        if not page_is_entered(self):
             return
         self._refresh_from_app_state()
 

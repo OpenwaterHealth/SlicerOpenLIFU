@@ -273,6 +273,11 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
+        # See :func:`OpenLIFULib.util.page_is_entered`: mirrored bool tracking whether this
+        # page is currently on-screen. Toggled in ``enter()`` / ``exit()`` so cross-page
+        # observer guards can consult it (works in both vanilla Slicer and the custom app).
+        self._entered = False
+
     @property
     def cur_solution_on_hardware_state(self) -> SolutionOnHardwareState:
         return self._cur_solution_on_hardware_state
@@ -419,12 +424,13 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Called each time the user opens this module."""
         logging.debug("OpenLIFUSonicationControlWidget.enter() called")
         ensure_python_requirements_for_module_enter()
+        self._entered = True
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
         # Full reconstruction from current app state. Off-page changes (session load, TT
         # approval, active-solution flip in the Sonication Planner) are ignored by the
-        # ``dataChanged`` observer now that it's ``isEntered``-guarded, so ``enter()`` owns
-        # first-render state on this page.
+        # ``dataChanged`` observer now that it's ``page_is_entered``-guarded, so ``enter()``
+        # owns first-render state on this page.
         self._refresh_from_app_state()
         from OpenLIFULib.view_state import apply_module_view_state, SONICATION_CONTROL
         apply_module_view_state(SONICATION_CONTROL)
@@ -432,6 +438,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def exit(self) -> None:
         """Called each time the user opens a different module."""
         logging.debug("OpenLIFUSonicationControlWidget.exit() called")
+        self._entered = False
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
@@ -447,7 +454,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         """Called just after the scene is closed."""
         logging.debug("onSceneEndClose() called")
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        from OpenLIFULib.util import page_is_entered
+        if page_is_entered(self):
             self.initializeParameterNode()
 
     def initializeParameterNode(self) -> None:
@@ -478,7 +486,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Cross-page fanout guard: only react when Sonication Control is the active page.
         # Off-page changes (session load in Data, TT approval in TL, etc.) are picked up
         # on next ``enter()``.
-        if not getattr(self.parent, "isEntered", False):
+        from OpenLIFULib.util import page_is_entered
+        if not page_is_entered(self):
             return
         self._refresh_from_app_state()
 

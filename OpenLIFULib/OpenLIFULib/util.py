@@ -100,6 +100,28 @@ def session_is_dirty() -> bool:
     return bool(state.session_is_dirty)
 
 
+def page_is_entered(widget) -> bool:
+    """Return ``True`` iff ``widget`` is the currently-displayed OpenLIFU page.
+
+    In vanilla Slicer, ``widget.parent`` is a ``qSlicerScriptedLoadableModuleWidget``
+    with an ``isEntered`` attribute that answers this question. In the custom app
+    (openlifu-desktop-application) each page widget is reparented into a plain
+    ``QWidget`` inside the host's ``QStackedWidget``, so ``widget.parent`` has no
+    ``isEntered`` -- naive checks like ``getattr(widget.parent, "isEntered", False)``
+    silently return False and cross-page observer guards short-circuit even when
+    the page IS on-screen (see SlicerOpenLIFU regression fix following #625).
+
+    The host (``OpenLIFU._delegate_enter`` / ``_delegate_exit``) calls each page's
+    ``enter()`` / ``exit()`` on page switch. Pages that need on-screen detection in
+    both environments should set ``self._entered = True`` in ``enter()`` and
+    ``False`` in ``exit()``, then consult this helper.
+    """
+    parent = getattr(widget, "parent", None)
+    if parent is not None and hasattr(parent, "isEntered"):
+        return bool(parent.isEntered)
+    return bool(getattr(widget, "_entered", False))
+
+
 def active_solution_is_pre_solution() -> bool:
     """Return ``True`` iff the active solution was computed against a virtual-fit-derived transducer pose.
 
