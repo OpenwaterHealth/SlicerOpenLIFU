@@ -662,6 +662,37 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
             if reply != qt.QMessageBox.Yes:
                 return
 
+        # Source-liveness gate: even for standard solutions, the specific VF / TT result
+        # that produced the transducer pose may have been revoked or removed since the
+        # solution was computed (openlifu-python#492 tracks the source id). The stored
+        # ``array_transform`` still describes where the compute was done, but the user
+        # should re-review before sending to hardware, so hard-warn on non-live states.
+        from OpenLIFULib.solution_source_status import (
+            get_active_solution_source_status,
+            is_safe_to_send_to_hardware,
+            label_for_status,
+            tooltip_for_status,
+            STATUS_LEGACY,
+        )
+        source_status = get_active_solution_source_status()
+        if not is_safe_to_send_to_hardware(source_status):
+            # Legacy solutions get a softer prompt -- we can't know either way, but the
+            # user's intent to send is a reasonable acknowledgement.
+            if source_status == STATUS_LEGACY:
+                title = "Solution source unknown (legacy)"
+            else:
+                title = f"Solution source: {label_for_status(source_status)}"
+            reply = qt.QMessageBox.warning(
+                slicer.util.mainWindow(),
+                title,
+                tooltip_for_status(source_status)
+                + "\n\nSend this solution to the device anyway?",
+                qt.QMessageBox.Yes | qt.QMessageBox.No,
+                qt.QMessageBox.No,
+            )
+            if reply != qt.QMessageBox.Yes:
+                return
+
         # Compatibility gate: defense in depth. The button-enable logic
         # already disables on ERROR, but re-check here to defend against
         # programmatic / keyboard activations.

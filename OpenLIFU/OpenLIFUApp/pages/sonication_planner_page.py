@@ -265,6 +265,13 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # their enabled state must track selection changes.
         self.ui.solutionsTableWidget.itemSelectionChanged.connect(self._update_solutions_toolbar)
 
+        # Right-click context menu on the Solutions table exposes bulk actions that don't
+        # warrant a permanent toolbar button (e.g. "Delete solutions with revoked source").
+        self.ui.solutionsTableWidget.setContextMenuPolicy(qt.Qt.CustomContextMenu)
+        self.ui.solutionsTableWidget.customContextMenuRequested.connect(
+            self._on_solutions_table_context_menu
+        )
+
         # Connect PNP sliders
         self.ui.pnpColorSlider.valuesChanged.connect(self.onPnpColorSliderChanged)
         self.ui.pnpOpacitySlider.valueChanged.connect(self.onPnpOpacitySliderChanged)
@@ -699,6 +706,20 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         # before compute runs; the outgoing solution's volume is about to stop being active.
         self.logic.hide_pnp()
 
+        # Capture the specific source id so downstream can flag "source revoked / missing"
+        # in the Solutions table (SlicerOpenLIFU followup to #628, backed by
+        # openlifu-python#492). The format is source-kind dependent:
+        #   * VF: ``"<target_id>:<rank>"`` -- composite key that stays stable across
+        #     approval-only changes (rank re-indexes only when a VF entry is added / removed).
+        #   * TT: the TransducerTrackingResult stable id (``TT:resultID`` attribute).
+        source_id: Optional[str] = None
+        if option.kind == "VF":
+            rank_attr = option.transform_node.GetAttribute("VF:rank")
+            if rank_attr is not None:
+                source_id = f"{option.target_id}:{rank_attr}"
+        else:  # option.kind == "TT"
+            source_id = option.transform_node.GetAttribute("TT:resultID")
+
         with BusyCursor():
             try:
                 self.ui.solutionProgressBar.maximum = 0
@@ -709,6 +730,7 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                     live_tx,
                     session.get_protocol(),
                     pre_solution=option.is_pre_solution,
+                    source_id=source_id,
                 )
             finally:
                 self.updateSolutionProgressBar()
@@ -893,58 +915,128 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
         ):
             return
 
-        # Drop the SolutionInfo entry. Reassigning the pack fires the write hook so the
-        # cross-module observers (and our own ``_refresh_solutions_table``) run.
+        self._delete_solutions_by_id([sid])
+
+    def _delete_solutions_by_id(self, sids_to_delete: List[str]) -> None:
+        """Bulk delete a set of solutions from the session (in-memory + scene nodes).
+
+        Shared code path for the toolbar Delete action (single-id) and the context-menu
+        "Delete solutions with revoked source" bulk action. Callers are responsible for
+        any user confirmation; this helper just does the state transitions:
+
+        1. Drop the matching :class:`SolutionInfo` entries from ``session.solutions``.
+        2. Pop each corresponding :class:`SlicerOpenLIFUSolution` wrapper out of
+           ``state.loaded_solutions`` and call ``clear_nodes()`` to remove its PNP /
+           intensity volume nodes from the scene.
+        3. If the currently active solution was in the delete set, promote another
+           loaded solution via ``_activate_solution`` (if any) or drop to no-active.
+        """
+        if not sids_to_delete:
+            return
+        sids_set = set(sids_to_delete)
+        state = get_app_state()
+        loaded_session = state.loaded_session
+        if loaded_session is None:
+            return
+        session_openlifu = loaded_session.session.session
+
+        # (1) Drop SolutionInfo entries.
         session_openlifu.solutions = [
-            si for si in session_openlifu.solutions if si.solution_id != sid
+            si for si in session_openlifu.solutions if si.solution_id not in sids_set
         ]
         state.loaded_session = loaded_session
 
-        # Drop the in-memory Solution wrapper and its scene nodes (PNP / intensity volumes).
-        # Previously we popped from ``loaded_solutions`` without calling ``clear_nodes()``, so
-        # the volumes were orphaned in the scene -- they survived even a full session unload
-        # because ``OpenLIFUDataLogic.clear_solutions`` iterates the (now empty)
-        # ``loaded_solutions`` dict to find nodes to remove.
-        was_active = state.active_solution_id == sid
-        popped_solution = None
-        if sid in loaded_solutions:
-            popped_solution = loaded_solutions.pop(sid)
-            state.loaded_solutions = loaded_solutions
-        if popped_solution is not None:
-            try:
-                popped_solution.clear_nodes()
-            except Exception as e:  # noqa: BLE001
-                logging.warning("Could not remove scene nodes for deleted solution %s: %s", sid, e)
+        # (2) Drop wrappers + clear scene nodes.
+        loaded_solutions = state.loaded_solutions
+        was_active_deleted = state.active_solution_id in sids_set
+        for sid in sids_set:
+            popped = None
+            if sid in loaded_solutions:
+                popped = loaded_solutions.pop(sid)
+            if popped is not None:
+                try:
+                    popped.clear_nodes()
+                except Exception as e:  # noqa: BLE001
+                    logging.warning("Could not remove scene nodes for deleted solution %s: %s", sid, e)
+        state.loaded_solutions = loaded_solutions
 
-        # If the deleted solution was NOT the active one, we're done -- the Solutions table
-        # will refresh via the ``state.loaded_session`` write above.
-        if not was_active:
+        # (3) Promote a remaining solution if we just deleted the active one.
+        if not was_active_deleted:
             return
-
-        # Deleted the shown solution. Prefer promoting another loaded solution (via the atomic
-        # activation entry point) rather than dropping to "no active solution": that keeps the
-        # Sonication Planner page in a consistent shown-solution state for the user, and moves
-        # the row-checkmark to the newly-active row via ``_refresh_solutions_table``.
         remaining_ids_in_session_order = [
             si.solution_id for si in session_openlifu.solutions
             if si.solution_id in loaded_solutions
         ]
         if remaining_ids_in_session_order:
-            # Activate the first remaining. Force PNP render True so the user immediately sees
-            # the promoted solution's volume (same UX as compute-time).
             self._activate_solution(remaining_ids_in_session_order[0], render_pnp_override=True)
         else:
-            # No remaining solutions. Hide the (already-cleared) checkbox and drop active.
-            # ``hide_pnp`` is a no-op here because the popped solution's PNP volume was already
-            # removed above, but we still toggle the checkbox to keep the widget state coherent.
             self.ui.renderPNPCheckBox.blockSignals(True)
             try:
                 self.ui.renderPNPCheckBox.checked = False
             finally:
                 self.ui.renderPNPCheckBox.blockSignals(False)
-            # ``active_solution_id`` is a non-None string field on the parameter node; use the
-            # empty-string sentinel documented on ``set_active_solution``.
             set_active_solution("")
+
+    @display_errors
+    def _on_solutions_table_context_menu(self, position) -> None:
+        """Right-click menu on the Solutions table: exposes bulk-delete-by-source-status."""
+        from OpenLIFULib.solution_source_status import (
+            get_solution_source_status,
+            STATUS_REVOKED,
+            STATUS_MISSING,
+        )
+        state = get_app_state()
+        loaded_session = state.loaded_session
+        if loaded_session is None:
+            return
+        session_openlifu = loaded_session.session.session
+        session_id = loaded_session.get_session_id()
+
+        revoked_sids = [
+            si.solution_id for si in session_openlifu.solutions
+            if get_solution_source_status(si, session_id) == STATUS_REVOKED
+        ]
+        missing_sids = [
+            si.solution_id for si in session_openlifu.solutions
+            if get_solution_source_status(si, session_id) == STATUS_MISSING
+        ]
+
+        menu = qt.QMenu(self.ui.solutionsTableWidget)
+        revoked_action = menu.addAction(f"Delete solutions with revoked source ({len(revoked_sids)})")
+        revoked_action.setEnabled(bool(revoked_sids))
+        missing_action = menu.addAction(f"Delete solutions with missing source ({len(missing_sids)})")
+        missing_action.setEnabled(bool(missing_sids))
+        chosen = menu.exec_(self.ui.solutionsTableWidget.viewport().mapToGlobal(position))
+        if chosen is None:
+            return
+
+        if chosen is revoked_action and revoked_sids:
+            self._bulk_delete_with_confirm(
+                revoked_sids,
+                title="Delete revoked solutions?",
+                subject="revoked",
+            )
+        elif chosen is missing_action and missing_sids:
+            self._bulk_delete_with_confirm(
+                missing_sids,
+                title="Delete missing-source solutions?",
+                subject="missing-source",
+            )
+
+    def _bulk_delete_with_confirm(self, sids: List[str], *, title: str, subject: str) -> None:
+        """Confirm-once-and-bulk-delete helper for the source-status context menu actions."""
+        if not sids:
+            return
+        n = len(sids)
+        if not slicer.util.confirmYesNoDisplay(
+            text=(
+                f"Delete {n} {subject} solution{'s' if n != 1 else ''} from this session?\n\n"
+                "The associated files will be removed from disk the next time the session is saved."
+            ),
+            windowTitle=title,
+        ):
+            return
+        self._delete_solutions_by_id(sids)
 
     def _selected_solution_id(self) -> Optional[str]:
         """Return the solution id of the currently selected Solutions-table row, or None."""
@@ -1180,16 +1272,17 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
     _COL_ID = 2
     _COL_TARGET = 3
     _COL_TYPE = 4
-    _COL_PROTOCOL = 5
-    _COL_COMPUTED = 6
-    _COL_APPROVED = 7
+    _COL_SOURCE = 5
+    _COL_PROTOCOL = 6
+    _COL_COMPUTED = 7
+    _COL_APPROVED = 8
 
     def _configure_solutions_table_columns(self) -> None:
         """One-time setup of the Solutions table columns, headers, and resize policy."""
         tbl = self.ui.solutionsTableWidget
-        tbl.setColumnCount(8)
+        tbl.setColumnCount(9)
         tbl.setHorizontalHeaderLabels(
-            ["Show", "Name", "ID", "Target", "Type", "Protocol", "Compute time", "Approved"]
+            ["Show", "Name", "ID", "Target", "Type", "Source", "Protocol", "Compute time", "Approved"]
         )
         header = tbl.horizontalHeader()
         header.setSectionResizeMode(qt.QHeaderView.ResizeToContents)
@@ -1279,6 +1372,33 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
                 type_item = qt.QTableWidgetItem(type_label)
                 type_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
                 tbl.setItem(row_idx, self._COL_TYPE, type_item)
+
+                # Source liveness -- resolves against the VF / TT scene state (see
+                # ``OpenLIFULib.solution_source_status``). Colored background makes revoked /
+                # missing sources scan-able at a glance; hover tooltip explains what to do.
+                from OpenLIFULib.solution_source_status import (
+                    get_solution_source_status,
+                    label_for_status,
+                    tooltip_for_status,
+                    STATUS_LIVE,
+                    STATUS_REVOKED,
+                    STATUS_MISSING,
+                    STATUS_LEGACY,
+                )
+                source_status = get_solution_source_status(info, loaded_session.get_session_id())
+                source_item = qt.QTableWidgetItem(label_for_status(source_status))
+                source_item.setFlags(qt.Qt.ItemIsSelectable | qt.Qt.ItemIsEnabled)
+                source_item.setToolTip(tooltip_for_status(source_status))
+                # Muted colors so the badges don't overpower the rest of the table.
+                _source_bg = {
+                    STATUS_LIVE:    qt.QColor(210, 245, 210),  # light green
+                    STATUS_REVOKED: qt.QColor(255, 235, 190),  # light amber
+                    STATUS_MISSING: qt.QColor(250, 210, 210),  # light red
+                    STATUS_LEGACY:  qt.QColor(230, 230, 230),  # light gray
+                }
+                if source_status in _source_bg:
+                    source_item.setBackground(_source_bg[source_status])
+                tbl.setItem(row_idx, self._COL_SOURCE, source_item)
 
                 # Protocol
                 protocol_item = qt.QTableWidgetItem(info.protocol_id)
@@ -1507,15 +1627,18 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             inputTarget: vtkMRMLMarkupsFiducialNode,
             inputTransducer : SlicerOpenLIFUTransducer,
             inputProtocol: SlicerOpenLIFUProtocol,
-            pre_solution: bool = False) -> Tuple[SlicerOpenLIFUSolution, SlicerOpenLIFUSolutionAnalysis]:
+            pre_solution: bool = False,
+            source_id: Optional[str] = None) -> Tuple[SlicerOpenLIFUSolution, SlicerOpenLIFUSolutionAnalysis]:
         """Compute solution for the given volume, target, transducer, and protocol, setting the solution as the active solution.
         Note that setting the solution will trigger a write of the solution to the databse if there is an active session.
 
         Args:
             pre_solution: if True, this solution was computed against a virtual-fit-derived
-                transducer transform rather than an approved tracking result. The solution's
-                ``id`` and ``name`` are prefixed accordingly so downstream consumers (e.g.
-                sonication control's load-to-device flow) can distinguish and warn. See #609.
+                transducer transform rather than an approved tracking result. See #609.
+            source_id: Opaque identifier of the specific VF or TT result the transducer pose
+                came from at compute time. Stored on ``SolutionInfo.transducer_transform_source_id``
+                so downstream can show a source-liveness column and warn when the source is
+                revoked / missing (see openlifu-python#492).
         """
         solution_openlifu, pnp_aggregated, intensity_aggregated, analysis_openlifu = compute_solution_openlifu(
             inputProtocol.protocol,
@@ -1564,6 +1687,7 @@ class OpenLIFUSonicationPlannerLogic(ScriptedLoadableModuleLogic):
             target_id=fiducial_to_openlifu_point_id(inputTarget),
             transducer_id=inputTransducer.transducer.transducer.id,
             transducer_transform_source="virtual_fit" if pre_solution else "localization",
+            transducer_transform_source_id=source_id,
             approved=False,
             computed_at=datetime.now(),
             array_transform=array_transform_openlifu,

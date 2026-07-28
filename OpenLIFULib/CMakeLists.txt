@@ -23,6 +23,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/transform_conversion.py
   OpenLIFULib/transducer_tracking_results.py
   OpenLIFULib/skinseg.py
+  OpenLIFULib/solution_source_status.py
   OpenLIFULib/transducer_tracking_wizard_utils.py
   OpenLIFULib/view_state.py
   OpenLIFULib/events.py
