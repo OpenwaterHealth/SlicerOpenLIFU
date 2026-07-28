@@ -779,11 +779,53 @@ class OpenLIFUSonicationPlannerWidget(ScriptedLoadableModuleWidget, VTKObservati
           vrDisplayNode.SetIgnoreVolumeDisplayNodeThreshold(0)
 
 
-    def deleteSolutionAndSolutionAnalysisIfAny(self, reason:str):
-        """Delete the solution in the data module and the solution analysis in
-        the sonication planner module, and show a message dialog to that effect.
+    def deleteSolutionAndSolutionAnalysisIfAny(
+        self, reason: str, target_id: Optional[str] = None,
+    ) -> None:
+        """Delete session solutions whose provenance ties them to a specific target.
+
+        Used as a cross-page cascade primitive by PrePlanning's target-modification handlers
+        (``onPointModified`` / ``onPointAddedOrRemoved``): when the user moves or deletes a
+        target, every solution computed against that target is invalidated, and this method
+        drops those solutions in one shot.
+
+        Args:
+            reason: Human-readable message to surface via ``notify``.
+            target_id: If provided, only solutions whose ``SolutionInfo.target_id`` matches
+                are deleted. If ``None`` (legacy callers), fall back to the old behavior of
+                dropping only the currently active solution -- retained so we don't need to
+                sweep every call site in one commit. New code should always pass
+                ``target_id``.
+
+        #629 background: previously VF / TT approval revocation ALSO called this method
+        without a target filter, which clobbered whichever solution happened to be active
+        (even if it was for a completely different target / source). Source-status tracking
+        now handles those cases via the Solutions table's Source column + right-click bulk-
+        delete, so those cascade calls have been removed. Target modification remains a
+        legitimate hard-invalidation trigger since the target itself has changed.
         """
-        data_logic : "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
+        data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
+
+        if target_id is not None:
+            # Delete every solution whose provenance target matches. Use the atomic bulk
+            # helper so scene nodes are cleared and a remaining solution gets promoted
+            # exactly as with the toolbar / context-menu delete paths (#628).
+            state = get_app_state()
+            loaded_session = state.loaded_session
+            if loaded_session is None:
+                return
+            session_openlifu = loaded_session.session.session
+            sids_to_delete = [
+                si.solution_id for si in session_openlifu.solutions
+                if si.target_id == target_id
+            ]
+            if not sids_to_delete:
+                return
+            self._delete_solutions_by_id(sids_to_delete)
+            notify(f"Solution(s) deleted:\n{reason}")
+            return
+
+        # Legacy path -- no target filter. Drop the active solution (if any).
         if self.logic.solution_analysis_exists():
             data_logic.clear_solution(clean_up_scene=True)
             self._parameterNode.solution_analysis = None

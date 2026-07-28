@@ -562,7 +562,10 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
-            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner").deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
+            # #629: target-based delete filter so we only drop solutions that actually reference
+            # this target, not whatever solution happens to be active.
+            target_id = fiducial_to_openlifu_point_id(node)
+            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner").deleteSolutionAndSolutionAnalysisIfAny(reason=reason, target_id=target_id)
 
     def onPointModified(self, node:vtkMRMLMarkupsFiducialNode, caller, event):
         # Refresh the corresponding row's R/A/S cells to reflect the new fiducial position, unless we
@@ -576,7 +579,9 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             reason = "The target was modified."
             self.revokeTargetApprovalIfAny(node, reason=reason)
             self.clearVirtualFitResultsIfAny(node, reason = reason)
-            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner").deleteSolutionAndSolutionAnalysisIfAny(reason=reason)
+            # #629: target-based delete filter (see onPointAddedOrRemoved).
+            target_id = fiducial_to_openlifu_point_id(node)
+            slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner").deleteSolutionAndSolutionAnalysisIfAny(reason=reason, target_id=target_id)
 
     def clearVirtualFitResultsIfAny(self,target: vtkMRMLMarkupsFiducialNode, reason:str):
         """Clear virtual fit results for the target from the scene if any.
@@ -633,9 +638,11 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         revoked for a specific target, only the TT results whose ``TT:targetID`` matches that
         target are revoked; results targeting other points remain valid.
 
-        Also clears any computed Solution / SolutionAnalysis here, since the pose source backing
-        the solution has just become invalid. Solution clearing is now driven by approval
-        changes rather than by transducer-transform events.
+        #629: solutions are no longer blanket-deleted from this cascade. Each solution's
+        ``array_transform`` records the exact pose used at compute time, so display keeps
+        working after a source revocation; the Sonication Planner Solutions table shows the
+        source status column ("Revoked" / "Missing") and the user chooses when to bulk-
+        delete via the right-click context menu.
         """
         try:
             tl_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUTransducerLocalization")
@@ -665,20 +672,6 @@ class OpenLIFUPrePlanningWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                         + (f": {reason}" if reason else ".")
                     ),
                 )
-
-        # Clear solution regardless of whether there was a TT to revoke: the VF
-        # revocation alone is enough to invalidate any cached solution.
-        try:
-            sp_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner")
-        except AttributeError:
-            sp_widget = None
-        if sp_widget is not None:
-            sp_widget.deleteSolutionAndSolutionAnalysisIfAny(
-                reason=(
-                    "The underlying virtual fit approval was revoked"
-                    + (f": {reason}" if reason else ".")
-                ),
-            )
 
     def updateTargetsTable(self):
         """Rebuild the targets table from the session's target list.

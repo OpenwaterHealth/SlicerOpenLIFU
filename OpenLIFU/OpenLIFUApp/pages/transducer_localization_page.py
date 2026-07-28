@@ -6000,16 +6000,14 @@ class OpenLIFUTransducerLocalizationLogic(ScriptedLoadableModuleLogic):
         if session:
             data_logic: "OpenLIFUDataLogic" = slicer.util.getModuleLogic("OpenLIFU").data_logic
             data_logic.update_underlying_openlifu_session()
-        # Clear any cached solution: revoking TT approval invalidates the pose source the
-        # solution was computed against. Solution clearing is now driven by approval changes.
-        try:
-            sp_widget = slicer.util.getModuleWidget("OpenLIFU").get_page_widget("OpenLIFUSonicationPlanner")
-        except AttributeError:
-            sp_widget = None
-        if sp_widget is not None:
-            sp_widget.deleteSolutionAndSolutionAnalysisIfAny(
-                reason="Transducer tracking approval was revoked.",
-            )
+        # #629: solutions no longer need to be blanket-deleted when their source TT is
+        # revoked. Each solution's ``array_transform`` records the exact pose used at
+        # compute time, so display still works; the Sonication Planner Solutions table
+        # shows the source status column ("Revoked" / "Missing") and the user can bulk-
+        # delete via the right-click context menu when they want to. Previously this
+        # method dropped whatever solution was currently active (regardless of whether
+        # it was related to the revoked TT), which is the bug that surfaced as
+        # "clicking Show on the still-Live VF solution raised ... not in loaded_solutions".
 
     def get_transducer_tracking_approval(self, result_id: str) -> bool:
         """Return whether the TT result with the given stable id is approved.
