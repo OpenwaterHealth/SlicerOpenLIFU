@@ -95,6 +95,39 @@ class SlicerOpenLIFUPhotoscanWrapper:
     def __init__(self, photoscan: "Optional[openlifu.nav.photoscan.Photoscan]" = None):
         self.photoscan = photoscan
 
+# ---------------------------------------------------------------------------
+# Split-session wrappers (SESSION_SPLIT_DESIGN.md).
+#
+# In the split-session model, the omnibus ``openlifu.db.Session`` is split into
+# an immutable ``Plan`` plus mutable ``PlanningSession`` and ``SonicationSession``
+# working documents. Each needs a parameterNode-serializable thin wrapper for
+# the same reason ``SlicerOpenLIFUSessionWrapper`` exists: the parameter-node
+# annotation must evaluate at import time, and we lazy-load ``openlifu``.
+#
+# The names ``SlicerOpenLIFUPlan``, ``SlicerOpenLIFUPlanningSession``, and
+# ``SlicerOpenLIFUSonicationSession`` are reserved for the upcoming
+# parameterPacks in ``OpenLIFULib.plan`` / ``.planning_session`` /
+# ``.sonication_session``.
+# ---------------------------------------------------------------------------
+
+class SlicerOpenLIFUPlanWrapper:
+    """Ultrathin wrapper of openlifu.db.Plan. This exists so that Plans can have parameter node
+    support while we still do lazy-loading of openlifu."""
+    def __init__(self, plan: "Optional[openlifu.db.Plan]" = None):
+        self.plan = plan
+
+class SlicerOpenLIFUPlanningSessionWrapper:
+    """Ultrathin wrapper of openlifu.db.PlanningSession. This exists so that PlanningSessions can have
+    parameter node support while we still do lazy-loading of openlifu."""
+    def __init__(self, planning_session: "Optional[openlifu.db.PlanningSession]" = None):
+        self.planning_session = planning_session
+
+class SlicerOpenLIFUSonicationSessionWrapper:
+    """Ultrathin wrapper of openlifu.db.SonicationSession. This exists so that SonicationSessions can have
+    parameter node support while we still do lazy-loading of openlifu."""
+    def __init__(self, sonication_session: "Optional[openlifu.db.SonicationSession]" = None):
+        self.sonication_session = sonication_session
+
 def SlicerOpenLIFUSerializerBaseMaker(
         serialized_type:type,
         default_args:Optional[list[Any]] = None,
@@ -293,6 +326,40 @@ class OpenLIFUPhotoscanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLI
 
         json_string = parameterNode.GetParameter(name)    
         return SlicerOpenLIFUPhotoscanWrapper(openlifu.nav.photoscan.Photoscan.from_json(json_string))
+
+# ---------------------------------------------------------------------------
+# Split-session serializers (SESSION_SPLIT_DESIGN.md).
+# ---------------------------------------------------------------------------
+
+@parameterNodeSerializer
+class OpenLIFUPlanSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPlanWrapper)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUPlanWrapper) -> None:
+        parameterNode.SetParameter(name, value.plan.to_json(compact=True))
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUPlanWrapper:
+        import openlifu.db
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUPlanWrapper(openlifu.db.Plan.from_json(json_string))
+
+@parameterNodeSerializer
+class OpenLIFUPlanningSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUPlanningSessionWrapper)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUPlanningSessionWrapper) -> None:
+        parameterNode.SetParameter(name, value.planning_session.to_json(compact=True))
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUPlanningSessionWrapper:
+        import openlifu.db
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUPlanningSessionWrapper(openlifu.db.PlanningSession.from_json(json_string))
+
+@parameterNodeSerializer
+class OpenLIFUSonicationSessionSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUSonicationSessionWrapper)):
+    def write(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str, value: SlicerOpenLIFUSonicationSessionWrapper) -> None:
+        parameterNode.SetParameter(name, value.sonication_session.to_json(compact=True))
+
+    def read(self, parameterNode: slicer.vtkMRMLScriptedModuleNode, name: str) -> SlicerOpenLIFUSonicationSessionWrapper:
+        import openlifu.db
+        json_string = parameterNode.GetParameter(name)
+        return SlicerOpenLIFUSonicationSessionWrapper(openlifu.db.SonicationSession.from_json(json_string))
 
 @parameterNodeSerializer
 class XarraydatasetSerializer(SlicerOpenLIFUSerializerBaseMaker(SlicerOpenLIFUXADataset)):

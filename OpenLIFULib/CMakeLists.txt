@@ -12,6 +12,9 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFULib/dependency_utils.py
   OpenLIFULib/parameter_node_utils.py
   OpenLIFULib/session.py
+  OpenLIFULib/plan.py
+  OpenLIFULib/planning_session.py
+  OpenLIFULib/sonication_session.py
   OpenLIFULib/transducer.py
   OpenLIFULib/targets.py
   OpenLIFULib/simulation.py

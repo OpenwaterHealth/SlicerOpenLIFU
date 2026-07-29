@@ -35,12 +35,15 @@ from OpenLIFULib.targets import (
     openlifu_point_to_fiducial,
 )
 from OpenLIFULib.algorithm_input_widget import OpenLIFUAlgorithmInputWidget
+from OpenLIFULib.plan import SlicerOpenLIFUPlan
+from OpenLIFULib.planning_session import SlicerOpenLIFUPlanningSession
 from OpenLIFULib.session import SlicerOpenLIFUSession, assign_openlifu_metadata_to_volume_node
 from OpenLIFULib.simulation import (
     make_volume_from_xarray_in_transducer_coords,
     make_xarray_in_transducer_coords_from_volume,
 )
 from OpenLIFULib.solution import SlicerOpenLIFUSolution
+from OpenLIFULib.sonication_session import SlicerOpenLIFUSonicationSession
 
 __all__ = [
     "SlicerOpenLIFUSolution",
@@ -51,6 +54,9 @@ __all__ = [
     "SlicerOpenLIFURun",
     "SlicerOpenLIFUSolutionAnalysis",
     "SlicerOpenLIFUPhotoscan",
+    "SlicerOpenLIFUPlan",
+    "SlicerOpenLIFUPlanningSession",
+    "SlicerOpenLIFUSonicationSession",
     "get_cur_db",
     "get_openlifu_database_parameter_node",
     "get_app_state",

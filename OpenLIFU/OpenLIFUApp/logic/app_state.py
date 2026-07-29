@@ -9,10 +9,13 @@ from slicer.parameterNodeWrapper import parameterNodeWrapper
 
 from OpenLIFULib import (
     SlicerOpenLIFUPhotoscan,
+    SlicerOpenLIFUPlan,
+    SlicerOpenLIFUPlanningSession,
     SlicerOpenLIFUProtocol,
     SlicerOpenLIFURun,
     SlicerOpenLIFUSession,
     SlicerOpenLIFUSolution,
+    SlicerOpenLIFUSonicationSession,
     SlicerOpenLIFUTransducer,
 )
 
@@ -38,6 +41,23 @@ class OpenLIFUAppState:
     loaded_solutions : "Dict[str,SlicerOpenLIFUSolution]"
     active_solution_id : str
     loaded_session : "Optional[SlicerOpenLIFUSession]"
+    """Legacy omnibus session. Retained during the split-session refactor
+    (SlicerOpenLIFU#631) so pages that have not yet been rewritten can keep
+    functioning; will be removed once every page moves to
+    ``loaded_planning_session`` or ``loaded_sonication_session``."""
+
+    loaded_planning_session : "Optional[SlicerOpenLIFUPlanningSession]"
+    """The currently-loaded PlanningSession, or ``None``. Mutually exclusive
+    with ``loaded_sonication_session`` in the intended workflow (the Data
+    Manager loads one at a time), though the app state does not enforce that.
+    See ``SESSION_SPLIT_DESIGN.md``."""
+
+    loaded_sonication_session : "Optional[SlicerOpenLIFUSonicationSession]"
+    """The currently-loaded SonicationSession, or ``None``. Carries a frozen
+    reference to a :class:`SlicerOpenLIFUPlan` for the target / volume /
+    protocol / transducer / array_transform context. See
+    ``SESSION_SPLIT_DESIGN.md``."""
+
     loaded_run: "Optional[SlicerOpenLIFURun]"
     loaded_photoscans: "Dict[str,SlicerOpenLIFUPhotoscan]"
 
