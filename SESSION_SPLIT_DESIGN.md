@@ -1,9 +1,9 @@
 # Session Split Design (openlifu-python & SlicerOpenLIFU)
 
-Status: **DRAFT** — 2026-07-29.
+Status: **APPROVED** — 2026-07-29. Design decisions locked (see §12).
 Reviewers: @pjh7 (and any OpenLIFU app team members)
 Tracking: SlicerOpenLIFU#631, openlifu-python#493
-Target branches: cut from `v2_ui_refactor` (SlicerOpenLIFU) and `v2_refactor` (openlifu-python). Everything comes back to those.
+Target branches: `v2_ui_refactor` (SlicerOpenLIFU) and `v2_refactor` (openlifu-python). Commits land directly on these branches; no `session_split` sub-branch.
 
 ## 1. Motivation
 
@@ -129,24 +129,21 @@ class SonicationSession(DictMixin):
 
     Loads a Plan by id (immutable input). Session-owned data is the
     photoscan registrations, transducer-tracking results, the final
-    Solution, and Runs. The Plan's target, protocol, and array_transform
-    are the reference "what we're trying to hit"; the SonicationSession
-    tracks "what we actually did" via TT + Solution + Run.
+    Solution reference, and Runs. The Plan's target, volume, protocol,
+    and array_transform are the reference "what we're trying to hit";
+    the SonicationSession tracks "what we actually did" via TT + Solution
+    + Run.
     """
     id: str
     name: str
     subject_id: str
-    plan_id: str                             # frozen reference
+    plan_id: str                             # frozen reference; volume + target + VF pose come from here
 
-    # Volume may differ from the Plan's volume (e.g. a fresh scan taken at treatment time).
-    # If None, use plan.volume_id. Convention TBD; safer to require explicit.
-    volume_id: str
-
-    photoscan_ids: List[str] = []            # SonicationSession-scoped photoscans (see below)
+    photoscan_ids: List[str] = []            # subject-scoped storage, session-scoped ownership
     photoscan_registrations: List[PhotoscanRegistration] = []
     transducer_tracking_results: List[TransducerTrackingResult] = []
 
-    solution: Optional[SolutionInfo] = None  # the ONE final solution (not a list)
+    solution: Optional[SolutionInfo] = None  # the ONE final solution (metadata ref; actual files at subject scope)
     runs: List[Run] = []
 
     date_created: datetime
@@ -155,11 +152,19 @@ class SonicationSession(DictMixin):
 ```
 
 Notes:
+* **No `volume_id` field.** Volume comes from the Plan. Starting a
+  Sonication Session involves loading a Plan, which directly loads the
+  volume, target, and VF pose. If the treatment-time workflow ever needs
+  a re-scan, the user finalizes a new Plan against that new volume
+  (correct semantics: a different volume is a different plan).
 * `solution` is `Optional[SolutionInfo]`, not a list. A SonicationSession
   computes at most one final solution (recomputes replace it in-place).
-  If the user needs to try a different pose, they either (a) recompute in
-  the same session (previous solution is discarded, `run` history stays),
-  or (b) create a new SonicationSession from the same Plan.
+  Multi-solution generation + selection (akin to virtual fitting and
+  picking a favorite) is a plausible future feature but out of scope for
+  this refactor. If the user needs to try a different pose, they either
+  (a) recompute in the same session (previous solution ref is discarded,
+  `run` history stays), or (b) create a new SonicationSession from the
+  same Plan.
 * `photoscan_ids` list is the SonicationSession's owned photoscans. Two
   sonication sessions on the same subject would each capture their own
   photoscan(s) at treatment time.
@@ -174,6 +179,11 @@ Notes:
 
 ## 4. Database layout
 
+All heavy artifacts (volumes, photoscans, plans, solutions) live at
+subject scope. Sessions and plans reference them by id. This is a clean
+separation of storage (subject-owned) from ownership (session-owned) and
+sets us up cleanly for a future migration to a relational database.
+
 ```
 {db_root}/
   users/                                  # unchanged
@@ -183,10 +193,10 @@ Notes:
     subjects.json
     {subject_id}/
       {subject_id}.json
-      volumes/                            # unchanged
+      volumes/                            # unchanged (already subject-scoped)
 
-      photoscans/                         # NEW: subject-scoped for storage, but
-        photoscans.json                   # ownership is per-SonicationSession
+      photoscans/                         # subject-scoped storage; ownership per SonicationSession
+        photoscans.json
         {photoscan_id}/
           {photoscan_id}.json
           {photoscan_id}.obj
@@ -194,39 +204,53 @@ Notes:
           {photoscan_id}.png
           ...
 
+      solutions/                          # subject-scoped storage; ownership per PlanningSession / Plan / SonicationSession
+        solutions.json
+        {solution_id}/
+          {solution_id}.json
+          {solution_id}.nc
+          analysis.json
+
+      plans/                              # subject-scoped storage; referenced by PlanningSession (produced) and SonicationSession (consumed)
+        plans.json
+        {plan_id}/
+          {plan_id}.json                  # holds SolutionInfo list referencing solutions/{sid}/
+
       planning_sessions/
         planning_sessions.json
         {planning_session_id}/
-          {planning_session_id}.json
-          pre_solutions/
-            solutions.json
-            {sid}/{sid}.json + {sid}.nc
-
-      plans/
-        plans.json
-        {plan_id}/
-          {plan_id}.json
-          pre_solutions/                  # copied at finalize time (or referenced?)
-            solutions.json
-            {sid}/{sid}.json + {sid}.nc
+          {planning_session_id}.json      # holds SolutionInfo list referencing solutions/{sid}/
 
       sonication_sessions/
         sonication_sessions.json
         {sonication_session_id}/
-          {sonication_session_id}.json
-          solutions/
-            {sid}/{sid}.json + {sid}.nc + analysis.json
+          {sonication_session_id}.json    # holds solution SolutionInfo ref + photoscan_ids
           runs/
             runs.json
             {rid}/{rid}.json
 ```
 
-**Photoscan file storage clarification**: Physical files live under
-`subjects/{subject_id}/photoscans/` for simplicity (no fs churn on
-SonicationSession delete). Logical ownership is tracked via
-`SonicationSession.photoscan_ids`. `db.get_photoscan_ids(subject_id)`
-becomes subject-scoped; each SonicationSession filters that list to its
-own owned subset.
+**Storage vs. ownership** (design principle): heavy binary artifacts
+(volumes, photoscans, solution `.nc` files, analysis JSON) are stored at
+subject scope so they're not duplicated across sessions and don't churn
+when sessions are deleted. Sessions and plans hold lightweight
+`SolutionInfo` / photoscan-id references. `SolutionInfo` already carries
+the metadata (id, protocol_id, target_id, transducer_id, approved,
+computed_at, array_transform, transducer_transform_source[_id]) needed
+for UI filtering and provenance without loading the pressure field.
+
+**Solution ownership rules**:
+* A solution can be referenced by exactly one PlanningSession's
+  `pre_solutions` (the session that computed it) OR one Plan's
+  `pre_solutions` (copied by reference at finalize time) OR one
+  SonicationSession's `solution` field.
+* Deleting a session/plan does NOT delete the solution files
+  automatically (safer default; user does a separate cleanup action or
+  orphan sweep).
+
+**Photoscan file storage**: same principle. `db.get_photoscan_ids(subject_id)`
+is subject-scoped; each SonicationSession filters that list to its own
+owned subset.
 
 Old `subjects/{subject_id}/sessions/` directory is left alone; existing
 sessions live there as read-only. No migration.
@@ -381,15 +405,25 @@ Semantics:
    * `target` = the target the approved VF is for
    * `array_transform` = the approved VF's transform
    * `pre_solutions` = the session's pre-solutions FILTERED to those that
-     used this approved VF (`transducer_transform_source_id` matches)
+     used this approved VF (`transducer_transform_source_id` matches).
+     Note: these are `SolutionInfo` refs to the subject-scoped solution
+     files, not copies of the underlying `.nc`.
    * `parent_planning_session_id` = session id
-3. Write the Plan to disk.
+3. Write the Plan JSON to disk.
 4. Append the new Plan's id to `PlanningSession.finalized_plan_ids`.
 5. The PlanningSession remains mutable; the user can keep editing and
    finalize a different Plan later.
 
+**Multiple Plans per PlanningSession is expected and supported.** The
+Planning Session Overview page shows all finalized Plans in a list
+("Plan A — finalized 2026-07-29, Plan B — finalized 2026-07-30, ...").
+Each finalize action produces a new immutable Plan; nothing is
+overwritten.
+
 Immutability: once written, a Plan's JSON never changes. If the user
-wants a modified Plan, they finalize a new one.
+wants a modified Plan, they finalize a new one. Deleting a Plan is a
+separate operation and only removes the Plan record — pre-solutions it
+referenced remain on the PlanningSession.
 
 ## 9. Slicer-side pack structures
 
@@ -422,8 +456,9 @@ loaded_sonication_session: Optional[SlicerOpenLIFUSonicationSession]
 
 `loaded_session` is retired. `loaded_solutions` shrinks to just
 "currently-loaded solution objects for the current session" —
-Planning-side has `List[SlicerOpenLIFUSolution]` (pre-solutions);
-Sonication-side has `Optional[SlicerOpenLIFUSolution]` (the final one).
+Planning-side has `List[SlicerOpenLIFUSolution]` (pre-solutions, loaded
+from subject-scoped `solutions/`); Sonication-side has
+`Optional[SlicerOpenLIFUSolution]` (the final one).
 
 ## 10. What we're NOT doing
 
@@ -439,53 +474,60 @@ Sonication-side has `Optional[SlicerOpenLIFUSolution]` (the final one).
 * **No `openlifu.db.Session` compat shim**. Callers of the old
   `db.load_session` get an error asking them to migrate.
 
-## 11. Staging plan (branch: `session_split`)
+## 11. Staging plan
 
-Each row is a commit. Cut from `v2_ui_refactor` (SlicerOpenLIFU) and
-`v2_refactor` (openlifu-python).
+Each row is a commit. Land directly on `v2_ui_refactor` (SlicerOpenLIFU)
+and `v2_refactor` (openlifu-python). No sub-branch — since we know
+everything comes back to `v2_*` anyway, the sub-branch adds only
+overhead.
 
 | # | Commit | Repo | Description |
 |---|---|---|---|
-| 1 | Add `Plan` / `PlanningSession` / `SonicationSession` dataclasses | openlifu-python | Data model + tests. Old `Session` untouched. |
-| 2 | Add DB read/write for the three types | openlifu-python | `write_plan`, `load_planning_session`, `load_sonication_session`, etc. + tests. |
-| 3 | Add Slicer-side wrappers + parameter node fields | SlicerOpenLIFU | `SlicerOpenLIFUPlanningSession`, `SlicerOpenLIFUSonicationSession`, `SlicerOpenLIFUPlan`. App state carries both new fields. |
-| 4 | Rewrite Data Manager for new types | SlicerOpenLIFU | Two lists (Planning / Sonication), one list of Plans. Old session UI collapsed. |
-| 5 | Rewrite Home for two-workflow launch | SlicerOpenLIFU | Two big buttons. |
-| 6 | Split Session Overview into Planning Overview + Sonication Overview | SlicerOpenLIFU | Both minimal at first. |
-| 7 | Rewrite PrePlanning against PlanningSession | SlicerOpenLIFU | No cross-page cascades. Enter-only refresh. Drift detection at enter(). |
-| 8 | Rewrite Solution Generator (formerly Sonication Planner) | SlicerOpenLIFU | Mode-agnostic. Reads session type; writes to right destination. |
-| 9 | Rewrite Localization against SonicationSession | SlicerOpenLIFU | No cross-page cascades. |
-| 10 | Rewrite Sonication Control against SonicationSession | SlicerOpenLIFU | Load solution from `SonicationSession.solution`. |
-| 11 | Add Finalize Plan button + logic | SlicerOpenLIFU | Planning Overview → Finalize → creates Plan. |
-| 12 | Delete old `Session` code paths | SlicerOpenLIFU + openlifu-python | Purge, tests, sample data update. |
-| 13 | Update sample database | openlifu-sample-database | Convert one sample subject to have a PlanningSession + Plan + SonicationSession. |
+| 1 | Add subject-scoped `solutions/` layout for the new types | openlifu-python | `db.write_solution` / `db.load_solution` accept `subject_id`; add index file scheme. Old session `solutions/` path untouched. Tests. |
+| 2 | Add `Plan` / `PlanningSession` / `SonicationSession` dataclasses | openlifu-python | Data model + tests. Old `Session` untouched. |
+| 3 | Add DB read/write for the three types | openlifu-python | `write_plan`, `load_planning_session`, `load_sonication_session`, subject-scoped photoscan storage. Tests. |
+| 4 | Add Slicer-side wrappers + parameter node fields | SlicerOpenLIFU | `SlicerOpenLIFUPlanningSession`, `SlicerOpenLIFUSonicationSession`, `SlicerOpenLIFUPlan`. App state carries both new fields. |
+| 5 | Rewrite Data Manager for new types | SlicerOpenLIFU | Two lists (Planning / Sonication), one list of Plans. Old session UI collapsed. |
+| 6 | Rewrite Home for two-workflow launch | SlicerOpenLIFU | Two big buttons. |
+| 7 | Split Session Overview into Planning Overview + Sonication Overview | SlicerOpenLIFU | Both minimal at first. |
+| 8 | Rewrite PrePlanning against PlanningSession | SlicerOpenLIFU | No cross-page cascades. Enter-only refresh. Drift detection at enter(). |
+| 9 | Rewrite Solution Generator (formerly Sonication Planner) | SlicerOpenLIFU | Mode-agnostic. Reads session type; writes to right destination. |
+| 10 | Rewrite Localization against SonicationSession | SlicerOpenLIFU | No cross-page cascades. |
+| 11 | Rewrite Sonication Control against SonicationSession | SlicerOpenLIFU | Load solution from `SonicationSession.solution`. |
+| 12 | Add Finalize Plan button + logic | SlicerOpenLIFU | Planning Overview → Finalize → creates Plan (supports multiple Plans per PlanningSession). |
+| 13 | Delete old `Session` code paths | SlicerOpenLIFU + openlifu-python | Purge, tests, sample data update. |
+| 14 | Update sample database | openlifu-sample-database | Convert one sample subject to have a PlanningSession + Plan + SonicationSession under the new layout. |
 
 Each commit references its issue. Small enough to review. Tests pass at
 every commit.
 
-Merges back to `v2_ui_refactor` / `v2_refactor` when done, then a final
-merge to `main` follows the normal process.
+Final merge from `v2_*` to `main` follows the normal process.
 
-## 12. Open questions
+## 12. Answered design decisions (2026-07-29)
 
-1. **Do multiple Plans per PlanningSession need distinct UI?** I proposed
-   allowing it (finalize twice → two Plans), but the primary flow is one
-   PlanningSession → one Plan. The UI could show "You've already
-   finalized this session as Plan X; finalizing again will produce a new
-   Plan Y." That's easy — the concern is just whether users get confused.
+1. **Multiple Plans per PlanningSession** — SUPPORTED. Planning
+   Overview lists all Plans finalized from this session; "Finalize Plan"
+   is always available and always produces a new immutable Plan.
 
-2. **Photoscan storage location** — subject-scoped physical, session-scoped
-   ownership. Alternative: session-scoped physical too. Preference?
+2. **Photoscan / Plan / Solution storage location** — SUBJECT-SCOPED.
+   All heavy artifacts (photoscans, plans, solutions) live under
+   `subjects/{sid}/`. Sessions and plans hold lightweight refs by id.
+   This sets us up cleanly for a future relational-DB migration.
 
-3. **SonicationSession volume**. I've assumed it may differ from the Plan's
-   volume (fresh scan at treatment time). If in practice it never differs,
-   we could drop the field and always use `plan.volume_id`. Preference?
+3. **SonicationSession volume** — COMES FROM THE PLAN. No `volume_id`
+   field on SonicationSession. Loading a Plan directly loads volume +
+   target + VF pose. A fresh-scan-at-treatment-time workflow means
+   finalizing a new Plan against the new volume (correct semantics).
 
-4. **Runs storage**. Runs live on SonicationSession. Currently there's
-   also a `session.solution_id` link. In the new model, the analog is
-   `SonicationSession.solution` field. Any need to track a history of
-   solutions per session? I'd say no — the Run has all the data you need
-   for what was actually delivered.
+4. **Solution history on SonicationSession** — ONE SOLUTION PER SESSION.
+   `SonicationSession.solution: Optional[SolutionInfo]` (not a list).
+   Recompute replaces in place. `Run` history captures what was actually
+   delivered. Multi-solution generation + selection (akin to VF favorite
+   picking) is a plausible future feature but explicitly out of scope
+   for this refactor.
+
+5. **Branching** — Commit directly to `v2_ui_refactor` / `v2_refactor`.
+   No `session_split` sub-branch.
 
 ## 13. Followups (not in this refactor)
 
@@ -498,6 +540,15 @@ merge to `main` follows the normal process.
   checkbox setting.
 * Yellow color for transducer at an unapproved TT pose (raised in the
   bug tracking that led to this design).
+* **Multi-solution generation and selection** on a SonicationSession,
+  akin to computing multiple virtual fits and picking a favorite. Would
+  change `SonicationSession.solution` from `Optional[SolutionInfo]` to
+  a list plus an `active_solution_id` selector.
+* Migration to a relational database. The subject-scoped-storage +
+  reference-by-id layout in this refactor is designed to be trivially
+  portable to a relational schema (`subjects`, `plans`, `solutions`,
+  `planning_sessions`, `sonication_sessions`, `runs`, `photoscans` all
+  become tables with FK relationships).
 
 ## 14. References
 
