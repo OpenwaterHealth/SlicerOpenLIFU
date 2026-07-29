@@ -191,7 +191,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
             slicer.util.errorDisplay("No protocol is loaded in the current session.")
             return
         protocol = loaded_session.get_protocol().protocol
-        from OpenLIFUApp.pages.data_page import ProtocolPreviewDialog
+        from OpenLIFUApp.pages_legacy.data_page import ProtocolPreviewDialog
         ProtocolPreviewDialog(protocol).exec_()
 
     @display_errors
@@ -211,7 +211,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
                 registration_path = abspaths.get("registration_surface_abspath")
         except Exception:
             pass
-        from OpenLIFUApp.pages.data_page import TransducerPreviewDialog
+        from OpenLIFUApp.pages_legacy.data_page import TransducerPreviewDialog
         TransducerPreviewDialog(
             transducer_openlifu,
             body_abspath=body_path,
@@ -242,14 +242,14 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         if slicer_photoscan is None:
             self._json_preview_photoscan(pid, subject_id, session_id)
             return
-        from OpenLIFUApp.pages.transducer_localization_page import PhotoscanPreviewDialog
+        from OpenLIFUApp.pages_legacy.transducer_localization_page import PhotoscanPreviewDialog
         with BusyCursor():
             dialog = PhotoscanPreviewDialog(slicer_photoscan)
         dialog.exec_()
         dialog.deleteLater()
 
     def _json_preview_photoscan(self, pid: str, subject_id: str, session_id: str) -> None:
-        from OpenLIFUApp.pages.data_page import _JsonTreeDialog
+        from OpenLIFUApp.pages_legacy.data_page import _JsonTreeDialog
         try:
             db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
             obj = db.load_photoscan(subject_id, session_id, pid)
@@ -263,7 +263,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
         if loaded_session is None:
             slicer.util.errorDisplay("No session is loaded.")
             return
-        from OpenLIFUApp.pages.data_page import _JsonTreeDialog
+        from OpenLIFUApp.pages_legacy.data_page import _JsonTreeDialog
         try:
             import openlifu.plan
             db = slicer.util.getModuleLogic("OpenLIFU").database_logic.db
@@ -285,7 +285,7 @@ class OpenLIFUSessionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, G
             return
         subject_id = loaded_session.get_subject_id()
         session_id = loaded_session.get_session_id()
-        from OpenLIFUApp.pages.data_page import _JsonTreeDialog
+        from OpenLIFUApp.pages_legacy.data_page import _JsonTreeDialog
         tree_data = {}
         try:
             import openlifu.plan
@@ -580,10 +580,10 @@ class OpenLIFUSessionTest(ScriptedLoadableModuleTest):
         ``OpenLIFUApp.pages``; this test catches import-path regressions
         without needing a loaded database or session.
         """
-        from OpenLIFUApp.pages.data_page import ProtocolPreviewDialog  # noqa: F401
-        from OpenLIFUApp.pages.data_page import TransducerPreviewDialog  # noqa: F401
-        from OpenLIFUApp.pages.data_page import _JsonTreeDialog  # noqa: F401
-        from OpenLIFUApp.pages.transducer_localization_page import PhotoscanPreviewDialog  # noqa: F401
+        from OpenLIFUApp.pages_legacy.data_page import ProtocolPreviewDialog  # noqa: F401
+        from OpenLIFUApp.pages_legacy.data_page import TransducerPreviewDialog  # noqa: F401
+        from OpenLIFUApp.pages_legacy.data_page import _JsonTreeDialog  # noqa: F401
+        from OpenLIFUApp.pages_legacy.transducer_localization_page import PhotoscanPreviewDialog  # noqa: F401
 
     def test_dashboard_with_no_session(self):
         """The dashboard must render gracefully when no session is loaded."""

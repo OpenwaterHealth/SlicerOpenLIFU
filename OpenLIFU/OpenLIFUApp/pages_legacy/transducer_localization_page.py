@@ -127,7 +127,7 @@ if TYPE_CHECKING:
     import openlifu
     from openlifu.db import Database
     import openlifu.nav.photoscan
-    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
+    from OpenLIFUApp.pages_legacy.data_page import OpenLIFUDataLogic
 
 
 logger = logging.getLogger(__name__)

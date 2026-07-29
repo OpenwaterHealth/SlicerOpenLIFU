@@ -34,9 +34,7 @@ from OpenLIFULib.util import display_errors
 
 # Host's parameter node type — relocated from OpenLIFUData in Round 5b.
 from OpenLIFUApp.logic.app_state import OpenLIFUAppState, get_app_state_signals
-
-if TYPE_CHECKING:
-    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
+from OpenLIFUApp.logic.database_logic import DatabaseLogic
 
 
 # ---------------------------------------------------------------------------
@@ -106,14 +104,14 @@ class _Page:
 # timeline in the order given here. Pages with `on_timeline=False` are
 # embedded but not shown on the workflow timeline (Home, Data Manager) --
 # they are reachable via the in-module navigation that lives on those pages.
+#
+# Session-split refactor (SlicerOpenLIFU#631): only the new-model pages are
+# active. Legacy pages remain in the source tree under
+# ``OpenLIFUApp/pages_legacy/`` for reference until their fresh
+# replacements land.
 _PAGE_DEFS: List[_Page] = [
-    _Page("OpenLIFUHome",                  "Home",         on_timeline=False),
-    _Page("OpenLIFUData",                  "Data",         on_timeline=False),
-    _Page("OpenLIFUSession",               "Session",      on_timeline=True),
-    _Page("OpenLIFUPrePlanning",           "Pre-Planning", on_timeline=True),
-    _Page("OpenLIFUTransducerLocalization","Localization", on_timeline=True),
-    _Page("OpenLIFUSonicationPlanner",     "Solution",     on_timeline=True),
-    _Page("OpenLIFUSonicationControl",     "Control",      on_timeline=True),
+    _Page("OpenLIFUHome",        "Home",         on_timeline=False),
+    _Page("OpenLIFUDataManager", "Data Manager", on_timeline=False),
 ]
 
 
@@ -589,25 +587,11 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # imports symbols from OpenLIFULib/other pages at load time and
         # OpenLIFU.py is imported early by Slicer's module discovery pass.
         from OpenLIFUApp.pages.home_page import OpenLIFUHomeWidget
-        from OpenLIFUApp.pages.data_page import OpenLIFUDataWidget
-        from OpenLIFUApp.pages.session_page import OpenLIFUSessionWidget
-        from OpenLIFUApp.pages.preplanning_page import OpenLIFUPrePlanningWidget
-        from OpenLIFUApp.pages.transducer_localization_page import OpenLIFUTransducerLocalizationWidget
-        from OpenLIFUApp.pages.sonication_planner_page import OpenLIFUSonicationPlannerWidget
-        from OpenLIFUApp.pages.sonication_control_page import OpenLIFUSonicationControlWidget
-        from OpenLIFUApp.pages.database_page import OpenLIFUDatabaseWidget
-        from OpenLIFUApp.pages.login_page import OpenLIFULoginWidget
+        from OpenLIFUApp.pages.data_manager_page import OpenLIFUDataManagerWidget
 
         widget_classes = {
-            "OpenLIFUHome":                   OpenLIFUHomeWidget,
-            "OpenLIFUData":                   OpenLIFUDataWidget,
-            "OpenLIFUSession":                OpenLIFUSessionWidget,
-            "OpenLIFUPrePlanning":            OpenLIFUPrePlanningWidget,
-            "OpenLIFUTransducerLocalization": OpenLIFUTransducerLocalizationWidget,
-            "OpenLIFUSonicationPlanner":      OpenLIFUSonicationPlannerWidget,
-            "OpenLIFUSonicationControl":      OpenLIFUSonicationControlWidget,
-            "OpenLIFUDatabase":               OpenLIFUDatabaseWidget,
-            "OpenLIFULogin":                  OpenLIFULoginWidget,
+            "OpenLIFUHome":        OpenLIFUHomeWidget,
+            "OpenLIFUDataManager": OpenLIFUDataManagerWidget,
         }
 
         # -- Stacked pages (visible timeline; reachable via show_page) --
@@ -639,18 +623,9 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.ui.pageStack.addWidget(container)
                 page.container = container
 
-        # -- Popup-only pages (Database, Login): instantiate + setup but
-        #    leave the widget off-screen. ``_ModuleWidgetPopupDialog`` will
-        #    reparent ``widget.uiWidget`` into a QDialog on demand and put
-        #    it back on close. --
-        for key in ("OpenLIFUDatabase", "OpenLIFULogin"):
-            widget_class = widget_classes[key]
-            try:
-                logging.info("[OpenLIFU host] setting up popup-only %s...", key)
-                widget = self._instantiate_page_widget(widget_class)
-                self._page_widgets[key] = widget
-            except Exception:  # noqa: BLE001
-                logging.exception("[OpenLIFU host] setup failed for popup-only %s", key)
+        # Popup-only pages (Database / Login) are deferred until fresh
+        # split-session replacements land; the legacy popups relied on
+        # widgets that no longer participate in the host embedding pass.
 
         self._embedding_done = True
         logging.info(
@@ -907,11 +882,11 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def onSaveClicked(self, checked: bool = False) -> None:
-        data_logic: "OpenLIFUDataLogic" = self.logic.data_logic
-        if data_logic.getParameterNode().loaded_session is None:
+        """Save the currently-loaded PlanningSession or SonicationSession, if any."""
+        try:
+            self.logic.data_manager_logic.save_loaded_session()
+        except RuntimeError:
             slicer.util.errorDisplay("There is no loaded session.")
-            return
-        data_logic.save_session()
 
     @display_errors
     def onNextClicked(self, checked: bool = False) -> None:
@@ -931,49 +906,56 @@ class OpenLIFUWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     @display_errors
     def onExitClicked(self, checked: bool = False) -> None:
-        data_logic: "OpenLIFUDataLogic" = self.logic.data_logic
-        if data_logic.getParameterNode().loaded_session is None:
+        """Close the loaded session (planning or sonication) and return Home.
+
+        Session-split refactor: prompts to save via
+        :func:`confirm_exit_session_dialog` when either a planning or a
+        sonication session is loaded.
+        """
+        state = self.logic.getParameterNode()
+        if state.loaded_planning_session is None and state.loaded_sonication_session is None:
             slicer.util.errorDisplay("There is no loaded session.")
             return
         choice = confirm_exit_session_dialog()
         if choice == "cancel":
             return
         if choice == "save":
-            data_logic.save_session()
-        data_logic.clear_session(clean_up_scene=True)
+            try:
+                self.logic.data_manager_logic.save_loaded_session()
+            except RuntimeError:
+                pass
+        self.logic.data_manager_logic.close_loaded_sessions()
         self.show_page("OpenLIFUHome")
 
     @display_errors
     def onBackToHomeClicked(self, checked: bool = False) -> None:
-        """Return to the Home page from the Data Manager, prompting to save
-        or discard any loaded session first."""
-        data_logic: "OpenLIFUDataLogic" = self.logic.data_logic
-        if data_logic.getParameterNode().loaded_session is not None:
+        """Return to the Home page, prompting to save or discard any loaded
+        session first."""
+        state = self.logic.getParameterNode()
+        if state.loaded_planning_session is not None or state.loaded_sonication_session is not None:
             choice = confirm_exit_session_dialog()
             if choice == "cancel":
                 return
             if choice == "save":
-                data_logic.save_session()
-            data_logic.clear_session(clean_up_scene=True)
+                try:
+                    self.logic.data_manager_logic.save_loaded_session()
+                except RuntimeError:
+                    pass
+            self.logic.data_manager_logic.close_loaded_sessions()
         self.show_page("OpenLIFUHome")
 
     def _refresh_save_exit_state(self) -> None:
-        # IMPORTANT: use ``self.logic.getParameterNode()`` here, NOT
-        # ``self.logic.data_logic.getParameterNode()``. The Data logic's
-        # ``getParameterNode`` delegates through
-        # ``slicer.util.getModuleLogic('OpenLIFU').getParameterNode()``,
-        # which forces Slicer to lazily construct its own OpenLIFULogic
-        # instance (separate from ``self.logic`` above) the first time
-        # it's called. That triggers every page-logic ``__init__``
-        # (including the expensive ``OpenLIFUSonicationControlLogic`` USB /
-        # monitor setup) a second time and, worse, can recurse into a
-        # third construction during startup before Slicer's cache is set.
-        # ``self.logic`` is the same OpenLIFULogic that Slicer will
-        # eventually cache, so calling its ``getParameterNode`` directly
-        # short-circuits the whole re-entrancy.
+        """Update the host's Save/Exit button state from app state.
+
+        Session-split refactor: enabled if EITHER a planning or a
+        sonication session is loaded.
+        """
         try:
-            data_pn = self.logic.getParameterNode()
-            has_session = data_pn.loaded_session is not None
+            state = self.logic.getParameterNode()
+            has_session = (
+                state.loaded_planning_session is not None
+                or state.loaded_sonication_session is not None
+            )
         except Exception:  # noqa: BLE001
             has_session = False
         self.ui.hostSaveButton.setEnabled(has_session)
@@ -1039,32 +1021,20 @@ class OpenLIFULogic(ScriptedLoadableModuleLogic):
         self._app_state_cache: Optional[OpenLIFUAppState] = None
         self._app_state_cache_node = None
 
-        # Owned page-logic instances. Round 5c-3 replaced the former
-        # ``slicer.util.getModuleLogic("OpenLIFU<X>")`` property accessors
-        # with direct-attribute ownership; the shim modules have been
-        # deleted so the host is the single source of truth for logic
-        # instances. Local imports here avoid circulars: each page module
-        # imports symbols from ``OpenLIFULib``/other pages at load time and
-        # ``OpenLIFU.py`` is imported before ``OpenLIFUApp`` is on sys.path.
+        # Session-split refactor (SlicerOpenLIFU#631): only construct the
+        # logic instances the fresh split-session pages need. Legacy
+        # page-logic classes (data_logic / session_logic /
+        # preplanning_logic / transducer_localization_logic /
+        # sonication_planner_logic / sonication_control_logic /
+        # login_logic) are not instantiated during the transition; the
+        # code that consumed them lives in ``OpenLIFUApp/pages_legacy/``
+        # and is not embedded.
         from OpenLIFUApp.pages.home_page import OpenLIFUHomeLogic
-        from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
-        from OpenLIFUApp.pages.session_page import OpenLIFUSessionLogic
-        from OpenLIFUApp.pages.preplanning_page import OpenLIFUPrePlanningLogic
-        from OpenLIFUApp.pages.transducer_localization_page import OpenLIFUTransducerLocalizationLogic
-        from OpenLIFUApp.pages.sonication_planner_page import OpenLIFUSonicationPlannerLogic
-        from OpenLIFUApp.pages.sonication_control_page import OpenLIFUSonicationControlLogic
-        from OpenLIFUApp.pages.database_page import OpenLIFUDatabaseLogic
-        from OpenLIFUApp.pages.login_page import OpenLIFULoginLogic
+        from OpenLIFUApp.pages.data_manager_page import OpenLIFUDataManagerLogic
 
         self.home_logic = OpenLIFUHomeLogic()
-        self.data_logic = OpenLIFUDataLogic()
-        self.session_logic = OpenLIFUSessionLogic()
-        self.preplanning_logic = OpenLIFUPrePlanningLogic()
-        self.transducer_localization_logic = OpenLIFUTransducerLocalizationLogic()
-        self.sonication_planner_logic = OpenLIFUSonicationPlannerLogic()
-        self.sonication_control_logic = OpenLIFUSonicationControlLogic()
-        self.database_logic = OpenLIFUDatabaseLogic()
-        self.login_logic = OpenLIFULoginLogic()
+        self.data_manager_logic = OpenLIFUDataManagerLogic()
+        self.database_logic = DatabaseLogic()
 
     def getParameterNode(self):
         """Return the OpenLIFU app-state wrapper (cached).

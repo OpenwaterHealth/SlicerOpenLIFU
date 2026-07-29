@@ -6,18 +6,12 @@ set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
   OpenLIFUApp/__init__.py
   OpenLIFUApp/pages/__init__.py
-  OpenLIFUApp/pages/session_page.py
-  OpenLIFUApp/pages/preplanning_page.py
-  OpenLIFUApp/pages/transducer_localization_page.py
-  OpenLIFUApp/pages/sonication_planner_page.py
-  OpenLIFUApp/pages/sonication_control_page.py
-  OpenLIFUApp/pages/database_page.py
-  OpenLIFUApp/pages/login_page.py
-  OpenLIFUApp/pages/data_page.py
+  OpenLIFUApp/pages/data_manager_page.py
   OpenLIFUApp/pages/home_page.py
   OpenLIFUApp/logic/__init__.py
   OpenLIFUApp/logic/app_state.py
   OpenLIFUApp/logic/cloud_sync.py
+  OpenLIFUApp/logic/database_logic.py
   )
 
 set(MODULE_PYTHON_RESOURCES

@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     import openlifu.plan
     import openlifu.xdc
     import xarray
-    from OpenLIFUApp.pages.data_page import OpenLIFUDataLogic
+    from OpenLIFUApp.pages_legacy.data_page import OpenLIFUDataLogic
 
 #
 # OpenLIFUSonicationPlannerParameterNode

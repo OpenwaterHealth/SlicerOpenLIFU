@@ -139,8 +139,8 @@ if TYPE_CHECKING:
     import openlifu.sim
     import openlifu.xdc
     import openlifu.xdc.util
-    from OpenLIFUApp.pages.home_page import OpenLIFUHomeLogic
-    from OpenLIFUApp.pages.preplanning_page import OpenLIFUPrePlanningWidget
+    from OpenLIFUApp.pages_legacy.home_page import OpenLIFUHomeLogic
+    from OpenLIFUApp.pages_legacy.preplanning_page import OpenLIFUPrePlanningWidget
 
 #
 # OpenLIFUDataDialogs
@@ -4471,7 +4471,7 @@ class PhotoscanManagerDialog(qt.QDialog):
         # camera reset, visibility toggling and view-node isolation. Use it here so
         # the user gets a consistent preview experience across modules.
         try:
-            from OpenLIFUApp.pages.transducer_localization_page import PhotoscanPreviewDialog
+            from OpenLIFUApp.pages_legacy.transducer_localization_page import PhotoscanPreviewDialog
         except Exception as e:
             logging.warning("Falling back to JSON preview for photoscan %s: %s", pid, e)
             self._json_preview(pid)
