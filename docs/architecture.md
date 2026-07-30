@@ -1,8 +1,8 @@
 # SlicerOpenLIFU — architecture (session-split refactor, v2)
 
 Status: **living document** — updated as pages land.
-Last major update: 2026-07-30 (Data Manager + Home landed;
-Session Overview + PrePlanning + Solution Generator +
+Last major update: 2026-07-30 (Planning + Sonication Session Overview
+landed, with Finalize Plan action; PrePlanning + Solution Generator +
 Localization + Sonication Control still to come).
 
 Companion documents:
@@ -59,17 +59,22 @@ flowchart TB
       subgraph PAGES["Pages"]
         HOME["Home page"]
         DATAMGR["Data Manager<br/>(tabs + collapsibles)"]
-        PSO[/"Planning Session Overview (TBD)"/]
-        SSO[/"Sonication Session Overview (TBD)"/]
+        PSO["Planning Session Overview<br/>(Finalize Plan)"]
+        SSO["Sonication Session Overview"]
       end
 
       HOSTLOGIC --> HOSTWIDGET
       HOSTWIDGET --> HOME
       HOSTWIDGET --> DATAMGR
+      HOSTWIDGET --> PSO
+      HOSTWIDGET --> SSO
       DATAMGR --> APPSTATE
+      PSO --> APPSTATE
+      SSO --> APPSTATE
       APPSTATE --> PACKS
       HOSTLOGIC -->|"database_logic.db"| DBAPI
       DATAMGR -->|"load / write"| DBAPI
+      PSO -->|"finalize_plan write_plan"| DBAPI
       DBAPI -->|"load_*"| WRAPPERS
     end
 ```

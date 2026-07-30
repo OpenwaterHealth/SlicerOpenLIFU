@@ -56,7 +56,15 @@ class Page:
 # timeline page lands (Planning Session Overview, Sonication Session
 # Overview, PrePlanning, Solution Generator, Localization, Sonication
 # Control) it will be appended here.
+#
+# Timeline registration for the Session Overview pages is deferred until
+# the timeline strip supports mode switching (planning-workflow vs
+# sonication-workflow strips) -- for now the Overview pages are
+# ``on_timeline=False`` and are reached from the Data Manager after a
+# successful load (SlicerOpenLIFU#633).
 PAGE_DEFS: List[Page] = [
-    Page("OpenLIFUHome",        "Home",         on_timeline=False),
-    Page("OpenLIFUDataManager", "Data Manager", on_timeline=False),
+    Page("OpenLIFUHome",                       "Home",                        on_timeline=False),
+    Page("OpenLIFUDataManager",                "Data Manager",                on_timeline=False),
+    Page("OpenLIFUPlanningSessionOverview",    "Planning Session Overview",   on_timeline=False),
+    Page("OpenLIFUSonicationSessionOverview",  "Sonication Session Overview", on_timeline=False),
 ]

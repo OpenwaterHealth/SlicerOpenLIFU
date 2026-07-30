@@ -22,6 +22,10 @@ IEC 62304 traceability path.
   * [`pages/home.md`](pages/home.md) — Home page.
   * [`pages/data-manager.md`](pages/data-manager.md) — Data Manager
     page.
+  * [`pages/planning-session-overview.md`](pages/planning-session-overview.md)
+    — Planning Session Overview page (hosts the **Finalize Plan** action).
+  * [`pages/sonication-session-overview.md`](pages/sonication-session-overview.md)
+    — Sonication Session Overview page.
 
 ## Related
 

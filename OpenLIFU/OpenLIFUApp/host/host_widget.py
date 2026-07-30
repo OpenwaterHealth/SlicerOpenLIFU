@@ -272,10 +272,18 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # OpenLIFU.py is imported early by Slicer's module discovery pass.
         from OpenLIFUApp.pages.home_page import OpenLIFUHomeWidget
         from OpenLIFUApp.pages.data_manager_page import OpenLIFUDataManagerWidget
+        from OpenLIFUApp.pages.planning_session_overview_page import (
+            OpenLIFUPlanningSessionOverviewWidget,
+        )
+        from OpenLIFUApp.pages.sonication_session_overview_page import (
+            OpenLIFUSonicationSessionOverviewWidget,
+        )
 
         widget_classes = {
-            "OpenLIFUHome":        OpenLIFUHomeWidget,
-            "OpenLIFUDataManager": OpenLIFUDataManagerWidget,
+            "OpenLIFUHome":                      OpenLIFUHomeWidget,
+            "OpenLIFUDataManager":               OpenLIFUDataManagerWidget,
+            "OpenLIFUPlanningSessionOverview":   OpenLIFUPlanningSessionOverviewWidget,
+            "OpenLIFUSonicationSessionOverview": OpenLIFUSonicationSessionOverviewWidget,
         }
 
         for page_def in PAGE_DEFS:

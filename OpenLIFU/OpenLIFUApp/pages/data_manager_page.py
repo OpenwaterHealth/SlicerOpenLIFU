@@ -642,7 +642,8 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self.refresh_subject_scoped_lists()
 
     def on_load_planning_button_clicked(self) -> None:
-        """Load the currently-selected PlanningSession into the app state."""
+        """Load the currently-selected PlanningSession into the app state
+        and navigate to its Overview page (SlicerOpenLIFU#633)."""
         subject_id = self.current_subject_id()
         planning_session_id = self.selected_id_in_table(self.planning_table)
         if not subject_id or not planning_session_id:
@@ -654,6 +655,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             show_error_dialog(f"Load failed: {exc}")
             return
         self.refresh_loaded_labels()
+        navigate_to_host_page("OpenLIFUPlanningSessionOverview")
 
     def on_delete_planning_button_clicked(self) -> None:
         """Delete the currently-selected PlanningSession from the database.
@@ -733,7 +735,9 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self.refresh_subject_scoped_lists()
 
     def on_load_sonication_button_clicked(self) -> None:
-        """Load the currently-selected SonicationSession + its Plan into the app state."""
+        """Load the currently-selected SonicationSession + its Plan into
+        the app state and navigate to its Overview page
+        (SlicerOpenLIFU#633)."""
         subject_id = self.current_subject_id()
         sonication_session_id = self.selected_id_in_table(self.sonication_table)
         if not subject_id or not sonication_session_id:
@@ -745,6 +749,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             show_error_dialog(f"Load failed: {exc}")
             return
         self.refresh_loaded_labels()
+        navigate_to_host_page("OpenLIFUSonicationSessionOverview")
 
     def on_delete_sonication_button_clicked(self) -> None:
         """Delete the currently-selected SonicationSession from the database.
@@ -1245,6 +1250,20 @@ def show_info_dialog(text: str) -> None:
 def show_error_dialog(text: str) -> None:
     """Show a modal error dialog with the Data Manager as its window title."""
     slicer.util.errorDisplay(text, windowTitle="OpenLIFU Data Manager")
+
+
+def navigate_to_host_page(module_name: str) -> None:
+    """Ask the OpenLIFU host module to swap the visible page.
+
+    Thin wrapper so page-level code does not have to know how to fish
+    the host widget out of Slicer's module registry. Silent no-op if
+    the host is not yet available (extremely early in Slicer startup).
+    """
+    try:
+        host_widget = slicer.util.getModule("OpenLIFU").widgetRepresentation().self()
+        host_widget.show_page(module_name)
+    except Exception:  # noqa: BLE001
+        logging.exception("Data Manager: unable to navigate to %s.", module_name)
 
 
 # ---------------------------------------------------------------------------

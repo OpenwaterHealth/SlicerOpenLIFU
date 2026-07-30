@@ -11,13 +11,15 @@ signals and state transitions it drives, and its acceptance tests.
 * [`data-manager.md`](data-manager.md) — CRUD surface for
   PlanningSessions / Plans / SonicationSessions / Solutions (subject
   tab) and Protocols / Transducers / Users (database tabs).
+* [`planning-session-overview.md`](planning-session-overview.md) —
+  Status card for a loaded PlanningSession. Hosts the **Finalize
+  Plan** action.
+* [`sonication-session-overview.md`](sonication-session-overview.md) —
+  Status card for a loaded SonicationSession, with a read-only view
+  of its frozen Plan.
 
 Planned (pages not yet built):
 
-* `planning-session-overview.md` — status card + "Finalize Plan"
-  button for a loaded `PlanningSession`.
-* `sonication-session-overview.md` — status card + Plan reference
-  for a loaded `SonicationSession`.
 * `pre-planning.md` — target placement + virtual-fit UI for a
   `PlanningSession`.
 * `solution-generator.md` — compute Solutions (mode-agnostic;
