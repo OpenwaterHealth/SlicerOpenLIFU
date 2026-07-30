@@ -240,12 +240,16 @@ class SubjectPickerDialog(qt.QDialog):
             self.hint_label.setStyleSheet("color: #888;")
             outer.addWidget(self.hint_label)
 
-        buttons = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        # Cannot proceed with no subjects -- disable Ok in that case
-        # rather than raising a validation dialog after the click.
-        buttons.button(qt.QDialogButtonBox.Ok).setEnabled(bool(subject_ids))
+        # PythonQt does not expose ``QDialogButtonBox.button(role)``
+        # reliably (returns None), so we build the Ok / Cancel buttons
+        # by hand and add them via ``addButton(button, role)``. Same
+        # workaround is used in :class:`SessionPickerDialogBase`.
+        buttons = qt.QDialogButtonBox()
+        ok_button = qt.QPushButton("OK")
+        ok_button.setEnabled(bool(subject_ids))
+        buttons.addButton(ok_button, qt.QDialogButtonBox.AcceptRole)
+        cancel_button = qt.QPushButton("Cancel")
+        buttons.addButton(cancel_button, qt.QDialogButtonBox.RejectRole)
         buttons.accepted.connect(self.on_ok_clicked)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -314,10 +318,14 @@ class SessionPickerDialogBase(qt.QDialog):
         self.hint_label.setStyleSheet("color: #888;")
         outer.addWidget(self.hint_label)
 
-        buttons = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        buttons.button(qt.QDialogButtonBox.Ok).setText(self.load_button_label)
+        # See note in ``SubjectPickerDialog``: PythonQt does not
+        # expose ``QDialogButtonBox.button(role)`` reliably, so we
+        # build the Load / Cancel buttons manually.
+        buttons = qt.QDialogButtonBox()
+        ok_button = qt.QPushButton(self.load_button_label)
+        buttons.addButton(ok_button, qt.QDialogButtonBox.AcceptRole)
+        cancel_button = qt.QPushButton("Cancel")
+        buttons.addButton(cancel_button, qt.QDialogButtonBox.RejectRole)
         buttons.accepted.connect(self.on_ok_clicked)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
