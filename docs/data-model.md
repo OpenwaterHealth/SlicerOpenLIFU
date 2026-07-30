@@ -221,17 +221,34 @@ that Plan.
 
 ## Save semantics
 
-Session JSON is written to disk ONLY on explicit user save.
+**Session JSON is written to disk ONLY on explicit user save. Memory
+is the source of truth for the loaded session.**
+See SlicerOpenLIFU#636 for the design rationale and the split
+build / open / save API in `OpenLIFUApp.logic.session_actions`.
 
+* "New Planning Session" and "New Sonication Session" (Home + Data
+  Manager) build the openlifu object in memory via
+  `session_actions.build_*_session(...)`, open it into the app state
+  via `session_actions.open_*_session_into_app(...)`, and set
+  `OpenLIFUAppState.session_is_dirty = True` so that a later Save
+  actually writes. No disk write during creation.
 * `set_solution` / `clear_solution` / target moves / photoscan
   add / photoscan remove all mutate the in-memory session and set
-  `OpenLIFUAppState.session_is_dirty = True`, but do NOT touch
-  disk.
-* The Data Manager's "Save" button (or a future dirty-flag prompt on
-  page exit) calls `session_actions.save_loaded_session()`, which
-  writes both the loaded PlanningSession and SonicationSession
-  (whichever are non-null) via `db.write_planning_session(...,
-  on_conflict="overwrite")`.
+  `OpenLIFUAppState.session_is_dirty = True` (via
+  `OpenLIFULib.util.mark_session_dirty`), but do NOT touch disk.
+* The host's toolbar "Save" and Data Manager's "Save" button both
+  call `session_actions.save_loaded_session()`, which writes the
+  loaded PlanningSession + SonicationSession (whichever are non-null)
+  via `db.write_*_session(..., on_conflict="overwrite")` and clears
+  `session_is_dirty`.
+* Exit / Back-to-Home / any other "replace the loaded session"
+  action calls `session_actions.prompt_save_before_replacing_loaded_session()`
+  first, so unsaved changes surface a Save / Discard / Cancel
+  dialog rather than silently vanishing.
+* `session_actions.close_loaded_sessions()` NEVER writes -- it's the
+  "Discard" primitive. This is what makes memory-first work: if the
+  user builds a new session and exits without saving, close_loaded
+  drops it and disk stays untouched.
 * Solution binary artifacts (`.nc`, `.solution_analysis.json`) are
   derived data. They CAN be written eagerly at compute time; the
   session JSON's `SolutionInfo` entries reference them.

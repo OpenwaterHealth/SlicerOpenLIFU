@@ -70,19 +70,25 @@ def set_active_solution(solution_id: str) -> None:
 def mark_session_dirty() -> None:
     """Flag the loaded session as having unsaved in-memory changes.
 
-    Called by any in-memory mutation that will only be persisted to
-    ``{session_dir}/{session_id}.json`` when :meth:`OpenLIFUDataLogic.save_session`
-    runs (target edits, VF / TT / PR approvals, photoscan approvals, etc.). Solutions
-    and photoscan objects have their own on-disk artifacts written eagerly by
-    ``set_solution`` / ``write_photoscan``, so mutations to *those* don't need to be
-    flagged here -- only mutations to state that lives in the session JSON itself.
+    Called by any in-memory mutation that will only be persisted to the loaded
+    session's on-disk JSON when :func:`OpenLIFUApp.logic.session_actions.save_loaded_session`
+    runs (target edits, VF / TT / PR approvals, photoscan approvals, etc.). Also called
+    right after installing a freshly-built (not-yet-persisted) session into the app state
+    so a subsequent Save actually writes it (SlicerOpenLIFU#636). Solutions and photoscan
+    objects have their own on-disk artifacts written eagerly and are not tracked here --
+    this flag reflects only the state that lives in the session's own JSON.
     Silently no-ops if no session is loaded (there's nothing to be dirty).
 
-    Cleared by :meth:`OpenLIFUDataLogic.save_session`; consulted by
-    :meth:`clear_session` to prompt the user before discarding unsaved changes.
+    Cleared by :func:`OpenLIFUApp.logic.session_actions.save_loaded_session`; consulted
+    by :func:`OpenLIFUApp.logic.session_actions.prompt_save_before_replacing_loaded_session`
+    to gate any action that would clobber unsaved work.
     """
     state = get_app_state()
-    if state.loaded_session is None:
+    if (
+        state.loaded_session is None
+        and state.loaded_planning_session is None
+        and state.loaded_sonication_session is None
+    ):
         return
     if not state.session_is_dirty:
         state.session_is_dirty = True
@@ -95,7 +101,11 @@ def session_is_dirty() -> bool:
     no session is loaded.
     """
     state = get_app_state()
-    if state.loaded_session is None:
+    if (
+        state.loaded_session is None
+        and state.loaded_planning_session is None
+        and state.loaded_sonication_session is None
+    ):
         return False
     return bool(state.session_is_dirty)
 

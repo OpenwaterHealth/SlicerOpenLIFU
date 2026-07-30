@@ -359,15 +359,63 @@ Home is the intended primary route.
 
 ## 6. Save semantics
 
-**In-memory session is 1:1 with disk at load time.** Disk is only touched
-on explicit save. Solution binary files (`.nc`, analysis JSON) are
-per-solution artifacts and CAN be written eagerly on compute (they don't
-represent user intent, just derived data). But the *session JSON* (which
-solutions are affiliated, which is the final one) never touches disk
-outside an explicit `save`.
+**Memory is the source of truth for the loaded session.** Disk is
+only touched on explicit save (SlicerOpenLIFU#636). Solution binary
+files (`.nc`, analysis JSON) are per-solution artifacts and CAN be
+written eagerly on compute (they don't represent user intent, just
+derived data). But the *session JSON* (which solutions are affiliated,
+which is the final one) never touches disk outside an explicit save.
 
-**Dirty flag** (already added in #626) tracks in-memory changes. Save
-clears it. Exit / switch prompts if dirty.
+### Memory-first "New" flow
+
+The "New Planning Session" and "New Sonication Session" actions on
+Home and Data Manager all follow this shape:
+
+1. Build the openlifu object in memory:
+   `session_actions.build_planning_session(...)` or
+   `build_sonication_session(...)`. **No disk write.**
+2. Install as the loaded session:
+   `session_actions.open_planning_session_into_app(planning_session)`
+   or `open_sonication_session_into_app(sonication_session)`. This
+   materialises volume + target fiducial scene nodes but still
+   writes nothing to disk.
+3. Mark the app state dirty:
+   `OpenLIFULib.util.mark_session_dirty()`.
+4. Navigate to the appropriate Overview page.
+
+If the user then exits without saving, `close_loaded_sessions()`
+tears down the scene nodes and nulls the loaded-session field. The
+openlifu object is dropped. Disk stays untouched.
+
+### Guard against silent clobber
+
+`session_actions.prompt_save_before_replacing_loaded_session()` is
+called by every action that would otherwise replace the loaded
+session:
+
+* Home's New / Continue Planning / Sonication buttons.
+* Data Manager's New / Load Planning / Sonication buttons.
+* Data Manager's Close button.
+* The host toolbar's Save+Exit / Back-to-Home flows already prompt
+  via `confirm_exit_session_dialog` directly.
+
+Returns `True` if the caller should proceed; `False` if the user
+cancelled. When the loaded session is dirty, shows a Save / Discard
+/ Cancel dialog; when clean or nothing loaded, returns True
+immediately without prompting.
+
+### Dirty flag
+
+`OpenLIFUAppState.session_is_dirty` (originally added in #626,
+extended in #636 to cover the split-session fields via
+`OpenLIFULib.util.mark_session_dirty` / `session_is_dirty`) tracks
+in-memory changes.
+
+* Set true by: freshly-built New sessions; every mutation that lives
+  in the session JSON (target edits, VF / TT / PR approvals,
+  photoscan add / remove, etc.).
+* Cleared by: `save_loaded_session()` (successful save) and
+  `close_loaded_sessions()` (unload).
 
 **Removes the implicit `write_session` in**:
 

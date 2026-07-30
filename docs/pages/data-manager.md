@@ -130,16 +130,16 @@ touches another page.
 | `on_subject_combo_changed(*args)` | Guarded by `is_entered`; calls `refresh_subject_scoped_lists()`. |
 | `on_refresh_button_clicked()` | Runs every refresh helper. |
 | `on_load_db_button_clicked()` | File picker; `database_logic.load_database(path)`; refresh all. |
-| `on_new_planning_button_clicked()` | `NewPlanningSessionDialog` + `session_actions.create_planning_session()`; refresh subject-scoped. |
-| `on_load_planning_button_clicked()` | `session_actions.load_planning_session_into_app(...)`; refresh loaded labels. |
+| `on_new_planning_button_clicked()` | Guard unsaved work → `NewPlanningSessionDialog` → check ID collision → `session_actions.build_planning_session()` → `open_planning_session_into_app()` → `mark_session_dirty()` → navigate to Planning Session Overview. Memory-first (SlicerOpenLIFU#636). |
+| `on_load_planning_button_clicked()` | Guard unsaved work → `session_actions.open_planning_session_from_disk(...)` → refresh loaded labels → navigate. |
 | `on_delete_planning_button_clicked()` | Confirm + `logic.delete_planning_session(...)`; refresh subject-scoped. |
 | `on_delete_plan_button_clicked()` | Confirm + `logic.delete_plan(...)`; refresh subject-scoped. |
-| `on_new_sonication_button_clicked()` | `NewSonicationSessionDialog` + `session_actions.create_sonication_session()`; refresh subject-scoped. |
-| `on_load_sonication_button_clicked()` | `session_actions.load_sonication_session_into_app(...)`; refresh loaded labels. |
+| `on_new_sonication_button_clicked()` | Guard unsaved work → `NewSonicationSessionDialog` → check ID collision → `session_actions.build_sonication_session()` → `open_sonication_session_into_app()` → `mark_session_dirty()` → navigate to Sonication Session Overview. |
+| `on_load_sonication_button_clicked()` | Guard unsaved work → `session_actions.open_sonication_session_from_disk(...)` → refresh loaded labels → navigate. |
 | `on_delete_sonication_button_clicked()` | Confirm + `logic.delete_sonication_session(...)`; refresh subject-scoped. |
 | `on_delete_solution_button_clicked()` | Confirm + `db.delete_solution_at_subject_scope(...)`; refresh subject-scoped. |
 | `on_save_button_clicked()` | `session_actions.save_loaded_session()`; refresh subject-scoped. |
-| `on_close_button_clicked()` | Confirm + `session_actions.close_loaded_sessions()`; refresh loaded labels. |
+| `on_close_button_clicked()` | Guard unsaved work (save / discard / cancel) → `session_actions.close_loaded_sessions()`; refresh loaded labels. |
 
 ## Public API — Logic
 
@@ -159,16 +159,22 @@ Home and Data Manager call.
 ## Shared session actions
 
 Module: `OpenLIFUApp.logic.session_actions`. Called by both Data
-Manager button handlers and Home launch buttons.
+Manager button handlers and Home launch buttons. Split into
+build (memory) / open (state) / save (disk) primitives per
+SlicerOpenLIFU#636 -- memory is the source of truth for the loaded
+session; disk writes only happen on explicit Save.
 
 | Function | Purpose |
 |---|---|
-| `create_planning_session(*, subject_id, planning_session_id, name, volume_id, protocol_id, transducer_id)` | Build a fresh `openlifu.db.PlanningSession` and write it to disk. |
-| `create_sonication_session(*, subject_id, sonication_session_id, name, plan_id)` | Build a fresh `openlifu.db.SonicationSession` (validating the plan exists) and write it. |
-| `load_planning_session_into_app(subject_id, ps_id)` | Load PlanningSession + volume + target fiducials into app state. Closes any currently-loaded session first. |
-| `load_sonication_session_into_app(subject_id, ss_id)` | Load SonicationSession + its Plan + the Plan's volume into app state. Closes any currently-loaded session first. |
-| `save_loaded_session()` | Write the loaded PlanningSession + SonicationSession JSONs to disk. Raises `RuntimeError` if nothing is loaded. |
-| `close_loaded_sessions()` | Unload; remove scene nodes each session owned. |
+| `build_planning_session(*, subject_id, planning_session_id, name, volume_id, protocol_id, transducer_id)` | Build a fresh `openlifu.db.PlanningSession` **in memory**. No disk write. Caller opens it into app state + marks dirty. |
+| `build_sonication_session(*, subject_id, sonication_session_id, name, plan_id)` | Build a fresh `openlifu.db.SonicationSession` **in memory** (validating the plan exists on disk). No disk write. |
+| `open_planning_session_into_app(planning_session)` | Install an in-memory PlanningSession as the loaded session; load its volume + target fiducials into the scene. Closes any currently-loaded session first. Does NOT mark dirty. |
+| `open_sonication_session_into_app(sonication_session)` | Install an in-memory SonicationSession as the loaded session; load its referenced Plan + volume. Does NOT mark dirty. |
+| `open_planning_session_from_disk(subject_id, ps_id)` | Read PlanningSession off disk, then `open_planning_session_into_app`. |
+| `open_sonication_session_from_disk(subject_id, ss_id)` | Read SonicationSession off disk, then `open_sonication_session_into_app`. |
+| `save_loaded_session()` | Write the loaded PlanningSession + SonicationSession JSONs to disk. Clears `session_is_dirty`. Sole code path that writes the loaded session. Raises `RuntimeError` if nothing is loaded. |
+| `close_loaded_sessions()` | Unload; remove scene nodes each session owned. Never writes. Clears `session_is_dirty`. |
+| `prompt_save_before_replacing_loaded_session()` | Save / Discard / Cancel dialog gate. Returns `True` if the caller should proceed; `False` if the user cancelled. Guards every "open a new session" action. |
 | `require_current_database()` | Return the current `Database`, or raise `RuntimeError`. |
 | `load_volume_node_from_database(db, subject_id, volume_id)` | Load a volume into the Slicer scene as a scalar volume node. |
 | `create_target_fiducial_node(target)` | Create a fiducial node from an `openlifu.geo.Point`. |

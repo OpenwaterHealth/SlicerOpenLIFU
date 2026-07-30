@@ -40,6 +40,7 @@ from slicer.ScriptedLoadableModule import (
 )
 
 from OpenLIFULib import get_app_state, get_cur_db
+from OpenLIFULib.util import mark_session_dirty
 
 from OpenLIFUApp.dialogs.session_dialogs import (
     ContinuePlanningSessionDialog,
@@ -49,11 +50,14 @@ from OpenLIFUApp.dialogs.session_dialogs import (
     SubjectPickerDialog,
 )
 from OpenLIFUApp.logic.session_actions import (
-    create_planning_session,
-    create_sonication_session,
-    load_planning_session_into_app,
-    load_sonication_session_into_app,
+    build_planning_session,
+    build_sonication_session,
     navigate_to_host_page,
+    open_planning_session_from_disk,
+    open_planning_session_into_app,
+    open_sonication_session_from_disk,
+    open_sonication_session_into_app,
+    prompt_save_before_replacing_loaded_session,
 )
 
 
@@ -352,17 +356,30 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
     # ------------------------------------------------------------------
 
     def on_new_planning_button_clicked(self) -> None:
-        """Open a New Planning Session dialog, create + load, navigate to overview.
+        """Build a fresh PlanningSession in memory, open it, navigate to overview.
 
-        The dialog picks a subject via the ``subject_id`` field
-        collected inside :class:`NewPlanningSessionDialog`. To keep
-        Home simple, we ask for the subject before opening the New
-        dialog -- Data Manager's subject picker isn't visible here,
-        so we prompt with a subject-picker inline.
+        Memory-first (SlicerOpenLIFU#636): the new session is NOT
+        written to disk here. It lives in the app state as a dirty
+        loaded session; a later Save (from the Overview page's Save
+        button, the host's Save toolbar, or Save-and-Exit) is what
+        writes it. Discard at exit-time leaves disk untouched.
+
+        Guard order:
+
+        1. Prompt save / discard / cancel for any unsaved loaded
+           session so we don't silently clobber work.
+        2. Prompt for a subject.
+        3. Open the New dialog for the session's fields.
+        4. Refuse to accept a duplicate ID on disk before we build
+           anything, so we never have to reason about "what if the
+           save overwrites someone else's session with the same id".
+        5. Build in memory, open into app, mark dirty, navigate.
         """
         database = get_cur_db()
         if database is None:
             self.show_info("Load a database first.")
+            return
+        if not prompt_save_before_replacing_loaded_session():
             return
         subject_id = self.prompt_for_subject(database, "New Planning Session")
         if not subject_id:
@@ -371,7 +388,13 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            create_planning_session(
+            if dialog.session_id in database.get_planning_session_ids(subject_id):
+                self.show_info(
+                    f"A planning session with ID {dialog.session_id!r} "
+                    f"already exists for subject {subject_id!r}."
+                )
+                return
+            planning_session = build_planning_session(
                 subject_id=subject_id,
                 planning_session_id=dialog.session_id,
                 name=dialog.session_name,
@@ -379,39 +402,49 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
                 protocol_id=dialog.protocol_id,
                 transducer_id=dialog.transducer_id,
             )
-            load_planning_session_into_app(subject_id, dialog.session_id)
+            open_planning_session_into_app(planning_session)
+            mark_session_dirty()
         except Exception as exc:  # noqa: BLE001
             self.show_error(f"Create failed: {exc}")
             return
         navigate_to_host_page("OpenLIFUPlanningSessionOverview")
 
     def on_continue_planning_button_clicked(self) -> None:
-        """Open a picker for an existing PlanningSession, load, navigate to overview."""
+        """Open a picker for an existing PlanningSession, load, navigate to overview.
+
+        Loaded copy is not marked dirty -- disk is authoritative for
+        this path (SlicerOpenLIFU#636).
+        """
         database = get_cur_db()
         if database is None:
             self.show_info("Load a database first.")
+            return
+        if not prompt_save_before_replacing_loaded_session():
             return
         dialog = ContinuePlanningSessionDialog(database, self.uiWidget)
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            load_planning_session_into_app(dialog.subject_id, dialog.session_id)
+            open_planning_session_from_disk(dialog.subject_id, dialog.session_id)
         except Exception as exc:  # noqa: BLE001
             self.show_error(f"Load failed: {exc}")
             return
         navigate_to_host_page("OpenLIFUPlanningSessionOverview")
 
     def on_new_sonication_button_clicked(self) -> None:
-        """Open a New Sonication Session dialog, create + load, navigate to overview.
+        """Build a fresh SonicationSession in memory, open it, navigate to overview.
 
-        Requires at least one Plan to exist for the chosen subject;
-        surfaces an info dialog otherwise. Plans are finalized from
-        PlanningSessions; if none exist yet the user needs to run
-        the Planning workflow first.
+        Memory-first (SlicerOpenLIFU#636), same shape as
+        :meth:`on_new_planning_button_clicked`. The referenced Plan
+        must already exist on disk -- Plans are always disk-first --
+        so we surface a "finalize a plan first" info dialog when the
+        subject has none.
         """
         database = get_cur_db()
         if database is None:
             self.show_info("Load a database first.")
+            return
+        if not prompt_save_before_replacing_loaded_session():
             return
         subject_id = self.prompt_for_subject(database, "New Sonication Session")
         if not subject_id:
@@ -430,13 +463,20 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            create_sonication_session(
+            if dialog.session_id in database.get_sonication_session_ids(subject_id):
+                self.show_info(
+                    f"A sonication session with ID {dialog.session_id!r} "
+                    f"already exists for subject {subject_id!r}."
+                )
+                return
+            sonication_session = build_sonication_session(
                 subject_id=subject_id,
                 sonication_session_id=dialog.session_id,
                 name=dialog.session_name,
                 plan_id=dialog.plan_id,
             )
-            load_sonication_session_into_app(subject_id, dialog.session_id)
+            open_sonication_session_into_app(sonication_session)
+            mark_session_dirty()
         except Exception as exc:  # noqa: BLE001
             self.show_error(f"Create failed: {exc}")
             return
@@ -448,11 +488,13 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         if database is None:
             self.show_info("Load a database first.")
             return
+        if not prompt_save_before_replacing_loaded_session():
+            return
         dialog = ContinueSonicationSessionDialog(database, self.uiWidget)
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            load_sonication_session_into_app(dialog.subject_id, dialog.session_id)
+            open_sonication_session_from_disk(dialog.subject_id, dialog.session_id)
         except Exception as exc:  # noqa: BLE001
             self.show_error(f"Load failed: {exc}")
             return

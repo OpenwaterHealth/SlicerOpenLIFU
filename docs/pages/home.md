@@ -63,10 +63,10 @@ Class: `OpenLIFUHomeWidget` (extends `ScriptedLoadableModuleWidget`).
 | `try_auto_connect_if_needed()` | `enter()` | If not yet attempted this session and no DB loaded, call `DatabaseLogic.try_auto_connect()`. |
 | `refresh_status()` | `enter()` | Repopulate the three status labels from `get_cur_db()` and `get_app_state()`. Idempotent. |
 | `refresh_launch_buttons()` | `enter()` | Enable / disable the four launch buttons based on whether a DB is loaded; set hint label. |
-| `on_new_planning_button_clicked()` | signal handler | Prompt for subject, open `NewPlanningSessionDialog`, `create_planning_session()`, `load_planning_session_into_app()`, `navigate_to_host_page("OpenLIFUPlanningSessionOverview")`. |
-| `on_continue_planning_button_clicked()` | signal handler | Open `ContinuePlanningSessionDialog`, `load_planning_session_into_app()`, navigate. |
-| `on_new_sonication_button_clicked()` | signal handler | Prompt for subject, verify a Plan exists, open `NewSonicationSessionDialog`, `create_sonication_session()`, `load_sonication_session_into_app()`, navigate. |
-| `on_continue_sonication_button_clicked()` | signal handler | Open `ContinueSonicationSessionDialog`, `load_sonication_session_into_app()`, navigate. |
+| `on_new_planning_button_clicked()` | signal handler | Guard unsaved work → prompt subject → open `NewPlanningSessionDialog` → check ID collision → `build_planning_session()` → `open_planning_session_into_app()` → `mark_session_dirty()` → navigate. |
+| `on_continue_planning_button_clicked()` | signal handler | Guard unsaved work → open `ContinuePlanningSessionDialog` → `open_planning_session_from_disk()` → navigate. |
+| `on_new_sonication_button_clicked()` | signal handler | Guard unsaved work → prompt subject → verify a Plan exists → open `NewSonicationSessionDialog` → check ID collision → `build_sonication_session()` → `open_sonication_session_into_app()` → `mark_session_dirty()` → navigate. |
+| `on_continue_sonication_button_clicked()` | signal handler | Guard unsaved work → open `ContinueSonicationSessionDialog` → `open_sonication_session_from_disk()` → navigate. |
 | `on_data_manager_button_clicked()` | signal handler | Navigate to `OpenLIFUDataManager`. |
 | `prompt_for_subject(database, title)` | `on_new_*_button_clicked` | Modal `SubjectPickerDialog` over `database.get_subject_ids()`. |
 | `show_info(text)` / `show_error(text)` | handlers | Thin wrappers over `slicer.util.infoDisplay` / `errorDisplay`. |
@@ -134,10 +134,11 @@ sequenceDiagram
     Home->>Dialog: exec_()
     User->>Dialog: fill id / name / volume / protocol / transducer
     Dialog-->>Home: Accepted + fields
-    Home->>SA: create_planning_session(...)
-    SA-->>Home: (written to DB)
-    Home->>SA: load_planning_session_into_app(...)
-    SA-->>Home: (state.loaded_planning_session set)
+    Home->>SA: build_planning_session(...) -- in-memory
+    SA-->>Home: openlifu.db.PlanningSession object
+    Home->>SA: open_planning_session_into_app(planning_session)
+    SA-->>Home: (state.loaded_planning_session set, scene nodes materialised)
+    Home->>Home: mark_session_dirty()
     Home->>Host: show_page("OpenLIFUPlanningSessionOverview")
 ```
 
@@ -162,8 +163,10 @@ Every call to `refresh_status()` reads:
 * `try_auto_connect_if_needed()` may cause
   `DatabaseLogic.load_database(...)` to fire, which sets
   `DatabaseLogic.db` and writes `QSettings("OpenLIFU/databaseDirectory")`.
-* `on_new_*_button_clicked()` writes to the database (new session)
-  and to `get_app_state().loaded_*_session`.
+* `on_new_*_button_clicked()` writes ONLY to
+  `get_app_state().loaded_*_session` (memory-first per
+  SlicerOpenLIFU#636). The new session is not persisted to disk
+  until an explicit Save; Discard-at-exit leaves disk untouched.
 * `on_continue_*_button_clicked()` writes only to
   `get_app_state().loaded_*_session`.
 

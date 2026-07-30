@@ -47,18 +47,22 @@ from OpenLIFULib import (
     get_app_state,
     get_cur_db,
 )
+from OpenLIFULib.util import mark_session_dirty
 
 from OpenLIFUApp.dialogs.session_dialogs import (
     NewPlanningSessionDialog,
     NewSonicationSessionDialog,
 )
 from OpenLIFUApp.logic.session_actions import (
+    build_planning_session,
+    build_sonication_session,
     close_loaded_sessions,
-    create_planning_session,
-    create_sonication_session,
-    load_planning_session_into_app,
-    load_sonication_session_into_app,
     navigate_to_host_page,
+    open_planning_session_from_disk,
+    open_planning_session_into_app,
+    open_sonication_session_from_disk,
+    open_sonication_session_into_app,
+    prompt_save_before_replacing_loaded_session,
     require_current_database,
     save_loaded_session,
 )
@@ -619,17 +623,35 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
     # -- planning session actions --------------------------------------
 
     def on_new_planning_button_clicked(self) -> None:
-        """Prompt for a new PlanningSession's parameters and create it."""
+        """Build a new PlanningSession in memory and open it in the app.
+
+        Memory-first (SlicerOpenLIFU#636), same shape as Home's
+        :meth:`OpenLIFUHomeWidget.on_new_planning_button_clicked`.
+        The new session is NOT written to disk until an explicit Save;
+        Discard at exit-time leaves disk untouched. Because the
+        session is now the loaded session, we also navigate straight
+        to the Planning Session Overview -- consistent with Home and
+        avoids a stale Data Manager state where a memory-only session
+        wouldn't appear in the subject-scoped table anyway.
+        """
         subject_id = self.current_subject_id()
         if not subject_id:
             show_info_dialog("Select a subject first.")
             return
         database = get_cur_db()
+        if not prompt_save_before_replacing_loaded_session():
+            return
         dialog = NewPlanningSessionDialog(database, subject_id, self.parent)
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            create_planning_session(
+            if dialog.session_id in database.get_planning_session_ids(subject_id):
+                show_info_dialog(
+                    f"A planning session with ID {dialog.session_id!r} "
+                    f"already exists for subject {subject_id!r}."
+                )
+                return
+            planning_session = build_planning_session(
                 subject_id=subject_id,
                 planning_session_id=dialog.session_id,
                 name=dialog.session_name,
@@ -637,21 +659,25 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
                 protocol_id=dialog.protocol_id,
                 transducer_id=dialog.transducer_id,
             )
+            open_planning_session_into_app(planning_session)
+            mark_session_dirty()
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Create failed: {exc}")
             return
-        self.refresh_subject_scoped_lists()
+        navigate_to_host_page("OpenLIFUPlanningSessionOverview")
 
     def on_load_planning_button_clicked(self) -> None:
-        """Load the currently-selected PlanningSession into the app state
-        and navigate to its Overview page (SlicerOpenLIFU#633)."""
+        """Load the currently-selected PlanningSession from disk into the
+        app state and navigate to its Overview page."""
         subject_id = self.current_subject_id()
         planning_session_id = self.selected_id_in_table(self.planning_table)
         if not subject_id or not planning_session_id:
             show_info_dialog("Select a planning session first.")
             return
+        if not prompt_save_before_replacing_loaded_session():
+            return
         try:
-            load_planning_session_into_app(subject_id, planning_session_id)
+            open_planning_session_from_disk(subject_id, planning_session_id)
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Load failed: {exc}")
             return
@@ -710,42 +736,57 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
     # -- sonication session actions ------------------------------------
 
     def on_new_sonication_button_clicked(self) -> None:
-        """Prompt for a new SonicationSession + its referenced Plan and create it."""
+        """Build a new SonicationSession in memory and open it in the app.
+
+        Memory-first (SlicerOpenLIFU#636), same shape as Home's
+        :meth:`OpenLIFUHomeWidget.on_new_sonication_button_clicked`.
+        """
         subject_id = self.current_subject_id()
         if not subject_id:
             show_info_dialog("Select a subject first.")
             return
         database = get_cur_db()
-        plan_ids = database.get_plan_ids(subject_id)
+        plan_ids = list(database.get_plan_ids(subject_id))
         if not plan_ids:
             show_info_dialog("This subject has no plans. Finalize a plan first.")
+            return
+        if not prompt_save_before_replacing_loaded_session():
             return
         dialog = NewSonicationSessionDialog(subject_id, plan_ids, self.parent)
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            create_sonication_session(
+            if dialog.session_id in database.get_sonication_session_ids(subject_id):
+                show_info_dialog(
+                    f"A sonication session with ID {dialog.session_id!r} "
+                    f"already exists for subject {subject_id!r}."
+                )
+                return
+            sonication_session = build_sonication_session(
                 subject_id=subject_id,
                 sonication_session_id=dialog.session_id,
                 name=dialog.session_name,
                 plan_id=dialog.plan_id,
             )
+            open_sonication_session_into_app(sonication_session)
+            mark_session_dirty()
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Create failed: {exc}")
             return
-        self.refresh_subject_scoped_lists()
+        navigate_to_host_page("OpenLIFUSonicationSessionOverview")
 
     def on_load_sonication_button_clicked(self) -> None:
-        """Load the currently-selected SonicationSession + its Plan into
-        the app state and navigate to its Overview page
-        (SlicerOpenLIFU#633)."""
+        """Load the currently-selected SonicationSession + its Plan from
+        disk into the app state and navigate to its Overview page."""
         subject_id = self.current_subject_id()
         sonication_session_id = self.selected_id_in_table(self.sonication_table)
         if not subject_id or not sonication_session_id:
             show_info_dialog("Select a sonication session first.")
             return
+        if not prompt_save_before_replacing_loaded_session():
+            return
         try:
-            load_sonication_session_into_app(subject_id, sonication_session_id)
+            open_sonication_session_from_disk(subject_id, sonication_session_id)
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Load failed: {exc}")
             return
@@ -817,14 +858,21 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self.refresh_subject_scoped_lists()
 
     def on_close_button_clicked(self) -> None:
-        """Unload the currently-loaded session, prompting to confirm."""
+        """Unload the currently-loaded session, prompting save / discard /
+        cancel on unsaved changes (SlicerOpenLIFU#636).
+
+        Calling :func:`prompt_save_before_replacing_loaded_session` gives
+        us the same save / discard / cancel dialog the host toolbar
+        Save+Exit uses -- no risk of silently dropping a dirty session.
+        """
         state = get_app_state()
         if state.loaded_planning_session is None and state.loaded_sonication_session is None:
             return
-        if not confirm_action("Close the loaded session?"):
+        if not prompt_save_before_replacing_loaded_session():
             return
         close_loaded_sessions()
         self.refresh_loaded_labels()
+        self.refresh_subject_scoped_lists()
 
 
 # ---------------------------------------------------------------------------
