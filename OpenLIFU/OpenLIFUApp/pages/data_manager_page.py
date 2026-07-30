@@ -47,7 +47,7 @@ from OpenLIFULib import (
     get_app_state,
     get_cur_db,
 )
-from OpenLIFULib.util import mark_session_dirty
+from OpenLIFULib.util import mark_session_dirty, session_is_dirty
 
 from OpenLIFUApp.dialogs.session_dialogs import (
     NewPlanningSessionDialog,
@@ -505,8 +505,19 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             self.loaded_sonication_label.text = "Sonication session: —"
 
         has_session_loaded = (planning_session is not None) or (sonication_session is not None)
-        self.save_button.enabled = has_session_loaded
+        # Save is only meaningful when there are unsaved changes to write.
+        # Saving a clean session is a no-op disk write, so we grey out the
+        # button rather than let users trigger something with no effect
+        # (SlicerOpenLIFU#637). Close stays enabled whenever a session is
+        # loaded -- the close handler prompts to save / discard if dirty.
+        self.save_button.enabled = has_session_loaded and session_is_dirty()
         self.close_button.enabled = has_session_loaded
+        if not has_session_loaded:
+            self.save_button.setToolTip("No loaded session to save.")
+        elif not session_is_dirty():
+            self.save_button.setToolTip("No unsaved changes.")
+        else:
+            self.save_button.setToolTip("Save unsaved changes to disk.")
 
     def refresh_database_scoped_tables(self) -> None:
         """Repopulate the Protocols / Transducers / Users tabs."""
@@ -855,6 +866,11 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Save failed: {exc}")
             return
+        # Refresh the loaded card (so the Save button greys back out --
+        # save cleared the dirty flag, see SlicerOpenLIFU#637) and the
+        # subject-scoped lists (so a freshly-saved memory-first session
+        # appears in the table).
+        self.refresh_loaded_labels()
         self.refresh_subject_scoped_lists()
 
     def on_close_button_clicked(self) -> None:

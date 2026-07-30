@@ -37,7 +37,7 @@ from OpenLIFULib.module_layout import (
     tinted_icon,
     wire_passive_module_header,
 )
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import display_errors, session_is_dirty
 
 from OpenLIFUApp.logic.app_state import OpenLIFUAppState, get_app_state_signals
 from OpenLIFUApp.logic.session_actions import (
@@ -514,18 +514,31 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.hostStatusLabel.setText(status_text)
 
         # Footer visibility per page:
-        #   * Home:            footer fully hidden
-        #   * Data Manager:    footer visible with only the Back-to-Home button
-        #   * Timeline page:   footer visible with timeline + Next + status
-        on_data = self._current_page_key == "OpenLIFUData"
+        #   * Home:              footer fully hidden (nowhere to go "back" to)
+        #   * Timeline page:     footer visible with timeline + Next + status
+        #   * Any other page
+        #     (Data Manager,
+        #      Session Overviews): footer visible with only the Back-to-Home button
+        #
+        # The "other page" bucket used to be hard-coded to the legacy
+        # ``OpenLIFUData`` module key, which meant the current
+        # ``OpenLIFUDataManager`` page never got a Back-to-Home button and
+        # users with no loaded session (where the toolbar Exit is disabled)
+        # had no way off it -- SlicerOpenLIFU#637.
+        on_home = self._current_page_key == "OpenLIFUHome"
         on_timeline_page = current_key is not None
-        footer_visible = on_timeline_page or on_data
+        show_back_button = (
+            self._current_page_key is not None
+            and not on_home
+            and not on_timeline_page
+        )
+        footer_visible = on_timeline_page or show_back_button
         self.ui.hostFooterContainer.setVisible(footer_visible)
         self.ui.hostFooterRule.setVisible(footer_visible)
-        self.ui.hostBackToHomeButton.setVisible(on_data)
+        self.ui.hostBackToHomeButton.setVisible(show_back_button)
         self.ui.hostTimelineContainer.setVisible(on_timeline_page)
         self.ui.hostStatusLabel.setVisible(on_timeline_page)
-        if on_data:
+        if show_back_button:
             next_button.setVisible(False)
 
     # ------------------------------------------------------------------
@@ -592,7 +605,20 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.show_page("OpenLIFUHome")
 
     def _refresh_save_exit_state(self) -> None:
-        """Update the host's Save/Exit button state from app state."""
+        """Update the host's Save/Exit button state from app state.
+
+        Save button:
+            Enabled iff a session is loaded AND has unsaved in-memory
+            changes (``session_is_dirty``). Saving a clean session is a
+            disk write with no meaningful effect, so we grey out the
+            button rather than let users trigger a no-op that could
+            hide dirty-tracking bugs (SlicerOpenLIFU#637).
+
+        Exit button:
+            Enabled whenever a session is loaded (dirty or clean). Users
+            should always be able to exit; the exit dialog itself
+            handles the save / discard / cancel prompt when dirty.
+        """
         try:
             state = self.logic.getParameterNode()
             has_session = (
@@ -601,14 +627,23 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             )
         except Exception:  # noqa: BLE001
             has_session = False
-        self.ui.hostSaveButton.setEnabled(has_session)
+        is_dirty = has_session and session_is_dirty()
+
+        self.ui.hostSaveButton.setEnabled(is_dirty)
         self.ui.hostExitButton.setEnabled(has_session)
-        icon_color = icon_color_neutral() if has_session else icon_color_dim()
-        self.ui.hostSaveButton.setIcon(tinted_icon("save.png", icon_color))
-        self.ui.hostExitButton.setIcon(tinted_icon("exit.png", icon_color))
-        self.ui.hostSaveButton.setToolTip(
-            "Save the active session." if has_session else "No loaded session to save."
-        )
+
+        save_icon_color = icon_color_neutral() if is_dirty else icon_color_dim()
+        exit_icon_color = icon_color_neutral() if has_session else icon_color_dim()
+        self.ui.hostSaveButton.setIcon(tinted_icon("save.png", save_icon_color))
+        self.ui.hostExitButton.setIcon(tinted_icon("exit.png", exit_icon_color))
+
+        if not has_session:
+            self.ui.hostSaveButton.setToolTip("No loaded session to save.")
+        elif not is_dirty:
+            self.ui.hostSaveButton.setToolTip("No unsaved changes.")
+        else:
+            self.ui.hostSaveButton.setToolTip("Save unsaved changes to disk.")
+
         self.ui.hostExitButton.setToolTip(
             "Exit the active session." if has_session else "No loaded session to exit."
         )
