@@ -12,11 +12,10 @@ signals and state transitions it drives, and its acceptance tests.
   PlanningSessions / Plans / SonicationSessions / Solutions (subject
   tab) and Protocols / Transducers / Users (database tabs).
 * [`planning-session-overview.md`](planning-session-overview.md) —
-  Status card for a loaded PlanningSession. Hosts the **Finalize
-  Plan** action.
+  Information-only status card for a loaded PlanningSession.
 * [`sonication-session-overview.md`](sonication-session-overview.md) —
-  Status card for a loaded SonicationSession, with a read-only view
-  of its frozen Plan.
+  Information-only status card for a loaded SonicationSession, with
+  a read-only view of its frozen Plan.
 
 Planned (pages not yet built):
 

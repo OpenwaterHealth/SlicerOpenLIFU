@@ -59,8 +59,8 @@ flowchart TB
       subgraph PAGES["Pages"]
         HOME["Home page"]
         DATAMGR["Data Manager<br/>(tabs + collapsibles)"]
-        PSO["Planning Session Overview<br/>(Finalize Plan)"]
-        SSO["Sonication Session Overview"]
+        PSO["Planning Session Overview<br/>(info-only summary)"]
+        SSO["Sonication Session Overview<br/>(info-only summary)"]
       end
 
       HOSTLOGIC --> HOSTWIDGET
@@ -74,7 +74,6 @@ flowchart TB
       APPSTATE --> PACKS
       HOSTLOGIC -->|"database_logic.db"| DBAPI
       DATAMGR -->|"load / write"| DBAPI
-      PSO -->|"finalize_plan write_plan"| DBAPI
       DBAPI -->|"load_*"| WRAPPERS
     end
 ```

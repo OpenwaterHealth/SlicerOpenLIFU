@@ -392,8 +392,20 @@ separate cleanup action if desired).
 
 ## 8. Plan finalization
 
-`PlanningSession.finalize_plan()` is invoked by an explicit "Finalize
-Plan" button on the Planning Session Overview page.
+Finalizing a plan writes an immutable `Plan` record derived from the
+currently-loaded PlanningSession. The `finalize_plan(...)` function
+lives in `OpenLIFU/OpenLIFUApp/plan_finalization.py` so any page can
+invoke it. Design decision on WHERE the button lives is being
+revised under SlicerOpenLIFU#634:
+
+* Originally proposed to live on Planning Session Overview
+  (SlicerOpenLIFU#633, commit 108ccd7).
+* Revised (SlicerOpenLIFU#634): Session Overview is information-only.
+  Finalize Plan needs a new home. Leading candidate is Pre-Planning
+  ("Finalize this Plan" appears once the user has approved a VF for
+  a target); alternates are Solution Generator (planning mode) or an
+  always-visible workflow-toolbar action. Concrete decision lands
+  with the next commit implementing the button.
 
 Semantics:
 

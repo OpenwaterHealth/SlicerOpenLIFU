@@ -1,8 +1,9 @@
 # Sonication Session Overview page
 
 Living document — updated as the page changes.
-Last major update: 2026-07-30.
-Tracking: SlicerOpenLIFU#633.
+Last major update: 2026-07-30 (revised per SlicerOpenLIFU#634 —
+information-only, no action buttons, no rich tables).
+Tracking: SlicerOpenLIFU#633, SlicerOpenLIFU#634.
 
 ## Source
 
@@ -10,17 +11,12 @@ Tracking: SlicerOpenLIFU#633.
 
 ## Purpose
 
-Read-only status card for the currently-loaded SonicationSession.
-Shows the session's key fields plus the frozen fields inherited from
-its referenced `Plan` (target, volume, protocol, transducer,
-array_transform). Sub-tables display the photoscans owned by the
-session, the photoscan registrations attempted, the transducer-
-tracking results, the final Solution (at most one — see
-`SESSION_SPLIT_DESIGN.md` section 12 decision 4), and the runs
-performed.
-
-Navigation buttons for the Localization / Solution Generator /
-Sonication Control pages are placeholders until those pages land.
+**Information-only** status card for the currently-loaded
+SonicationSession. Displays the session's identity, the frozen
+Plan-derived context, and count-based summaries of the session's
+editable content. Nothing here mutates session state -- photoscans /
+registrations / TT results / runs are all owned by later workflow
+pages (Localization / Sonication Control).
 
 Users reach this page automatically after Loading a Sonication
 Session from the Data Manager.
@@ -31,34 +27,27 @@ Session from the Data Manager.
 flowchart TB
     subgraph SSO["Sonication Session Overview (programmatic Qt UI, no .ui file)"]
       HEAD["QGroupBox: 'Sonication Session'
-        Name / ID / Subject / Plan"]
+        Name / ID / Subject / Plan / Created / Modified"]
       PLAN["QGroupBox: 'Plan (frozen)'
-        Target / Volume / Protocol / Transducer"]
-
-      subgraph PS["ctkCollapsibleButton: 'Photoscans'"]
-        PS_T["Table: Photoscan ID"]
-      end
-
-      subgraph REG["ctkCollapsibleButton: 'Photoscan Registrations'"]
-        REG_T["Table: Registration ID | Photoscan | Approved"]
-      end
-
-      subgraph TT["ctkCollapsibleButton: 'Transducer Tracking Results'"]
-        TT_T["Table: TT Result ID | Target | Photoscan | Registration | Approved"]
-      end
-
-      SOL["QGroupBox: 'Final Solution'
-        Solution ID / Source / Approved / Computed at"]
-
-      subgraph RUNS["ctkCollapsibleButton: 'Runs'"]
-        RUNS_T["Table: Run ID"]
-      end
-
-      BTNS["[Go to Localization] [Compute solution] [Go to Sonication Control]"]
-
-      HEAD --> PLAN --> PS --> REG --> TT --> SOL --> RUNS --> BTNS
+        Target (id + position) / Volume / Protocol / Transducer"]
+      SUM["QGroupBox: 'Summary'
+        Photoscans:                <count>
+        Photoscan registrations:   <count> (K approved)
+        Transducer tracking:       <count> (K approved)
+        Final solution:            <id · source · approved> or 'not computed'
+        Runs:                      <count>"]
+      HEAD --> PLAN --> SUM
     end
 ```
+
+Notably absent (deliberately):
+
+* No tables (photoscan list, registration list, TT list, runs list).
+  Each list has an editing surface on Localization or Sonication
+  Control.
+* No navigation buttons. Workflow navigation happens through the
+  timeline footer on the host module; this page owns no page-swap
+  actions.
 
 ## Public API — Widget
 
@@ -68,9 +57,9 @@ Class: `OpenLIFUSonicationSessionOverviewWidget`.
 
 | Method | Purpose |
 |---|---|
-| `__init__(parent=None)` | Widget construction; sets `moduleName = "OpenLIFU"` and `is_entered = False`. |
-| `setup()` | Build the programmatic Qt UI once. Sets `self.uiWidget`. |
-| `enter()` | Sole source of first-render truth. Sets `is_entered = True`, calls `refresh_all()`. |
+| `__init__(parent=None)` | Widget construction; sets `moduleName = "OpenLIFU"`. |
+| `setup()` | Build the programmatic Qt UI once. |
+| `enter()` | Sole source of first-render truth. Calls `refresh_all()`. |
 | `exit()` | Sets `is_entered = False`. |
 | `cleanup()` | No-op. |
 
@@ -78,95 +67,60 @@ Class: `OpenLIFUSonicationSessionOverviewWidget`.
 
 | Method | Purpose |
 |---|---|
-| `build_header_group()` | Session name / id / subject / plan QGroupBox. |
-| `build_plan_group()` | Plan-derived fields QGroupBox (read-only). |
-| `build_photoscans_section()` | Collapsible Photoscans table. |
-| `build_registrations_section()` | Collapsible Photoscan Registrations table. |
-| `build_tt_section()` | Collapsible Transducer Tracking Results table. |
-| `build_solution_group()` | Final Solution QGroupBox. |
-| `build_runs_section()` | Collapsible Runs table. |
-| `build_action_row()` | Bottom row of navigation buttons. |
-| `make_collapsible_section(title, table)` | Wrap a table in a `ctkCollapsibleButton`. |
+| `build_header_group()` | Session name / id / subject / plan / dates group. |
+| `build_plan_group()` | Read-only Plan-derived fields group. |
+| `build_summary_group()` | Count-based summary group (five rows). |
 
 ### Refresh + helpers
 
 | Method | Purpose |
 |---|---|
-| `refresh_all()` | Rebuild every widget from `get_app_state().loaded_sonication_session`. |
-| `render_no_session_loaded()` | Reset every label to "—" and empty every table. |
+| `refresh_all()` | Rebuild every label from `get_app_state().loaded_sonication_session`. |
+| `render_no_session_loaded()` | Reset every label to `—`. |
+| `build_photoscans_summary(session)` | `"N"` or `"none captured"`. |
+| `build_registrations_summary(session)` | `"N (K approved)"` or `"none"`. |
+| `build_tt_summary(session)` | `"N (K approved)"` or `"none"`. |
+| `build_solution_summary(session)` | `"<id> · from <source> · <approved|unapproved>"` or `"not computed"`. |
+| `build_runs_summary(session)` | `"N"` or `"none performed"`. |
 
 ## Public API — Logic
 
-Class: `OpenLIFUSonicationSessionOverviewLogic`.
-
-Empty for now; retained as a hook for the actions those disabled
-navigation buttons will grow when Localization, Solution Generator,
-and Sonication Control land.
-
-## Solution model
-
-`SonicationSession.solution` is `Optional[SolutionInfo]` — at most one
-final solution per session. Recompute replaces in place. Multi-solution
-generation is deliberately out of scope (see
-`SESSION_SPLIT_DESIGN.md` section 12 decision 4).
-
-Displayed fields (from `SolutionInfo`):
-
-* `solution_id`
-* `transducer_transform_source` + `transducer_transform_source_id`
-  (e.g. `localization (tt_result_1)`)
-* `approved` (yes / no)
-* `computed_at` (ISO datetime)
-
-If no solution has been computed yet, "Solution ID" shows
-`(not computed)` and the other fields show `—`.
-
-## Runs
-
-`SonicationSession.run_ids: List[str]` is shown as a plain list. No
-per-run detail load is implemented yet -- the runs section is a
-placeholder until Sonication Control lands and populates it with
-actual runs. The current view will need to grow columns for
-success/failure, date, notes at that point.
+Class: `OpenLIFUSonicationSessionOverviewLogic`. **Empty.** Retained
+so the host's page-logic construction contract is consistent.
 
 ## Design rationale
 
-* **Plan is frozen input.** The Plan group is styled read-only. Any
-  desire to change target / volume / protocol / transducer / pose
-  requires finalizing a new Plan from a PlanningSession, not editing
-  here.
-* **Photoscan ownership is per-session.** Even though photoscan files
-  live at subject scope (see `SESSION_SPLIT_DESIGN.md` decision 2), the
-  ownership relation is per-SonicationSession -- the Photoscans table
-  here shows only the ids this session owns.
-* **No cross-page observers.** Reads on `enter()`; refresh helpers
-  fire only from local button handlers (currently none).
+* **Information-only.** Same principle as the Planning Session
+  Overview: a user on Session Overview is choosing a next step, not
+  taking a step.
+* **Plan is displayed frozen.** The Plan reference on a
+  SonicationSession is immutable input; the plan-derived group is
+  styled as such (`Plan (frozen)`).
+* **Solution summary condensed into one line.** Multi-line "Final
+  Solution" group has been folded into the `Final solution:` line in
+  the summary group.
+* **No cross-page observers.** Reads on `enter()`; idempotent.
 
 ## Acceptance tests
 
 Manual, until scripted tests land:
 
-1. Load a Sonication Session from the Data Manager. The page opens
+1. Load a Sonication Session from the Data Manager. Page opens
    automatically with the session's details filled in.
-2. The Plan (frozen) group shows the referenced Plan's target
-   (id + position), volume, protocol, transducer.
-3. The Photoscans table shows the session's photoscan_ids (one entry
-   in the sample DB for `neuromod_1x_demo`).
-4. The Photoscan Registrations table shows one registration
-   (migrated from the legacy TT record).
-5. The Transducer Tracking Results table shows one TT result for the
-   sample subject.
-6. The Final Solution group shows `(not computed)` because the sample
-   sessions do not carry a solution.
-7. The Runs table is empty (no runs in the sample DB).
-8. All three navigation buttons are disabled with tooltips noting
-   "coming soon".
+2. Header shows Name / ID / Subject / Plan / Created / Modified.
+3. Plan (frozen) group shows Target (id + `R, A, S` mm position),
+   Volume, Protocol, Transducer.
+4. Summary group shows counts: e.g. `1`, `1 (1 approved)`, `1 (1
+   approved)`, `not computed`, `none performed`.
+5. Page has no buttons and no editable widgets. Every widget is a
+   read-only `QLabel`.
+6. Close the session and navigate back. Every label reads `—`.
 
 ## Related documents
 
 * [`README.md`](README.md) — page docs index.
 * [`data-manager.md`](data-manager.md) — the page users come from.
-* [`planning-session-overview.md`](planning-session-overview.md) — the
-  page's structural sibling.
+* [`planning-session-overview.md`](planning-session-overview.md) —
+  the page's structural sibling.
 * [`../data-model.md`](../data-model.md) — the SonicationSession /
   Plan types.
