@@ -15,6 +15,13 @@ IEC 62304 traceability path.
 * [`coding-standards.md`](coding-standards.md) — rules for module
   size, class/function naming, docstring policy, cross-page
   communication policy, dependency direction.
+* [`pages/README.md`](pages/README.md) — per-page documentation index.
+  * [`pages/host.md`](pages/host.md) — the host module: entry point,
+    subpackage structure, startup flow, host widget + host logic
+    public API.
+  * [`pages/home.md`](pages/home.md) — Home page.
+  * [`pages/data-manager.md`](pages/data-manager.md) — Data Manager
+    page.
 
 ## Related
 
