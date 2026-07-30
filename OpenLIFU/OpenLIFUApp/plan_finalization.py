@@ -29,6 +29,8 @@ import slicer
 
 from OpenLIFULib import get_app_state, get_cur_db
 
+from OpenLIFUApp.dialogs import make_ok_cancel_button_box
+
 if TYPE_CHECKING:
     import openlifu.db
 
@@ -168,10 +170,11 @@ class FinalizePlanDialog(qt.QDialog):
         # Footer: OK / Cancel button box. Kept OUTSIDE the QFormLayout
         # so the OK button always renders (a QFormLayout row wrapping a
         # QDialogButtonBox has intermittently swallowed the OK button
-        # under PythonQt -- see SlicerOpenLIFU#634).
-        button_box = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
+        # under PythonQt -- see SlicerOpenLIFU#634). Uses the shared
+        # factory to sidestep the second PythonQt bug where a flag-based
+        # ``QDialogButtonBox(Ok | Cancel)`` renders with no buttons at
+        # all (SlicerOpenLIFU#635 follow-up).
+        button_box = make_ok_cancel_button_box()
         button_box.accepted.connect(self.on_ok_clicked)
         button_box.rejected.connect(self.reject)
         outer.addWidget(button_box)

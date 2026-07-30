@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING, List, Optional
 import qt
 import slicer
 
+from OpenLIFUApp.dialogs import make_ok_cancel_button_box
+
 if TYPE_CHECKING:
     import openlifu.db
 
@@ -113,9 +115,7 @@ class NewPlanningSessionDialog(qt.QDialog):
         form.addRow("Transducer:", self.transducer_combo)
         outer.addWidget(form_widget)
 
-        buttons = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
+        buttons = make_ok_cancel_button_box()
         buttons.accepted.connect(self.on_ok_clicked)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -165,9 +165,7 @@ class NewSonicationSessionDialog(qt.QDialog):
         form.addRow("Plan:", self.plan_combo)
         outer.addWidget(form_widget)
 
-        buttons = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
+        buttons = make_ok_cancel_button_box()
         buttons.accepted.connect(self.on_ok_clicked)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -240,16 +238,15 @@ class SubjectPickerDialog(qt.QDialog):
             self.hint_label.setStyleSheet("color: #888;")
             outer.addWidget(self.hint_label)
 
-        # PythonQt does not expose ``QDialogButtonBox.button(role)``
-        # reliably (returns None), so we build the Ok / Cancel buttons
-        # by hand and add them via ``addButton(button, role)``. Same
-        # workaround is used in :class:`SessionPickerDialogBase`.
-        buttons = qt.QDialogButtonBox()
-        ok_button = qt.QPushButton("OK")
-        ok_button.setEnabled(bool(subject_ids))
-        buttons.addButton(ok_button, qt.QDialogButtonBox.AcceptRole)
-        cancel_button = qt.QPushButton("Cancel")
-        buttons.addButton(cancel_button, qt.QDialogButtonBox.RejectRole)
+        # PythonQt safe: see ``dialogs.make_ok_cancel_button_box``
+        # docstring for why we avoid the flag-based ``QDialogButtonBox``
+        # constructor here (empty button strip under PythonQt).
+        buttons = make_ok_cancel_button_box()
+        # Cannot proceed with no subjects -- disable the accept button
+        # rather than raising a validation dialog after the click.
+        # ``buttons.buttons()`` returns the pushbuttons in the order
+        # they were added; AcceptRole was added first.
+        buttons.buttons()[0].setEnabled(bool(subject_ids))
         buttons.accepted.connect(self.on_ok_clicked)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -318,14 +315,10 @@ class SessionPickerDialogBase(qt.QDialog):
         self.hint_label.setStyleSheet("color: #888;")
         outer.addWidget(self.hint_label)
 
-        # See note in ``SubjectPickerDialog``: PythonQt does not
-        # expose ``QDialogButtonBox.button(role)`` reliably, so we
-        # build the Load / Cancel buttons manually.
-        buttons = qt.QDialogButtonBox()
-        ok_button = qt.QPushButton(self.load_button_label)
-        buttons.addButton(ok_button, qt.QDialogButtonBox.AcceptRole)
-        cancel_button = qt.QPushButton("Cancel")
-        buttons.addButton(cancel_button, qt.QDialogButtonBox.RejectRole)
+        # PythonQt safe: see ``dialogs.make_ok_cancel_button_box``
+        # docstring. Accept button labelled with the subclass's
+        # semantic label ("Load Planning Session", etc.).
+        buttons = make_ok_cancel_button_box(ok_label=self.load_button_label)
         buttons.accepted.connect(self.on_ok_clicked)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
