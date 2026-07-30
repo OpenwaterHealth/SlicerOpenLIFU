@@ -82,9 +82,9 @@ Reachable from other Python code via
 |---|---|
 | `show_page(module_name)` | Swap the visible page to the one registered under `module_name`. Called by pages that navigate. |
 | `get_page_widget(module_name)` | Return the embedded widget instance. Public accessor for cross-page reads (see `docs/coding-standards.md` rule 6 for the coordination policy). |
-| `onSaveClicked(checked)` | Save the loaded session via `session_actions.save_loaded_session()`. Save button is gated on `session_is_dirty()` -- disabled when nothing's dirty, re-enables the moment `mark_session_dirty` fires, greys back out after the save succeeds (SlicerOpenLIFU#637). |
-| `onExitClicked(checked)` | Confirm-close the loaded session and navigate to Home. Exit button is enabled whenever a session is loaded (dirty or clean) so the user can always get out; the exit dialog handles the save / discard / cancel prompt. |
-| `onBackToHomeClicked(checked)` | Same but without the "there is no session" error. Footer button visible on any non-Home / non-timeline page (currently: Data Manager, Planning Session Overview, Sonication Session Overview) so users always have a way back to Home even when the toolbar Exit is disabled -- SlicerOpenLIFU#637. |
+| `onSaveClicked(checked)` | Save the loaded session via `session_actions.save_loaded_session()`. Save button is **hidden** unless a session is loaded and dirty (SlicerOpenLIFU#638) -- a greyed-out button in the primary header slot is more distracting than informative. Appears the moment `mark_session_dirty` fires and disappears again after a successful save. |
+| `onExitClicked(checked)` | Confirm-close the loaded session and navigate to Home. Exit button is **hidden** when no session is loaded (SlicerOpenLIFU#638); the footer's Back-to-Home button gives the user a navigation escape on non-Home pages regardless. |
+| `onBackToHomeClicked(checked)` | Same but without the "there is no session" error. Footer button visible on any non-Home / non-timeline page (currently: Data Manager, Planning Session Overview, Sonication Session Overview) so users always have a way back to Home even when the toolbar Exit is hidden -- SlicerOpenLIFU#637. |
 | `onNextClicked(checked)` | Advance in the workflow timeline (currently no timeline pages -- kept for future). |
 
 The internal helpers (`_embed_all_pages`, `_refresh_timeline_state`,

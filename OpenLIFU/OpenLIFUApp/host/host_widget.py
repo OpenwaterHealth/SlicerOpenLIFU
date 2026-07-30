@@ -32,7 +32,6 @@ from OpenLIFULib.guided_mode_util import (
 )
 from OpenLIFULib.module_layout import (
     ModuleHeaderWidget,
-    icon_color_dim,
     icon_color_neutral,
     tinted_icon,
     wire_passive_module_header,
@@ -608,16 +607,18 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Update the host's Save/Exit button state from app state.
 
         Save button:
-            Enabled iff a session is loaded AND has unsaved in-memory
-            changes (``session_is_dirty``). Saving a clean session is a
-            disk write with no meaningful effect, so we grey out the
-            button rather than let users trigger a no-op that could
-            hide dirty-tracking bugs (SlicerOpenLIFU#637).
+            Visible + enabled iff a session is loaded AND has unsaved
+            in-memory changes (``session_is_dirty``). Hidden entirely
+            when there's nothing to save -- a greyed-out button in the
+            primary header slot is more visually distracting than
+            informative (SlicerOpenLIFU#638).
 
         Exit button:
-            Enabled whenever a session is loaded (dirty or clean). Users
-            should always be able to exit; the exit dialog itself
-            handles the save / discard / cancel prompt when dirty.
+            Visible + enabled iff a session is loaded. Hidden when
+            there's no session to exit -- the footer's Back-to-Home
+            button already gives the user a navigation escape on
+            non-Home pages (SlicerOpenLIFU#637 broadened its
+            visibility).
         """
         try:
             state = self.logic.getParameterNode()
@@ -629,24 +630,18 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             has_session = False
         is_dirty = has_session and session_is_dirty()
 
+        self.ui.hostSaveButton.setVisible(is_dirty)
         self.ui.hostSaveButton.setEnabled(is_dirty)
+        self.ui.hostExitButton.setVisible(has_session)
         self.ui.hostExitButton.setEnabled(has_session)
 
-        save_icon_color = icon_color_neutral() if is_dirty else icon_color_dim()
-        exit_icon_color = icon_color_neutral() if has_session else icon_color_dim()
-        self.ui.hostSaveButton.setIcon(tinted_icon("save.png", save_icon_color))
-        self.ui.hostExitButton.setIcon(tinted_icon("exit.png", exit_icon_color))
-
-        if not has_session:
-            self.ui.hostSaveButton.setToolTip("No loaded session to save.")
-        elif not is_dirty:
-            self.ui.hostSaveButton.setToolTip("No unsaved changes.")
-        else:
-            self.ui.hostSaveButton.setToolTip("Save unsaved changes to disk.")
-
-        self.ui.hostExitButton.setToolTip(
-            "Exit the active session." if has_session else "No loaded session to exit."
-        )
+        # Icons + tooltips still get set for the visible cases so a
+        # session-loaded-then-cleaned transition doesn't briefly flash a
+        # stale icon before the visibility toggle applies.
+        self.ui.hostSaveButton.setIcon(tinted_icon("save.png", icon_color_neutral()))
+        self.ui.hostExitButton.setIcon(tinted_icon("exit.png", icon_color_neutral()))
+        self.ui.hostSaveButton.setToolTip("Save unsaved changes to disk.")
+        self.ui.hostExitButton.setToolTip("Exit the active session.")
 
     # ------------------------------------------------------------------
     # Session observers (drive Save/Exit + timeline refresh)
