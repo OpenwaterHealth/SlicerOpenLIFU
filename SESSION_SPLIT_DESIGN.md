@@ -334,8 +334,7 @@ options and destination.
 **Planning workflow**:
 
 ```
-Home -> Data Manager -> select subject
-     -> "New Planning Session" or "Continue Planning Session"
+Home ("New Planning Session" | "Continue Planning Session")
      -> Planning Session Overview
      -> PrePlanning (place target, run VF, approve VF)
      -> Solution Generator (optional: compute pre-solutions)
@@ -346,15 +345,17 @@ Home -> Data Manager -> select subject
 **Sonication workflow**:
 
 ```
-Home -> Data Manager -> select subject
-     -> select a Plan for this subject
-     -> "Start Sonication Session"
+Home ("New Sonication Session" | "Continue Sonication Session")
      -> Sonication Session Overview
      -> Localization (capture photoscan, register, run TT, approve TT)
      -> Solution Generator (compute final Solution)
      -> back to Sonication Session Overview
      -> Sonication Control (send to device, run, record)
 ```
+
+Data Manager is available as an admin CRUD panel and can also
+launch a session (SlicerOpenLIFU#635 kept both entry points), but
+Home is the intended primary route.
 
 ## 6. Save semantics
 

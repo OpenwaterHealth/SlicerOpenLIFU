@@ -6,8 +6,11 @@ signals and state transitions it drives, and its acceptance tests.
 
 ## Fresh split-session pages
 
-* [`home.md`](home.md) — Landing page. Read-only status of database
-  + loaded sessions; single button navigating to the Data Manager.
+* [`home.md`](home.md) — Landing page. Auto-connects to the
+  last-used database and hosts the primary launch buttons for
+  New / Continue × Planning / Sonication sessions
+  (SlicerOpenLIFU#635). Also read-only status labels and a link to
+  the Data Manager for admin actions.
 * [`data-manager.md`](data-manager.md) — CRUD surface for
   PlanningSessions / Plans / SonicationSessions / Solutions (subject
   tab) and Protocols / Transducers / Users (database tabs).

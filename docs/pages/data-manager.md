@@ -130,33 +130,49 @@ touches another page.
 | `on_subject_combo_changed(*args)` | Guarded by `is_entered`; calls `refresh_subject_scoped_lists()`. |
 | `on_refresh_button_clicked()` | Runs every refresh helper. |
 | `on_load_db_button_clicked()` | File picker; `database_logic.load_database(path)`; refresh all. |
-| `on_new_planning_button_clicked()` | Dialog + `logic.create_planning_session()`; refresh subject-scoped. |
-| `on_load_planning_button_clicked()` | `logic.load_planning_session(...)`; refresh loaded labels. |
+| `on_new_planning_button_clicked()` | `NewPlanningSessionDialog` + `session_actions.create_planning_session()`; refresh subject-scoped. |
+| `on_load_planning_button_clicked()` | `session_actions.load_planning_session_into_app(...)`; refresh loaded labels. |
 | `on_delete_planning_button_clicked()` | Confirm + `logic.delete_planning_session(...)`; refresh subject-scoped. |
 | `on_delete_plan_button_clicked()` | Confirm + `logic.delete_plan(...)`; refresh subject-scoped. |
-| `on_new_sonication_button_clicked()` | Dialog + `logic.create_sonication_session()`; refresh subject-scoped. |
-| `on_load_sonication_button_clicked()` | `logic.load_sonication_session(...)`; refresh loaded labels. |
+| `on_new_sonication_button_clicked()` | `NewSonicationSessionDialog` + `session_actions.create_sonication_session()`; refresh subject-scoped. |
+| `on_load_sonication_button_clicked()` | `session_actions.load_sonication_session_into_app(...)`; refresh loaded labels. |
 | `on_delete_sonication_button_clicked()` | Confirm + `logic.delete_sonication_session(...)`; refresh subject-scoped. |
 | `on_delete_solution_button_clicked()` | Confirm + `db.delete_solution_at_subject_scope(...)`; refresh subject-scoped. |
-| `on_save_button_clicked()` | `logic.save_loaded_session()`; refresh subject-scoped. |
-| `on_close_button_clicked()` | Confirm + `logic.close_loaded_sessions()`; refresh loaded labels. |
+| `on_save_button_clicked()` | `session_actions.save_loaded_session()`; refresh subject-scoped. |
+| `on_close_button_clicked()` | Confirm + `session_actions.close_loaded_sessions()`; refresh loaded labels. |
 
 ## Public API — Logic
 
 Class: `OpenLIFUDataManagerLogic`. Consumable from a scripted test
-without the widget existing.
+without the widget existing. Now scoped to admin-only actions
+(deletion). The create / load / save / close operations moved to
+`OpenLIFUApp/logic/session_actions.py` when Home grew launch buttons
+(SlicerOpenLIFU#635); the module-function API there is what both
+Home and Data Manager call.
 
 | Method | Purpose |
 |---|---|
-| `create_planning_session(*, subject_id, planning_session_id, name, volume_id, protocol_id, transducer_id)` | Build a fresh `openlifu.db.PlanningSession` and write it to disk. |
-| `create_sonication_session(*, subject_id, sonication_session_id, name, plan_id)` | Build a fresh `openlifu.db.SonicationSession` (validating the plan exists) and write it. |
-| `load_planning_session(subject_id, ps_id)` | Load a PlanningSession + its volume + its target fiducials into the app state. Closes any currently-loaded session first. |
-| `load_sonication_session(subject_id, ss_id)` | Load a SonicationSession + its Plan + the Plan's volume into the app state. Closes any currently-loaded session first. |
 | `delete_planning_session(subject_id, ps_id)` | Close if loaded; delete from disk. |
 | `delete_plan(subject_id, plan_id)` | Close any SonicationSession referencing this plan; delete from disk. |
 | `delete_sonication_session(subject_id, ss_id)` | Close if loaded; delete from disk. |
+
+## Shared session actions
+
+Module: `OpenLIFUApp.logic.session_actions`. Called by both Data
+Manager button handlers and Home launch buttons.
+
+| Function | Purpose |
+|---|---|
+| `create_planning_session(*, subject_id, planning_session_id, name, volume_id, protocol_id, transducer_id)` | Build a fresh `openlifu.db.PlanningSession` and write it to disk. |
+| `create_sonication_session(*, subject_id, sonication_session_id, name, plan_id)` | Build a fresh `openlifu.db.SonicationSession` (validating the plan exists) and write it. |
+| `load_planning_session_into_app(subject_id, ps_id)` | Load PlanningSession + volume + target fiducials into app state. Closes any currently-loaded session first. |
+| `load_sonication_session_into_app(subject_id, ss_id)` | Load SonicationSession + its Plan + the Plan's volume into app state. Closes any currently-loaded session first. |
 | `save_loaded_session()` | Write the loaded PlanningSession + SonicationSession JSONs to disk. Raises `RuntimeError` if nothing is loaded. |
 | `close_loaded_sessions()` | Unload; remove scene nodes each session owned. |
+| `require_current_database()` | Return the current `Database`, or raise `RuntimeError`. |
+| `load_volume_node_from_database(db, subject_id, volume_id)` | Load a volume into the Slicer scene as a scalar volume node. |
+| `create_target_fiducial_node(target)` | Create a fiducial node from an `openlifu.geo.Point`. |
+| `navigate_to_host_page(module_name)` | Ask the host to swap to the named page. |
 
 ## Module-level helpers
 
@@ -168,9 +184,6 @@ Public per `docs/coding-standards.md` rule 2.
 | `make_fixed_width_table(columns)` | Create a `QTableWidget` with `Interactive` resize mode and fixed default column widths from `columns` (`[(header, width_px), ...]`). |
 | `fill_table_with_tooltips(table, rows)` | Populate a table + set each cell's tooltip to its full text. |
 | `collect_solution_infos_from_sessions(db, subject_id)` | Walk PlanningSessions + Plans + SonicationSessions to collect `{solution_id: SolutionInfo}`. Used by the Solutions table's provenance columns. |
-| `require_current_database()` | Return the current `Database`, or raise `RuntimeError`. |
-| `load_volume_node_from_database(db, subject_id, volume_id)` | Load a volume into the Slicer scene as a scalar volume node. |
-| `create_target_fiducial_node(target)` | Create a fiducial node from an `openlifu.geo.Point`. |
 | `confirm_action(text)` | Show a Cancel/OK dialog; return True on OK. |
 | `show_info_dialog(text)` / `show_error_dialog(text)` | Modal info / error with a consistent window title. |
 

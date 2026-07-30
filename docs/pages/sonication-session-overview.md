@@ -18,8 +18,9 @@ editable content. Nothing here mutates session state -- photoscans /
 registrations / TT results / runs are all owned by later workflow
 pages (Localization / Sonication Control).
 
-Users reach this page automatically after Loading a Sonication
-Session from the Data Manager.
+Users reach this page from Home's **New Sonication Session** or
+**Continue Sonication Session** buttons (SlicerOpenLIFU#635), or by
+Loading a Sonication Session from the Data Manager.
 
 ## Screen layout
 

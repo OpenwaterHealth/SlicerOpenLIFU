@@ -40,6 +40,10 @@ from OpenLIFULib.module_layout import (
 from OpenLIFULib.util import display_errors
 
 from OpenLIFUApp.logic.app_state import OpenLIFUAppState, get_app_state_signals
+from OpenLIFUApp.logic.session_actions import (
+    close_loaded_sessions,
+    save_loaded_session,
+)
 from OpenLIFUApp.host.host_logic import OpenLIFUHostLogic
 from OpenLIFUApp.host.page_registry import PAGE_DEFS, Page
 from OpenLIFUApp.host.timeline_widget import TimelineWidget
@@ -532,7 +536,7 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onSaveClicked(self, checked: bool = False) -> None:
         """Save the currently-loaded PlanningSession or SonicationSession, if any."""
         try:
-            self.logic.data_manager_logic.save_loaded_session()
+            save_loaded_session()
         except RuntimeError:
             slicer.util.errorDisplay("There is no loaded session.")
 
@@ -564,10 +568,10 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return
         if choice == "save":
             try:
-                self.logic.data_manager_logic.save_loaded_session()
+                save_loaded_session()
             except RuntimeError:
                 pass
-        self.logic.data_manager_logic.close_loaded_sessions()
+        close_loaded_sessions()
         self.show_page("OpenLIFUHome")
 
     @display_errors
@@ -581,10 +585,10 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 return
             if choice == "save":
                 try:
-                    self.logic.data_manager_logic.save_loaded_session()
+                    save_loaded_session()
                 except RuntimeError:
                     pass
-            self.logic.data_manager_logic.close_loaded_sessions()
+            close_loaded_sessions()
         self.show_page("OpenLIFUHome")
 
     def _refresh_save_exit_state(self) -> None:

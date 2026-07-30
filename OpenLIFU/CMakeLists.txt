@@ -7,6 +7,8 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFUApp/__init__.py
   OpenLIFUApp/plan_finalization.py
   OpenLIFUApp/table_widgets.py
+  OpenLIFUApp/dialogs/__init__.py
+  OpenLIFUApp/dialogs/session_dialogs.py
   OpenLIFUApp/host/__init__.py
   OpenLIFUApp/host/host_logic.py
   OpenLIFUApp/host/host_test.py
@@ -22,6 +24,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFUApp/logic/app_state.py
   OpenLIFUApp/logic/cloud_sync.py
   OpenLIFUApp/logic/database_logic.py
+  OpenLIFUApp/logic/session_actions.py
   )
 
 set(MODULE_PYTHON_RESOURCES

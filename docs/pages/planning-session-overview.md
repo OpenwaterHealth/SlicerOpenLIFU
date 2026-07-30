@@ -18,8 +18,9 @@ session state — that's the exclusive province of subsequent workflow
 pages (Pre-Planning owns targets + VF, Solution Generator owns
 pre-solutions, etc.).
 
-Users reach this page automatically after Loading a Planning Session
-from the Data Manager.
+Users reach this page from Home's **New Planning Session** or
+**Continue Planning Session** buttons (SlicerOpenLIFU#635), or by
+Loading a Planning Session from the Data Manager.
 
 ## Screen layout
 

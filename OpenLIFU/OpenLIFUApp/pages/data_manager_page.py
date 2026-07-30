@@ -32,8 +32,7 @@ handlers named ``on_<widget>_<event>``, docstrings that explain WHY.
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
 import ctk
 import qt
@@ -45,27 +44,29 @@ from slicer.ScriptedLoadableModule import (
 )
 
 from OpenLIFULib import (
-    SlicerOpenLIFUPlan,
-    SlicerOpenLIFUPlanningSession,
-    SlicerOpenLIFUSonicationSession,
-    assign_openlifu_metadata_to_volume_node,
     get_app_state,
     get_cur_db,
 )
-from OpenLIFULib.parameter_node_utils import (
-    SlicerOpenLIFUPlanningSessionWrapper,
-    SlicerOpenLIFUPlanWrapper,
-    SlicerOpenLIFUSonicationSessionWrapper,
-)
 
+from OpenLIFUApp.dialogs.session_dialogs import (
+    NewPlanningSessionDialog,
+    NewSonicationSessionDialog,
+)
+from OpenLIFUApp.logic.session_actions import (
+    close_loaded_sessions,
+    create_planning_session,
+    create_sonication_session,
+    load_planning_session_into_app,
+    load_sonication_session_into_app,
+    navigate_to_host_page,
+    require_current_database,
+    save_loaded_session,
+)
 from OpenLIFUApp.table_widgets import (
     SignalBlocker,
     fill_table_with_tooltips,
     make_fixed_width_table,
 )
-
-if TYPE_CHECKING:
-    import openlifu.db
 
 
 class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
@@ -628,7 +629,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            self.logic.create_planning_session(
+            create_planning_session(
                 subject_id=subject_id,
                 planning_session_id=dialog.session_id,
                 name=dialog.session_name,
@@ -650,7 +651,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             show_info_dialog("Select a planning session first.")
             return
         try:
-            self.logic.load_planning_session(subject_id, planning_session_id)
+            load_planning_session_into_app(subject_id, planning_session_id)
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Load failed: {exc}")
             return
@@ -723,7 +724,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         if dialog.exec_() != qt.QDialog.Accepted:
             return
         try:
-            self.logic.create_sonication_session(
+            create_sonication_session(
                 subject_id=subject_id,
                 sonication_session_id=dialog.session_id,
                 name=dialog.session_name,
@@ -744,7 +745,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             show_info_dialog("Select a sonication session first.")
             return
         try:
-            self.logic.load_sonication_session(subject_id, sonication_session_id)
+            load_sonication_session_into_app(subject_id, sonication_session_id)
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Load failed: {exc}")
             return
@@ -809,7 +810,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
     def on_save_button_clicked(self) -> None:
         """Persist the currently-loaded PlanningSession / SonicationSession to disk."""
         try:
-            self.logic.save_loaded_session()
+            save_loaded_session()
         except Exception as exc:  # noqa: BLE001
             show_error_dialog(f"Save failed: {exc}")
             return
@@ -822,7 +823,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             return
         if not confirm_action("Close the loaded session?"):
             return
-        self.logic.close_loaded_sessions()
+        close_loaded_sessions()
         self.refresh_loaded_labels()
 
 
@@ -833,125 +834,15 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
 class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
     """Business logic for the split-session Data Manager.
 
-    Every method takes explicit inputs (no reaching into signals or GUIs)
-    and touches disk / app state directly. Verification tests import
-    this class and drive it without the widget.
+    Owns the admin-only deletion methods (of PlanningSessions, Plans,
+    SonicationSessions, Solutions). Create / load / save / close are
+    NOT here -- those are shared with Home's launch buttons and live
+    on ``OpenLIFUApp.logic.session_actions`` as module functions (see
+    ``docs/coding-standards.md`` rule 6).
     """
 
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
-
-    # -- creation ------------------------------------------------------
-
-    def create_planning_session(
-        self,
-        *,
-        subject_id: str,
-        planning_session_id: str,
-        name: Optional[str],
-        volume_id: str,
-        protocol_id: str,
-        transducer_id: str,
-    ) -> None:
-        """Create and write a new (empty) PlanningSession."""
-        import openlifu.db
-        database = require_current_database()
-        session = openlifu.db.PlanningSession(
-            id=planning_session_id,
-            name=name or planning_session_id,
-            subject_id=subject_id,
-            volume_id=volume_id,
-            protocol_id=protocol_id,
-            transducer_id=transducer_id,
-        )
-        database.write_planning_session(subject_id, session)
-        logging.info(
-            "Created PlanningSession %s for subject %s",
-            planning_session_id, subject_id,
-        )
-
-    def create_sonication_session(
-        self,
-        *,
-        subject_id: str,
-        sonication_session_id: str,
-        name: Optional[str],
-        plan_id: str,
-    ) -> None:
-        """Create and write a new (empty) SonicationSession against a Plan."""
-        import openlifu.db
-        database = require_current_database()
-        if plan_id not in database.get_plan_ids(subject_id):
-            raise ValueError(
-                f"Plan {plan_id!r} does not exist for subject {subject_id!r}."
-            )
-        session = openlifu.db.SonicationSession(
-            id=sonication_session_id,
-            name=name or sonication_session_id,
-            subject_id=subject_id,
-            plan_id=plan_id,
-        )
-        database.write_sonication_session(subject_id, session)
-        logging.info(
-            "Created SonicationSession %s for subject %s (plan=%s)",
-            sonication_session_id, subject_id, plan_id,
-        )
-
-    # -- loading -------------------------------------------------------
-
-    def load_planning_session(self, subject_id: str, planning_session_id: str) -> None:
-        """Load a PlanningSession into the app state.
-
-        Unloads any currently-loaded planning or sonication session first
-        so the app is in a single-loaded-session state.
-        """
-        database = require_current_database()
-        planning_session = database.load_planning_session(subject_id, planning_session_id)
-        self.close_loaded_sessions()
-
-        volume_node = load_volume_node_from_database(
-            database, subject_id, planning_session.volume_id,
-        )
-        target_nodes = [
-            create_target_fiducial_node(target) for target in planning_session.targets
-        ]
-
-        state = get_app_state()
-        state.loaded_planning_session = SlicerOpenLIFUPlanningSession(
-            session=SlicerOpenLIFUPlanningSessionWrapper(planning_session=planning_session),
-            volume_node=volume_node,
-            target_nodes=target_nodes,
-        )
-        logging.info(
-            "Loaded PlanningSession %s for subject %s",
-            planning_session_id, subject_id,
-        )
-
-    def load_sonication_session(self, subject_id: str, sonication_session_id: str) -> None:
-        """Load a SonicationSession + its referenced Plan into the app state."""
-        database = require_current_database()
-        sonication_session = database.load_sonication_session(subject_id, sonication_session_id)
-        if sonication_session.plan_id is None:
-            raise ValueError(
-                f"SonicationSession {sonication_session_id!r} has no plan_id."
-            )
-        plan = database.load_plan(subject_id, sonication_session.plan_id)
-        self.close_loaded_sessions()
-
-        volume_node = load_volume_node_from_database(
-            database, subject_id, plan.volume_id,
-        )
-
-        state = get_app_state()
-        state.loaded_sonication_session = SlicerOpenLIFUSonicationSession(
-            session=SlicerOpenLIFUSonicationSessionWrapper(sonication_session=sonication_session),
-            plan=SlicerOpenLIFUPlanWrapper(plan=plan),
-            volume_node=volume_node,
-        )
-        logging.info(
-            "Loaded SonicationSession %s for subject %s (plan=%s)",
-            sonication_session_id, subject_id, plan.id,
-        )
 
     # -- deletion ------------------------------------------------------
 
@@ -961,7 +852,7 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
         state = get_app_state()
         loaded_session = state.loaded_planning_session
         if loaded_session is not None and loaded_session.get_planning_session_id() == planning_session_id:
-            self.close_loaded_sessions()
+            close_loaded_sessions()
         database.delete_planning_session(subject_id, planning_session_id)
 
     def delete_plan(self, subject_id: str, plan_id: str) -> None:
@@ -970,7 +861,7 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
         state = get_app_state()
         loaded_session = state.loaded_sonication_session
         if loaded_session is not None and loaded_session.get_plan_id() == plan_id:
-            self.close_loaded_sessions()
+            close_loaded_sessions()
         database.delete_plan(subject_id, plan_id)
 
     def delete_sonication_session(self, subject_id: str, sonication_session_id: str) -> None:
@@ -979,192 +870,31 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
         state = get_app_state()
         loaded_session = state.loaded_sonication_session
         if loaded_session is not None and loaded_session.get_sonication_session_id() == sonication_session_id:
-            self.close_loaded_sessions()
+            close_loaded_sessions()
         database.delete_sonication_session(subject_id, sonication_session_id)
-
-    # -- save / close --------------------------------------------------
-
-    def save_loaded_session(self) -> None:
-        """Persist the currently-loaded PlanningSession / SonicationSession
-        JSONs to disk.
-
-        Raises ``RuntimeError`` if nothing is loaded.
-        """
-        database = require_current_database()
-        state = get_app_state()
-        planning_session = state.loaded_planning_session
-        sonication_session = state.loaded_sonication_session
-        wrote_something = False
-        if planning_session is not None:
-            database.write_planning_session(
-                planning_session.get_subject_id(),
-                planning_session.session.planning_session,
-                on_conflict="overwrite",
-            )
-            wrote_something = True
-        if sonication_session is not None:
-            database.write_sonication_session(
-                sonication_session.get_subject_id(),
-                sonication_session.session.sonication_session,
-                on_conflict="overwrite",
-            )
-            wrote_something = True
-        if not wrote_something:
-            raise RuntimeError("Nothing loaded to save.")
-
-    def close_loaded_sessions(self) -> None:
-        """Unload the loaded PlanningSession / SonicationSession from the app state.
-
-        Tears down scene nodes each session owned (volume, targets). The
-        app state never nulls a session on its own; this method is the
-        single point at which unload happens.
-        """
-        state = get_app_state()
-        planning_session = state.loaded_planning_session
-        if planning_session is not None:
-            for node in planning_session.get_target_nodes():
-                try:
-                    slicer.mrmlScene.RemoveNode(node)
-                except Exception:  # noqa: BLE001
-                    pass
-            if planning_session.volume_node is not None:
-                try:
-                    slicer.mrmlScene.RemoveNode(planning_session.volume_node)
-                except Exception:  # noqa: BLE001
-                    pass
-            state.loaded_planning_session = None
-        sonication_session = state.loaded_sonication_session
-        if sonication_session is not None:
-            if sonication_session.volume_node is not None:
-                try:
-                    slicer.mrmlScene.RemoveNode(sonication_session.volume_node)
-                except Exception:  # noqa: BLE001
-                    pass
-            state.loaded_sonication_session = None
-
-
-# ---------------------------------------------------------------------------
-# Dialogs
-# ---------------------------------------------------------------------------
-
-class NewPlanningSessionDialog(qt.QDialog):
-    """Minimal New Planning Session dialog.
-
-    Collects id, name, and combo-box selections for volume, protocol,
-    and transducer. Used only from
-    :meth:`OpenLIFUDataManagerWidget.on_new_planning_button_clicked`;
-    if it grows a second call site it should move to a
-    ``dialogs/`` package.
-    """
-
-    def __init__(self, database, subject_id: str, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("New Planning Session")
-        self.session_id = ""
-        self.session_name = ""
-        self.volume_id = ""
-        self.protocol_id = ""
-        self.transducer_id = ""
-
-        layout = qt.QFormLayout(self)
-        self.id_edit = qt.QLineEdit()
-        self.name_edit = qt.QLineEdit()
-        self.volume_combo = qt.QComboBox()
-        self.protocol_combo = qt.QComboBox()
-        self.transducer_combo = qt.QComboBox()
-        for combo, populate in (
-            (self.volume_combo,     lambda: database.get_volume_ids(subject_id) if database else []),
-            (self.protocol_combo,   lambda: database.get_protocol_ids() if database else []),
-            (self.transducer_combo, lambda: database.get_transducer_ids() if database else []),
-        ):
-            try:
-                combo.addItems(populate())
-            except Exception:  # noqa: BLE001
-                pass
-
-        layout.addRow("ID:", self.id_edit)
-        layout.addRow("Name:", self.name_edit)
-        layout.addRow("Volume:", self.volume_combo)
-        layout.addRow("Protocol:", self.protocol_combo)
-        layout.addRow("Transducer:", self.transducer_combo)
-
-        buttons = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        buttons.accepted.connect(self.on_ok_clicked)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-
-    def on_ok_clicked(self) -> None:
-        session_id = self.id_edit.text.strip()
-        if not session_id:
-            show_info_dialog("An ID is required.")
-            return
-        self.session_id = session_id
-        self.session_name = self.name_edit.text.strip() or session_id
-        self.volume_id = self.volume_combo.currentText
-        self.protocol_id = self.protocol_combo.currentText
-        self.transducer_id = self.transducer_combo.currentText
-        if not (self.volume_id and self.protocol_id and self.transducer_id):
-            show_info_dialog("Volume, protocol, and transducer are required.")
-            return
-        self.accept()
-
-
-class NewSonicationSessionDialog(qt.QDialog):
-    """Minimal New Sonication Session dialog.
-
-    Collects id, name, and a Plan selection. Used only from
-    :meth:`OpenLIFUDataManagerWidget.on_new_sonication_button_clicked`.
-    """
-
-    def __init__(self, subject_id: str, plan_ids: List[str], parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("New Sonication Session")
-        self.session_id = ""
-        self.session_name = ""
-        self.plan_id = ""
-
-        layout = qt.QFormLayout(self)
-        self.id_edit = qt.QLineEdit()
-        self.name_edit = qt.QLineEdit()
-        self.plan_combo = qt.QComboBox()
-        self.plan_combo.addItems(plan_ids)
-
-        layout.addRow("ID:", self.id_edit)
-        layout.addRow("Name:", self.name_edit)
-        layout.addRow("Plan:", self.plan_combo)
-
-        buttons = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
-        )
-        buttons.accepted.connect(self.on_ok_clicked)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-
-    def on_ok_clicked(self) -> None:
-        session_id = self.id_edit.text.strip()
-        if not session_id:
-            show_info_dialog("An ID is required.")
-            return
-        self.session_id = session_id
-        self.session_name = self.name_edit.text.strip() or session_id
-        self.plan_id = self.plan_combo.currentText
-        if not self.plan_id:
-            show_info_dialog("A plan is required.")
-            return
-        self.accept()
 
 
 # ---------------------------------------------------------------------------
 # Module-level helpers (public per docs/coding-standards.md)
 # ---------------------------------------------------------------------------
 
+# ``NewPlanningSessionDialog`` and ``NewSonicationSessionDialog`` moved
+# out to ``OpenLIFUApp/dialogs/session_dialogs.py`` when Home grew its
+# own launch buttons and became a second call site (rule 7 in
+# ``docs/coding-standards.md``). They are imported at the top of this
+# module.
+#
 # ``SignalBlocker``, ``make_fixed_width_table``, and
 # ``fill_table_with_tooltips`` were extracted to
 # ``OpenLIFUApp.table_widgets`` when the Session Overview pages started
 # needing the same conventions (SlicerOpenLIFU#633). They are imported
 # at the top of this module.
+#
+# ``require_current_database``, ``load_volume_node_from_database``,
+# ``create_target_fiducial_node``, and ``navigate_to_host_page`` were
+# extracted to ``OpenLIFUApp.logic.session_actions`` when Home grew
+# its own session-launch buttons (SlicerOpenLIFU#635). They are
+# imported at the top of this module.
 
 
 def collect_solution_infos_from_sessions(database, subject_id: str) -> dict:
@@ -1194,43 +924,6 @@ def collect_solution_infos_from_sessions(database, subject_id: str) -> dict:
     return result
 
 
-def require_current_database() -> "openlifu.db.Database":
-    """Return the currently-loaded database or raise ``RuntimeError``.
-
-    Prefer this over ``get_cur_db()`` when the caller cannot proceed
-    without a database -- the raise gives every button handler a clean
-    error path.
-    """
-    database = get_cur_db()
-    if database is None:
-        raise RuntimeError("No database is currently loaded.")
-    return database
-
-
-def load_volume_node_from_database(
-    database, subject_id: str, volume_id: str,
-) -> Optional[slicer.vtkMRMLScalarVolumeNode]:
-    """Load a subject volume into the Slicer scene as a scalar volume node.
-
-    Reuses the DB metadata + NIfTI loader that legacy pages relied on;
-    scoped to the minimum viable behaviour for split-session pages.
-    """
-    info = database.get_volume_info(subject_id, volume_id)
-    volume_node = slicer.util.loadVolume(str(info["data_abspath"]))
-    assign_openlifu_metadata_to_volume_node(volume_node, info)
-    return volume_node
-
-
-def create_target_fiducial_node(target: "openlifu.geo.Point") -> slicer.vtkMRMLMarkupsFiducialNode:
-    """Create a fiducial node for the given openlifu Point target.
-
-    Uses the shared conversion helper so downstream pages that read
-    fiducials back as Points get consistent metadata (id, dims, units).
-    """
-    from OpenLIFULib.targets import openlifu_point_to_fiducial
-    return openlifu_point_to_fiducial(target)
-
-
 def confirm_action(text: str) -> bool:
     """Show a Cancel/OK confirmation dialog. Returns True on OK."""
     message_box = qt.QMessageBox()
@@ -1250,20 +943,6 @@ def show_info_dialog(text: str) -> None:
 def show_error_dialog(text: str) -> None:
     """Show a modal error dialog with the Data Manager as its window title."""
     slicer.util.errorDisplay(text, windowTitle="OpenLIFU Data Manager")
-
-
-def navigate_to_host_page(module_name: str) -> None:
-    """Ask the OpenLIFU host module to swap the visible page.
-
-    Thin wrapper so page-level code does not have to know how to fish
-    the host widget out of Slicer's module registry. Silent no-op if
-    the host is not yet available (extremely early in Slicer startup).
-    """
-    try:
-        host_widget = slicer.util.getModule("OpenLIFU").widgetRepresentation().self()
-        host_widget.show_page(module_name)
-    except Exception:  # noqa: BLE001
-        logging.exception("Data Manager: unable to navigate to %s.", module_name)
 
 
 # ---------------------------------------------------------------------------

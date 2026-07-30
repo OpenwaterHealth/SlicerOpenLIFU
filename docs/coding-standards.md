@@ -195,7 +195,7 @@ and `cleanup()` per widget. We use them:
   state and paints.
 * Anything explicitly created (nodes added to `slicer.mrmlScene`)
   is torn down by the code path that unloaded the session (e.g.
-  `data_manager_logic.close_loaded_sessions`).
+  `session_actions.close_loaded_sessions`).
 * `cleanup()` is only for module-teardown / Slicer-shutdown wind-up.
 
 ## Rule 9: dependencies flow one direction

@@ -92,19 +92,22 @@ Slicer-side scene data (volume node, target fiducials); pages consume
 flowchart LR
     HOME(["Home"])
     DM(["Data Manager"])
-    PSO(["Planning Session<br/>Overview<br/>(TBD)"])
+    PSO(["Planning Session<br/>Overview<br/>(info-only summary)"])
     PP(["Pre-Planning<br/>(TBD)"])
     SG(["Solution Generator<br/>(TBD)"])
-    SSO(["Sonication Session<br/>Overview<br/>(TBD)"])
+    SSO(["Sonication Session<br/>Overview<br/>(info-only summary)"])
     LOC(["Localization<br/>(TBD)"])
     SC(["Sonication Control<br/>(TBD)"])
 
-    HOME -->|"Open Data Manager"| DM
+    HOME -->|"New Planning Session"| PSO
+    HOME -->|"Continue Planning Session"| PSO
+    HOME -->|"New Sonication Session"| SSO
+    HOME -->|"Continue Sonication Session"| SSO
+    HOME -->|"Open Data Manager…"| DM
     DM -->|"Load Planning Session"| PSO
     DM -->|"Load Sonication Session"| SSO
     PSO -->|"Edit targets / VF"| PP
     PSO -->|"Compute pre-solutions"| SG
-    PSO -->|"Finalize Plan"| PSO
     SSO -->|"Capture photoscan / TT"| LOC
     SSO -->|"Compute final solution"| SG
     SSO -->|"Run sonication"| SC
@@ -114,6 +117,12 @@ flowchart LR
     SG --> SSO
     SC --> SSO
 ```
+
+Home is the primary launching point for the clinical workflow
+(SlicerOpenLIFU#635): four big buttons (New / Continue × Planning /
+Sonication) create + load a session and jump straight to the
+corresponding overview. Data Manager remains available as the admin
+CRUD surface but is not the intended workflow entry.
 
 The distinguishing feature of the split-session refactor is that
 Pre-Planning / Localization / Sonication Control belong to exactly
@@ -129,6 +138,8 @@ reachable at any time via the host module's navigation.
 ```mermaid
 stateDiagram-v2
     [*] --> NoSession
+    NoSession --> PlanningLoaded: Home<br/>New / Continue<br/>Planning Session
+    NoSession --> SonicationLoaded: Home<br/>New / Continue<br/>Sonication Session
     NoSession --> PlanningLoaded: Data Manager<br/>Load Planning Session
     NoSession --> SonicationLoaded: Data Manager<br/>Load Sonication Session
     PlanningLoaded --> PlanFinalized: Planning Overview<br/>Finalize Plan
@@ -139,10 +150,10 @@ stateDiagram-v2
 
 `OpenLIFUAppState.loaded_planning_session` and
 `OpenLIFUAppState.loaded_sonication_session` are mutually exclusive in
-the intended workflow (the Data Manager loads one at a time). The
-app state does not enforce that; enforcement is at the load-time
-layer (`data_manager_logic.load_planning_session` calls
-`close_loaded_sessions()` first).
+the intended workflow. Neither the app state nor callers of
+`OpenLIFUApp.logic.session_actions` enforce that at the parameter-node
+layer; enforcement is at the load-time layer -- every
+`load_*_session_into_app(...)` calls `close_loaded_sessions()` first.
 
 ## 5. Enter / refresh contract (design mandate)
 

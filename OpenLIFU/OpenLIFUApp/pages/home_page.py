@@ -1,27 +1,30 @@
 """Home page (split-session v2).
 
-Fresh rewrite for the session-split refactor. Not derived from the legacy
-``pages_legacy/home_page.py``.
+Landing page for the OpenLIFU host module. Owns:
 
-Responsibilities:
+* Auto-connect to the last-used database (SlicerOpenLIFU#635). On
+  every ``enter()``, if no database is currently loaded, ask
+  ``DatabaseLogic.try_auto_connect()`` to re-open the path persisted
+  in ``QSettings("OpenLIFU/databaseDirectory")``.
+* Read-only status labels for the current database and any loaded
+  planning / sonication session.
+* Four prominent launch buttons for the clinical workflow:
 
-* Minimal landing page.
-* Show current database + loaded-session status.
-* Provide a button to enter the Data Manager (subject / session CRUD).
+  * New Planning Session
+  * Continue Planning Session
+  * New Sonication Session
+  * Continue Sonication Session
+
+* A smaller "Open Data Manager…" link for admin actions.
 
 Non-goals:
 
-* No sign-in, hardware connect, cloud sync, or guided-workflow gating on
-  the Home page itself. Those are separate concerns that will get their
-  own dialogs / pages as needed. Home stays as small as possible so we
-  can verify the plumbing works end-to-end from the very start.
+* No sign-in, hardware-connect, or cloud-sync gating.
+* No guided-workflow timeline participation.
+* No cross-page observers -- ``enter()`` is the sole source of
+  first-render truth (``docs/coding-standards.md`` rule 4).
 
 Uses a programmatic Qt UI (no ``.ui`` file).
-
-See ``docs/coding-standards.md`` for the naming convention adopted
-here: no leading-underscore prefixes on public-behaviour methods,
-signal handlers named ``on_<widget>_<event>``, ``is_``/``has_``
-booleans, and docstrings that explain WHY.
 """
 
 from __future__ import annotations
@@ -38,12 +41,26 @@ from slicer.ScriptedLoadableModule import (
 
 from OpenLIFULib import get_app_state, get_cur_db
 
+from OpenLIFUApp.dialogs.session_dialogs import (
+    ContinuePlanningSessionDialog,
+    ContinueSonicationSessionDialog,
+    NewPlanningSessionDialog,
+    NewSonicationSessionDialog,
+)
+from OpenLIFUApp.logic.session_actions import (
+    create_planning_session,
+    create_sonication_session,
+    load_planning_session_into_app,
+    load_sonication_session_into_app,
+    navigate_to_host_page,
+)
+
 
 class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
     """Landing page for the OpenLIFU host module.
 
     Owns three status labels (database, loaded planning session, loaded
-    sonication session) and a single "Open Data Manager" button.
+    sonication session), four launch buttons, and a Data Manager link.
     Deliberately holds no domain state -- everything it renders is
     pulled from ``get_app_state()`` and ``get_cur_db()`` at
     ``enter()`` time.
@@ -60,6 +77,12 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         # "this page is currently visible" from "this page hasn't been
         # entered yet" without walking Qt visibility state.
         self.is_entered = False
+        # Set True once ``enter()`` has tried the QSettings-backed
+        # auto-connect at least once in this Slicer session. Re-entering
+        # Home should not repeatedly re-attempt an auto-connect if the
+        # user explicitly disconnected the database from the Data
+        # Manager. See :meth:`try_auto_connect_if_needed` for details.
+        self.has_attempted_auto_connect = False
 
     # ------------------------------------------------------------------
     # Slicer widget lifecycle
@@ -94,7 +117,8 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         outer.addWidget(subtitle)
 
         outer.addWidget(self.build_status_group())
-        outer.addLayout(self.build_action_row())
+        outer.addWidget(self.build_launch_group())
+        outer.addLayout(self.build_admin_row())
         outer.addStretch(1)
 
         self.layout.addWidget(top)
@@ -108,9 +132,15 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         ``enter`` is the SOLE source of first-render truth (see
         ``docs/coding-standards.md`` rule 4). Nothing else drives this
         page's UI -- there are no cross-page observers.
+
+        The first time this page becomes visible in a Slicer session,
+        it also tries an auto-connect to the last-used database (see
+        SlicerOpenLIFU#635).
         """
         self.is_entered = True
+        self.try_auto_connect_if_needed()
         self.refresh_status()
+        self.refresh_launch_buttons()
 
     def exit(self) -> None:
         """Mark the page as no longer visible without tearing down state."""
@@ -135,19 +165,123 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         layout.addRow("Sonication session:", self.sonication_status_label)
         return group
 
-    def build_action_row(self) -> qt.QVBoxLayout:
-        """Build the action buttons block (currently: Data Manager only)."""
-        row = qt.QVBoxLayout()
-        row.setSpacing(8)
+    def build_launch_group(self) -> qt.QGroupBox:
+        """Build the group of four large launch buttons.
 
-        self.data_manager_button = qt.QPushButton("Open Data Manager")
-        self.data_manager_button.setMinimumHeight(40)
+        Grid layout: two columns (New / Continue) x two rows
+        (Planning / Sonication). Each button carries a tooltip
+        describing the action; the buttons themselves are the primary
+        entry points into the clinical workflow.
+        """
+        group = qt.QGroupBox("Launch a session")
+        grid = qt.QGridLayout(group)
+        grid.setSpacing(10)
+
+        self.new_planning_button = self.make_big_button(
+            "New Planning Session",
+            tooltip="Create a new PlanningSession on the current database.",
+            handler=self.on_new_planning_button_clicked,
+        )
+        self.continue_planning_button = self.make_big_button(
+            "Continue Planning Session",
+            tooltip="Open an existing PlanningSession from the current database.",
+            handler=self.on_continue_planning_button_clicked,
+        )
+        self.new_sonication_button = self.make_big_button(
+            "New Sonication Session",
+            tooltip=(
+                "Create a new SonicationSession against a finalized Plan."
+            ),
+            handler=self.on_new_sonication_button_clicked,
+        )
+        self.continue_sonication_button = self.make_big_button(
+            "Continue Sonication Session",
+            tooltip="Open an existing SonicationSession from the current database.",
+            handler=self.on_continue_sonication_button_clicked,
+        )
+
+        # Row 0: Planning; Row 1: Sonication. Column 0: New; Column 1: Continue.
+        grid.addWidget(self.new_planning_button,        0, 0)
+        grid.addWidget(self.continue_planning_button,   0, 1)
+        grid.addWidget(self.new_sonication_button,      1, 0)
+        grid.addWidget(self.continue_sonication_button, 1, 1)
+
+        # Hint under the grid explains disabled state when there's no
+        # database. Updated by :meth:`refresh_launch_buttons`.
+        self.launch_hint_label = qt.QLabel("")
+        self.launch_hint_label.setWordWrap(True)
+        self.launch_hint_label.setStyleSheet("color: #888;")
+        grid.addWidget(self.launch_hint_label, 2, 0, 1, 2)
+
+        return group
+
+    def make_big_button(self, label: str, *, tooltip: str, handler) -> qt.QPushButton:
+        """Build one of the four large launch buttons.
+
+        Factored out so all four share the same minimum height and
+        emphasis; changing the launch-button styling should require
+        editing exactly one place.
+        """
+        button = qt.QPushButton(label)
+        button.setMinimumHeight(56)
+        font = button.font
+        font.setPointSize(font.pointSize() + 2)
+        button.font = font
+        button.setToolTip(tooltip)
+        button.clicked.connect(handler)
+        return button
+
+    def build_admin_row(self) -> qt.QHBoxLayout:
+        """Build the admin-actions row (currently: Data Manager only).
+
+        Deliberately smaller and less emphasised than the launch
+        buttons; the Data Manager is the admin panel, not the clinical
+        entry point.
+        """
+        row = qt.QHBoxLayout()
+        row.addStretch(1)
+        self.data_manager_button = qt.QPushButton("Open Data Manager…")
         self.data_manager_button.setToolTip(
-            "Browse and manage Planning Sessions, Plans, and Sonication Sessions."
+            "Browse and manage subjects, planning sessions, plans, "
+            "sonication sessions, solutions, protocols, transducers, "
+            "and users."
         )
         self.data_manager_button.clicked.connect(self.on_data_manager_button_clicked)
         row.addWidget(self.data_manager_button)
         return row
+
+    # ------------------------------------------------------------------
+    # Auto-connect
+    # ------------------------------------------------------------------
+
+    def try_auto_connect_if_needed(self) -> None:
+        """Ask the host's ``DatabaseLogic`` to try a QSettings-backed
+        auto-connect, if we haven't already tried in this session.
+
+        Runs at most once per Slicer session -- if the user
+        subsequently disconnects the database from the Data Manager
+        and returns to Home, we do NOT try to re-open it. That
+        respects an explicit user disconnect while still giving them
+        a re-open of the last-used database on the next Slicer launch.
+
+        Guarded so that repeated ``enter()`` calls during the same
+        session (e.g. navigating away and back) don't repeatedly try
+        the same failed path -- either the initial attempt succeeds
+        and there's now a loaded database, or it failed and we log +
+        stop trying.
+        """
+        if self.has_attempted_auto_connect:
+            return
+        self.has_attempted_auto_connect = True
+        if get_cur_db() is not None:
+            return  # already connected -- nothing to auto-connect
+        try:
+            database_logic = slicer.util.getModuleLogic(
+                "OpenLIFU",
+            ).database_logic
+            database_logic.try_auto_connect()
+        except Exception:  # noqa: BLE001
+            logging.exception("Home: auto-connect attempt failed")
 
     # ------------------------------------------------------------------
     # Refresh
@@ -186,22 +320,186 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         else:
             self.sonication_status_label.text = "—"
 
+    def refresh_launch_buttons(self) -> None:
+        """Toggle enablement + hint text on the four launch buttons.
+
+        Disabled when no database is loaded (nothing to create /
+        continue against). Enabled otherwise. Individual availability
+        for "New Sonication Session" (which needs at least one Plan)
+        is checked at click time rather than continuously here --
+        walking the DB on every ``enter()`` to count plans would add
+        latency for a rare disabled state.
+        """
+        database_loaded = get_cur_db() is not None
+        for button in (
+            self.new_planning_button,
+            self.continue_planning_button,
+            self.new_sonication_button,
+            self.continue_sonication_button,
+        ):
+            button.enabled = database_loaded
+        if database_loaded:
+            self.launch_hint_label.text = ""
+        else:
+            self.launch_hint_label.text = (
+                "Load a database from the Data Manager to enable "
+                "session actions."
+            )
+
     # ------------------------------------------------------------------
     # Signal handlers
     # ------------------------------------------------------------------
 
-    def on_data_manager_button_clicked(self) -> None:
-        """Ask the host module to swap the visible page to the Data Manager.
+    def on_new_planning_button_clicked(self) -> None:
+        """Open a New Planning Session dialog, create + load, navigate to overview.
 
-        We navigate through the host rather than through
-        ``slicer.util.selectModule`` because the pages are embedded in
-        the host's QStackedWidget; the host owns the swap machinery.
+        The dialog picks a subject via the ``subject_id`` field
+        collected inside :class:`NewPlanningSessionDialog`. To keep
+        Home simple, we ask for the subject before opening the New
+        dialog -- Data Manager's subject picker isn't visible here,
+        so we prompt with a subject-picker inline.
+        """
+        database = get_cur_db()
+        if database is None:
+            self.show_info("Load a database first.")
+            return
+        subject_id = self.prompt_for_subject(database, "New Planning Session")
+        if not subject_id:
+            return
+        dialog = NewPlanningSessionDialog(database, subject_id, self.uiWidget)
+        if dialog.exec_() != qt.QDialog.Accepted:
+            return
+        try:
+            create_planning_session(
+                subject_id=subject_id,
+                planning_session_id=dialog.session_id,
+                name=dialog.session_name,
+                volume_id=dialog.volume_id,
+                protocol_id=dialog.protocol_id,
+                transducer_id=dialog.transducer_id,
+            )
+            load_planning_session_into_app(subject_id, dialog.session_id)
+        except Exception as exc:  # noqa: BLE001
+            self.show_error(f"Create failed: {exc}")
+            return
+        navigate_to_host_page("OpenLIFUPlanningSessionOverview")
+
+    def on_continue_planning_button_clicked(self) -> None:
+        """Open a picker for an existing PlanningSession, load, navigate to overview."""
+        database = get_cur_db()
+        if database is None:
+            self.show_info("Load a database first.")
+            return
+        dialog = ContinuePlanningSessionDialog(database, self.uiWidget)
+        if dialog.exec_() != qt.QDialog.Accepted:
+            return
+        try:
+            load_planning_session_into_app(dialog.subject_id, dialog.session_id)
+        except Exception as exc:  # noqa: BLE001
+            self.show_error(f"Load failed: {exc}")
+            return
+        navigate_to_host_page("OpenLIFUPlanningSessionOverview")
+
+    def on_new_sonication_button_clicked(self) -> None:
+        """Open a New Sonication Session dialog, create + load, navigate to overview.
+
+        Requires at least one Plan to exist for the chosen subject;
+        surfaces an info dialog otherwise. Plans are finalized from
+        PlanningSessions; if none exist yet the user needs to run
+        the Planning workflow first.
+        """
+        database = get_cur_db()
+        if database is None:
+            self.show_info("Load a database first.")
+            return
+        subject_id = self.prompt_for_subject(database, "New Sonication Session")
+        if not subject_id:
+            return
+        try:
+            plan_ids = list(database.get_plan_ids(subject_id))
+        except Exception as exc:  # noqa: BLE001
+            self.show_error(f"Could not list plans: {exc}")
+            return
+        if not plan_ids:
+            self.show_info(
+                "This subject has no plans. Finalize a plan first."
+            )
+            return
+        dialog = NewSonicationSessionDialog(subject_id, plan_ids, self.uiWidget)
+        if dialog.exec_() != qt.QDialog.Accepted:
+            return
+        try:
+            create_sonication_session(
+                subject_id=subject_id,
+                sonication_session_id=dialog.session_id,
+                name=dialog.session_name,
+                plan_id=dialog.plan_id,
+            )
+            load_sonication_session_into_app(subject_id, dialog.session_id)
+        except Exception as exc:  # noqa: BLE001
+            self.show_error(f"Create failed: {exc}")
+            return
+        navigate_to_host_page("OpenLIFUSonicationSessionOverview")
+
+    def on_continue_sonication_button_clicked(self) -> None:
+        """Open a picker for an existing SonicationSession, load, navigate to overview."""
+        database = get_cur_db()
+        if database is None:
+            self.show_info("Load a database first.")
+            return
+        dialog = ContinueSonicationSessionDialog(database, self.uiWidget)
+        if dialog.exec_() != qt.QDialog.Accepted:
+            return
+        try:
+            load_sonication_session_into_app(dialog.subject_id, dialog.session_id)
+        except Exception as exc:  # noqa: BLE001
+            self.show_error(f"Load failed: {exc}")
+            return
+        navigate_to_host_page("OpenLIFUSonicationSessionOverview")
+
+    def on_data_manager_button_clicked(self) -> None:
+        """Ask the host module to swap the visible page to the Data Manager."""
+        navigate_to_host_page("OpenLIFUDataManager")
+
+    # ------------------------------------------------------------------
+    # Small helpers
+    # ------------------------------------------------------------------
+
+    def prompt_for_subject(
+        self, database, title: str,
+    ) -> Optional[str]:
+        """Modal picker: choose a subject from the current database.
+
+        Returns the chosen subject id, or ``None`` if the user
+        cancels / there are no subjects. Reuses Qt's built-in
+        ``QInputDialog.getItem`` so we don't have to write a bespoke
+        picker dialog for the New-* action paths.
         """
         try:
-            host_widget = slicer.util.getModule("OpenLIFU").widgetRepresentation().self()
-            host_widget.show_page("OpenLIFUDataManager")
-        except Exception:  # noqa: BLE001
-            logging.exception("Home: unable to navigate to Data Manager.")
+            subject_ids = list(database.get_subject_ids())
+        except Exception as exc:  # noqa: BLE001
+            self.show_error(f"Could not list subjects: {exc}")
+            return None
+        if not subject_ids:
+            self.show_info(
+                "The loaded database has no subjects. Create one in "
+                "the Data Manager."
+            )
+            return None
+        picked, ok = qt.QInputDialog.getItem(
+            self.uiWidget, title, "Subject:", subject_ids, 0, False,
+        )
+        if not ok or not picked:
+            return None
+        return picked
+
+    def show_info(self, text: str) -> None:
+        """Show a modal info dialog scoped to OpenLIFU Home."""
+        slicer.util.infoDisplay(text, windowTitle="OpenLIFU")
+
+    def show_error(self, text: str) -> None:
+        """Show a modal error dialog scoped to OpenLIFU Home."""
+        slicer.util.errorDisplay(text, windowTitle="OpenLIFU")
 
 
 class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):

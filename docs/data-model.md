@@ -228,7 +228,7 @@ Session JSON is written to disk ONLY on explicit user save.
   `OpenLIFUAppState.session_is_dirty = True`, but do NOT touch
   disk.
 * The Data Manager's "Save" button (or a future dirty-flag prompt on
-  page exit) calls `data_manager_logic.save_loaded_session()`, which
+  page exit) calls `session_actions.save_loaded_session()`, which
   writes both the loaded PlanningSession and SonicationSession
   (whichever are non-null) via `db.write_planning_session(...,
   on_conflict="overwrite")`.

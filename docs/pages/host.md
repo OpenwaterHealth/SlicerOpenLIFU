@@ -82,7 +82,7 @@ Reachable from other Python code via
 |---|---|
 | `show_page(module_name)` | Swap the visible page to the one registered under `module_name`. Called by pages that navigate. |
 | `get_page_widget(module_name)` | Return the embedded widget instance. Public accessor for cross-page reads (see `docs/coding-standards.md` rule 6 for the coordination policy). |
-| `onSaveClicked(checked)` | Save the loaded session via `data_manager_logic.save_loaded_session()`. |
+| `onSaveClicked(checked)` | Save the loaded session via `session_actions.save_loaded_session()`. |
 | `onExitClicked(checked)` | Confirm-close the loaded session and navigate to Home. |
 | `onBackToHomeClicked(checked)` | Same but without the "there is no session" error. |
 | `onNextClicked(checked)` | Advance in the workflow timeline (currently no timeline pages -- kept for future). |
@@ -101,7 +101,7 @@ Reachable via `slicer.util.getModuleLogic("OpenLIFU")`.
 |---|---|---|
 | `workflow` | `Workflow` | Guided-mode step gating. |
 | `home_logic` | `OpenLIFUHomeLogic` | Home page's Logic (empty today; kept as a hook). |
-| `data_manager_logic` | `OpenLIFUDataManagerLogic` | Data Manager's Logic; drives session load/save/close. |
+| `data_manager_logic` | `OpenLIFUDataManagerLogic` | Data Manager's Logic. Now scoped to admin-only deletion methods (SlicerOpenLIFU#635); load/save/close moved to `OpenLIFUApp.logic.session_actions`. |
 | `database_logic` | `DatabaseLogic` | Owns the currently-loaded `openlifu.db.Database`. `get_cur_db()` reads `.db` off this. |
 
 | Method | Purpose |
