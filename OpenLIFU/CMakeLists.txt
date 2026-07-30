@@ -5,6 +5,7 @@ set(MODULE_NAME OpenLIFU)
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
   OpenLIFUApp/__init__.py
+  OpenLIFUApp/table_widgets.py
   OpenLIFUApp/host/__init__.py
   OpenLIFUApp/host/host_logic.py
   OpenLIFUApp/host/host_test.py
