@@ -68,7 +68,7 @@ Class: `OpenLIFUHomeWidget` (extends `ScriptedLoadableModuleWidget`).
 | `on_new_sonication_button_clicked()` | signal handler | Prompt for subject, verify a Plan exists, open `NewSonicationSessionDialog`, `create_sonication_session()`, `load_sonication_session_into_app()`, navigate. |
 | `on_continue_sonication_button_clicked()` | signal handler | Open `ContinueSonicationSessionDialog`, `load_sonication_session_into_app()`, navigate. |
 | `on_data_manager_button_clicked()` | signal handler | Navigate to `OpenLIFUDataManager`. |
-| `prompt_for_subject(database, title)` | `on_new_*_button_clicked` | Modal `QInputDialog.getItem` picker over `database.get_subject_ids()`. |
+| `prompt_for_subject(database, title)` | `on_new_*_button_clicked` | Modal `SubjectPickerDialog` over `database.get_subject_ids()`. |
 | `show_info(text)` / `show_error(text)` | handlers | Thin wrappers over `slicer.util.infoDisplay` / `errorDisplay`. |
 
 Class: `OpenLIFUHomeLogic` (extends `ScriptedLoadableModuleLogic`).
@@ -123,7 +123,7 @@ Key contract points:
 sequenceDiagram
     participant User
     participant Home as OpenLIFUHomeWidget
-    participant Subject as QInputDialog<br/>(subject picker)
+    participant Subject as SubjectPickerDialog
     participant Dialog as NewPlanningSessionDialog
     participant SA as session_actions
     participant Host as OpenLIFUHostWidget
@@ -177,9 +177,11 @@ Every call to `refresh_status()` reads:
   explicit user disconnect; matches the "opened OpenLIFU → my last
   database is there" mental model without fighting the user.
 * **Subject picker before the New-* dialog.** Home does not host a
-  persistent subject combo (that's a Data Manager job). Prompting
-  for the subject in a Qt-built-in `QInputDialog.getItem` avoids
-  duplicating the picker widget code.
+  persistent subject combo (that's a Data Manager job). A bespoke
+  `SubjectPickerDialog` in `session_dialogs.py` is used rather than
+  `qt.QInputDialog.getItem`, whose return-value shape is
+  inconsistent under PythonQt (returns a bare `str` instead of the
+  documented `(text, ok)` tuple on some builds).
 * **Continue picker is single-dialog.** Users pick subject and
   session inside `ContinuePlanningSessionDialog` /
   `ContinueSonicationSessionDialog` (subject combo on top, session

@@ -15,6 +15,12 @@ Four dialogs, matching Home's four launch buttons:
 * :class:`ContinueSonicationSessionDialog` -- subject + sonication
   session picker; no create action.
 
+Plus one prerequisite picker:
+
+* :class:`SubjectPickerDialog` -- subject-only picker Home opens
+  before the two New-* dialogs (Data Manager has its own subject
+  combo so it does not need this).
+
 None of these dialogs touches the app state or Slicer scene. They
 collect user input and expose it as attributes (``session_id``,
 ``subject_id``, etc.); the caller runs the actual create / load
@@ -177,6 +183,79 @@ class NewSonicationSessionDialog(qt.QDialog):
         if not self.plan_id:
             show_info_dialog("A plan is required.")
             return
+        self.accept()
+
+
+# ---------------------------------------------------------------------------
+# Subject picker (used before opening a New-* dialog from Home)
+# ---------------------------------------------------------------------------
+
+class SubjectPickerDialog(qt.QDialog):
+    """Modal picker: choose a subject from the current database.
+
+    On accept, ``subject_id`` holds the chosen id. Cancel leaves it
+    an empty string.
+
+    Home uses this before opening :class:`NewPlanningSessionDialog` /
+    :class:`NewSonicationSessionDialog`, since Home has no persistent
+    subject combo (that lives on the Data Manager). We use a bespoke
+    dialog rather than ``qt.QInputDialog.getItem`` because the latter
+    has an inconsistent return-value shape under PythonQt (returns a
+    bare ``str`` on some builds instead of the documented ``(text,
+    ok)`` tuple), which caused a
+    ``ValueError: too many values to unpack`` regression when Home's
+    launch buttons first shipped.
+    """
+
+    def __init__(
+        self,
+        database: "openlifu.db.Database",
+        title: str = "Choose a subject",
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.subject_id: str = ""
+        try:
+            subject_ids = list(database.get_subject_ids())
+        except Exception:  # noqa: BLE001
+            subject_ids = []
+
+        outer = qt.QVBoxLayout(self)
+
+        row = qt.QHBoxLayout()
+        row.addWidget(qt.QLabel("Subject:"))
+        self.subject_combo = qt.QComboBox()
+        self.subject_combo.setMinimumWidth(240)
+        self.subject_combo.addItems(subject_ids)
+        row.addWidget(self.subject_combo, 1)
+        outer.addLayout(row)
+
+        if not subject_ids:
+            self.hint_label = qt.QLabel(
+                "The loaded database has no subjects. Create one in "
+                "the Data Manager."
+            )
+            self.hint_label.setWordWrap(True)
+            self.hint_label.setStyleSheet("color: #888;")
+            outer.addWidget(self.hint_label)
+
+        buttons = qt.QDialogButtonBox(
+            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel
+        )
+        # Cannot proceed with no subjects -- disable Ok in that case
+        # rather than raising a validation dialog after the click.
+        buttons.button(qt.QDialogButtonBox.Ok).setEnabled(bool(subject_ids))
+        buttons.accepted.connect(self.on_ok_clicked)
+        buttons.rejected.connect(self.reject)
+        outer.addWidget(buttons)
+
+    def on_ok_clicked(self) -> None:
+        picked = self.subject_combo.currentText
+        if not picked:
+            show_info_dialog("Select a subject.")
+            return
+        self.subject_id = picked
         self.accept()
 
 

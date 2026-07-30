@@ -46,6 +46,7 @@ from OpenLIFUApp.dialogs.session_dialogs import (
     ContinueSonicationSessionDialog,
     NewPlanningSessionDialog,
     NewSonicationSessionDialog,
+    SubjectPickerDialog,
 )
 from OpenLIFUApp.logic.session_actions import (
     create_planning_session,
@@ -471,27 +472,19 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         """Modal picker: choose a subject from the current database.
 
         Returns the chosen subject id, or ``None`` if the user
-        cancels / there are no subjects. Reuses Qt's built-in
-        ``QInputDialog.getItem`` so we don't have to write a bespoke
-        picker dialog for the New-* action paths.
+        cancels / there are no subjects.
+
+        Uses a bespoke :class:`SubjectPickerDialog` rather than
+        ``qt.QInputDialog.getItem`` because PythonQt (Slicer's Qt
+        binding) returns a bare ``str`` from ``getItem`` on some
+        builds -- unlike PyQt5's documented ``(text, ok)`` tuple --
+        which caused a ``ValueError: too many values to unpack``
+        regression on the first click of a launch button.
         """
-        try:
-            subject_ids = list(database.get_subject_ids())
-        except Exception as exc:  # noqa: BLE001
-            self.show_error(f"Could not list subjects: {exc}")
+        dialog = SubjectPickerDialog(database, title, self.uiWidget)
+        if dialog.exec_() != qt.QDialog.Accepted:
             return None
-        if not subject_ids:
-            self.show_info(
-                "The loaded database has no subjects. Create one in "
-                "the Data Manager."
-            )
-            return None
-        picked, ok = qt.QInputDialog.getItem(
-            self.uiWidget, title, "Subject:", subject_ids, 0, False,
-        )
-        if not ok or not picked:
-            return None
-        return picked
+        return dialog.subject_id or None
 
     def show_info(self, text: str) -> None:
         """Show a modal info dialog scoped to OpenLIFU Home."""
