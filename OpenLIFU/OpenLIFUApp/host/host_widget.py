@@ -57,6 +57,18 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def __init__(self, parent=None) -> None:
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
+        # Slicer's ``ScriptedLoadableModuleWidget.__init__`` derives
+        # ``self.moduleName`` from this class name by stripping the trailing
+        # ``Widget``. Since we live under ``OpenLIFUApp/host/`` and are
+        # re-exported from ``OpenLIFU.py`` as ``OpenLIFUWidget``, the class
+        # name here is ``OpenLIFUHostWidget`` and the default derivation
+        # would give ``"OpenLIFUHost"``. That name has no matching Slicer
+        # module and ``self.resourcePath("UI/OpenLIFUHost.ui")`` would then
+        # crash in ``setupDeveloperSection`` inside the base ``setup()``.
+        # Set it explicitly so every path (resource lookup, developer
+        # section UI, embedded-page dispatch) resolves through the real
+        # Slicer module registered by ``OpenLIFU.py``.
+        self.moduleName = "OpenLIFU"
         self.logic: Optional[OpenLIFUHostLogic] = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None

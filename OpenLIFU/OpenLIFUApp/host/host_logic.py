@@ -47,6 +47,16 @@ class OpenLIFUHostLogic(ScriptedLoadableModuleLogic):
 
     def __init__(self) -> None:
         ScriptedLoadableModuleLogic.__init__(self)
+        # Slicer's ``ScriptedLoadableModuleLogic.__init__`` derives
+        # ``self.moduleName`` from this class name by stripping ``Logic``.
+        # Since we live under ``OpenLIFUApp/host/`` and are re-exported from
+        # ``OpenLIFU.py`` as ``OpenLIFULogic``, the class name here is
+        # ``OpenLIFUHostLogic`` and the default derivation would give
+        # ``"OpenLIFUHost"``. That name has no matching Slicer module and
+        # every downstream ``getParameterNode()`` -- both here and via
+        # ``get_app_state()`` in OpenLIFULib -- would look up the wrong
+        # MRML singleton. Set it explicitly to match ``OpenLIFU.py``.
+        self.moduleName = "OpenLIFU"
         self.workflow = Workflow()
         self._app_state_cache: Optional[OpenLIFUAppState] = None
         self._app_state_cache_node = None
