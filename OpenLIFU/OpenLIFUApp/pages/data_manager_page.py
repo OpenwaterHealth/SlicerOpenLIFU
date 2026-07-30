@@ -1,39 +1,34 @@
 """Data Manager page (split-session v2).
 
 Fresh rewrite for the session-split refactor (SlicerOpenLIFU#631,
-SESSION_SPLIT_DESIGN.md). Not derived from the legacy ``data_page.py``.
+SESSION_SPLIT_DESIGN.md).
 
-Responsibilities:
+Layout:
 
-* Show the CRUD surface for the split-session model on one subject at a
-  time: PlanningSessions, Plans, SonicationSessions.
-* Show the reference-data lists (Protocols, Transducers, Volumes) needed
-  when creating a new PlanningSession or SonicationSession.
-* Route every read/write through the new subject-scoped ``Database``
-  API (``load_planning_session`` / ``write_plan`` /
-  ``load_sonication_session`` etc.).
+* Top row: database path + Load button.
+* Tabs:
+  * **Subject data**: subject picker + four collapsible sections
+    (Planning Sessions / Plans / Sonication Sessions / Solutions),
+    plus a Loaded status card with Save / Close.
+  * **Protocols**: DB-level protocols table.
+  * **Transducers**: DB-level transducers table.
+  * **Users**: DB-level users table.
 
-Non-goals (deliberately):
+Every table uses fixed-by-default resizable column widths and puts the
+full cell text into each item's tooltip so long strings can be
+inspected without dragging the column.
 
-* Any legacy ``openlifu.db.Session`` handling.
-* Photoscan management, photocollection generation, protocol/transducer
-  editing, run history, cloud sync, guided-workflow gating -- those get
-  their own pages / dialogs in later commits or stay in the legacy Data
-  page until retired.
-* Cross-page observers wired to ``dataChanged``. The page reads state on
-  ``enter()`` and refreshes itself in response to its own button
-  handlers -- nothing else drives its UI.
-
-Uses a programmatic Qt UI (no ``.ui`` file). This keeps the whole page
-in one reviewable Python file and avoids another XML dependency during
-the transition.
+Responsibilities: CRUD surface for the split-session model against the
+subject-scoped Database API. No cross-page observers; ``enter()`` is
+the sole source of first-render truth (see design doc, section 5.1).
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
+import ctk
 import qt
 import slicer
 from slicer.ScriptedLoadableModule import (
@@ -60,29 +55,20 @@ if TYPE_CHECKING:
     import openlifu.db
 
 
+# Column-config type. ``(header, default_width_px)`` per column.
+ColumnSpec = List[tuple]
+
+
 # ---------------------------------------------------------------------------
 # Widget
 # ---------------------------------------------------------------------------
 
-_COL_ID = 0
-_COL_NAME = 1
-_COL_EXTRA = 2  # per-list purpose: target-id / plan-id / plan-id
-
-
 class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
-    """Programmatic Qt UI for the split-session Data Manager.
-
-    Layout:
-
-    * top row: subject picker + Refresh
-    * three grouped sections (Planning / Plans / Sonication)
-    * bottom row: current-load status + Save / Close for the loaded
-      Planning or Sonication session
-    """
+    """Programmatic Qt UI for the split-session Data Manager."""
 
     def __init__(self, parent=None):
         ScriptedLoadableModuleWidget.__init__(self, parent)
-        self.moduleName = "OpenLIFU"  # embed under the host module's resources
+        self.moduleName = "OpenLIFU"
         self.logic: Optional[OpenLIFUDataManagerLogic] = None
         self._entered = False
 
@@ -99,91 +85,160 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         top_layout.setContentsMargins(8, 8, 8, 8)
         top_layout.setSpacing(8)
 
-        # -- Database row -----------------------------------------------
-        db_row = qt.QHBoxLayout()
-        db_row.addWidget(qt.QLabel("Database:"))
+        top_layout.addLayout(self._build_database_row())
+
+        self.tabs = qt.QTabWidget()
+        self.tabs.addTab(self._build_subject_tab(), "Subject Data")
+        self.tabs.addTab(self._build_protocols_tab(), "Protocols")
+        self.tabs.addTab(self._build_transducers_tab(), "Transducers")
+        self.tabs.addTab(self._build_users_tab(), "Users")
+        top_layout.addWidget(self.tabs, 1)
+
+        self.layout.addWidget(top)
+        self.uiWidget = top
+
+    def enter(self) -> None:
+        """``enter`` is the SOLE source of first-render truth (design mandate)."""
+        self._entered = True
+        self._refresh_db_status()
+        self._refresh_subjects()
+        self._refresh_all_lists()
+        self._refresh_loaded_labels()
+        self._refresh_db_tables()
+
+    def exit(self) -> None:
+        self._entered = False
+
+    def cleanup(self) -> None:
+        pass
+
+    # ==================================================================
+    # UI builders
+    # ==================================================================
+
+    def _build_database_row(self) -> qt.QHBoxLayout:
+        row = qt.QHBoxLayout()
+        row.addWidget(qt.QLabel("Database:"))
         self.db_path_label = qt.QLabel("(none loaded)")
         self.db_path_label.setStyleSheet("color: #666;")
-        db_row.addWidget(self.db_path_label, 1)
+        row.addWidget(self.db_path_label, 1)
         self.load_db_button = qt.QPushButton("Load…")
         self.load_db_button.setToolTip(
             "Open an openlifu file-based database from a local folder."
         )
         self.load_db_button.clicked.connect(self._on_load_db_clicked)
-        db_row.addWidget(self.load_db_button)
-        top_layout.addLayout(db_row)
+        row.addWidget(self.load_db_button)
+        return row
 
-        # -- Subject row -------------------------------------------------
-        subject_row = qt.QHBoxLayout()
-        subject_row.addWidget(qt.QLabel("Subject:"))
+    # -- Subject Data tab ----------------------------------------------
+
+    def _build_subject_tab(self) -> qt.QWidget:
+        tab = qt.QWidget()
+        outer = qt.QVBoxLayout(tab)
+        outer.setContentsMargins(4, 8, 4, 4)
+        outer.setSpacing(6)
+
+        # subject picker row
+        row = qt.QHBoxLayout()
+        row.addWidget(qt.QLabel("Subject:"))
         self.subject_combo = qt.QComboBox()
         self.subject_combo.setMinimumWidth(240)
         self.subject_combo.currentIndexChanged.connect(self._on_subject_changed)
-        subject_row.addWidget(self.subject_combo, 1)
-
+        row.addWidget(self.subject_combo, 1)
         self.refresh_button = qt.QPushButton("Refresh")
         self.refresh_button.setToolTip("Rescan the database for this subject.")
         self.refresh_button.clicked.connect(self._on_refresh_clicked)
-        subject_row.addWidget(self.refresh_button)
-        top_layout.addLayout(subject_row)
+        row.addWidget(self.refresh_button)
+        outer.addLayout(row)
 
-        # -- Planning sessions ------------------------------------------
-        top_layout.addWidget(self._build_group(
+        # -- Planning sessions section
+        self.planning_table = _make_table([
+            ("ID", 200),
+            ("Name", 260),
+            ("# Targets", 90),
+        ])
+        outer.addWidget(self._collapsible(
             title="Planning Sessions",
-            help_text=(
-                "Mutable working documents. Owns targets, virtual-fit results, "
-                "and pre-solutions. Finalize a plan from the Planning Session "
-                "Overview page."
-            ),
-            table_headers=("ID", "Name", "# Targets"),
-            attr_prefix="planning",
+            hint=("Mutable working documents. Owns targets, virtual-fit "
+                  "results, and pre-solutions."),
+            table=self.planning_table,
             actions=[
-                ("New...", self._on_new_planning_clicked),
+                ("New…",   self._on_new_planning_clicked),
                 ("Load",   self._on_load_planning_clicked),
                 ("Delete", self._on_delete_planning_clicked),
             ],
         ))
 
-        # -- Plans ------------------------------------------------------
-        top_layout.addWidget(self._build_group(
+        # -- Plans section
+        self.plan_table = _make_table([
+            ("ID", 200),
+            ("Name", 220),
+            ("Target", 140),
+            ("Parent Planning Session", 200),
+        ])
+        outer.addWidget(self._collapsible(
             title="Plans",
-            help_text=(
-                "Immutable finalized treatment plans. Produced by finalizing a "
-                "Planning Session. A Sonication Session starts from a Plan."
-            ),
-            table_headers=("ID", "Name", "Target"),
-            attr_prefix="plan",
+            hint=("Immutable finalized treatment plans. Produced by "
+                  "finalizing a Planning Session."),
+            table=self.plan_table,
             actions=[
                 ("Delete", self._on_delete_plan_clicked),
             ],
         ))
 
-        # -- Sonication sessions ----------------------------------------
-        top_layout.addWidget(self._build_group(
+        # -- Sonication sessions section
+        self.sonication_table = _make_table([
+            ("ID", 200),
+            ("Name", 220),
+            ("Plan", 160),
+            ("Solution", 160),
+        ])
+        outer.addWidget(self._collapsible(
             title="Sonication Sessions",
-            help_text=(
-                "At-treatment-time sessions. References a Plan for target and "
-                "pose; owns photoscan registrations, transducer tracking, and "
-                "the final Solution."
-            ),
-            table_headers=("ID", "Name", "Plan"),
-            attr_prefix="sonication",
+            hint=("At-treatment-time sessions. References a Plan for "
+                  "target and pose; owns the photoscan registrations, "
+                  "transducer tracking, and the final Solution."),
+            table=self.sonication_table,
             actions=[
-                ("New...", self._on_new_sonication_clicked),
+                ("New…",   self._on_new_sonication_clicked),
                 ("Load",   self._on_load_sonication_clicked),
                 ("Delete", self._on_delete_sonication_clicked),
             ],
         ))
 
-        # -- Loaded status + Save / Close -------------------------------
-        loaded_group = qt.QGroupBox("Loaded")
-        loaded_layout = qt.QVBoxLayout(loaded_group)
+        # -- Solutions section (subject-scoped)
+        self.solution_table = _make_table([
+            ("ID", 200),
+            ("Target", 140),
+            ("Source", 100),
+            ("Approved", 90),
+            ("Computed at", 180),
+        ])
+        outer.addWidget(self._collapsible(
+            title="Solutions",
+            hint=("Computed sonication solutions. Subject-scoped; a single "
+                  "Solution can be referenced by a PlanningSession's "
+                  "pre-solutions and by a SonicationSession's final "
+                  "solution."),
+            table=self.solution_table,
+            actions=[
+                ("Delete", self._on_delete_solution_clicked),
+            ],
+        ))
+
+        outer.addWidget(self._build_loaded_group())
+        outer.addStretch(1)
+        return tab
+
+    def _build_loaded_group(self) -> qt.QGroupBox:
+        group = qt.QGroupBox("Loaded")
+        layout = qt.QVBoxLayout(group)
         self.loaded_planning_label = qt.QLabel("Planning session: —")
         self.loaded_sonication_label = qt.QLabel("Sonication session: —")
-        loaded_layout.addWidget(self.loaded_planning_label)
-        loaded_layout.addWidget(self.loaded_sonication_label)
+        layout.addWidget(self.loaded_planning_label)
+        layout.addWidget(self.loaded_sonication_label)
 
-        buttons_row = qt.QHBoxLayout()
+        row = qt.QHBoxLayout()
         self.save_button = qt.QPushButton("Save")
         self.save_button.setToolTip(
             "Write the loaded PlanningSession or SonicationSession JSON to disk."
@@ -192,86 +247,83 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self.close_button = qt.QPushButton("Close")
         self.close_button.setToolTip("Unload the currently-loaded session.")
         self.close_button.clicked.connect(self._on_close_clicked)
-        buttons_row.addStretch(1)
-        buttons_row.addWidget(self.save_button)
-        buttons_row.addWidget(self.close_button)
-        loaded_layout.addLayout(buttons_row)
-        top_layout.addWidget(loaded_group)
+        row.addStretch(1)
+        row.addWidget(self.save_button)
+        row.addWidget(self.close_button)
+        layout.addLayout(row)
+        return group
 
-        top_layout.addStretch(1)
+    # -- DB-level tabs -------------------------------------------------
 
-        self.layout.addWidget(top)
-        # Required for _embed_page_widget_into_stack.
-        self.uiWidget = top
+    def _build_protocols_tab(self) -> qt.QWidget:
+        tab = qt.QWidget()
+        layout = qt.QVBoxLayout(tab)
+        layout.setContentsMargins(4, 8, 4, 4)
+        self.protocol_table = _make_table([
+            ("ID", 240),
+            ("Name", 320),
+        ])
+        layout.addWidget(self.protocol_table, 1)
+        return tab
 
-    def enter(self) -> None:
-        """Enter is the SOLE source of first-render truth (design mandate)."""
-        self._entered = True
-        self._refresh_db_status()
-        self._refresh_subjects()
-        self._refresh_all_lists()
-        self._refresh_loaded_labels()
+    def _build_transducers_tab(self) -> qt.QWidget:
+        tab = qt.QWidget()
+        layout = qt.QVBoxLayout(tab)
+        layout.setContentsMargins(4, 8, 4, 4)
+        self.transducer_table = _make_table([
+            ("ID", 240),
+            ("Name", 320),
+            ("# Elements", 100),
+        ])
+        layout.addWidget(self.transducer_table, 1)
+        return tab
 
-    def exit(self) -> None:
-        self._entered = False
+    def _build_users_tab(self) -> qt.QWidget:
+        tab = qt.QWidget()
+        layout = qt.QVBoxLayout(tab)
+        layout.setContentsMargins(4, 8, 4, 4)
+        self.user_table = _make_table([
+            ("ID", 240),
+            ("Name", 260),
+            ("Roles", 200),
+        ])
+        layout.addWidget(self.user_table, 1)
+        return tab
 
-    def cleanup(self) -> None:
-        pass
-
-    # ------------------------------------------------------------------
-    # UI builders
-    # ------------------------------------------------------------------
-
-    def _build_group(
+    def _collapsible(
         self,
         *,
         title: str,
-        help_text: str,
-        table_headers: tuple,
-        attr_prefix: str,
+        hint: str,
+        table: qt.QTableWidget,
         actions: List[tuple],
-    ) -> qt.QGroupBox:
-        """Build a labelled group with a compact 3-column table and action buttons.
+    ) -> ctk.ctkCollapsibleButton:
+        cb = ctk.ctkCollapsibleButton()
+        cb.text = title
+        cb.collapsed = False
+        inner = qt.QVBoxLayout(cb)
 
-        Stashes the table on ``self`` as ``<attr_prefix>_table`` for later
-        access by the refresh methods.
-        """
-        group = qt.QGroupBox(title)
-        layout = qt.QVBoxLayout(group)
+        hint_label = qt.QLabel(hint)
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet("color: #666;")
+        inner.addWidget(hint_label)
 
-        help_label = qt.QLabel(help_text)
-        help_label.setWordWrap(True)
-        help_label.setStyleSheet("color: #666;")
-        layout.addWidget(help_label)
+        inner.addWidget(table)
 
-        table = qt.QTableWidget()
-        table.setColumnCount(len(table_headers))
-        table.setHorizontalHeaderLabels(list(table_headers))
-        table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
-        table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
-        table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
-        table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setStretchLastSection(True)
-        table.setMinimumHeight(120)
-        setattr(self, f"{attr_prefix}_table", table)
-        layout.addWidget(table)
-
-        actions_row = qt.QHBoxLayout()
-        actions_row.addStretch(1)
+        row = qt.QHBoxLayout()
+        row.addStretch(1)
         for label, slot in actions:
             btn = qt.QPushButton(label)
             btn.clicked.connect(slot)
-            actions_row.addWidget(btn)
-        layout.addLayout(actions_row)
+            row.addWidget(btn)
+        inner.addLayout(row)
+        return cb
 
-        return group
-
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Refresh helpers
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _refresh_db_status(self) -> None:
-        """Update the database status label and enable/disable child controls."""
         db = get_cur_db()
         if db is None:
             self.db_path_label.text = "(none loaded)"
@@ -281,7 +333,6 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             self.db_path_label.setStyleSheet("color: #060;")
 
     def _refresh_subjects(self) -> None:
-        """Repopulate the subject dropdown from the database."""
         db = get_cur_db()
         prev = self.subject_combo.currentText
         with _SignalBlocker(self.subject_combo):
@@ -294,7 +345,6 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             subject_ids = db.get_subject_ids()
             for sid in subject_ids:
                 self.subject_combo.addItem(sid)
-            # Restore prior selection if still available.
             if prev in subject_ids:
                 self.subject_combo.setCurrentText(prev)
 
@@ -302,12 +352,12 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         subject_id = self._current_subject_id()
         db = get_cur_db()
         if db is None or not subject_id:
-            self._fill_table(self.planning_table, [])
-            self._fill_table(self.plan_table, [])
-            self._fill_table(self.sonication_table, [])
+            _fill_table(self.planning_table, [])
+            _fill_table(self.plan_table, [])
+            _fill_table(self.sonication_table, [])
+            _fill_table(self.solution_table, [])
             return
 
-        # -- Planning sessions
         planning_rows = []
         for ps_id in db.get_planning_session_ids(subject_id):
             try:
@@ -315,28 +365,56 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
                 planning_rows.append((ps.id, ps.name or "", str(len(ps.targets))))
             except Exception as exc:  # noqa: BLE001
                 planning_rows.append((ps_id, f"<error: {exc}>", ""))
-        self._fill_table(self.planning_table, planning_rows)
+        _fill_table(self.planning_table, planning_rows)
 
-        # -- Plans
         plan_rows = []
         for plan_id in db.get_plan_ids(subject_id):
             try:
                 plan = db.load_plan(subject_id, plan_id)
                 target_id = plan.target.id if plan.target is not None else ""
-                plan_rows.append((plan.id, plan.name or "", target_id))
+                plan_rows.append((
+                    plan.id,
+                    plan.name or "",
+                    target_id,
+                    plan.parent_planning_session_id or "",
+                ))
             except Exception as exc:  # noqa: BLE001
-                plan_rows.append((plan_id, f"<error: {exc}>", ""))
-        self._fill_table(self.plan_table, plan_rows)
+                plan_rows.append((plan_id, f"<error: {exc}>", "", ""))
+        _fill_table(self.plan_table, plan_rows)
 
-        # -- Sonication sessions
         sonication_rows = []
         for ss_id in db.get_sonication_session_ids(subject_id):
             try:
                 ss = db.load_sonication_session(subject_id, ss_id)
-                sonication_rows.append((ss.id, ss.name or "", ss.plan_id or ""))
+                solution_id = ss.solution.solution_id if ss.solution else ""
+                sonication_rows.append((
+                    ss.id, ss.name or "", ss.plan_id or "", solution_id,
+                ))
             except Exception as exc:  # noqa: BLE001
-                sonication_rows.append((ss_id, f"<error: {exc}>", ""))
-        self._fill_table(self.sonication_table, sonication_rows)
+                sonication_rows.append((ss_id, f"<error: {exc}>", "", ""))
+        _fill_table(self.sonication_table, sonication_rows)
+
+        # Solutions: subject-scoped. We don't parse the whole Solution here
+        # (too heavy). We list ids and their metadata from anywhere we can:
+        # if a SolutionInfo entry references this solution on a session or
+        # a Plan, we grab the metadata from there. Otherwise the columns
+        # stay blank.
+        solution_ids = db.get_subject_solution_ids(subject_id)
+        info_by_id = _collect_solution_infos(db, subject_id)
+        solution_rows = []
+        for sid in solution_ids:
+            info = info_by_id.get(sid)
+            if info is not None:
+                solution_rows.append((
+                    sid,
+                    info.target_id or "",
+                    info.transducer_transform_source or "",
+                    "yes" if info.approved else "no",
+                    info.computed_at.isoformat() if info.computed_at else "",
+                ))
+            else:
+                solution_rows.append((sid, "", "", "", ""))
+        _fill_table(self.solution_table, solution_rows)
 
     def _refresh_loaded_labels(self) -> None:
         state = get_app_state()
@@ -357,22 +435,53 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         else:
             self.loaded_sonication_label.text = "Sonication session: —"
 
-        # Save button is only meaningful when something is loaded.
         self.save_button.enabled = (ps is not None) or (ss is not None)
         self.close_button.enabled = (ps is not None) or (ss is not None)
 
-    def _fill_table(self, table: qt.QTableWidget, rows: List[tuple]) -> None:
-        table.clearContents()
-        table.setRowCount(len(rows))
-        for row_idx, row in enumerate(rows):
-            for col_idx, value in enumerate(row):
-                item = qt.QTableWidgetItem(str(value))
-                table.setItem(row_idx, col_idx, item)
-        table.resizeColumnsToContents()
+    def _refresh_db_tables(self) -> None:
+        """Refresh the DB-level tabs (protocols / transducers / users)."""
+        db = get_cur_db()
+        if db is None:
+            _fill_table(self.protocol_table, [])
+            _fill_table(self.transducer_table, [])
+            _fill_table(self.user_table, [])
+            return
 
-    # ------------------------------------------------------------------
+        # Protocols
+        rows = []
+        for pid in db.get_protocol_ids():
+            try:
+                protocol = db.load_protocol(pid)
+                rows.append((protocol.id, protocol.name or ""))
+            except Exception:  # noqa: BLE001
+                rows.append((pid, ""))
+        _fill_table(self.protocol_table, rows)
+
+        # Transducers
+        rows = []
+        for tid in db.get_transducer_ids():
+            try:
+                xdc = db.load_transducer(tid)
+                n_el = len(xdc.elements) if getattr(xdc, "elements", None) else ""
+                rows.append((xdc.id, xdc.name or "", str(n_el)))
+            except Exception:  # noqa: BLE001
+                rows.append((tid, "", ""))
+        _fill_table(self.transducer_table, rows)
+
+        # Users
+        rows = []
+        for uid in db.get_user_ids():
+            try:
+                user = db.load_user(uid)
+                roles = getattr(user, "roles", None) or []
+                rows.append((user.id, user.name or "", ", ".join(str(r) for r in roles)))
+            except Exception:  # noqa: BLE001
+                rows.append((uid, "", ""))
+        _fill_table(self.user_table, rows)
+
+    # ==================================================================
     # Selection helpers
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _current_subject_id(self) -> Optional[str]:
         if not self.subject_combo.isEnabled():
@@ -384,13 +493,12 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         rows = table.selectionModel().selectedRows()
         if not rows:
             return None
-        row_idx = rows[0].row()
-        item = table.item(row_idx, _COL_ID)
+        item = table.item(rows[0].row(), 0)
         return item.text() if item is not None else None
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Signal handlers
-    # ------------------------------------------------------------------
+    # ==================================================================
 
     def _on_subject_changed(self, *_args) -> None:
         if not self._entered:
@@ -402,9 +510,9 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self._refresh_subjects()
         self._refresh_all_lists()
         self._refresh_loaded_labels()
+        self._refresh_db_tables()
 
     def _on_load_db_clicked(self) -> None:
-        """Prompt for a database directory and load it via the host DatabaseLogic."""
         path = qt.QFileDialog.getExistingDirectory(
             self.parent, "Select openlifu database root", "",
         )
@@ -419,6 +527,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self._refresh_subjects()
         self._refresh_all_lists()
         self._refresh_loaded_labels()
+        self._refresh_db_tables()
 
     # ---- planning session actions ----
 
@@ -550,6 +659,26 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
             return
         self._refresh_all_lists()
 
+    # ---- solution actions ----
+
+    def _on_delete_solution_clicked(self) -> None:
+        subject_id = self._current_subject_id()
+        sol_id = self._selected_id_in(self.solution_table)
+        if not subject_id or not sol_id:
+            _info("Select a solution first.")
+            return
+        if not _confirm(f"Delete solution {sol_id!r}?\n"
+                       "PlanningSessions / Plans / SonicationSessions that "
+                       "reference this solution will keep their SolutionInfo "
+                       "entries but the on-disk files will be gone."):
+            return
+        try:
+            get_cur_db().delete_solution_at_subject_scope(subject_id, sol_id)
+        except Exception as exc:  # noqa: BLE001
+            _error(f"Delete failed: {exc}")
+            return
+        self._refresh_all_lists()
+
     # ---- save/close ----
 
     def _on_save_clicked(self) -> None:
@@ -575,12 +704,7 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
 # ---------------------------------------------------------------------------
 
 class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
-    """Business logic for the split-session Data Manager.
-
-    Every method takes explicit inputs (no reaching into signals or GUIs)
-    and touches disk / app state directly. Designed to be usable from
-    scripted tests without the widget.
-    """
+    """Business logic for the split-session Data Manager."""
 
     def __init__(self):
         ScriptedLoadableModuleLogic.__init__(self)
@@ -597,7 +721,6 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
         protocol_id: str,
         transducer_id: str,
     ) -> None:
-        """Create and write a new (empty) PlanningSession."""
         import openlifu.db
         db = _require_db()
         session = openlifu.db.PlanningSession(
@@ -622,10 +745,8 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
         name: Optional[str],
         plan_id: str,
     ) -> None:
-        """Create and write a new (empty) SonicationSession against a Plan."""
         import openlifu.db
         db = _require_db()
-        # Validate: Plan must exist on disk.
         if plan_id not in db.get_plan_ids(subject_id):
             raise ValueError(
                 f"Plan {plan_id!r} does not exist for subject {subject_id!r}."
@@ -645,22 +766,12 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
     # -- loading -------------------------------------------------------
 
     def load_planning_session(self, subject_id: str, planning_session_id: str) -> None:
-        """Load a PlanningSession into the app state.
-
-        Unloads any currently-loaded planning or sonication session first so
-        the app is in a single-loaded-session state.
-        """
         db = _require_db()
         ps = db.load_planning_session(subject_id, planning_session_id)
         self.close_loaded_sessions()
 
-        # Volume node: load / import from the DB volume.
         volume_node = _load_volume(db, subject_id, ps.volume_id)
-
-        # Target fiducial nodes: minimum viable rendering -- one node per
-        # target Point. Populating VF-derived transforms and re-solving
-        # existing pre-solutions is out of scope for this commit.
-        target_nodes = [_ensure_target_fiducial(target) for target in ps.targets]
+        target_nodes = [_ensure_target_fiducial(t) for t in ps.targets]
 
         state = get_app_state()
         state.loaded_planning_session = SlicerOpenLIFUPlanningSession(
@@ -674,7 +785,6 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
         )
 
     def load_sonication_session(self, subject_id: str, sonication_session_id: str) -> None:
-        """Load a SonicationSession + its referenced Plan into the app state."""
         db = _require_db()
         ss = db.load_sonication_session(subject_id, sonication_session_id)
         if ss.plan_id is None:
@@ -701,7 +811,6 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
 
     def delete_planning_session(self, subject_id: str, planning_session_id: str) -> None:
         db = _require_db()
-        # If currently loaded, close first.
         state = get_app_state()
         loaded = state.loaded_planning_session
         if loaded is not None and loaded.get_planning_session_id() == planning_session_id:
@@ -710,7 +819,6 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
 
     def delete_plan(self, subject_id: str, plan_id: str) -> None:
         db = _require_db()
-        # If a currently-loaded SonicationSession references this plan, close it.
         state = get_app_state()
         loaded = state.loaded_sonication_session
         if loaded is not None and loaded.get_plan_id() == plan_id:
@@ -728,7 +836,6 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
     # -- save / close --------------------------------------------------
 
     def save_loaded_session(self) -> None:
-        """Write the currently-loaded PlanningSession or SonicationSession to disk."""
         db = _require_db()
         state = get_app_state()
         ps = state.loaded_planning_session
@@ -752,13 +859,7 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
             raise RuntimeError("Nothing loaded to save.")
 
     def close_loaded_sessions(self) -> None:
-        """Unload any currently-loaded planning or sonication session.
-
-        Tears down the scene nodes each session owned. Explicit; the app
-        state never nulls a session out on its own.
-        """
         state = get_app_state()
-
         ps = state.loaded_planning_session
         if ps is not None:
             for node in ps.get_target_nodes():
@@ -772,7 +873,6 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
                 except Exception:  # noqa: BLE001
                     pass
             state.loaded_planning_session = None
-
         ss = state.loaded_sonication_session
         if ss is not None:
             if ss.volume_node is not None:
@@ -788,8 +888,7 @@ class OpenLIFUDataManagerLogic(ScriptedLoadableModuleLogic):
 # ---------------------------------------------------------------------------
 
 class NewPlanningSessionDialog(qt.QDialog):
-    """Minimum viable New Planning Session dialog: pick id, name, volume,
-    protocol, transducer."""
+    """Minimum viable New Planning Session dialog."""
 
     def __init__(self, db, subject_id: str, parent=None):
         super().__init__(parent)
@@ -806,19 +905,15 @@ class NewPlanningSessionDialog(qt.QDialog):
         self.volume_combo = qt.QComboBox()
         self.protocol_combo = qt.QComboBox()
         self.transducer_combo = qt.QComboBox()
-
-        try:
-            self.volume_combo.addItems(db.get_volume_ids(subject_id) if db else [])
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            self.protocol_combo.addItems(db.get_protocol_ids() if db else [])
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            self.transducer_combo.addItems(db.get_transducer_ids() if db else [])
-        except Exception:  # noqa: BLE001
-            pass
+        for combo, populate in (
+            (self.volume_combo, lambda: db.get_volume_ids(subject_id) if db else []),
+            (self.protocol_combo, lambda: db.get_protocol_ids() if db else []),
+            (self.transducer_combo, lambda: db.get_transducer_ids() if db else []),
+        ):
+            try:
+                combo.addItems(populate())
+            except Exception:  # noqa: BLE001
+                pass
 
         layout.addRow("ID:", self.id_edit)
         layout.addRow("Name:", self.name_edit)
@@ -850,7 +945,7 @@ class NewPlanningSessionDialog(qt.QDialog):
 
 
 class NewSonicationSessionDialog(qt.QDialog):
-    """Minimum viable New Sonication Session dialog: pick id, name, plan."""
+    """Minimum viable New Sonication Session dialog."""
 
     def __init__(self, subject_id: str, plan_ids: List[str], parent=None):
         super().__init__(parent)
@@ -910,6 +1005,74 @@ class _SignalBlocker:
             self._obj.blockSignals(self._prev)
 
 
+def _make_table(columns: ColumnSpec) -> qt.QTableWidget:
+    """Create a QTableWidget with fixed-by-default resizable column widths.
+
+    Column headers use ``Interactive`` resize mode so the user can drag to
+    resize but nothing auto-adjusts to content (avoids the "content
+    changed, columns jumped" problem).
+
+    Args:
+        columns: list of ``(header, default_width_px)`` tuples, one per column.
+    """
+    table = qt.QTableWidget()
+    table.setColumnCount(len(columns))
+    table.setHorizontalHeaderLabels([h for h, _ in columns])
+    table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+    table.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+    table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+    table.verticalHeader().setVisible(False)
+    table.setAlternatingRowColors(True)
+
+    header = table.horizontalHeader()
+    header.setSectionResizeMode(qt.QHeaderView.Interactive)
+    header.setStretchLastSection(True)
+    for idx, (_, width) in enumerate(columns):
+        table.setColumnWidth(idx, int(width))
+
+    table.setMinimumHeight(120)
+    return table
+
+
+def _fill_table(table: qt.QTableWidget, rows: Sequence[tuple]) -> None:
+    """Populate ``table`` with the given rows and put each cell's full text
+    into its tooltip so long strings can be hovered."""
+    table.setRowCount(len(rows))
+    for row_idx, row in enumerate(rows):
+        for col_idx, value in enumerate(row):
+            text = "" if value is None else str(value)
+            item = qt.QTableWidgetItem(text)
+            item.setToolTip(text)
+            table.setItem(row_idx, col_idx, item)
+
+
+def _collect_solution_infos(db, subject_id: str) -> dict:
+    """Walk this subject's PlanningSessions / Plans / SonicationSessions and
+    collect a ``{solution_id: SolutionInfo}`` map.
+
+    Used to populate the Solutions table's provenance columns (target,
+    source, approved, computed_at) without loading the actual Solution
+    files.
+    """
+    out = {}
+    try:
+        for ps_id in db.get_planning_session_ids(subject_id):
+            ps = db.load_planning_session(subject_id, ps_id)
+            for info in ps.pre_solutions:
+                out.setdefault(info.solution_id, info)
+        for plan_id in db.get_plan_ids(subject_id):
+            plan = db.load_plan(subject_id, plan_id)
+            for info in plan.pre_solutions:
+                out.setdefault(info.solution_id, info)
+        for ss_id in db.get_sonication_session_ids(subject_id):
+            ss = db.load_sonication_session(subject_id, ss_id)
+            if ss.solution is not None:
+                out.setdefault(ss.solution.solution_id, ss.solution)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def _require_db() -> "openlifu.db.Database":
     db = get_cur_db()
     if db is None:
@@ -918,11 +1081,6 @@ def _require_db() -> "openlifu.db.Database":
 
 
 def _load_volume(db, subject_id: str, volume_id: str) -> Optional[slicer.vtkMRMLScalarVolumeNode]:
-    """Load a subject volume into the scene as a scalar volume node.
-
-    Reuses the DB metadata + NIfTI loader that legacy pages have relied on;
-    scoped to the minimum viable behavior for split-session pages.
-    """
     info = db.get_volume_info(subject_id, volume_id)
     volume_node = slicer.util.loadVolume(str(info["data_abspath"]))
     assign_openlifu_metadata_to_volume_node(volume_node, info)
@@ -930,11 +1088,6 @@ def _load_volume(db, subject_id: str, volume_id: str) -> Optional[slicer.vtkMRML
 
 
 def _ensure_target_fiducial(target: "openlifu.geo.Point") -> slicer.vtkMRMLMarkupsFiducialNode:
-    """Create a fiducial node for the given openlifu Point target.
-
-    Uses the shared conversion helper so downstream pages that read
-    fiducials back as Points get consistent metadata (id, dims, units).
-    """
     from OpenLIFULib.targets import openlifu_point_to_fiducial
     return openlifu_point_to_fiducial(target)
 
