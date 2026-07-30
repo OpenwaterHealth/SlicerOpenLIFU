@@ -156,15 +156,15 @@ sequenceDiagram
     Slicer->>Page: enter()
     Page->>AppState: read loaded_*
     Page->>Database: read subject-scoped indexes
-    Page->>Page: refresh_all() — populate widgets
-    User->>Page: click "Load Planning Session"
+    Page->>Page: refresh_all - populate widgets
+    User->>Page: click Load Planning Session
     Page->>Database: load_planning_session(subject_id, ps_id)
     Database-->>Page: PlanningSession object
     Page->>AppState: state.loaded_planning_session = ...
-    Page->>Page: refresh_loaded_labels()
+    Page->>Page: refresh_loaded_labels
     User->>Slicer: navigate away
-    Slicer->>Page: exit()
-    Page->>Page: mark not entered; keep state
+    Slicer->>Page: exit
+    Page->>Page: mark not entered, keep state
 ```
 
 Explicit non-behaviors:

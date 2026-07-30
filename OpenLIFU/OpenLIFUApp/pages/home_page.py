@@ -17,6 +17,11 @@ Non-goals:
   can verify the plumbing works end-to-end from the very start.
 
 Uses a programmatic Qt UI (no ``.ui`` file).
+
+See ``docs/coding-standards.md`` for the naming convention adopted
+here: no leading-underscore prefixes on public-behaviour methods,
+signal handlers named ``on_<widget>_<event>``, ``is_``/``has_``
+booleans, and docstrings that explain WHY.
 """
 
 from __future__ import annotations
@@ -34,22 +39,39 @@ from slicer.ScriptedLoadableModule import (
 from OpenLIFULib import get_app_state, get_cur_db
 
 
-# ---------------------------------------------------------------------------
-# Widget
-# ---------------------------------------------------------------------------
-
 class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
-    """Programmatic Qt landing page."""
+    """Landing page for the OpenLIFU host module.
+
+    Owns three status labels (database, loaded planning session, loaded
+    sonication session) and a single "Open Data Manager" button.
+    Deliberately holds no domain state -- everything it renders is
+    pulled from ``get_app_state()`` and ``get_cur_db()`` at
+    ``enter()`` time.
+    """
 
     def __init__(self, parent=None):
         ScriptedLoadableModuleWidget.__init__(self, parent)
+        # Every embedded page borrows the host module's resource path so
+        # ``self.resourcePath("Icons/foo.png")`` resolves under
+        # ``OpenLIFU/Resources/`` rather than a per-page module dir.
         self.moduleName = "OpenLIFU"
         self.logic: Optional[OpenLIFUHomeLogic] = None
-        self._entered = False
+        # Tracked so cross-page events (e.g. a scene reset) can distinguish
+        # "this page is currently visible" from "this page hasn't been
+        # entered yet" without walking Qt visibility state.
+        self.is_entered = False
 
+    # ------------------------------------------------------------------
+    # Slicer widget lifecycle
     # ------------------------------------------------------------------
 
     def setup(self) -> None:
+        """Build the programmatic Qt UI once, when the widget is created.
+
+        Called by the host module's ``instantiate_page_widget`` helper.
+        We do not touch the parameter node or database here; those are
+        read on ``enter()``.
+        """
         ScriptedLoadableModuleWidget.setup(self)
         self.logic = OpenLIFUHomeLogic()
 
@@ -59,10 +81,10 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         outer.setSpacing(16)
 
         title = qt.QLabel("OpenLIFU")
-        f = title.font
-        f.setPointSize(f.pointSize() + 6)
-        f.setBold(True)
-        title.font = f
+        title_font = title.font
+        title_font.setPointSize(title_font.pointSize() + 6)
+        title_font.setBold(True)
+        title.font = title_font
         outer.addWidget(title)
 
         subtitle = qt.QLabel(
@@ -71,69 +93,95 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         subtitle.setStyleSheet("color: #666;")
         outer.addWidget(subtitle)
 
-        # -- Status group -----------------------------------------------
-        status_group = qt.QGroupBox("Status")
-        status_layout = qt.QFormLayout(status_group)
+        outer.addWidget(self.build_status_group())
+        outer.addLayout(self.build_action_row())
+        outer.addStretch(1)
+
+        self.layout.addWidget(top)
+        # The host looks up ``uiWidget`` when embedding the page into its
+        # QStackedWidget. Naming enforced by the host's embed helper.
+        self.uiWidget = top
+
+    def enter(self) -> None:
+        """Reset first-render state and populate every widget from live sources.
+
+        ``enter`` is the SOLE source of first-render truth (see
+        ``docs/coding-standards.md`` rule 4). Nothing else drives this
+        page's UI -- there are no cross-page observers.
+        """
+        self.is_entered = True
+        self.refresh_status()
+
+    def exit(self) -> None:
+        """Mark the page as no longer visible without tearing down state."""
+        self.is_entered = False
+
+    def cleanup(self) -> None:
+        """Slicer widget teardown hook; nothing to clean up here."""
+
+    # ------------------------------------------------------------------
+    # UI builders
+    # ------------------------------------------------------------------
+
+    def build_status_group(self) -> qt.QGroupBox:
+        """Build the read-only status group (database + loaded sessions)."""
+        group = qt.QGroupBox("Status")
+        layout = qt.QFormLayout(group)
         self.db_status_label = qt.QLabel("—")
         self.planning_status_label = qt.QLabel("—")
         self.sonication_status_label = qt.QLabel("—")
-        status_layout.addRow("Database:", self.db_status_label)
-        status_layout.addRow("Planning session:", self.planning_status_label)
-        status_layout.addRow("Sonication session:", self.sonication_status_label)
-        outer.addWidget(status_group)
+        layout.addRow("Database:", self.db_status_label)
+        layout.addRow("Planning session:", self.planning_status_label)
+        layout.addRow("Sonication session:", self.sonication_status_label)
+        return group
 
-        # -- Action buttons ---------------------------------------------
-        actions = qt.QVBoxLayout()
-        actions.setSpacing(8)
+    def build_action_row(self) -> qt.QVBoxLayout:
+        """Build the action buttons block (currently: Data Manager only)."""
+        row = qt.QVBoxLayout()
+        row.setSpacing(8)
 
         self.data_manager_button = qt.QPushButton("Open Data Manager")
         self.data_manager_button.setMinimumHeight(40)
         self.data_manager_button.setToolTip(
             "Browse and manage Planning Sessions, Plans, and Sonication Sessions."
         )
-        self.data_manager_button.clicked.connect(self._on_data_manager_clicked)
-        actions.addWidget(self.data_manager_button)
-
-        outer.addLayout(actions)
-        outer.addStretch(1)
-
-        self.layout.addWidget(top)
-        self.uiWidget = top
-
-    def enter(self) -> None:
-        self._entered = True
-        self._refresh_status()
-
-    def exit(self) -> None:
-        self._entered = False
-
-    def cleanup(self) -> None:
-        pass
+        self.data_manager_button.clicked.connect(self.on_data_manager_button_clicked)
+        row.addWidget(self.data_manager_button)
+        return row
 
     # ------------------------------------------------------------------
-    # Refresh helpers
+    # Refresh
     # ------------------------------------------------------------------
 
-    def _refresh_status(self) -> None:
-        db = get_cur_db()
-        if db is not None:
-            self.db_status_label.text = str(getattr(db, "path", "loaded"))
+    def refresh_status(self) -> None:
+        """Repopulate the status labels from the currently-loaded database
+        and application state.
+
+        Idempotent: every call regenerates every label from live sources.
+        Safe to invoke from ``enter()`` and from any future signal handler
+        that needs to force a repaint.
+        """
+        database = get_cur_db()
+        if database is not None:
+            self.db_status_label.text = str(getattr(database, "path", "loaded"))
         else:
             self.db_status_label.text = "(none loaded)"
 
         state = get_app_state()
-        ps = state.loaded_planning_session
-        if ps is not None:
+        planning_session = state.loaded_planning_session
+        if planning_session is not None:
             self.planning_status_label.text = (
-                f"{ps.get_planning_session_id()} (subject={ps.get_subject_id()})"
+                f"{planning_session.get_planning_session_id()} "
+                f"(subject={planning_session.get_subject_id()})"
             )
         else:
             self.planning_status_label.text = "—"
 
-        ss = state.loaded_sonication_session
-        if ss is not None:
+        sonication_session = state.loaded_sonication_session
+        if sonication_session is not None:
             self.sonication_status_label.text = (
-                f"{ss.get_sonication_session_id()} (plan={ss.get_plan_id()})"
+                f"{sonication_session.get_sonication_session_id()} "
+                f"(plan={sonication_session.get_plan_id()})"
             )
         else:
             self.sonication_status_label.text = "—"
@@ -142,8 +190,13 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
     # Signal handlers
     # ------------------------------------------------------------------
 
-    def _on_data_manager_clicked(self) -> None:
-        """Ask the host to swap the visible page to the Data Manager."""
+    def on_data_manager_button_clicked(self) -> None:
+        """Ask the host module to swap the visible page to the Data Manager.
+
+        We navigate through the host rather than through
+        ``slicer.util.selectModule`` because the pages are embedded in
+        the host's QStackedWidget; the host owns the swap machinery.
+        """
         try:
             host_widget = slicer.util.getModule("OpenLIFU").widgetRepresentation().self()
             host_widget.show_page("OpenLIFUDataManager")
@@ -151,12 +204,11 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
             logging.exception("Home: unable to navigate to Data Manager.")
 
 
-# ---------------------------------------------------------------------------
-# Logic
-# ---------------------------------------------------------------------------
-
 class OpenLIFUHomeLogic(ScriptedLoadableModuleLogic):
-    """Landing-page logic. Deliberately empty for now."""
+    """Landing-page business logic.
 
-    def __init__(self):
-        ScriptedLoadableModuleLogic.__init__(self)
+    Currently empty. Kept in place so the host module's
+    ``home_logic`` attribute always references a construct-able object,
+    and so future landing-page behaviour (e.g. env-var-driven mode
+    locks, sign-in-required gating) has a home.
+    """
