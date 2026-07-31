@@ -36,7 +36,9 @@ flowchart TB
         Virtual fit results:    <count> across N target(s), K approved
         Pre-solutions:          <count> (K approved)
         Finalized plans:        <count> (K missing on disk if any)"]
-      HEAD --> CTX --> SUM
+      ACT["QGroupBox: 'Actions'
+        [ Edit Targets… ]"]
+      HEAD --> CTX --> SUM --> ACT
     end
 ```
 
@@ -45,8 +47,10 @@ Notably absent (deliberately):
 * No tables (target list, VF list, pre-solution list, finalized-plan
   list). Each list has an editing surface on a later page and would
   duplicate that here.
-* No action buttons. Any button that would permute session state
-  lives on the page that owns the state, not here.
+* No editing controls. The Actions group is navigation-only -- each
+  button jumps into the workflow page that owns the corresponding
+  editing surface. As more workflow pages land (Virtual Fit,
+  Solution Generator, Finalize Plan), the Actions group grows.
 * No Finalize Plan button. Finalize is a workflow-completion action;
   it will land on Pre-Planning (leading candidate) or the workflow
   toolbar in a follow-up commit for SlicerOpenLIFU#634.
@@ -72,17 +76,24 @@ Class: `OpenLIFUPlanningSessionOverviewWidget`.
 | `build_header_group()` | Session name / id / subject / dates group. |
 | `build_context_group()` | Volume / protocol / transducer group. |
 | `build_summary_group()` | Count-based summary group (four rows). |
+| `build_actions_group()` | Navigation buttons into the workflow pages that mutate session state. |
 
 ### Refresh + helpers
 
 | Method | Purpose |
 |---|---|
-| `refresh_all()` | Rebuild every label from `get_app_state().loaded_planning_session`. |
-| `render_no_session_loaded()` | Reset every label to `—`. |
+| `refresh_all()` | Rebuild every label from `get_app_state().loaded_planning_session`. Enables the Edit Targets… button. |
+| `render_no_session_loaded()` | Reset every label to `—` and disable the Edit Targets… button. |
 | `build_targets_summary(session)` | `"N (id1, id2, id3, ...)"` |
 | `build_vf_summary(session)` | `"N across M target(s), K approved"` |
 | `build_pre_solutions_summary(session)` | `"N (K approved)"` |
 | `build_finalized_plans_summary(session)` | `"N"` or `"N (K missing on disk)"` |
+
+### Signal handlers
+
+| Method | Purpose |
+|---|---|
+| `on_edit_targets_button_clicked(_checked)` | Navigate to `OpenLIFUTargetSelection` (SlicerOpenLIFU#640). |
 
 ## Public API — Logic
 

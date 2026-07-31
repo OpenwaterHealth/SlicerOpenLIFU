@@ -26,6 +26,8 @@ from slicer.ScriptedLoadableModule import (
 
 from OpenLIFULib import get_app_state, get_cur_db
 
+from OpenLIFUApp.logic.session_actions import navigate_to_host_page
+
 if TYPE_CHECKING:
     import openlifu.db
 
@@ -61,6 +63,7 @@ class OpenLIFUPlanningSessionOverviewWidget(ScriptedLoadableModuleWidget):
         outer.addWidget(self.build_header_group())
         outer.addWidget(self.build_context_group())
         outer.addWidget(self.build_summary_group())
+        outer.addWidget(self.build_actions_group())
         outer.addStretch(1)
 
         self.layout.addWidget(top)
@@ -128,6 +131,35 @@ class OpenLIFUPlanningSessionOverviewWidget(ScriptedLoadableModuleWidget):
         layout.addRow("Finalized plans:", self.finalized_plans_summary_label)
         return group
 
+    def build_actions_group(self) -> qt.QGroupBox:
+        """Quick-jump links into the workflow pages that mutate the
+        loaded session.
+
+        Overview itself stays information-only (SlicerOpenLIFU#634);
+        every editing surface lives on its own workflow page. These
+        buttons are just navigation into the right page -- they do
+        not mutate session state themselves.
+
+        Grows as more workflow pages land:
+
+        * Edit Targets… → Target Selection (SlicerOpenLIFU#640)
+        * Run Virtual Fit… → Virtual Fit (follow-up)
+        * Compute Solutions… → Solution Generator (follow-up)
+        * Finalize Plan… → plan finalization dialog (follow-up)
+        """
+        group = qt.QGroupBox("Actions")
+        layout = qt.QVBoxLayout(group)
+        self.edit_targets_button = qt.QPushButton("Edit Targets…")
+        self.edit_targets_button.setMinimumHeight(36)
+        self.edit_targets_button.setToolTip(
+            "Open the Target Selection page for this session."
+        )
+        self.edit_targets_button.clicked.connect(
+            self.on_edit_targets_button_clicked,
+        )
+        layout.addWidget(self.edit_targets_button)
+        return group
+
     # ------------------------------------------------------------------
     # Refresh
     # ------------------------------------------------------------------
@@ -160,6 +192,7 @@ class OpenLIFUPlanningSessionOverviewWidget(ScriptedLoadableModuleWidget):
         self.vf_summary_label.text = self.build_vf_summary(session)
         self.pre_solutions_summary_label.text = self.build_pre_solutions_summary(session)
         self.finalized_plans_summary_label.text = self.build_finalized_plans_summary(session)
+        self.edit_targets_button.enabled = True
 
     def render_no_session_loaded(self) -> None:
         """Reset every label to placeholder text."""
@@ -171,6 +204,15 @@ class OpenLIFUPlanningSessionOverviewWidget(ScriptedLoadableModuleWidget):
             self.pre_solutions_summary_label, self.finalized_plans_summary_label,
         ):
             label.text = "—"
+        self.edit_targets_button.enabled = False
+
+    # ------------------------------------------------------------------
+    # Signal handlers
+    # ------------------------------------------------------------------
+
+    def on_edit_targets_button_clicked(self, _checked: bool = False) -> None:
+        """Navigate to the Target Selection page (SlicerOpenLIFU#640)."""
+        navigate_to_host_page("OpenLIFUTargetSelection")
 
     # ------------------------------------------------------------------
     # Summary formatters

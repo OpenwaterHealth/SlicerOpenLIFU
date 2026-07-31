@@ -281,12 +281,16 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         from OpenLIFUApp.pages.sonication_session_overview_page import (
             OpenLIFUSonicationSessionOverviewWidget,
         )
+        from OpenLIFUApp.pages.target_selection_page import (
+            OpenLIFUTargetSelectionWidget,
+        )
 
         widget_classes = {
             "OpenLIFUHome":                      OpenLIFUHomeWidget,
             "OpenLIFUDataManager":               OpenLIFUDataManagerWidget,
             "OpenLIFUPlanningSessionOverview":   OpenLIFUPlanningSessionOverviewWidget,
             "OpenLIFUSonicationSessionOverview": OpenLIFUSonicationSessionOverviewWidget,
+            "OpenLIFUTargetSelection":           OpenLIFUTargetSelectionWidget,
         }
 
         for page_def in PAGE_DEFS:

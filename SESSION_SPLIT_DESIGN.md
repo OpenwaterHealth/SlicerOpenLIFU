@@ -311,10 +311,18 @@ No global observers. No `TransformModifiedEvent` handlers. No
 | **Data Manager** | either or none | CRUD on planning sessions, plans, sonication sessions |
 | **Planning Session Overview** | PlanningSession | Status card for a PlanningSession |
 | **Sonication Session Overview** | SonicationSession | Status card for a SonicationSession + linked Plan |
-| **PrePlanning** | PlanningSession | Target placement, VF |
+| **Volume Segmentation** *(planned)* | PlanningSession | Interactive skin / tissue segmentation for the loaded volume |
+| **Target Selection** | PlanningSession | Target CRUD (add / import / edit / remove). Fresh split-session page (SlicerOpenLIFU#640). |
+| **Virtual Fit** *(planned)* | PlanningSession | Virtual-fit compute + manual edit + approval per target |
 | **Solution Generator** | either | Given (volume, protocol, target, pose) → compute a Solution. Pre-solution when caller is PlanningSession; final Solution when caller is SonicationSession. |
 | **Localization** | SonicationSession | Photoscan registration + TT |
 | **Sonication Control** | SonicationSession | Load solution to device, run, records |
+
+Target Selection and Virtual Fit are the split of the legacy
+Pre-Planning module. The legacy page mixed both workflows in a
+single ~2100-line widget with two tables and two "current target"
+concepts that could disagree at runtime; the split gives each
+concern its own page with a single canonical selection.
 
 **Solution Generator** is the renamed / refactored current
 `sonication_planner_page.py`. It takes its inputs from the session:
@@ -336,7 +344,9 @@ options and destination.
 ```
 Home ("New Planning Session" | "Continue Planning Session")
      -> Planning Session Overview
-     -> PrePlanning (place target, run VF, approve VF)
+     -> [Volume Segmentation]      (planned)
+     -> Target Selection            (SlicerOpenLIFU#640, this commit)
+     -> Virtual Fit                 (follow-up)
      -> Solution Generator (optional: compute pre-solutions)
      -> back to Planning Session Overview
      -> "Finalize Plan" button -> writes a Plan; user can continue editing

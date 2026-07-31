@@ -67,4 +67,5 @@ PAGE_DEFS: List[Page] = [
     Page("OpenLIFUDataManager",                "Data Manager",                on_timeline=False),
     Page("OpenLIFUPlanningSessionOverview",    "Planning Session Overview",   on_timeline=False),
     Page("OpenLIFUSonicationSessionOverview",  "Sonication Session Overview", on_timeline=False),
+    Page("OpenLIFUTargetSelection",            "Target Selection",            on_timeline=False),
 ]

@@ -16,14 +16,18 @@ signals and state transitions it drives, and its acceptance tests.
   tab) and Protocols / Transducers / Users (database tabs).
 * [`planning-session-overview.md`](planning-session-overview.md) —
   Information-only status card for a loaded PlanningSession.
+  Hosts an **Edit Targets…** link into Target Selection.
 * [`sonication-session-overview.md`](sonication-session-overview.md) —
-  Information-only status card for a loaded SonicationSession, with
+  Information-only summary for a loaded SonicationSession, with
   a read-only view of its frozen Plan.
+* [`target-selection.md`](target-selection.md) — target-management
+  half of the split legacy Pre-Planning (SlicerOpenLIFU#640).
+  Targets table + Add / Import / Edit / Remove.
 
 Planned (pages not yet built):
 
-* `pre-planning.md` — target placement + virtual-fit UI for a
-  `PlanningSession`.
+* `virtual-fit.md` — virtual-fit half of the split Pre-Planning.
+* `volume-segmentation.md` — will slot ahead of Target Selection.
 * `solution-generator.md` — compute Solutions (mode-agnostic;
   callable from either overview).
 * `localization.md` — photoscan registration + transducer

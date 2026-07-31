@@ -20,6 +20,7 @@ set(MODULE_PYTHON_SCRIPTS
   OpenLIFUApp/pages/home_page.py
   OpenLIFUApp/pages/planning_session_overview_page.py
   OpenLIFUApp/pages/sonication_session_overview_page.py
+  OpenLIFUApp/pages/target_selection_page.py
   OpenLIFUApp/logic/__init__.py
   OpenLIFUApp/logic/app_state.py
   OpenLIFUApp/logic/cloud_sync.py

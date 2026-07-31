@@ -93,7 +93,8 @@ flowchart LR
     HOME(["Home"])
     DM(["Data Manager"])
     PSO(["Planning Session<br/>Overview<br/>(info-only summary)"])
-    PP(["Pre-Planning<br/>(TBD)"])
+    TSEL(["Target Selection"])
+    VF(["Virtual Fit<br/>(TBD)"])
     SG(["Solution Generator<br/>(TBD)"])
     SSO(["Sonication Session<br/>Overview<br/>(info-only summary)"])
     LOC(["Localization<br/>(TBD)"])
@@ -106,13 +107,15 @@ flowchart LR
     HOME -->|"Open Data Manager…"| DM
     DM -->|"Load Planning Session"| PSO
     DM -->|"Load Sonication Session"| SSO
-    PSO -->|"Edit targets / VF"| PP
+    PSO -->|"Edit Targets…"| TSEL
     PSO -->|"Compute pre-solutions"| SG
+    TSEL -->|"Next: Virtual Fit"| VF
     SSO -->|"Capture photoscan / TT"| LOC
     SSO -->|"Compute final solution"| SG
     SSO -->|"Run sonication"| SC
     LOC --> SSO
-    PP --> PSO
+    TSEL --> PSO
+    VF --> PSO
     SG --> PSO
     SG --> SSO
     SC --> SSO
@@ -125,10 +128,11 @@ corresponding overview. Data Manager remains available as the admin
 CRUD surface but is not the intended workflow entry.
 
 The distinguishing feature of the split-session refactor is that
-Pre-Planning / Localization / Sonication Control belong to exactly
-ONE session type each (planning-only, sonication-only,
-sonication-only). The Solution Generator is the exception: it is
-mode-agnostic and consumed by both overview pages.
+Target Selection / Virtual Fit / Localization / Sonication Control
+belong to exactly ONE session type each (planning-only,
+planning-only, sonication-only, sonication-only). The Solution
+Generator is the exception: it is mode-agnostic and consumed by
+both overview pages.
 
 Home and Data Manager are outside the workflow timeline; they are
 reachable at any time via the host module's navigation.
