@@ -52,6 +52,7 @@ from slicer.ScriptedLoadableModule import (
 )
 
 from OpenLIFULib import get_app_state
+from OpenLIFULib.module_layout import wrap_page_in_scroll_area
 from OpenLIFULib.targets import (
     assign_unique_color_to_fiducial,
     fiducial_to_openlifu_point,
@@ -152,8 +153,15 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         outer.addWidget(self.build_targets_group())
         outer.addStretch(1)
 
-        self.layout.addWidget(top)
-        self.uiWidget = top
+        # Wrap in a QScrollArea so the page scrolls INSIDE the host's
+        # pageStack when its content exceeds the viewport, instead of
+        # pushing the host's fixed header / footer off-screen
+        # (SlicerOpenLIFU#643). ``uiWidget`` MUST point at the scroll
+        # area itself, because the host's embed helper adds
+        # ``widget.uiWidget`` directly into the pageStack.
+        scroll = wrap_page_in_scroll_area(top)
+        self.layout.addWidget(scroll)
+        self.uiWidget = scroll
 
     def enter(self) -> None:
         """Sole first-render truth. Refresh every widget from the

@@ -25,6 +25,7 @@ from slicer.ScriptedLoadableModule import (
 )
 
 from OpenLIFULib import get_app_state, get_cur_db
+from OpenLIFULib.module_layout import wrap_page_in_scroll_area
 
 if TYPE_CHECKING:
     import openlifu.db
@@ -63,8 +64,12 @@ class OpenLIFUPlanningSessionOverviewWidget(ScriptedLoadableModuleWidget):
         outer.addWidget(self.build_summary_group())
         outer.addStretch(1)
 
-        self.layout.addWidget(top)
-        self.uiWidget = top
+        # Wrap in a QScrollArea so the page scrolls INSIDE the host's
+        # pageStack when its content exceeds the viewport
+        # (SlicerOpenLIFU#643).
+        scroll = wrap_page_in_scroll_area(top)
+        self.layout.addWidget(scroll)
+        self.uiWidget = scroll
 
     def enter(self) -> None:
         """Repopulate every visible piece of state from

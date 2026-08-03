@@ -47,6 +47,46 @@ flowchart TB
 registration and re-exports the other three classes so Slicer's
 `getattr(module, "<Name>Widget")` lookups still work.
 
+## Layout: fixed header + scrollable page + fixed footer
+
+The host's `OpenLIFU.ui` places five items in a `QVBoxLayout` with
+no margins or spacing:
+
+```
+hostMainLayout
+  ├─ hostHeaderContainer  (Save / Exit toolbar, module status icons)
+  ├─ hostHeaderRule       (thin separator)
+  ├─ pageStack            (QStackedWidget of embedded pages)
+  ├─ hostFooterRule       (thin separator)
+  └─ hostFooterContainer  (Back-to-Home + timeline strip + Next)
+```
+
+The fixed-chrome contract (SlicerOpenLIFU#643) is:
+
+1. **Outer host widget** has `SizePolicy(Preferred, Expanding)` -- it
+   takes whatever vertical space the module panel viewport gives it
+   and never grows past.
+2. **`pageStack`** also has `SizePolicy(Preferred, Expanding)` -- it
+   absorbs the height left after the header + rule + rule + footer
+   rows.
+3. **Each embedded page** wraps its content in a `QScrollArea` (via
+   `OpenLIFULib.module_layout.wrap_page_in_scroll_area`) with
+   `setWidgetResizable(True)` and `Expanding` vertical size policy.
+   When the page content exceeds the pageStack's allotted height,
+   only the scroll area's viewport scrolls; the host's header and
+   footer stay pinned.
+
+Steps 1 + 2 are set in `OpenLIFUHostWidget.setup()`. Step 3 is
+per-page (the page's `setup()` calls `wrap_page_in_scroll_area(top)`
+and stores the returned scroll area as `self.uiWidget`).
+
+Mirror of the legacy `apply_module_layout` pattern, which wrapped
+each legacy `.ui`-file-driven page in a scroll area with the same
+properties. `wrap_page_in_scroll_area` is the slim analogue for the
+new programmatic-UI pages, which don't have the header /
+workflow-controls placeholder pattern that `apply_module_layout`
+assumes.
+
 ## Startup flow
 
 ```mermaid

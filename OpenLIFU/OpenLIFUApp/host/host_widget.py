@@ -110,6 +110,24 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui = slicer.util.childWidgetVariables(uiWidget)
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
+        # Fixed-header / scrollable-page / fixed-footer layout
+        # (SlicerOpenLIFU#643): the outer host widget expands to fill
+        # whatever vertical space its parent gives it (Slicer's module
+        # panel viewport, or the custom app's chrome area). The
+        # ``pageStack`` in the middle of ``hostMainLayout`` also expands
+        # vertically, absorbing whatever height is left after the fixed
+        # header + footer rows.
+        #
+        # Each page provides its OWN internal ``QScrollArea`` around its
+        # content (via :func:`OpenLIFULib.module_layout.wrap_page_in_scroll_area`
+        # in the page's ``setup()``) so the page content scrolls inside
+        # the pageStack rather than pushing the host's header + footer
+        # off-screen. Mirror of the legacy ``apply_module_layout``
+        # pattern (which wrapped each legacy page's body in a scroll
+        # area with the same properties).
+        uiWidget.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
+        self.ui.pageStack.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
+
         self.logic = OpenLIFUHostLogic()
 
         # ---- Header status icons (DB / Login / Device) ----
@@ -453,10 +471,16 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         timeline_keys = [p.key for p in PAGE_DEFS if p.on_timeline]
 
         # Furthest reachable index.
+        #
+        # A page is reachable if every workflow page strictly before it
+        # has ``can_proceed=True``. Pages that never registered
+        # ``WorkflowControls`` (info-only Overview, Target Selection, etc.
+        # -- SlicerOpenLIFU#643) count as freely proceedable; the
+        # gating knob is opt-in for pages that need it.
         reachable_index = 0  # first workflow page is always reachable
         for i, k in enumerate(timeline_keys):
             controls = workflow.workflow_controls.get(k)
-            if controls is not None and controls.can_proceed:
+            if controls is None or controls.can_proceed:
                 reachable_index = max(reachable_index, i + 1)
             else:
                 break
@@ -495,7 +519,10 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             )
         else:
             current_controls = workflow.workflow_controls.get(self._current_page_key)
-            can_proceed = bool(current_controls and current_controls.can_proceed)
+            # Same default as the reachable-index calculation: pages
+            # that never registered ``WorkflowControls`` proceed freely
+            # (SlicerOpenLIFU#643).
+            can_proceed = (current_controls is None) or bool(current_controls.can_proceed)
             next_button.setVisible(True)
             next_button.setEnabled(can_proceed)
             next_page = self._pages.get(timeline_keys[current_index + 1])
@@ -569,7 +596,9 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if workflow is None:
             return
         current_controls = workflow.workflow_controls.get(self._current_page_key)
-        if current_controls is None or not current_controls.can_proceed:
+        # Pages that never registered ``WorkflowControls`` are freely
+        # proceedable (SlicerOpenLIFU#643) -- the gating knob is opt-in.
+        if current_controls is not None and not current_controls.can_proceed:
             return
         self.show_page(timeline_keys[current_index + 1])
 

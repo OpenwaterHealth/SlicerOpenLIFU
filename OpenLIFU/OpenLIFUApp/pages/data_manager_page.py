@@ -47,6 +47,7 @@ from OpenLIFULib import (
     get_app_state,
     get_cur_db,
 )
+from OpenLIFULib.module_layout import wrap_page_in_scroll_area
 from OpenLIFULib.util import mark_session_dirty, session_is_dirty
 
 from OpenLIFUApp.dialogs.session_dialogs import (
@@ -117,8 +118,12 @@ class OpenLIFUDataManagerWidget(ScriptedLoadableModuleWidget):
         self.tabs.addTab(self.build_users_tab(), "Users")
         top_layout.addWidget(self.tabs, 1)
 
-        self.layout.addWidget(top)
-        self.uiWidget = top
+        # Wrap in a QScrollArea so the page scrolls INSIDE the host's
+        # pageStack when its content exceeds the viewport
+        # (SlicerOpenLIFU#643).
+        scroll = wrap_page_in_scroll_area(top)
+        self.layout.addWidget(scroll)
+        self.uiWidget = scroll
 
     def enter(self) -> None:
         """Rebuild every visible piece of state from live sources.

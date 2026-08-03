@@ -40,6 +40,7 @@ from slicer.ScriptedLoadableModule import (
 )
 
 from OpenLIFULib import get_app_state, get_cur_db
+from OpenLIFULib.module_layout import wrap_page_in_scroll_area
 from OpenLIFULib.util import mark_session_dirty
 
 from OpenLIFUApp.dialogs.session_dialogs import (
@@ -126,10 +127,15 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget):
         outer.addLayout(self.build_admin_row())
         outer.addStretch(1)
 
-        self.layout.addWidget(top)
-        # The host looks up ``uiWidget`` when embedding the page into its
-        # QStackedWidget. Naming enforced by the host's embed helper.
-        self.uiWidget = top
+        # Wrap in a QScrollArea so the page scrolls INSIDE the host's
+        # pageStack when its content exceeds the viewport, instead of
+        # pushing the host's fixed header / footer off-screen
+        # (SlicerOpenLIFU#643). ``uiWidget`` MUST point at the scroll
+        # area itself, because the host's embed helper adds
+        # ``widget.uiWidget`` directly into the pageStack.
+        scroll = wrap_page_in_scroll_area(top)
+        self.layout.addWidget(scroll)
+        self.uiWidget = scroll
 
     def enter(self) -> None:
         """Reset first-render state and populate every widget from live sources.

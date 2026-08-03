@@ -754,6 +754,67 @@ def apply_module_layout(
 
 
 # ----------------------------------------------------------------------
+# scroll-area wrapping for split-session pages
+# ----------------------------------------------------------------------
+
+def wrap_page_in_scroll_area(page_widget: "qt.QWidget") -> "qt.QScrollArea":
+    """Wrap a programmatically-built page widget in a vertical-only ``QScrollArea``.
+
+    Slim companion to :func:`apply_module_layout` for split-session
+    pages that build their UI programmatically rather than via a
+    ``.ui`` file. The new pages (Home, Data Manager, Session Overviews,
+    Target Selection, ...) don't have a per-page header /
+    workflow-controls placeholder pattern -- the host module provides
+    those. What they still need is the SAME scroll-area contract:
+
+    * ``setFrameShape(NoFrame)`` -- no visible border; the scroll area
+      is a mechanism, not a visual chrome element.
+    * ``setHorizontalScrollBarPolicy(ScrollBarAlwaysOff)`` -- pages
+      layout horizontally to the panel width.
+    * ``setWidgetResizable(True)`` -- the KEY property. Without it,
+      the scroll area treats the wrapped widget as fixed-size and
+      won't stretch it to the viewport width; the visible surface
+      becomes a small island in a big scroll area.
+
+    Usage in a page's ``setup()``:
+
+    .. code-block:: python
+
+        top = qt.QWidget()
+        outer = qt.QVBoxLayout(top)
+        # ... build ...
+        outer.addStretch(1)  # push content to the top of the viewport
+        scroll = wrap_page_in_scroll_area(top)
+        self.layout.addWidget(scroll)
+        self.uiWidget = scroll   # host mounts THIS into the pageStack
+
+    ``self.uiWidget`` MUST point at the returned scroll area, not the
+    inner ``top`` widget -- the host's embed helper adds
+    ``widget.uiWidget`` into the pageStack, and we want the scroll
+    area there so the page's content can scroll internally.
+
+    The returned scroll area has ``Expanding`` vertical size policy,
+    so within the pageStack (which itself has ``Expanding`` vertical
+    policy) it stretches to fill the space between the host's fixed
+    header and footer.
+
+    Introduced SlicerOpenLIFU#643 after the legacy fixed-header
+    / scrollable-body / fixed-footer pattern (implemented by
+    :func:`apply_module_layout` for legacy pages) was lost during the
+    split-session page rewrites.
+    """
+    import qt
+    scroll = qt.QScrollArea()
+    scroll.setObjectName("pageScrollArea")
+    scroll.setFrameShape(qt.QFrame.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+    scroll.setWidgetResizable(True)
+    scroll.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Expanding)
+    scroll.setWidget(page_widget)
+    return scroll
+
+
+# ----------------------------------------------------------------------
 # passive observer wiring (read-only header)
 # ----------------------------------------------------------------------
 
