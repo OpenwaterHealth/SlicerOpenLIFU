@@ -53,23 +53,34 @@ class Page:
 # that lives on those pages.
 #
 # Legacy pages have been retired; when a fresh replacement for a legacy
-# timeline page lands (Planning Session Overview, Sonication Session
-# Overview, PrePlanning, Solution Generator, Localization, Sonication
-# Control) it will be appended here.
+# timeline page lands (Virtual Fit, Solution Generator, Localization,
+# Sonication Control) it will be appended here.
 #
-# Timeline registration for the Session Overview pages is deferred until
-# the timeline strip supports mode switching (planning-workflow vs
-# sonication-workflow strips) -- for now the Overview pages are
-# ``on_timeline=False`` and are reached from the Data Manager after a
-# successful load (SlicerOpenLIFU#633).
+# Planning Session Overview is the FIRST timeline step for a
+# PlanningSession (SlicerOpenLIFU#642) -- it's the info-only status
+# card users land on after "New / Continue Planning Session", and the
+# timeline strip then advances into Target Selection etc.
+#
+# Sonication Session Overview stays off-timeline for now: the timeline
+# strip currently renders a single ordered sequence, and mixing the
+# Planning and Sonication workflows in one strip would confuse users
+# (deferred per SlicerOpenLIFU#633). When the Sonication workflow pages
+# (Localization / Sonication Control) land, we'll decide whether to
+# switch the strip based on the loaded session type or add a per-type
+# timeline separator.
 PAGE_DEFS: List[Page] = [
     Page("OpenLIFUHome",                       "Home",                        on_timeline=False),
     Page("OpenLIFUDataManager",                "Data Manager",                on_timeline=False),
-    Page("OpenLIFUPlanningSessionOverview",    "Planning Session Overview",   on_timeline=False),
+    # Sonication workflow -- overview stays off-timeline until the
+    # sonication pages (Localization, Sonication Control) land and we
+    # decide how to switch the timeline strip between the Planning and
+    # Sonication workflow shapes. Until then, users on a
+    # SonicationSession still navigate via the footer's Back-to-Home.
     Page("OpenLIFUSonicationSessionOverview",  "Sonication Session Overview", on_timeline=False),
-    # First page of the Planning workflow timeline (SlicerOpenLIFU#641).
-    # Virtual Fit and Solution Generator will join it as they land; the
-    # timeline strip shows the ordered sequence and the Next button
-    # advances through it.
+    # Planning workflow timeline. Overview is the first stop; the
+    # timeline strip's second circle advances into Target Selection.
+    # Virtual Fit / Solution Generator join here as they land
+    # (SlicerOpenLIFU#642).
+    Page("OpenLIFUPlanningSessionOverview",    "Planning Session Overview",   on_timeline=True),
     Page("OpenLIFUTargetSelection",            "Target Selection",            on_timeline=True),
 ]

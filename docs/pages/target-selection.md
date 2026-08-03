@@ -20,12 +20,13 @@ targets-table selection and a VF-inputs "current target" could
 point at different targets at the same time, producing a 3D scene
 whose contents you had to reason about across two widgets.
 
-Users reach this page from the Planning Session Overview's
-**Edit Targets…** button. Volume Segmentation will eventually slot
-in ahead of Target Selection; the workflow will become
+Users reach this page via the workflow timeline in the host's fixed
+footer (SlicerOpenLIFU#642). Target Selection is the second circle
+on the Planning workflow timeline; the first is Planning Session
+Overview. Volume Segmentation will eventually slot in ahead of
+Target Selection; the workflow will become
 `Overview → Volume Segmentation → Target Selection → Virtual Fit →
-Solution Generator → Overview`. Timeline registration lands together
-with Virtual Fit.
+Solution Generator → Overview`.
 
 ## Screen layout
 
@@ -214,9 +215,12 @@ leaking state.
 
 Manual, until automated tests land:
 
-1. Load a PlanningSession from Home. Overview appears. Click
-   **Edit Targets…**. Target Selection page opens; table populated
-   from the loaded session (if the session had any targets).
+1. Load a PlanningSession from Home. Overview appears with the
+   footer's timeline strip showing two circles: Planning Session
+   Overview (current, ringed) and Target Selection (reachable,
+   hollow). Click the Target Selection circle. Target Selection
+   opens; table populated from the loaded session (if the session
+   had any targets).
 2. Click **Add Target**. Click in a slice view. Table gets a new
    row; the fiducial appears in the 3D view and slice views. Session
    is marked dirty (host toolbar Save button appears).
@@ -249,5 +253,7 @@ Manual, until automated tests land:
 * [`../data-model.md`](../data-model.md) — memory-first Save
   semantics.
 * [`planning-session-overview.md`](planning-session-overview.md) —
-  hosts the Edit Targets… button that launches this page.
+  first workflow-timeline step; users navigate here to Target
+  Selection via the footer timeline strip.
 * SlicerOpenLIFU#640 — issue that scoped this change.
+* SlicerOpenLIFU#642 — timeline-based navigation correction.

@@ -149,8 +149,8 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
 
         outer.addWidget(self.build_header())
         outer.addWidget(self.build_context_group())
-        outer.addWidget(self.build_targets_group(), 1)
-        outer.addStretch(0)
+        outer.addWidget(self.build_targets_group())
+        outer.addStretch(1)
 
         self.layout.addWidget(top)
         self.uiWidget = top
@@ -242,6 +242,13 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
             ("Show",  50),
             ("Jump",  56),
         ])
+        # Cap the table's height at ~4 rows plus the header. Beyond
+        # that the table scrolls internally rather than pushing the
+        # action buttons off the bottom of the viewport
+        # (SlicerOpenLIFU#642). Reserve a bit of extra room for the
+        # optional horizontal scrollbar the ID column can trigger.
+        self.targets_table.setMinimumHeight(160)
+        self.targets_table.setMaximumHeight(200)
         # The ID column is user-visible but off by default -- the
         # display label is what the user cares about; the ID is only
         # relevant for debugging or for cross-referencing with an
@@ -256,7 +263,7 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         self.targets_table.horizontalHeader().customContextMenuRequested.connect(
             self.on_targets_header_context_menu_requested,
         )
-        layout.addWidget(self.targets_table, 1)
+        layout.addWidget(self.targets_table)
 
         row = qt.QHBoxLayout()
         self.add_button = qt.QPushButton("Add Target")

@@ -341,22 +341,34 @@ options and destination.
 
 **Planning workflow**:
 
+Home ("New / Continue Planning Session") lands the user on
+Planning Session Overview -- the FIRST step on the workflow
+timeline strip in the fixed footer (SlicerOpenLIFU#642). The
+user advances through the strip by clicking circles or the
+Next button.
+
 ```
 Home ("New Planning Session" | "Continue Planning Session")
-     -> Planning Session Overview
-     -> [Volume Segmentation]      (planned)
-     -> Target Selection            (SlicerOpenLIFU#640, this commit)
-     -> Virtual Fit                 (follow-up)
-     -> Solution Generator (optional: compute pre-solutions)
-     -> back to Planning Session Overview
-     -> "Finalize Plan" button -> writes a Plan; user can continue editing
+     ┌ timeline: Planning Session Overview  (info-only card)
+     ├ timeline: [Volume Segmentation]     (planned)
+     ├ timeline: Target Selection           (SlicerOpenLIFU#640)
+     ├ timeline: Virtual Fit                (follow-up)
+     ├ timeline: Solution Generator         (compute pre-solutions)
+     └ "Finalize Plan" button on the workflow toolbar
+       -> writes a Plan; user can continue editing
 ```
 
 **Sonication workflow**:
 
+Sonication workflow timeline hasn't landed yet; when the Sonication
+Localization / Sonication Control pages arrive, the timeline will
+either switch shape based on the loaded session type or add a
+per-workflow separator. Until then, Sonication Session Overview
+is off-timeline.
+
 ```
 Home ("New Sonication Session" | "Continue Sonication Session")
-     -> Sonication Session Overview
+     -> Sonication Session Overview          (off-timeline for now)
      -> Localization (capture photoscan, register, run TT, approve TT)
      -> Solution Generator (compute final Solution)
      -> back to Sonication Session Overview

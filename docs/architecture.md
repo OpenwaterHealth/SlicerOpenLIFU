@@ -88,12 +88,18 @@ Slicer-side scene data (volume node, target fiducials); pages consume
 
 ## 3. Page navigation
 
+Within a loaded session, the fixed footer's timeline strip is the
+canonical navigation surface: circles for each workflow step, click
+to jump to any reachable step (SlicerOpenLIFU#642). Home, Data
+Manager, and the Sonication Session Overview live outside the
+timeline (entry / admin / mode-not-yet-timeline'd respectively).
+
 ```mermaid
 flowchart LR
     HOME(["Home"])
     DM(["Data Manager"])
-    PSO(["Planning Session<br/>Overview<br/>(info-only summary)"])
-    TSEL(["Target Selection"])
+    PSO(["Planning Session<br/>Overview<br/>(info-only summary)<br/>[timeline step 1]"])
+    TSEL(["Target Selection<br/>[timeline step 2]"])
     VF(["Virtual Fit<br/>(TBD)"])
     SG(["Solution Generator<br/>(TBD)"])
     SSO(["Sonication Session<br/>Overview<br/>(info-only summary)"])
@@ -107,16 +113,13 @@ flowchart LR
     HOME -->|"Open Data Manager…"| DM
     DM -->|"Load Planning Session"| PSO
     DM -->|"Load Sonication Session"| SSO
-    PSO -->|"Edit Targets…"| TSEL
-    PSO -->|"Compute pre-solutions"| SG
-    TSEL -->|"Next: Virtual Fit"| VF
+    PSO <-->|"timeline"| TSEL
+    TSEL <-->|"timeline"| VF
+    VF <-->|"timeline"| SG
     SSO -->|"Capture photoscan / TT"| LOC
     SSO -->|"Compute final solution"| SG
     SSO -->|"Run sonication"| SC
     LOC --> SSO
-    TSEL --> PSO
-    VF --> PSO
-    SG --> PSO
     SG --> SSO
     SC --> SSO
 ```
