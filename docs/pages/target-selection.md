@@ -61,17 +61,17 @@ Class: `OpenLIFUTargetSelectionWidget` (extends
 | `refresh_targets_table()` | `refresh_all`, `on_edit_toggle` | Rebuild the targets table from `planning_session.get_target_nodes()`. Wrapped in `is_refreshing_table = True` so cell-change signals bail. |
 | `populate_target_row(row, node)` | `refresh_targets_table` | Populate one row from a fiducial node. |
 | `apply_edit_flag(item)` | `populate_target_row` | Set the item's `ItemIsEditable` flag from `is_in_edit_mode`. |
-| `refresh_action_buttons()` | `refresh_all`, selection changes | Enable / disable Add / Import / Edit / Remove based on session-loaded + placement + selection state. |
+| `refresh_action_buttons()` | `refresh_all`, selection changes, edit-mode toggle, placement start / end | Gate Add / Import / Edit / Remove on the current mode (SlicerOpenLIFU#644): all four disabled while a placement is in-flight; Add / Import disabled while Edit mode is on. Escape is the sole cancel path during placement. |
 | `on_add_button_clicked()` | signal | Start point placement: create placeholder fiducial, enter PLACE mode, observe `EndPlacementEvent`. |
 | `on_placement_ended(caller, event)` | Slicer VTK observer | Register the placed target via `logic.add_target_from_scene`, or clean up the placeholder on cancel. After registering, selects the new row and toggles Edit mode ON so the just-placed fiducial is unlocked and immediately draggable (SlicerOpenLIFU#641). |
 | `cancel_placement()` | `exit()`, `cleanup()` | Force-cancel: remove the observer, delete the placeholder, drop PLACE mode. |
 | `on_import_button_clicked()` | signal | Show `ImportTargetDialog`; register the chosen scene fiducial or file-loaded fiducial. |
-| `on_edit_toggle(checked)` | signal | Enter / exit Edit mode. Toggles cell edit triggers, rebuilds the table for `ItemIsEditable` flags, and (on exit) calls `logic.sync_targets_from_scene()` so any 3D-drag changes get committed to the openlifu Session (SlicerOpenLIFU#641). |
+| `on_edit_toggle(checked)` | signal | Enter / exit Edit mode. Toggles cell edit triggers, rebuilds the table for `ItemIsEditable` flags, records / clears `edit_focus_row` for the selection-lock (SlicerOpenLIFU#644), and (on exit) calls `logic.sync_targets_from_scene()` so any 3D-drag changes get committed to the openlifu Session (SlicerOpenLIFU#641). |
 | `apply_edit_focus_to_selection()` | `on_edit_toggle`, `on_targets_table_selection_changed`, `refresh_all`, `exit` | Unlock the selected fiducial (only when in edit mode); lock every other target fiducial. Called anywhere the selection or edit-mode state changes (SlicerOpenLIFU#641). |
 | `select_row_for_node(node)` | `on_placement_ended` | Move table selection to the row whose Name cell carries `node` in its UserRole data. Used to select the just-placed target so edit mode focuses on it. |
-| `on_remove_button_clicked()` | signal | Confirm + `logic.remove_target(node)`. |
 | `on_targets_table_item_changed(item)` | signal | Cell edit: dispatch to `logic.rename_target` (Name) or `logic.move_target` (R/A/S). Bails during refresh / when not entered. |
-| `on_targets_table_selection_changed()` | signal | Update Remove-button enablement. In edit mode, also re-applies edit focus so the newly-selected fiducial unlocks and the previously-selected one re-locks. |
+| `on_targets_table_selection_changed()` | signal | Update Remove-button enablement. In edit mode, silently reverts user attempts to select a different row so selection stays locked to `edit_focus_row` (SlicerOpenLIFU#644); the user is committed to editing one target at a time. |
+| `on_remove_button_clicked(_checked)` | signal | Confirm + `logic.remove_target(node)`. If the removed target was the one under Edit-mode focus, exits Edit mode (the `edit_focus_row` index would otherwise dangle) -- SlicerOpenLIFU#644. |
 | `on_show_checkbox_toggled(node, checked)` | signal | `logic.toggle_visibility(node, checked)`. |
 | `on_jump_button_clicked(node)` | signal | `logic.jump_to_target(node)`. |
 | `on_targets_header_context_menu_requested(pos)` | signal | Right-click header menu to toggle hideable columns (currently just ID). |
@@ -180,6 +180,31 @@ the page. The lifecycle is:
 All observer / placeholder state is on `self` -- no `slicer.util`
 globals -- so the page can be reloaded / re-embedded without
 leaking state.
+
+## Edit-mode contract
+
+The page enforces "you are editing ONE target at a time"
+(SlicerOpenLIFU#644):
+
+* **While `is_in_edit_mode == True`**:
+  * `edit_focus_row` names the row that Edit mode focused on.
+  * Add Target and Import are disabled -- user has to click Done
+    before starting a new placement or import.
+  * Table selection is locked to `edit_focus_row`. User attempts to
+    click a different row are silently reverted (see
+    `on_targets_table_selection_changed`).
+  * The focused fiducial is the only one that's unlocked in 3D.
+  * Remove stays enabled with its normal confirm dialog. Removing
+    the edit-focus target auto-exits Edit mode so `edit_focus_row`
+    doesn't dangle.
+
+* **While a placement is in-flight (`placement_node is not None`)**:
+  * ALL four action buttons (Add / Import / Edit / Remove) are
+    disabled. Escape is the sole cancel path -- it fires
+    `EndPlacementEvent` with 0 control points and cleans up the
+    placeholder in `on_placement_ended`.
+  * If the user navigates away mid-placement, `exit()` calls
+    `cancel_placement()` to clean up.
 
 ## Design rationale
 

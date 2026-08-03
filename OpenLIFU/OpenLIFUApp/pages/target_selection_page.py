@@ -125,6 +125,12 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         # is highlighted + unlocked so it can be dragged in slice views,
         # every other fiducial stays locked.
         self.is_in_edit_mode = False
+        # Row that Edit mode focused on. Selection changes while
+        # ``is_in_edit_mode`` is True are silently reverted to this row
+        # -- the user is committed to editing one target at a time and
+        # switching focus mid-edit is not supported
+        # (SlicerOpenLIFU#644). ``None`` outside edit mode.
+        self.edit_focus_row: Optional[int] = None
         # Placeholder for the fiducial the user is actively placing via
         # Add Target's PLACE-mode flow. ``None`` when no placement is in
         # progress. Only one at a time -- the Add button is disabled
@@ -191,6 +197,7 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
             with SignalBlocker(self.edit_button):
                 self.edit_button.setChecked(False)
             self.is_in_edit_mode = False
+            self.edit_focus_row = None
             self.edit_button.setText("Edit")
         self.apply_edit_focus_to_selection()
 
@@ -451,17 +458,35 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
     def refresh_action_buttons(self) -> None:
         """Enable / disable the action row based on state.
 
-        * Add / Import: disabled while a placement is in progress.
-        * Edit: enabled iff a session is loaded.
-        * Remove: enabled iff a session is loaded and a target row is
-          currently selected.
+        Three modes (SlicerOpenLIFU#644):
+
+        * **Placing**: user clicked Add Target and we're waiting for a
+          slice-view click. Every button disabled. Escape is the sole
+          cancel path -- it fires ``EndPlacementEvent`` with 0 control
+          points and cleans up in :meth:`on_placement_ended`.
+        * **Editing**: user is fine-tuning one focused target. Add /
+          Import disabled so we can't start another placement while a
+          target is open. Edit button stays enabled (reads "Done"). Remove
+          stays enabled (still confirms).
+        * **Normal**: nothing special. Add / Import / Edit enabled if a
+          session is loaded; Remove enabled if a session is loaded AND a
+          row is selected.
         """
         loaded = get_app_state().loaded_planning_session is not None
         placing = self.placement_node is not None
+        editing = self.is_in_edit_mode
         selection_row = self.targets_table.currentRow()
         has_selection = selection_row is not None and selection_row >= 0
-        self.add_button.enabled = loaded and not placing
-        self.import_button.enabled = loaded and not placing
+
+        if placing:
+            self.add_button.enabled = False
+            self.import_button.enabled = False
+            self.edit_button.enabled = False
+            self.remove_button.enabled = False
+            return
+
+        self.add_button.enabled = loaded and not editing
+        self.import_button.enabled = loaded and not editing
         self.edit_button.enabled = loaded
         self.remove_button.enabled = loaded and has_selection
 
@@ -612,6 +637,9 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
           fiducial to avoid accidental drags.
         * Sets table edit triggers so cells become editable.
         * Renames the Edit button to "Done".
+        * Records the focused row in ``edit_focus_row`` so
+          :meth:`on_targets_table_selection_changed` can revert user
+          attempts to switch to another row (SlicerOpenLIFU#644).
 
         Leaving edit mode locks all fiducials, resets the table
         triggers so cells are read-only, and force-syncs any drag-only
@@ -620,6 +648,11 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         but a 3D drag has no such sink until we push it here).
         """
         self.is_in_edit_mode = checked
+        if checked:
+            row = self.targets_table.currentRow()
+            self.edit_focus_row = row if row is not None and row >= 0 else None
+        else:
+            self.edit_focus_row = None
         self.edit_button.setText("Done" if checked else "Edit")
         self.targets_table.setEditTriggers(
             qt.QAbstractItemView.DoubleClicked
@@ -640,6 +673,16 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         # Rebuild the table so Qt.ItemIsEditable flag toggles pick up
         # and R / A / S cells match the freshly-synced fiducial state.
         self.refresh_targets_table()
+        # Belt-and-suspenders: the table rebuild may clobber selection
+        # depending on Qt version. Re-select the edit-focus row so the
+        # user's committed target stays the one that's highlighted +
+        # unlocked when :meth:`apply_edit_focus_to_selection` runs
+        # below (SlicerOpenLIFU#644).
+        if checked and self.edit_focus_row is not None:
+            row_count = self.targets_table.rowCount
+            if 0 <= self.edit_focus_row < row_count:
+                with SignalBlocker(self.targets_table):
+                    self.targets_table.selectRow(self.edit_focus_row)
         # Apply the lock/unlock focus AFTER the table rebuild so the
         # selection restoration in the rebuild doesn't move focus
         # around unexpectedly.
@@ -700,7 +743,12 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
                 return
 
     def on_remove_button_clicked(self, _checked: bool = False) -> None:
-        """Remove the currently-selected target from the session and scene."""
+        """Remove the currently-selected target from the session and scene.
+
+        If the removed target was the one under Edit-mode focus,
+        exit Edit mode -- the ``edit_focus_row`` index would otherwise
+        dangle at a stale row (SlicerOpenLIFU#644).
+        """
         node = self.selected_target_node()
         if node is None:
             return
@@ -716,6 +764,11 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         except Exception as exc:  # noqa: BLE001
             self.show_error(f"Remove failed: {exc}")
             return
+        if self.is_in_edit_mode:
+            # Toggling the button fires on_edit_toggle(False), which
+            # clears edit_focus_row, syncs (no-op after remove), and
+            # resets edit triggers + button label.
+            self.edit_button.setChecked(False)
         self.refresh_all()
 
     def on_targets_table_item_changed(self, item: qt.QTableWidgetItem) -> None:
@@ -751,16 +804,29 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
             self.refresh_targets_table()
 
     def on_targets_table_selection_changed(self) -> None:
-        """Update Remove-button enablement based on selection.
+        """Handle a table selection change.
 
-        While in edit mode, also move the "unlocked in 3D" focus to
-        the newly-selected row (SlicerOpenLIFU#641). The previously-
-        selected fiducial re-locks so the user's next drag can only
-        move the currently-focused target.
+        Contract (SlicerOpenLIFU#644):
+
+        * If Edit mode is on and the user tries to select a row that
+          isn't the ``edit_focus_row``, revert the selection with a
+          signal-blocked ``selectRow`` -- the user is committed to
+          editing one target at a time.
+        * If Edit mode is on and the selection lands back on
+          ``edit_focus_row`` (e.g. because we just reverted), no-op.
+        * Otherwise: rebuild Remove-button enablement.
         """
         if self.is_refreshing_table:
             return
-        if self.is_in_edit_mode:
+        if self.is_in_edit_mode and self.edit_focus_row is not None:
+            current = self.targets_table.currentRow()
+            if current != self.edit_focus_row:
+                with SignalBlocker(self.targets_table):
+                    self.targets_table.selectRow(self.edit_focus_row)
+                # After revert, the selection is back on the focused
+                # row and edit focus is already applied to it. No need
+                # to re-apply.
+                return
             self.apply_edit_focus_to_selection()
         self.refresh_action_buttons()
 
