@@ -67,5 +67,9 @@ PAGE_DEFS: List[Page] = [
     Page("OpenLIFUDataManager",                "Data Manager",                on_timeline=False),
     Page("OpenLIFUPlanningSessionOverview",    "Planning Session Overview",   on_timeline=False),
     Page("OpenLIFUSonicationSessionOverview",  "Sonication Session Overview", on_timeline=False),
-    Page("OpenLIFUTargetSelection",            "Target Selection",            on_timeline=False),
+    # First page of the Planning workflow timeline (SlicerOpenLIFU#641).
+    # Virtual Fit and Solution Generator will join it as they land; the
+    # timeline strip shows the ordered sequence and the Next button
+    # advances through it.
+    Page("OpenLIFUTargetSelection",            "Target Selection",            on_timeline=True),
 ]

@@ -52,23 +52,25 @@ Class: `OpenLIFUTargetSelectionWidget` (extends
 | `__init__(parent=None)` | host `_instantiate_page_widget` | Widget construction; sets `moduleName = "OpenLIFU"` and placement-mode flags. |
 | `setup()` | host `_instantiate_page_widget` | Build the programmatic Qt UI once. Sets `self.uiWidget`. |
 | `enter()` | host `_delegate_enter` | Sole first-render truth. Sets `is_entered = True`, calls `refresh_all()`. |
-| `exit()` | host `_delegate_exit` | Sets `is_entered = False`. Cancels any in-flight placement so the user doesn't return to Home with an empty placeholder fiducial hanging around. |
+| `exit()` | host `_delegate_exit` | Sets `is_entered = False`. Cancels any in-flight placement so the user doesn't return to Home with an empty placeholder fiducial hanging around. Also syncs any 3D-drag changes to the openlifu Session (SlicerOpenLIFU#641) and forces edit mode off so returning locks every fiducial. |
 | `cleanup()` | Slicer widget teardown | Cancels any pending placement observer. |
 | `build_header()` / `build_context_group()` / `build_targets_group()` | `setup()` | Programmatic Qt UI construction. |
-| `refresh_all()` | `enter()` + signal handlers after mutations | Rebuild context labels + table + action-button enablement. Idempotent. |
+| `refresh_all()` | `enter()` + signal handlers after mutations | Rebuild context labels + table + action-button enablement + re-apply edit-focus lock (SlicerOpenLIFU#641). Idempotent. |
 | `refresh_context()` | `refresh_all` | Repopulate the Planning Session context labels. |
 | `refresh_targets_table()` | `refresh_all`, `on_edit_toggle` | Rebuild the targets table from `planning_session.get_target_nodes()`. Wrapped in `is_refreshing_table = True` so cell-change signals bail. |
 | `populate_target_row(row, node)` | `refresh_targets_table` | Populate one row from a fiducial node. |
 | `apply_edit_flag(item)` | `populate_target_row` | Set the item's `ItemIsEditable` flag from `is_in_edit_mode`. |
 | `refresh_action_buttons()` | `refresh_all`, selection changes | Enable / disable Add / Import / Edit / Remove based on session-loaded + placement + selection state. |
 | `on_add_button_clicked()` | signal | Start point placement: create placeholder fiducial, enter PLACE mode, observe `EndPlacementEvent`. |
-| `on_placement_ended(caller, event)` | Slicer VTK observer | Register the placed target via `logic.add_target_from_scene`, or clean up the placeholder on cancel. |
+| `on_placement_ended(caller, event)` | Slicer VTK observer | Register the placed target via `logic.add_target_from_scene`, or clean up the placeholder on cancel. After registering, selects the new row and toggles Edit mode ON so the just-placed fiducial is unlocked and immediately draggable (SlicerOpenLIFU#641). |
 | `cancel_placement()` | `exit()`, `cleanup()` | Force-cancel: remove the observer, delete the placeholder, drop PLACE mode. |
 | `on_import_button_clicked()` | signal | Show `ImportTargetDialog`; register the chosen scene fiducial or file-loaded fiducial. |
-| `on_edit_toggle(checked)` | signal | Enter / exit Edit mode; rebuilds the table so cell editable flags apply. |
+| `on_edit_toggle(checked)` | signal | Enter / exit Edit mode. Toggles cell edit triggers, rebuilds the table for `ItemIsEditable` flags, and (on exit) calls `logic.sync_targets_from_scene()` so any 3D-drag changes get committed to the openlifu Session (SlicerOpenLIFU#641). |
+| `apply_edit_focus_to_selection()` | `on_edit_toggle`, `on_targets_table_selection_changed`, `refresh_all`, `exit` | Unlock the selected fiducial (only when in edit mode); lock every other target fiducial. Called anywhere the selection or edit-mode state changes (SlicerOpenLIFU#641). |
+| `select_row_for_node(node)` | `on_placement_ended` | Move table selection to the row whose Name cell carries `node` in its UserRole data. Used to select the just-placed target so edit mode focuses on it. |
 | `on_remove_button_clicked()` | signal | Confirm + `logic.remove_target(node)`. |
 | `on_targets_table_item_changed(item)` | signal | Cell edit: dispatch to `logic.rename_target` (Name) or `logic.move_target` (R/A/S). Bails during refresh / when not entered. |
-| `on_targets_table_selection_changed()` | signal | Update Remove-button enablement. |
+| `on_targets_table_selection_changed()` | signal | Update Remove-button enablement. In edit mode, also re-applies edit focus so the newly-selected fiducial unlocks and the previously-selected one re-locks. |
 | `on_show_checkbox_toggled(node, checked)` | signal | `logic.toggle_visibility(node, checked)`. |
 | `on_jump_button_clicked(node)` | signal | `logic.jump_to_target(node)`. |
 | `on_targets_header_context_menu_requested(pos)` | signal | Right-click header menu to toggle hideable columns (currently just ID). |
@@ -83,16 +85,18 @@ without the widget.
 
 | Method | Purpose |
 |---|---|
-| `add_target_from_scene(fiducial_node)` | Register an existing scene fiducial as a session target. Idempotent. Assigns a palette color; rebuilds `session.targets`; marks dirty. |
+| `add_target_from_scene(fiducial_node)` | Register an existing scene fiducial as a session target. Idempotent. Assigns a palette color; rebuilds `session.targets`; marks dirty; forces pack re-serialisation via `_persist_planning_session_changes` (SlicerOpenLIFU#641). |
 | `import_target_from_disk(path)` | Load a fiducial file (`.mrk.json` / `.fcsv`), trim to a single control point, then `add_target_from_scene`. |
 | `rename_target(target_id, new_label)` | Update the control-point label (user-visible name). Node name (== openlifu Point id) stays put so VF / solution refs remain valid. Marks dirty. |
 | `move_target(target_id, ras_position)` | Update the fiducial position. Revokes any VF-approval flags for the target in the in-memory `virtual_fit_results` dict (a moved target can't count as "approved-at-old-position"). Marks dirty. |
 | `remove_target(fiducial_node)` | Drop the fiducial from `target_nodes`, remove it from the scene, prune any `virtual_fit_results` entry keyed by that target. Marks dirty. |
+| `sync_targets_from_scene()` | Force-sync openlifu `Session.targets` from the scene fiducials. Called on exit-edit-mode (Done) and on `exit()` to capture any 3D-drag changes that never went through `move_target` (SlicerOpenLIFU#641). No-op if nothing actually changed; marks dirty when it does. |
 | `toggle_visibility(fiducial_node, visible)` | Pure scene mutation on the display node's `Visibility`. Does NOT mark dirty (visibility is not part of the openlifu Point). |
 | `jump_to_target(fiducial_node)` | Snap slice views to the target's RAS position. |
 | `_require_planning_session()` | Return the loaded PlanningSession or raise. |
 | `_find_target_node(target_id)` | Look up a session target by openlifu Point id (through the pack's `target_nodes` list, not scene lookup). |
-| `_rebuild_openlifu_targets(planning_session)` | Rewrite `planning_session.session.planning_session.targets` from the current fiducial nodes. Called after every mutation so the openlifu Point list stays in sync with the scene. |
+| `_rebuild_openlifu_targets(planning_session)` | Rewrite `planning_session.session.planning_session.targets` from the current fiducial nodes. Uses the wrapper-capture-mutate-write-back pattern so `@parameterPack` correctly re-serialises the change (SlicerOpenLIFU#641). |
+| `_persist_planning_session_changes(planning_session)` | Force a full pack re-serialisation into the app state (`state.loaded_planning_session = planning_session`). Every mutation ends with a call here so the on-parameter-node representation stays consistent with in-memory mutations. Mirror of the legacy `parameter_node.loaded_session = session` idiom. |
 | `_revoke_vf_approvals_for_target(planning_session, target_id)` | Flip every VF-approval flag for the target to False. Cross-page cascade to VF-node deletion / TT revoke / solution drops lives on the Virtual Fit page. |
 
 ## Dialog

@@ -164,10 +164,27 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
     def exit(self) -> None:
         """Mark the page as not entered. Cancel any in-flight placement
         so the user doesn't return to Home with an empty placeholder
-        fiducial hanging around."""
+        fiducial hanging around. Lock every target fiducial so navigating
+        to another page doesn't leave a draggable target -- edit affordances
+        are strictly this page's concern (SlicerOpenLIFU#641).
+
+        Also captures any 3D-drag changes into the openlifu Session on
+        the way out, so navigating away with Back-to-Home doesn't
+        silently lose an unsaved drag.
+        """
         self.is_entered = False
         if self.placement_node is not None:
             self.cancel_placement()
+        if self.is_in_edit_mode:
+            try:
+                self.logic.sync_targets_from_scene()
+            except Exception:  # noqa: BLE001
+                logging.exception("TargetSelection: sync_targets_from_scene failed")
+            with SignalBlocker(self.edit_button):
+                self.edit_button.setChecked(False)
+            self.is_in_edit_mode = False
+            self.edit_button.setText("Edit")
+        self.apply_edit_focus_to_selection()
 
     def cleanup(self) -> None:
         """Widget teardown. Cancels any pending placement observer."""
@@ -290,6 +307,13 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         self.refresh_context()
         self.refresh_targets_table()
         self.refresh_action_buttons()
+        # Reapply the "edit-mode lock focus" contract after every
+        # refresh. Enter-time this ensures every target starts locked
+        # (edit mode always starts off on page entry, since ``exit()``
+        # reset it). Mid-flow it re-locks anything that a scene
+        # observer or external code may have unlocked out of band
+        # (SlicerOpenLIFU#641).
+        self.apply_edit_focus_to_selection()
 
     def refresh_context(self) -> None:
         """Repopulate the Planning Session context labels."""
@@ -461,7 +485,9 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
     def on_placement_ended(self, caller, _event) -> None:
         """Called by Slicer when the user places a point or cancels
         (Escape). Registers a completed target or removes an aborted
-        placeholder."""
+        placeholder, then enters Edit mode focused on the new row so
+        the user can immediately drag the fiducial or type coordinates
+        (SlicerOpenLIFU#641)."""
         interaction_node = caller
         if self.placement_observer_tag is not None:
             interaction_node.RemoveObserver(self.placement_observer_tag)
@@ -482,7 +508,24 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         except Exception as exc:  # noqa: BLE001
             self.show_error(f"Failed to register placed target: {exc}")
             slicer.mrmlScene.RemoveNode(node)
-        self.refresh_all()
+            self.refresh_all()
+            return
+
+        # Refresh the table first so the new row exists, then select
+        # that row BEFORE toggling into edit mode. Order matters:
+        # entering edit mode uses the current selection to decide which
+        # fiducial to unlock.
+        self.refresh_context()
+        self.refresh_targets_table()
+        self.select_row_for_node(node)
+        # Toggle Edit ON (or refresh focus if it was already on) so the
+        # newly-placed fiducial is unlocked + draggable and the user can
+        # fine-tune it right away.
+        if self.is_in_edit_mode:
+            self.apply_edit_focus_to_selection()
+        else:
+            self.edit_button.setChecked(True)  # fires on_edit_toggle
+        self.refresh_action_buttons()
 
     def cancel_placement(self) -> None:
         """Cancel an in-flight placement (e.g. on ``exit()``).
@@ -545,10 +588,101 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
         self.refresh_all()
 
     def on_edit_toggle(self, checked: bool) -> None:
-        """Enter or exit Edit mode. Rebuilds the table so item flags pick up."""
+        """Enter or exit Edit mode.
+
+        Edit mode (SlicerOpenLIFU#641):
+
+        * Unlocks the currently-focused (selected) fiducial so it can
+          be dragged in slice / 3D views. Locks every other target
+          fiducial to avoid accidental drags.
+        * Sets table edit triggers so cells become editable.
+        * Renames the Edit button to "Done".
+
+        Leaving edit mode locks all fiducials, resets the table
+        triggers so cells are read-only, and force-syncs any drag-only
+        changes into the openlifu Session (the R / A / S cell path is
+        already synced through :meth:`on_targets_table_item_changed`,
+        but a 3D drag has no such sink until we push it here).
+        """
         self.is_in_edit_mode = checked
         self.edit_button.setText("Done" if checked else "Edit")
+        self.targets_table.setEditTriggers(
+            qt.QAbstractItemView.DoubleClicked
+            | qt.QAbstractItemView.EditKeyPressed
+            | qt.QAbstractItemView.AnyKeyPressed
+            if checked else qt.QAbstractItemView.NoEditTriggers
+        )
+        if not checked:
+            # Exiting edit mode: capture any 3D-drag changes the user
+            # made to the focused fiducial (or to any other target if
+            # they touched multiple during the session). Also refresh
+            # the R / A / S cells so the table shows the committed
+            # values.
+            try:
+                self.logic.sync_targets_from_scene()
+            except Exception:  # noqa: BLE001
+                logging.exception("TargetSelection: sync_targets_from_scene failed")
+        # Rebuild the table so Qt.ItemIsEditable flag toggles pick up
+        # and R / A / S cells match the freshly-synced fiducial state.
         self.refresh_targets_table()
+        # Apply the lock/unlock focus AFTER the table rebuild so the
+        # selection restoration in the rebuild doesn't move focus
+        # around unexpectedly.
+        self.apply_edit_focus_to_selection()
+        self.refresh_action_buttons()
+
+    def apply_edit_focus_to_selection(self) -> None:
+        """Scope the "unlocked in 3D" affordance to the selected row.
+
+        Called on edit-toggle, on selection change while in edit mode,
+        and after placement. Idempotent.
+
+        Contract (SlicerOpenLIFU#641):
+
+        * ``is_in_edit_mode == False``: lock every target fiducial.
+        * ``is_in_edit_mode == True`` + no row selected: lock every
+          target (nothing to edit yet).
+        * ``is_in_edit_mode == True`` + row selected: unlock the
+          selected fiducial, lock every other target.
+
+        Focus is one-target-at-a-time by design -- the legacy code
+        allowed multi-select unlocking and it produced ambiguous 3D
+        interactions.
+        """
+        planning_session = get_app_state().loaded_planning_session
+        if planning_session is None:
+            return
+        target_nodes = planning_session.get_target_nodes()
+        if not self.is_in_edit_mode:
+            for node in target_nodes:
+                try:
+                    node.SetLocked(True)
+                except Exception:  # noqa: BLE001
+                    pass
+            return
+        selected = self.selected_target_node()
+        for node in target_nodes:
+            try:
+                node.SetLocked(node is not selected)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def select_row_for_node(
+        self, node: "vtkMRMLMarkupsFiducialNode",
+    ) -> None:
+        """Move table selection to the row whose Name cell carries
+        ``node`` in its UserRole data.
+
+        Used after placement so the new target is the row the user
+        sees selected (and therefore the fiducial that unlocks when
+        edit mode enters). Silently no-ops if the row doesn't exist
+        (e.g. the refresh raced ahead of the caller).
+        """
+        for row in range(self.targets_table.rowCount):
+            name_item = self.targets_table.item(row, COLUMN_NAME)
+            if name_item is not None and name_item.data(qt.Qt.UserRole) is node:
+                self.targets_table.selectRow(row)
+                return
 
     def on_remove_button_clicked(self, _checked: bool = False) -> None:
         """Remove the currently-selected target from the session and scene."""
@@ -602,9 +736,17 @@ class OpenLIFUTargetSelectionWidget(ScriptedLoadableModuleWidget):
             self.refresh_targets_table()
 
     def on_targets_table_selection_changed(self) -> None:
-        """Update Remove-button enablement based on selection."""
+        """Update Remove-button enablement based on selection.
+
+        While in edit mode, also move the "unlocked in 3D" focus to
+        the newly-selected row (SlicerOpenLIFU#641). The previously-
+        selected fiducial re-locks so the user's next drag can only
+        move the currently-focused target.
+        """
         if self.is_refreshing_table:
             return
+        if self.is_in_edit_mode:
+            self.apply_edit_focus_to_selection()
         self.refresh_action_buttons()
 
     def on_show_checkbox_toggled(
@@ -722,6 +864,7 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
         assign_unique_color_to_fiducial(fiducial_node, current)
         planning_session.target_nodes = [*current, fiducial_node]
         self._rebuild_openlifu_targets(planning_session)
+        self._persist_planning_session_changes(planning_session)
         mark_session_dirty()
         logging.info(
             "TargetSelection: added target %s",
@@ -770,6 +913,7 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
         node.SetNthControlPointLabel(0, new_label)
         planning_session = self._require_planning_session()
         self._rebuild_openlifu_targets(planning_session)
+        self._persist_planning_session_changes(planning_session)
         mark_session_dirty()
 
     def move_target(
@@ -791,6 +935,7 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
         planning_session = self._require_planning_session()
         self._revoke_vf_approvals_for_target(planning_session, target_id)
         self._rebuild_openlifu_targets(planning_session)
+        self._persist_planning_session_changes(planning_session)
         mark_session_dirty()
 
     def remove_target(
@@ -818,16 +963,50 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
         # and TT / photoscan cascades come with those pages -- for now
         # this page's cascade footprint is limited to VF entries the
         # PlanningSession JSON itself carries.
-        session = planning_session.session.planning_session
-        if target_id in session.virtual_fit_results:
-            del session.virtual_fit_results[target_id]
+        wrapper = planning_session.session
+        if target_id in wrapper.planning_session.virtual_fit_results:
+            del wrapper.planning_session.virtual_fit_results[target_id]
+        planning_session.session = wrapper
         self._rebuild_openlifu_targets(planning_session)
+        self._persist_planning_session_changes(planning_session)
         mark_session_dirty()
         logging.info("TargetSelection: removed target %s", target_id)
 
     # ------------------------------------------------------------------
     # Scene-only helpers (do not touch the session or dirty flag)
     # ------------------------------------------------------------------
+
+    def sync_targets_from_scene(self) -> bool:
+        """Rebuild the openlifu Session's ``targets`` from the scene
+        fiducials and persist the change.
+
+        Called on Done (exit edit mode): if the user dragged a fiducial
+        in 3D but didn't type into the R / A / S cells, only the
+        fiducial has the new position -- the openlifu Session's
+        ``targets`` list is still stale. This method pushes the current
+        fiducial state into the openlifu Session.
+
+        Returns True iff anything actually changed. Marks dirty in that
+        case. Idempotent when nothing has moved.
+        """
+        planning_session = self._require_planning_session()
+        # Snapshot the current openlifu targets to compare against.
+        wrapper_before = planning_session.session
+        before = [
+            (p.id, tuple(p.position), p.name)
+            for p in wrapper_before.planning_session.targets
+        ]
+        self._rebuild_openlifu_targets(planning_session)
+        wrapper_after = planning_session.session
+        after = [
+            (p.id, tuple(p.position), p.name)
+            for p in wrapper_after.planning_session.targets
+        ]
+        if before == after:
+            return False
+        self._persist_planning_session_changes(planning_session)
+        mark_session_dirty()
+        return True
 
     def toggle_visibility(
         self, fiducial_node: "vtkMRMLMarkupsFiducialNode", visible: bool,
@@ -886,6 +1065,15 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
         sync with the scene throughout the edit session; :func:`save_loaded_session`
         can then serialise the up-to-date list without any pre-save
         sync step.
+
+        Uses the "capture wrapper, mutate, write wrapper back" pattern
+        because ``@parameterPack`` fields with custom serializers
+        deserialise-on-read but do not re-serialise on nested-attribute
+        mutation. Without the wrapper reassignment the mutation lives
+        on an ephemeral wrapper and evaporates by the time
+        :func:`save_loaded_session` re-reads the pack --
+        SlicerOpenLIFU#641. The caller must additionally reassign the
+        pack to the app state (see :meth:`_persist_planning_session_changes`).
         """
         target_points = []
         for node in planning_session.get_target_nodes():
@@ -895,7 +1083,27 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
                 logging.exception(
                     "TargetSelection: could not convert fiducial to openlifu Point",
                 )
-        planning_session.session.planning_session.targets = target_points
+        wrapper = planning_session.session
+        wrapper.planning_session.targets = target_points
+        planning_session.session = wrapper
+
+    def _persist_planning_session_changes(self, planning_session) -> None:
+        """Force a full pack re-serialisation into the app state.
+
+        Every mutation on this Logic class ends with a call here so the
+        parameter pack's on-disk representation stays consistent with
+        the in-memory mutations (SlicerOpenLIFU#641).
+
+        Mirror of the legacy
+        ``parameter_node.loaded_session = session`` pattern
+        (``OpenLIFUDataLogic.update_underlying_openlifu_session``).
+        Without this, mutations to ``target_nodes`` DO persist (list
+        field with a built-in serializer) but mutations to
+        ``session.planning_session.targets`` (nested attribute on a
+        custom-serialised wrapper) get lost.
+        """
+        state = get_app_state()
+        state.loaded_planning_session = planning_session
 
     def _revoke_vf_approvals_for_target(
         self, planning_session, target_id: str,
@@ -907,14 +1115,18 @@ class OpenLIFUTargetSelectionLogic(ScriptedLoadableModuleLogic):
         result doesn't silently become the "approved at new position"
         one. Full VF cascade (delete VF nodes, revoke TT approvals, drop
         solutions) will land with the Virtual Fit page.
+
+        Uses the wrapper reassignment pattern for the same reason as
+        :meth:`_rebuild_openlifu_targets` (SlicerOpenLIFU#641).
         """
-        session = planning_session.session.planning_session
-        entries = session.virtual_fit_results.get(target_id)
+        wrapper = planning_session.session
+        entries = wrapper.planning_session.virtual_fit_results.get(target_id)
         if not entries:
             return
-        session.virtual_fit_results[target_id] = [
+        wrapper.planning_session.virtual_fit_results[target_id] = [
             (False, transform) for _approved, transform in entries
         ]
+        planning_session.session = wrapper
 
 
 # ---------------------------------------------------------------------------

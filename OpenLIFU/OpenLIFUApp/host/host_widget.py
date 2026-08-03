@@ -519,6 +519,10 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Footer visibility per page:
         #   * Home:              footer fully hidden (nowhere to go "back" to)
         #   * Timeline page:     footer visible with timeline + Next + status
+        #                        + Back-to-Home (so the user can bail out of
+        #                        the workflow without waiting for a session
+        #                        prompt they may not have if the toolbar Exit
+        #                        button is unavailable). See SlicerOpenLIFU#641.
         #   * Any other page
         #     (Data Manager,
         #      Session Overviews): footer visible with only the Back-to-Home button
@@ -533,7 +537,6 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         show_back_button = (
             self._current_page_key is not None
             and not on_home
-            and not on_timeline_page
         )
         footer_visible = on_timeline_page or show_back_button
         self.ui.hostFooterContainer.setVisible(footer_visible)
@@ -541,8 +544,6 @@ class OpenLIFUHostWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.hostBackToHomeButton.setVisible(show_back_button)
         self.ui.hostTimelineContainer.setVisible(on_timeline_page)
         self.ui.hostStatusLabel.setVisible(on_timeline_page)
-        if show_back_button:
-            next_button.setVisible(False)
 
     # ------------------------------------------------------------------
     # Save / Exit
