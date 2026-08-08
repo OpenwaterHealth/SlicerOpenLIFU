@@ -51,6 +51,7 @@ from OpenLIFULib.util import (
     display_errors,
     ensure_list,
     replace_widget,
+    page_is_entered,
 )
 from OpenLIFULib.volume_thresholding import load_volume_and_threshold_background
 from OpenLIFULib.virtual_fit_results import (
@@ -1489,6 +1490,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        self._entered = True
         ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
@@ -1496,6 +1498,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
@@ -1509,7 +1512,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        if page_is_entered(self):
             self.initializeParameterNode()
         self.setupSHNodeObserver()
 

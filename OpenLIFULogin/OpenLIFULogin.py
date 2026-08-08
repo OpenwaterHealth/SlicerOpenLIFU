@@ -39,7 +39,7 @@ from OpenLIFULib import (
 from OpenLIFULib.class_definition_widgets import ListTableWidget
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner, set_user_account_mode_state
-from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node
+from OpenLIFULib.util import display_errors, get_openlifu_data_parameter_node, page_is_entered
 
 if TYPE_CHECKING:
     import openlifu
@@ -669,6 +669,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        self._entered = True
         dependencies_available = ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
@@ -682,6 +683,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
@@ -695,7 +697,7 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        if page_is_entered(self):
             self.initializeParameterNode()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):

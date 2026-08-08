@@ -37,6 +37,7 @@ from OpenLIFULib.user_account_mode_util import get_current_user, get_user_accoun
 from OpenLIFULib.util import (
     display_errors,
     replace_widget,
+    page_is_entered,
 )
 
 if TYPE_CHECKING:
@@ -375,6 +376,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        self._entered = True
         dependencies_available = ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
@@ -383,6 +385,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
 
         # Cache a WIP (other modules might load one)
         if self._protocol_editor_widgets_initialized and self._cur_save_state == SaveState.UNSAVED_CHANGES:
@@ -402,7 +405,7 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        if page_is_entered(self):
             self.initializeParameterNode()
 
     def onDatabaseChanged(self, db: Optional["openlifu.db.Database"] = None):
@@ -425,6 +428,8 @@ class OpenLIFUProtocolConfigWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.protocolSelector.setCurrentText(prev_protocol)
 
     def onDataParameterNodeModified(self, caller = None, event = None):
+        if not page_is_entered(self):
+            return
         # Edits to data parameter node should not change selected protocol
         prev_protocol = self.ui.protocolSelector.currentText
 

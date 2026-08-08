@@ -13,6 +13,22 @@ if TYPE_CHECKING:
 
 # Use this to ensure compatibility in Python 3.9
 get_hints = get_type_hints if hasattr(Annotated, '__metadata__') else get_type_hints_ext
+def page_is_entered(widget: Any) -> bool:
+    """Return whether an OpenLIFU page widget is currently entered.
+
+    Vanilla 3D Slicer exposes ``parent.isEntered`` on scripted module widgets.
+    The OpenLIFU custom desktop application reparents page widgets into a plain
+    ``QWidget``, so that attribute is unavailable there.  Custom-app delegates
+    call each page's ``enter()`` / ``exit()`` methods, which maintain the
+    ``_entered`` fallback used here.
+    """
+    parent = getattr(widget, "parent", None)
+    parent_is_entered = getattr(parent, "isEntered", None)
+    if parent_is_entered is not None:
+        return bool(parent_is_entered)
+    return bool(getattr(widget, "_entered", False))
+
+
 class BusyCursor:
     """
     Context manager for showing a busy cursor.  Ensures that cursor reverts to normal in

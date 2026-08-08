@@ -71,7 +71,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors, page_is_entered
 from OpenLIFULib.notifications import notify
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
@@ -2138,6 +2138,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
+        self._entered = True
         ensure_python_requirements_for_module_enter()
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
@@ -2145,6 +2146,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     def exit(self) -> None:
         """Called each time the user opens a different module."""
+        self._entered = False
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
@@ -2158,7 +2160,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
     def onSceneEndClose(self, caller, event) -> None:
         """Called just after the scene is closed."""
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
+        if page_is_entered(self):
             self.initializeParameterNode()
 
     def initializeParameterNode(self) -> None:
@@ -2183,6 +2185,8 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
     def onDataParameterNodeModified(self, caller, event) -> None:
+        if not page_is_entered(self):
+            return
         self.updatePhotoscanGenerationButtons()
         self.updateApprovalStatusLabel()
         self.updateInputOptions()
