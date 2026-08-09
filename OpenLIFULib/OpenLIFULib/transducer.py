@@ -88,6 +88,7 @@ class SlicerOpenLIFUTransducer:
         model_node.SetAndObserveTransformNodeID(transform_node.GetID())
         shNode.SetItemParent(shNode.GetItemByDataNode(model_node), parentFolderItem)
         model_node.CreateDefaultDisplayNodes() # toggles the "eyeball" on
+        model_node.GetDisplayNode().SetVisibility2D(True)
 
         if transducer_abspaths_info['transducer_body_abspath'] is not None:
             if transducer.transducer_body_filename != Path(transducer_abspaths_info['transducer_body_abspath']).name:
@@ -96,6 +97,7 @@ class SlicerOpenLIFUTransducer:
             body_model_node.SetName(f"{slicer_transducer_name}-body")
             body_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
             shNode.SetItemParent(shNode.GetItemByDataNode(body_model_node), parentFolderItem)
+            body_model_node.GetDisplayNode().SetVisibility2D(True)
         else:
             body_model_node = None
 
@@ -106,6 +108,7 @@ class SlicerOpenLIFUTransducer:
             shNode.SetItemParent(shNode.GetItemByDataNode(surface_model_node), parentFolderItem)
             surface_model_node.SetAndObserveTransformNodeID(transform_node.GetID())
             surface_model_node.SetName(f"{slicer_transducer_name}-surface")
+            surface_model_node.GetDisplayNode().SetVisibility2D(True)
         else:
             surface_model_node = None
 
@@ -283,6 +286,7 @@ class SlicerOpenLIFUTransducer:
             model_to_clone = self.model_node
         
         self.cloned_virtual_fit_model = get_cloned_node(model_to_clone)
+        self.cloned_virtual_fit_model.GetDisplayNode().SetVisibility2D(True)
         self.cloned_virtual_fit_model.SetAndObserveTransformNodeID(virtual_fit_transform.GetID())
         self.cloned_virtual_fit_model.SetName(f"{model_to_clone.GetName()}-{virtual_fit_transform.GetName()}")
         normalized_color = [c / 255.0 for c in TRANSDUCER_MODEL_COLORS["virtual_fit_result"]] # Normalize color to 0-1 range
