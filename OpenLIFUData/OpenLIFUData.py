@@ -1805,6 +1805,9 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         """Check to ensure that the currently active solution is in a valid state, clearing out the solution
         if it is not and returning whether there is an active valid solution."""
 
+        if self.session_loading_unloading_in_progress:
+            return False
+
         solution = self.getParameterNode().loaded_solution
 
         if solution is None:
