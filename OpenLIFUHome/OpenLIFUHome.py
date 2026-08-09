@@ -420,3 +420,4 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         from OpenLIFUSonicationControl import OpenLIFUSonicationControlTest
         sct = OpenLIFUSonicationControlTest()
         sct._workflow_sonication_control()
+        dt.clear_session_regression()

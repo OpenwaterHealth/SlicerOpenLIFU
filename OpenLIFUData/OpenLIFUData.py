@@ -1678,7 +1678,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         for f in self._on_subject_changed_callbacks:
             f(self._subject)
 
-    def clear_session(self, clean_up_scene:bool = True) -> None:
+    def clear_session(self, clean_up_scene: bool = True) -> None:
         """Unload the current session if there is one loaded.
 
         Args:
@@ -1690,32 +1690,62 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
 
         self.session_loading_unloading_in_progress = True
 
-        loaded_session = self.getParameterNode().loaded_session
-        if loaded_session is None:
-            return # There is no active session to clear
-        self.getParameterNode().loaded_session = None
-        if clean_up_scene:
-            loaded_session.clear_volume_and_target_nodes()
-            if loaded_session.get_transducer_id() in self.getParameterNode().loaded_transducers:
-                self.remove_transducer(loaded_session.get_transducer_id())
-            if loaded_session.get_protocol_id() in self.getParameterNode().loaded_protocols:
-                self.remove_protocol(loaded_session.get_protocol_id())
+        try:
+            loaded_session = self.getParameterNode().loaded_session
+            if loaded_session is None:
+                return  # There is no active session to clear
+
+            if clean_up_scene:
+                # Snapshot everything needed for cleanup before detaching the
+                # parameterPack-backed session. After loaded_session is cleared
+                # from the parameter node, do not access the wrapper again.
+                session_id = loaded_session.get_session_id()
+                transducer_id = loaded_session.get_transducer_id()
+                protocol_id = loaded_session.get_protocol_id()
+                last_generated_solution_id = loaded_session.last_generated_solution_id
+                photocollection_ids = list(
+                    loaded_session.get_affiliated_photocollection_ids()
+                )
+                photoscan_ids = list(loaded_session.get_affiliated_photoscan_ids())
+                volume_node = loaded_session.volume_node
+                target_nodes = list(loaded_session.target_nodes)
+
+            self.getParameterNode().loaded_session = None
+            del loaded_session
+
+            if not clean_up_scene:
+                return
+
+            for node in [volume_node, *target_nodes]:
+                if node is not None:
+                    slicer.mrmlScene.RemoveNode(node)
+
+            if transducer_id in self.getParameterNode().loaded_transducers:
+                self.remove_transducer(transducer_id)
+
+            if protocol_id in self.getParameterNode().loaded_protocols:
+                self.remove_protocol(protocol_id)
+
             if (
                 self.getParameterNode().loaded_solution is not None
-                and loaded_session.last_generated_solution_id == self.getParameterNode().loaded_solution.solution.solution.id
+                and last_generated_solution_id
+                == self.getParameterNode().loaded_solution.solution.solution.id
             ):
                 self.clear_solution(clean_up_scene=True)
-            clear_virtual_fit_results(session_id = loaded_session.get_session_id(), target_id=None)
-            for photocollection_id in loaded_session.get_affiliated_photocollection_ids():
+
+            clear_virtual_fit_results(session_id=session_id, target_id=None)
+
+            for photocollection_id in photocollection_ids:
                 if photocollection_id in self.getParameterNode().session_photocollections:
                     self.remove_photocollection(photocollection_id)
-            
-            for photoscan_id in loaded_session.get_affiliated_photoscan_ids():
+
+            for photoscan_id in photoscan_ids:
                 if photoscan_id in self.getParameterNode().loaded_photoscans:
                     self.remove_photoscan(photoscan_id)
 
-            clear_transducer_tracking_results(session_id = loaded_session.get_session_id())
+            clear_transducer_tracking_results(session_id=session_id)
 
+        finally:
             self.session_loading_unloading_in_progress = False
 
     def save_session(self) -> None:
@@ -2839,3 +2869,16 @@ class OpenLIFUDataTest(ScriptedLoadableModuleTest):
 
         assert result is True
         assert dw.logic.getParameterNode().loaded_session.get_session_id() == "test_session"
+
+    def clear_session_regression(self):
+        """Verify that clearing a session leaves the session fully detached."""
+
+        dw = slicer.modules.OpenLIFUDataWidget
+        parameter_node = dw.logic.getParameterNode()
+
+        assert parameter_node.loaded_session is not None
+
+        dw.logic.clear_session(clean_up_scene=True)
+
+        assert parameter_node.loaded_session is None
+        assert dw.logic.session_loading_unloading_in_progress is False
