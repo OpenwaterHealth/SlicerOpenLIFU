@@ -778,12 +778,21 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
         if not returncode:
             return
 
-        users = get_cur_db().load_all_users()
         import bcrypt
 
-        verify_password = lambda text, _hash: bcrypt.checkpw(text.encode('utf-8'), _hash.encode('utf-8'))
+        verify_password = lambda text, _hash: bcrypt.checkpw(
+            text.encode("utf-8"), _hash.encode("utf-8")
+        )
 
-        matched_user = next((u for u in users if u.id == user_id and verify_password(password_text, u.password_hash)), None)
+        try:
+            matched_user = get_cur_db().load_user(user_id)
+        except Exception:
+            matched_user = None
+
+        if matched_user is not None and not verify_password(
+            password_text, matched_user.password_hash
+        ):
+            matched_user = None
 
         if not matched_user:
             self.updateWidgetLoginState(LoginState.UNSUCCESSFUL_LOGIN)
