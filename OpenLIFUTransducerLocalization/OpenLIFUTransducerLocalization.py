@@ -73,7 +73,11 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
 from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
 from OpenLIFULib.notifications import notify
-from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
+from OpenLIFULib.virtual_fit_results import (
+    get_virtual_fit_approval_for_target,
+    get_approval_from_virtual_fit_result_node,
+    get_approved_target_ids,
+)
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
 
 # These imports are for IDE and static analysis purposes only
@@ -2957,13 +2961,25 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         current_data = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = current_data['Photoscan']
         photoscans_with_approved_tt = self.logic.get_photoscan_ids_with_approved_tt_results(approved_photoscans_only = True)
-        
+        has_approved_vf = bool(
+            get_approved_target_ids(session_id)
+        ) if session_id is not None else False
+
         if session is None:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "If you are seeing this, guided mode is being run out of order! Load a session to proceed."
         elif not selected_photoscan_openlifu:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Select a photoscan to proceed."
+        elif (
+            not photoscans_with_approved_tt
+            and not get_guided_mode_state()
+            and has_approved_vf
+        ):
+            self.workflow_controls.can_proceed = True
+            self.workflow_controls.status_text = (
+                "Approved virtual-fit result detected, proceed to compute a pre-solution."
+            )
         elif not photoscans_with_approved_tt:
             self.workflow_controls.can_proceed = False
             self.workflow_controls.status_text = "Run transducer localization to proceed."
