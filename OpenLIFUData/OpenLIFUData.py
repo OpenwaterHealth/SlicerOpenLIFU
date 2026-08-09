@@ -1882,8 +1882,7 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         
         # Keep track of any photocollections associated with the session
         affiliated_photocollections = get_cur_db().get_photocollection_reference_numbers(subject_id, session_id)
-        if affiliated_photocollections:
-            loaded_session.set_affiliated_photocollections(affiliated_photocollections)
+        loaded_session.set_affiliated_photocollections(affiliated_photocollections)
 
     def update_photoscans_affiliated_with_loaded_session(self) -> None:
 
@@ -1892,9 +1891,11 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
         session_id = loaded_session.get_session_id()
         
         # Keep track of any photoscans associated with the session
-        affiliated_photoscans = {id:get_cur_db().load_photoscan(subject_id, session_id, id) for id in get_cur_db().get_photoscan_ids(subject_id, session_id)}
-        if affiliated_photoscans:
-            loaded_session.set_affiliated_photoscans(affiliated_photoscans)
+        affiliated_photoscans = {
+            id: get_cur_db().load_photoscan(subject_id, session_id, id)
+            for id in get_cur_db().get_photoscan_ids(subject_id, session_id)
+        }
+        loaded_session.set_affiliated_photoscans(affiliated_photoscans)
 
     def load_session(self, subject_id, session_id) -> None:
 
