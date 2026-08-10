@@ -2754,6 +2754,10 @@ class OpenLIFUDataLogic(ScriptedLoadableModuleLogic):
                                 texture_abspath,
                                 mtl_abspath,
                                 on_conflict = openlifu.db.database.OnConflictOpts.OVERWRITE)
+
+        # Ensure this ID is reloaded from the newly written database files.
+        if newOpenLIFUPhotoscan.id in self.getParameterNode().loaded_photoscans:
+            self.remove_photoscan(newOpenLIFUPhotoscan.id)
     
         return newOpenLIFUPhotoscan
 
