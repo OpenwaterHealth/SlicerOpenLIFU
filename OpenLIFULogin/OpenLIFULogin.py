@@ -1237,13 +1237,17 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def _onMeshroomInstallFinished(self, succeeded: bool, install_dir: Path) -> None:
         if succeeded:
-            from OpenLIFULib.meshroom_install_gui import MESHROOM_VERSION, MESHROOM_EXTRACTED_DIR_NAME, save_meshroom_path
+            from OpenLIFULib.meshroom_install_gui import (
+                MESHROOM_VERSION,
+                MESHROOM_EXTRACTED_DIR_NAME,
+                restore_meshroom_path,
+                save_meshroom_path,
+            )
             meshroom_bin_dir = install_dir / MESHROOM_EXTRACTED_DIR_NAME
             meshroom_bin_path = str(meshroom_bin_dir)
             meshroom_executable_name = "meshroom_batch.exe" if sys.platform.startswith("win") else "meshroom_batch"
             save_meshroom_path(meshroom_bin_dir / meshroom_executable_name)
-
-            os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + meshroom_bin_path
+            restore_meshroom_path()
 
             # Write to Windows user PATH registry key for persistence across sessions
             # User PATH does not require admin permissions
@@ -1627,8 +1631,21 @@ class OpenLIFULoginTest(ScriptedLoadableModuleTest):
         original_path_env = os.environ.get("PATH", "")
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
-                executable = Path(temp_dir) / "meshroom_batch"
+                temp_dir_path = Path(temp_dir)
+                executable_name = "meshroom_batch.exe" if sys.platform.startswith("win") else "meshroom_batch"
+                old_meshroom_dir = temp_dir_path / "Meshroom-2024.1.0"
+                configured_meshroom_dir = temp_dir_path / "Meshroom-2025.1.0"
+                old_meshroom_dir.mkdir()
+                configured_meshroom_dir.mkdir()
+                old_executable = old_meshroom_dir / executable_name
+                executable = configured_meshroom_dir / executable_name
+                old_executable.write_text("fake old executable")
                 executable.write_text("fake executable")
+                old_executable.chmod(0o755)
+                executable.chmod(0o755)
+                os.environ["PATH"] = os.pathsep.join(
+                    [str(old_meshroom_dir), str(configured_meshroom_dir), original_path_env]
+                )
 
                 save_meshroom_path(executable)
                 self.assertEqual(str(executable), settings.value(MESHROOM_EXECUTABLE_SETTINGS_KEY))
@@ -1636,7 +1653,10 @@ class OpenLIFULoginTest(ScriptedLoadableModuleTest):
                 restored = restore_meshroom_path()
 
                 self.assertEqual(executable, restored)
-                self.assertIn(str(executable.parent), os.environ.get("PATH", "").split(os.pathsep))
+                path_entries = os.environ.get("PATH", "").split(os.pathsep)
+                self.assertEqual(str(configured_meshroom_dir), path_entries[0])
+                self.assertEqual(1, path_entries.count(str(configured_meshroom_dir)))
+                self.assertEqual(executable, Path(shutil.which(executable_name)))
         finally:
             if original_value:
                 settings.setValue(MESHROOM_EXECUTABLE_SETTINGS_KEY, original_value)
