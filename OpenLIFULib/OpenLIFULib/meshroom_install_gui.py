@@ -47,9 +47,12 @@ def restore_meshroom_path() -> Optional[Path]:
         return None
 
     meshroom_dir = str(executable.parent)
-    path_entries = os.environ.get("PATH", "").split(os.pathsep)
-    if meshroom_dir not in path_entries:
-        os.environ["PATH"] = os.pathsep.join([meshroom_dir, *path_entries])
+    path_entries = [
+        entry
+        for entry in os.environ.get("PATH", "").split(os.pathsep)
+        if entry and entry != meshroom_dir
+    ]
+    os.environ["PATH"] = os.pathsep.join([meshroom_dir, *path_entries])
 
     return executable
 
