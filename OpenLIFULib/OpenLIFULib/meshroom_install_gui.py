@@ -71,24 +71,30 @@ class MeshroomInstallController:
         self._destination: Optional[Path] = None
         self._work_dir: Optional[Path] = None
         self._cancel_file: Optional[Path] = None
-        self._background_canceled_process: Optional[qt.QProcess] = None
         self._reset_output_state()
 
     def is_active(self) -> bool:
         return self._process is not None
 
     def cleanup(self) -> None:
-        if self._process is not None:
-            self.cancel_install()
+        process = self._process
+        if process is None:
+            return
+
+        self._on_finished_callback = lambda succeeded: None
+        self._was_canceled = True
+        self._request_child_cancel()
+        self._disconnect_process_signals(process)
+        if process.state() != qt.QProcess.NotRunning:
+            process.terminate()
+            if not process.waitForFinished(2000):
+                process.kill()
+                process.waitForFinished(2000)
+        self._complete_install(False, canceled=True)
 
     def start_install(self, destination: Path, archive_url: str) -> bool:
         if self.is_active():
             slicer.util.warningDisplay("Meshroom installation is already in progress.")
-            return False
-        if self._background_canceled_process is not None:
-            slicer.util.warningDisplay(
-                "The previous Meshroom installation is still canceling. Please wait a moment and try again."
-            )
             return False
 
         python_slicer = shutil.which("PythonSlicer")
@@ -156,21 +162,19 @@ class MeshroomInstallController:
         process = self._process
         if process is None:
             return
+        if self._was_canceled:
+            return
 
         self._was_canceled = True
         self._request_child_cancel()
         if self._dialog is not None:
             self._dialog.setLabelText("Canceling Meshroom installation...")
+            self._dialog.setRange(0, 0)
+            self._dialog.setCancelButton(None)
+            self._dialog.show()
 
         if process.state() == qt.QProcess.NotRunning:
             self._complete_install(False, canceled=True)
-            return
-
-        self._detach_canceled_process(process, self._work_dir)
-        self._process = None
-        self._work_dir = None
-        self._cancel_file = None
-        self._complete_install(False, canceled=True)
 
     def _request_child_cancel(self) -> None:
         cancel_file = self._cancel_file
@@ -181,28 +185,6 @@ class MeshroomInstallController:
             cancel_file.write_text("cancel\n", encoding="utf-8")
         except Exception as exc:
             self._append_diagnostic(f"Could not write cancel file: {exc}")
-
-    def _detach_canceled_process(self, process, work_dir: Optional[Path]) -> None:
-        self._disconnect_process_signals(process)
-        self._background_canceled_process = process
-
-        def cleanup_detached_process(*args, detached_process=process, detached_work_dir=work_dir):
-            self._cleanup_detached_process(detached_process, detached_work_dir)
-
-        process.finished.connect(cleanup_detached_process)
-        if process.state() == qt.QProcess.NotRunning:
-            cleanup_detached_process()
-
-    def _cleanup_detached_process(self, process, work_dir: Optional[Path]) -> None:
-        try:
-            process.finished.disconnect()
-        except Exception:
-            pass
-        if self._background_canceled_process is process:
-            self._background_canceled_process = None
-        process.deleteLater()
-        if work_dir is not None:
-            shutil.rmtree(work_dir, ignore_errors=True)
 
     def _on_stdout_ready(self) -> None:
         process = self._process

@@ -669,6 +669,9 @@ class OpenLIFULoginWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Gui
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        if self._meshroom_install_controller is not None:
+            self._meshroom_install_controller.cleanup()
+            self._meshroom_install_controller = None
         self.removeObservers()
 
     def enter(self) -> None:
@@ -1607,16 +1610,50 @@ class OpenLIFULoginTest(ScriptedLoadableModuleTest):
                 )
 
                 controller.cancel_install()
-                self.assertFalse(controller.is_active())
+                self.assertTrue(controller.is_active())
+                self.assertNotIn("succeeded", result)
                 self.assertTrue(
                     self._process_events_until(
-                        lambda: controller._background_canceled_process is None,
+                        lambda: not controller.is_active(),
                         timeout_seconds=10,
                     ),
                     "Canceled Meshroom install subprocess did not exit.",
                 )
                 self.assertFalse(result.get("succeeded", True))
             finally:
+                controller.cleanup()
+
+    def test_meshroom_install_controller_cleanup_stops_process(self):
+        self._python_slicer_or_skip()
+        from OpenLIFULib.meshroom_install_gui import MeshroomInstallController
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            destination = temp_dir_path / "destination"
+            destination.mkdir()
+            slow_cli = temp_dir_path / "slow_meshroom_cli.py"
+            slow_cli.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+
+            result = {}
+            controller = MeshroomInstallController(
+                parent=None,
+                on_finished=lambda succeeded: result.__setitem__("succeeded", succeeded),
+            )
+            import OpenLIFULib.meshroom_install_gui as meshroom_gui
+            original_cli_path = meshroom_gui.meshroom_install_cli_path
+            meshroom_gui.meshroom_install_cli_path = lambda: slow_cli
+            try:
+                self.assertTrue(controller.start_install(destination, "file:///unused.zip"))
+                process = controller._process
+                self.assertIsNotNone(process)
+
+                controller.cleanup()
+
+                self.assertFalse(controller.is_active())
+                self.assertEqual(qt.QProcess.NotRunning, process.state())
+                self.assertEqual({}, result)
+            finally:
+                meshroom_gui.meshroom_install_cli_path = original_cli_path
                 controller.cleanup()
 
     def test_save_and_restore_meshroom_path(self):
