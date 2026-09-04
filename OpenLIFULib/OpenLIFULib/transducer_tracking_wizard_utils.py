@@ -48,8 +48,7 @@ def create_threeD_photoscan_view_node(photoscan_id: str):
     
     # Layout name is used to create and identify the underlying view node 
     layoutName = f"PhotoscanCoordinates-{photoscan_id}"
-    layoutLabel = "Photoscan Co-ordinate Space"
-    layoutColor = [0.97, 0.54, 0.12] # Orange background
+    layoutLabel = "Photoscan Coordinate Space"
     # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
     viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
 
@@ -59,14 +58,15 @@ def create_threeD_photoscan_view_node(photoscan_id: str):
         viewLogic.SetMRMLScene(slicer.mrmlScene)
         viewNode = viewLogic.AddViewNode(layoutName)
         viewNode.SetLayoutLabel(layoutLabel)
-        viewNode.SetLayoutColor(layoutColor)
         viewNode.SetName(f'view-{photoscan_id}')
         viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
         viewNode.SetAttribute("isWizardViewNode", "true") 
 
     # Customize view node. 
-    viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
-    viewNode.SetBackgroundColor2(0.98,0.58,0.4)
+    # Solid dark gray, so this view
+    # is consistent with the rest of the OpenLIFU app's dark theme.
+    viewNode.SetBackgroundColor(0.1176, 0.1176, 0.1255)
+    viewNode.SetBackgroundColor2(0.1176, 0.1176, 0.1255)
     viewNode.SetBoxVisible(False) # Turn off bounding box visibility
     viewNode.SetAxisLabelsVisible(False) # Turn off axis labels visibility
 
@@ -78,8 +78,7 @@ def get_threeD_transducer_tracking_view_node():
 
     # Layout name is used to create and identify the underlying view node 
     layoutName = "TransducerTracking"
-    layoutLabel = "Volume Co-ordinate Space"
-    layoutColor = [0.97, 0.54, 0.12] # Orange background
+    layoutLabel = "Volume Coordinate Space"
     # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
     viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
 
@@ -89,14 +88,15 @@ def get_threeD_transducer_tracking_view_node():
         viewLogic.SetMRMLScene(slicer.mrmlScene)
         viewNode = viewLogic.AddViewNode(layoutName)
         viewNode.SetLayoutLabel(layoutLabel)
-        viewNode.SetLayoutColor(layoutColor)
         viewNode.SetName(f'view-transducertracking')
         viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
         viewNode.SetAttribute("isWizardViewNode", "true")  # Set an attribute to identify this as a wizard view nodee
 
     # Customize view node. 
-    viewNode.SetBackgroundColor(0.98, 0.9,0.77) # shades of orange
-    viewNode.SetBackgroundColor2(0.98,0.58,0.4)
+    # Solid dark gray, so this view
+    # is consistent with the rest of the OpenLIFU app's dark theme.
+    viewNode.SetBackgroundColor(0.1176, 0.1176, 0.1255)
+    viewNode.SetBackgroundColor2(0.1176, 0.1176, 0.1255)
     viewNode.SetBoxVisible(False) # Turn off bounding box visibility
     viewNode.SetAxisLabelsVisible(False) # Turn off axis labels visibility
 
