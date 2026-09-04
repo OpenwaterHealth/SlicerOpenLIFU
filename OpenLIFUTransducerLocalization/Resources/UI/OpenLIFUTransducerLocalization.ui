@@ -287,12 +287,18 @@
         <property name="text">
          <string>Distance from virtual fit (mm):</string>
         </property>
+        <property name="cssClass" stdset="0">
+         <string>label--secondary</string>
+        </property>
        </widget>
       </item>
       <item>
        <widget class="QLabel" name="approvalStatusLabel">
         <property name="text">
          <string>(approval status label)</string>
+        </property>
+        <property name="cssClass" stdset="0">
+         <string>label--secondary</string>
         </property>
        </widget>
       </item>

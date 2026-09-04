@@ -105,7 +105,11 @@
                     </widget>
                    </item>
                    <item row="0" column="1">
-                    <widget class="QLabel" name="subjectStatusSubjectNameValueLabel"/>
+                    <widget class="QLabel" name="subjectStatusSubjectNameValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="1" column="0">
                     <widget class="QLabel" name="subjectStatusSubjectIdLabel">
@@ -115,7 +119,11 @@
                     </widget>
                    </item>
                    <item row="1" column="1">
-                    <widget class="QLabel" name="subjectStatusSubjectIdValueLabel"/>
+                    <widget class="QLabel" name="subjectStatusSubjectIdValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="2" column="0">
                     <widget class="QLabel" name="subjectStatusSubjectNumberOfVolumesLabel">
@@ -125,7 +133,11 @@
                     </widget>
                    </item>
                    <item row="2" column="1">
-                    <widget class="QLabel" name="subjectStatusSubjectNumberOfVolumesValueLabel"/>
+                    <widget class="QLabel" name="subjectStatusSubjectNumberOfVolumesValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="3" column="0">
                     <widget class="QLabel" name="subjectStatusSubjectNumberOfSessionsLabel">
@@ -135,7 +147,11 @@
                     </widget>
                    </item>
                    <item row="3" column="1">
-                    <widget class="QLabel" name="subjectStatusSubjectNumberOfSessionsValueLabel"/>
+                    <widget class="QLabel" name="subjectStatusSubjectNumberOfSessionsValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                   </layout>
                  </widget>
@@ -340,7 +356,11 @@
                     <number>0</number>
                    </property>
                    <item row="0" column="1">
-                    <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel"/>
+                    <widget class="QLabel" name="sessionStatusSubjectNameIdValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="1" column="0">
                     <widget class="QLabel" name="sessionStatusSessionNameIdLabel">
@@ -350,7 +370,11 @@
                     </widget>
                    </item>
                    <item row="1" column="1">
-                    <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel"/>
+                    <widget class="QLabel" name="sessionStatusSessionNameIdValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="2" column="0">
                     <widget class="QLabel" name="sessionStatusProtocolLabel">
@@ -360,7 +384,11 @@
                     </widget>
                    </item>
                    <item row="2" column="1">
-                    <widget class="QLabel" name="sessionStatusProtocolValueLabel"/>
+                    <widget class="QLabel" name="sessionStatusProtocolValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="3" column="0">
                     <widget class="QLabel" name="sessionStatusTransducerLabel">
@@ -370,7 +398,11 @@
                     </widget>
                    </item>
                    <item row="3" column="1">
-                    <widget class="QLabel" name="sessionStatusTransducerValueLabel"/>
+                    <widget class="QLabel" name="sessionStatusTransducerValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="4" column="0">
                     <widget class="QLabel" name="sessionStatusVolumeLabel">
@@ -380,7 +412,11 @@
                     </widget>
                    </item>
                    <item row="4" column="1">
-                    <widget class="QLabel" name="sessionStatusVolumeValueLabel"/>
+                    <widget class="QLabel" name="sessionStatusVolumeValueLabel">
+                     <property name="cssClass" stdset="0">
+                      <string>label--secondary</string>
+                     </property>
+                    </widget>
                    </item>
                    <item row="0" column="0">
                     <widget class="QLabel" name="sessionStatusSubjectNameIdLabel">
@@ -396,6 +432,9 @@
                  <widget class="QLabel" name="sessionStatusAdditionalInfoLabel">
                   <property name="text">
                    <string>(additional info goes here)</string>
+                  </property>
+                  <property name="cssClass" stdset="0">
+                   <string>label--secondary</string>
                   </property>
                  </widget>
                 </item>
