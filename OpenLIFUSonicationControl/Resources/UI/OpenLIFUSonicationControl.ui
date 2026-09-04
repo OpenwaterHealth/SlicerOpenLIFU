@@ -143,6 +143,9 @@
         <property name="text">
          <string>Run</string>
         </property>
+        <property name="cssClass" stdset="0">
+         <string>button--success</string>
+        </property>
        </widget>
       </item>
      </layout>
@@ -152,6 +155,9 @@
     <widget class="QPushButton" name="abortPushButton">
      <property name="text">
       <string>Abort</string>
+     </property>
+     <property name="cssClass" stdset="0">
+      <string>button--danger</string>
      </property>
     </widget>
    </item>
