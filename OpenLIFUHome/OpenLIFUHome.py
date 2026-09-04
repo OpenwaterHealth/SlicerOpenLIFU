@@ -149,19 +149,20 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.openLIFUToolBar.setObjectName("CloudSyncToolBar")
             mw.addToolBar(self.openLIFUToolBar)
 
-        self.syncAction = self.openLIFUToolBar.findChild(qt.QAction, "OpenLIFUToolbarSyncAction")
+        self.syncAction = self.openLIFUToolBar.findChild(qt.QPushButton, "OpenLIFUToolbarSyncButton")
 
         if not self.syncAction:
-            self.syncAction = qt.QAction("Sync Cloud", self.openLIFUToolBar)
-            self.syncAction.setObjectName("OpenLIFUToolbarSyncAction")
+            self.syncAction = qt.QPushButton()
+            self.syncAction.setObjectName("OpenLIFUToolbarSyncButton")
+            self.syncAction.setToolTip("Sync Cloud")
 
             moduleDir = os.path.dirname(__file__)
             iconPath = os.path.join(moduleDir, 'Resources', 'Icons','sync.png')
             self.syncAction.setIcon(qt.QIcon(iconPath))
 
-            self.openLIFUToolBar.addAction(self.syncAction)
+            self.openLIFUToolBar.addWidget(self.syncAction)
 
-            self.syncAction.triggered.connect(self.onToolbarSyncTriggered)
+            self.syncAction.clicked.connect(self.onToolbarSyncTriggered)
         
     def onToolbarSyncTriggered(self):
         # 1. Save current module for the 'Back' button
