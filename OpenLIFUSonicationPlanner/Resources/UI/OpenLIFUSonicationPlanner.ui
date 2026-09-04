@@ -42,12 +42,18 @@
      <property name="text">
       <string>(virtual fit approval status here)</string>
      </property>
+     <property name="cssClass" stdset="0">
+      <string>label--secondary</string>
+     </property>
     </widget>
    </item>
    <item>
     <widget class="QLabel" name="trackingApprovalStatusLabel">
      <property name="text">
       <string>(transducer localization approval here)</string>
+     </property>
+     <property name="cssClass" stdset="0">
+      <string>label--secondary</string>
      </property>
     </widget>
    </item>
