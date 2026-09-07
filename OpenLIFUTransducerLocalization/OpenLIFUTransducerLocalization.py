@@ -71,7 +71,7 @@ from OpenLIFULib.transducer_tracking_wizard_utils import (
     get_threeD_transducer_tracking_view_node,
 )
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, get_cloned_node, replace_widget, display_errors
+from OpenLIFULib.util import add_slicer_log_handler, BusyCursor, disconnect_signal_connections, get_cloned_node, replace_widget, display_errors
 from OpenLIFULib.notifications import notify
 from OpenLIFULib.virtual_fit_results import get_virtual_fit_approval_for_target, get_approval_from_virtual_fit_result_node
 from OpenLIFULib.install_asset_dialog import InstallAssetDialog
@@ -494,7 +494,7 @@ class SkinSegmentationMarkupPage(FacialLandmarksMarkupPageBase):  # Inherit from
         
 class PhotoscanVolumeTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
-        super().__init__()
+        super().__init__(parent)
         self.setTitle("Register photoscan to skin surface")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
@@ -848,7 +848,7 @@ class PhotoscanVolumeTrackingPage(qt.QWizardPage):
 
 class TransducerPhotoscanTrackingPage(qt.QWizardPage):
     def __init__(self, parent = None):
-        super().__init__()
+        super().__init__(parent)
         self.setTitle("Register transducer to photoscan")
         self.ui = initialize_wizard_ui(self)
         self.viewWidget = set_threeD_view_widget(self.ui)
@@ -1116,9 +1116,28 @@ class TransducerTrackingWizard(qt.QWizard):
     def __init__(self, photoscan: SlicerOpenLIFUPhotoscan, 
                  volume: vtkMRMLScalarVolumeNode, 
                  transducer: SlicerOpenLIFUTransducer,
-                 virtual_fit_result_node: Optional[vtkMRMLTransformNode]):
-        super().__init__()
+                 virtual_fit_result_node: Optional[vtkMRMLTransformNode], parent=None):
+        super().__init__(parent if parent is not None else slicer.util.mainWindow())
+        self._cleaned_up = False
+        self._qt_connections = []
+        self._view_nodes_configured = False
+        self.current_allowed_context_menu_actions = None
+        self.node_observations = defaultdict(list)
+        self.photoscanMarkupPage = None
+        self.skinSegmentationMarkupPage = None
+        self.photoscanVolumeTrackingPage = None
+        self.transducerPhotoscanTrackingPage = None
+        self.transducer = transducer
+        try:
+            self._setup(photoscan, volume, transducer, virtual_fit_result_node)
+        except Exception:
+            try:
+                self.clean_up()
+            finally:
+                self.deleteLater()
+            raise
 
+    def _setup(self, photoscan, volume, transducer, virtual_fit_result_node):
         self._logic = slicer.util.getModuleLogic('OpenLIFUTransducerLocalization')
         
         pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
@@ -1151,15 +1170,18 @@ class TransducerTrackingWizard(qt.QWizard):
                 self.transducer.set_cloned_virtual_fit_model(self.virtual_fit_result_node)
 
             self.setupViewNodes()
+            self._view_nodes_configured = True
 
         self.setOption(qt.QWizard.NoBackButtonOnStartPage)
         self.setWizardStyle(qt.QWizard.ClassicStyle)
         self.setButtonText(qt.QWizard.FinishButton,"Approve")
-        # Connect the currentIdChanged signal
-        self.currentIdChanged.connect(self.setPageSpecificNodeDisplaySettings)
-        # Connect signals for finish and cancel
-        self.button(qt.QWizard.FinishButton).clicked.connect(self.onFinish)
-        self.button(qt.QWizard.CancelButton).clicked.connect(self.onCancel)
+        self._qt_connections = [
+            (self.currentIdChanged, self.setPageSpecificNodeDisplaySettings),
+            (self.button(qt.QWizard.FinishButton).clicked, self.onFinish),
+            (self.button(qt.QWizard.CancelButton).clicked, self.onCancel),
+        ]
+        for signal, callback in self._qt_connections:
+            signal.connect(callback)
 
         # Check the scene for previously computed tt results for the specified photoscan
         self._valid_tt_result_exists = False
@@ -1180,9 +1202,6 @@ class TransducerTrackingWizard(qt.QWizard):
             ): #Flag to keep track of when approval is revoked and an existing result can be modified
                 self._existing_approval_revoked = True    
 
-        # Mapping from mrml node ID to a list of vtkCommand tags that can later be used to remove the observation
-        self.node_observations : Dict[str,List[int]] = defaultdict(list)
-        
         self.setWindowTitle("Transducer Localization Wizard")
         self.photoscanMarkupPage = PhotoscanMarkupPage(self)
         self.skinSegmentationMarkupPage = SkinSegmentationMarkupPage(self)
@@ -1197,10 +1216,15 @@ class TransducerTrackingWizard(qt.QWizard):
     def customexec_(self):
         self._needs_initial_maximize = True
         self.setWindowFlags(self.windowFlags() | qt.Qt.WindowFlags.CustomizeWindowHint | qt.Qt.WindowFlags.WindowMaximizeButtonHint)
-        returncode = self.exec_()
-        return (returncode, self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node)
+        try:
+            returncode = self.exec_()
+            return (returncode, self.photoscan_to_volume_transform_node, self.transducer_to_volume_transform_node)
+        finally:
+            self.clean_up()
     
     def setPageSpecificNodeDisplaySettings(self, page_id: int):
+        if self._cleaned_up:
+            return
         current_page = self.page(page_id)
 
         if current_page is None:
@@ -1335,7 +1359,8 @@ class TransducerTrackingWizard(qt.QWizard):
             lockButton.setIcon(qt.QIcon(":Icons/Medium/SlicerUnlock.png"))
             lockButton.setToolTip("Page unlocked. Click to approve tracking result.")
 
-    def onFinish(self):
+    @display_errors
+    def onFinish(self, checked=False):
         """Handle Finish button click."""
 
         # Copy photoscan and skin segmentation landmarks to slicer scene
@@ -1376,67 +1401,67 @@ class TransducerTrackingWizard(qt.QWizard):
         self.clean_up()
         self.accept()  # Closes the wizard
 
-    def onCancel(self):
+    @display_errors
+    def onCancel(self, checked=False):
         """Handle Cancel button click."""
 
-        self.clean_up()
-        self.transducer.update_color()
         self.reject()  # Closes the wizard
+
+    def reject(self):
+        try:
+            self.clean_up()
+            if self.transducer is not None:
+                self.transducer.update_color()
+        finally:
+            self.done(qt.QDialog.Rejected)
     
     def clean_up(self):
         """Clean up routine before exiting wizard"""
-
-        self.resetViewNodes()
-
-        # Reset the transducer surface to observe the transducer transform
-        self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
-        self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
-
-        # Restore transducer surface display settings
-        self.transducerPhotoscanTrackingPage._update_distance_map_visibility(
-            visible = False,
-            model = self.transducer_surface
-        )
-
-        self.clearWizardNodes()
-        # When clearing the nodes associated with the markups widgets, the interaction node gets set to Place mode.
-        # This forced set of the interaction node is needed to solve that. 
-        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SwitchToViewTransformMode()
-
-        # Enable right click context menus
-        pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
-        pluginLogic = pluginHandler.pluginLogic()
-        pluginLogic.allowedViewContextMenuActionNames = self.current_allowed_context_menu_actions
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        disconnect_signal_connections(self._qt_connections)
+        for node_id in list(self.node_observations):
+            node = slicer.mrmlScene.GetNodeByID(node_id)
+            if node is not None:
+                self.clean_up_observers(node)
+        self.node_observations.clear()
+        try:
+            if self._view_nodes_configured:
+                self.resetViewNodes()
+                self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+                self.transducer_body.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
+            if self.transducerPhotoscanTrackingPage is not None:
+                self.transducerPhotoscanTrackingPage._update_distance_map_visibility(
+                    visible=False, model=self.transducer_surface)
+        finally:
+            try:
+                self.clearWizardNodes()
+                interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+                if interactionNode is not None:
+                    interactionNode.SwitchToViewTransformMode()
+            finally:
+                if self.current_allowed_context_menu_actions is not None:
+                    pluginLogic = slicer.qSlicerSubjectHierarchyPluginHandler.instance().pluginLogic()
+                    pluginLogic.allowedViewContextMenuActionNames = self.current_allowed_context_menu_actions
 
     def clearWizardNodes(self):
-        # Ensure any temporary variables are cleared. Nodes in the scene are not updated
-        for node in self.photoscanMarkupPage.temp_markup_fiducials.values():
-            if node:
+        nodes = []
+        for page in (self.photoscanMarkupPage, self.skinSegmentationMarkupPage):
+            if page is not None:
+                nodes.extend(page.temp_markup_fiducials.values())
+                nodes.append(page.facial_landmarks_fiducial_node)
+        page = self.photoscanVolumeTrackingPage
+        if page is not None:
+            if page.photoscan_roi_submesh is not None:
+                nodes.append(slicer.modules.colors.logic().GetColorLegendDisplayNode(page.photoscan_roi_submesh))
+            nodes.extend((page.photoscan_roi_submesh, page.photoscan_to_volume_transform_node, page.scaling_transform_node))
+        if self.transducerPhotoscanTrackingPage is not None:
+            nodes.append(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
+        for node in nodes:
+            if node is not None:
                 self.clean_up_observers(node)
                 slicer.mrmlScene.RemoveNode(node)
-        if self.photoscanMarkupPage.facial_landmarks_fiducial_node:
-            self.clean_up_observers(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
-            slicer.mrmlScene.RemoveNode(self.photoscanMarkupPage.facial_landmarks_fiducial_node)
-
-        for node in self.skinSegmentationMarkupPage.temp_markup_fiducials.values():
-            if node:
-                self.clean_up_observers(node)
-                slicer.mrmlScene.RemoveNode(node)
-        
-        if self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node:
-            self.clean_up_observers(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
-            slicer.mrmlScene.RemoveNode(self.skinSegmentationMarkupPage.facial_landmarks_fiducial_node)
-
-        if self.photoscanVolumeTrackingPage.photoscan_roi_submesh is not None:
-            color_legend = slicer.modules.colors.logic().GetColorLegendDisplayNode(self.photoscanVolumeTrackingPage.photoscan_roi_submesh)
-            if color_legend:
-                slicer.mrmlScene.RemoveNode(color_legend)
-            slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_roi_submesh)
-
-        slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.photoscan_to_volume_transform_node)
-        slicer.mrmlScene.RemoveNode(self.transducerPhotoscanTrackingPage.transducer_to_volume_transform_node)
-        slicer.mrmlScene.RemoveNode(self.photoscanVolumeTrackingPage.scaling_transform_node)
 
     def clean_up_observers(self, node: vtkMRMLNode):
         """ Removes any tagged observers associated with this node """
@@ -2037,6 +2062,7 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
         # crashing after the wizard is closed. 
         self.wizard = None
         self._running_wizard = False
+        self._cleaned_up = False
 
         self._virtual_fit_transform_for_tracking = None
 
@@ -2135,7 +2161,22 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
+        self._cleaned_up = True
         self.removeObservers()
+        self._disposeWizard()
+
+    def _disposeWizard(self):
+        wizard = self.wizard
+        self.wizard = None
+        try:
+            if wizard is not None:
+                try:
+                    if not wizard._cleaned_up:
+                        wizard.reject()
+                finally:
+                    wizard.deleteLater()
+        finally:
+            self._running_wizard = False
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
@@ -2711,21 +2752,27 @@ class OpenLIFUTransducerLocalizationWidget(ScriptedLoadableModuleWidget, VTKObse
                     skin_mesh_node.SetDisplayVisibility(is_visible)
                 skin_mesh_node.GetDisplayNode().SetOpacity(self.ui.skinMeshOpacitySlider.value)
 
-    def onRunTrackingClicked(self):
+    @display_errors
+    def onRunTrackingClicked(self, checked=False):
 
         activeData = self.algorithm_input_widget.get_current_data()
         selected_photoscan_openlifu = activeData["Photoscan"]
         selected_transducer = activeData["Transducer"]
 
         self._running_wizard = True
-        self.wizard = TransducerTrackingWizard(
-            photoscan = selected_photoscan_openlifu,
-            volume = activeData["Volume"],
-            transducer = selected_transducer,
-            virtual_fit_result_node = self._virtual_fit_transform_for_tracking)
-        returncode, photoscan_to_volume_transform_node, transducer_to_volume_transform_node = self.wizard.customexec_()
-        self.wizard.deleteLater() # Needed to avoid memory leaks when slicer is exited. 
-        self._running_wizard = False
+        try:
+            self.wizard = TransducerTrackingWizard(
+                photoscan = selected_photoscan_openlifu,
+                volume = activeData["Volume"],
+                transducer = selected_transducer,
+                virtual_fit_result_node = self._virtual_fit_transform_for_tracking,
+                parent=self.parent)
+            returncode, photoscan_to_volume_transform_node, transducer_to_volume_transform_node = self.wizard.customexec_()
+        finally:
+            self._disposeWizard()
+
+        if self._cleaned_up:
+            return
 
         # Restore previous photoscan/skin segmentation visibility states
         self.updateModelRendering()
