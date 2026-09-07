@@ -216,6 +216,7 @@ These observers are critical for reactive UI updates when data is loaded/changed
 
 ## Commit Guidelines
 
+- **Every commit must include a sign-off**. Use `git commit -s` to add the `Signed-off-by` trailer.
 - **Every commit must reference a relevant GitHub issue number** in the title or body (e.g. `Fix target placement crash (#42)` or with `Fixes #42` / `Relates to #42` in the body).
 - When creating commits, always verify an issue number is included before finalizing.
 - When reviewing code or PRs, check that every commit references an issue number and flag any that don't.
