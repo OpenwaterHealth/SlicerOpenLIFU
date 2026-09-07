@@ -6,7 +6,7 @@ import signal
 import logging
 from pathlib import Path
 from OpenLIFULib import ensure_python_requirements_for_module_enter
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.util import disconnect_signal_connections, display_errors
 from slicer.ScriptedLoadableModule import *
 from slicer.i18n import tr as _
 from slicer.i18n import translate
@@ -18,7 +18,7 @@ _sharedLogicInstance = None
 
 def getCloudSyncLogic():
     global _sharedLogicInstance
-    if _sharedLogicInstance is None:
+    if _sharedLogicInstance is None or _sharedLogicInstance._closed:
         _sharedLogicInstance = OpenLIFUCloudSyncLogic()
     return _sharedLogicInstance
 
@@ -45,6 +45,8 @@ class OpenLIFUCloudSync(ScriptedLoadableModule):
 class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
     def setup(self):
         ScriptedLoadableModuleWidget.setup(self)
+        self._cleaned_up = False
+        self._status_connections = []
         self.logic = getCloudSyncLogic()
 
         uiPath = os.path.join(os.path.dirname(__file__),
@@ -63,10 +65,18 @@ class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
         if hasattr(self.ui, 'syncButton'):
             self.ui.syncButton.hide()
 
-        self.logic.statusHelper.statusChanged.connect(
-            self.onCloudStatusChanged)
+        self._status_connections.append((self.logic.statusHelper.statusChanged, self.onCloudStatusChanged))
+        self.logic.statusHelper.statusChanged.connect(self.onCloudStatusChanged)
 
         self.updateGUI()
+
+    def cleanup(self):
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        disconnect_signal_connections(self._status_connections)
+        self.logic.cleanup()
+        self.logic = None
 
     def enter(self):
         ensure_python_requirements_for_module_enter()
@@ -74,6 +84,8 @@ class OpenLIFUCloudSyncWidget(ScriptedLoadableModuleWidget):
 
     def onCloudStatusChanged(self, message, timestamp):
         """Thread-safe update of UI labels from background cloud events."""
+        if self._cleaned_up:
+            return
         slicer.util.showStatusMessage(f"Cloud: {message}", 3000)
         if hasattr(self.ui, 'lastSyncLabel'):
             self.ui.lastSyncLabel.text = timestamp
@@ -113,19 +125,31 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         self._cloudTokens = None
         self._isServiceRunning = False
         self._active_runner = None
+        self._closed = False
+        self._process_connections = []
         # Instantiate signal bridge
         self.statusHelper = CloudStatusHelper()
 
-        # Cleanup connections for both graceful and terminal exits
-        slicer.app.connect("aboutToQuit()", self.cleanup)
-        signal.signal(signal.SIGINT, self._handleTerminalInterrupt)
+        self.monitorTimer = qt.QTimer()
+        self.monitorTimer.setInterval(50000)
+        self.startupTimer = qt.QTimer()
+        self.startupTimer.setSingleShot(True)
+        self.startupTimer.setInterval(1000)
+        self.heartbeatRequestTimer = qt.QTimer()
+        self.heartbeatRequestTimer.setSingleShot(True)
+        self.heartbeatRequestTimer.setInterval(100)
+        self._timer_connections = [
+            (self.monitorTimer.timeout, self.heartbeat),
+            (self.startupTimer.timeout, self.startHeartbeat),
+            (self.heartbeatRequestTimer.timeout, self.heartbeat),
+        ]
+        for timer_signal, callback in self._timer_connections:
+            timer_signal.connect(callback)
 
-        # Defer heartbeat startup
-        qt.QTimer.singleShot(1000, self.startHeartbeat)
-
-        # self.dummyTimer = qt.QTimer()
-        # self.dummyTimer.timeout.connect(lambda: None) # Do nothing
-        # self.dummyTimer.start(100) # Fire every 100ms to "nudge" the GIL
+        self._shutdown_connections = [(slicer.app.aboutToQuit, self.cleanup)]
+        slicer.app.aboutToQuit.connect(self.cleanup)
+        self._previous_sigint_handler = signal.signal(signal.SIGINT, self._handleTerminalInterrupt)
+        self.startupTimer.start()
 
     def _handleTerminalInterrupt(self, signum, frame):
         """Ensures cleanup runs even if Ctrl+C is pressed in terminal."""
@@ -134,12 +158,14 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         slicer.app.quit()
 
     def startHeartbeat(self):
-        self.monitorTimer = qt.QTimer()
-        self.monitorTimer.timeout.connect(self.heartbeat)
-        self.monitorTimer.start(50000)
+        if self._closed:
+            return
+        self.monitorTimer.start()
         self.heartbeat()
 
     def heartbeat(self):
+        if self._closed:
+            return
         logger.info("Heartbeat: Checking Cloud Sync status...")
         token = self.getValidToken()
         if not self.syncProcess and token:
@@ -147,12 +173,16 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def _safeStatusUpdate(self, status):
         """Thread-safe bridge to emit UI updates from background threads."""
+        if self._closed:
+            return
         timestamp = time.strftime("%H:%M:%S")
         self.statusHelper.statusChanged.emit(status, timestamp)
 
     def attemptAutoStartSync(self):
-        import sys
         """Launches the background sync engine via QProcess."""
+        import sys
+        if self._closed:
+            return
         if self.syncProcess and self.syncProcess.state() != qt.QProcess.NotRunning:
             return
 
@@ -175,13 +205,18 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
         env = qt.QProcessEnvironment.systemEnvironment()
         env.insert("PYTHONPATH", os.pathsep.join(sys.path))
 
+        self._stopSyncProcess()
         self.syncProcess = qt.QProcess()
         self.syncProcess.setProcessEnvironment(env)
         # Combine stdout and stderr for easier logging
         self.syncProcess.setProcessChannelMode(qt.QProcess.MergedChannels)
 
-        self.syncProcess.readyReadStandardOutput.connect(self.onProcessOutput)
-        self.syncProcess.finished.connect(self.onProcessFinished)
+        self._process_connections = [
+            (self.syncProcess.readyReadStandardOutput, self.onProcessOutput),
+            (self.syncProcess.finished, self.onProcessFinished),
+        ]
+        for process_signal, callback in self._process_connections:
+            process_signal.connect(callback)
 
         args = [scriptPath, "--db_path", db_dir, "--api_key",
                 self.apiKey, "--refresh_token", refresh_token]
@@ -190,7 +225,7 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def onProcessOutput(self):
         """Captures real-time prints and logs from the child process."""
-        if self.syncProcess:
+        if not self._closed and self.syncProcess:
             raw_data = self.syncProcess.readAllStandardOutput().data().decode()
             for line in raw_data.splitlines():
                 line = line.strip()
@@ -218,17 +253,51 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
                     self.statusHelper.statusChanged.emit("Idle", timestamp)
 
     def onProcessFinished(self, exitStatus):
+        if self._closed:
+            return
         logger.info(f"Sync Engine stopped. Exit code: {exitStatus}")
         self._safeStatusUpdate("Sync Stopped")
 
+    def _stopSyncProcess(self):
+        """Stop syncing without disabling future login or heartbeat activity."""
+        disconnect_signal_connections(self._process_connections)
+        process = self.syncProcess
+        self.syncProcess = None
+        if process is None:
+            return
+        try:
+            if process.state() != qt.QProcess.NotRunning:
+                logger.info("Stopping background sync engine...")
+                process.terminate()
+                if not process.waitForFinished(2000):
+                    process.kill()
+                    if not process.waitForFinished(2000):
+                        logger.warning("Cloud sync process did not stop after being killed.")
+        finally:
+            process.deleteLater()
+
     def cleanup(self):
-        """Gracefully kill the background process."""
-        if self.syncProcess and self.syncProcess.state() != qt.QProcess.NotRunning:
-            logger.info("Stopping background sync engine...")
-            self.syncProcess.terminate()
-            if not self.syncProcess.waitForFinished(2000):
-                self.syncProcess.kill()
-            self.syncProcess = None
+        """Release the shared service before Python finalization or module reload."""
+        global _sharedLogicInstance
+        if self._closed:
+            return
+        self._closed = True
+        for timer in (self.startupTimer, self.monitorTimer, self.heartbeatRequestTimer):
+            timer.stop()
+        disconnect_signal_connections(self._timer_connections)
+        self.startupTimer = self.monitorTimer = self.heartbeatRequestTimer = None
+        try:
+            self._stopSyncProcess()
+        except Exception:
+            logger.warning("Could not stop cloud sync during cleanup", exc_info=True)
+        finally:
+            disconnect_signal_connections(self._shutdown_connections)
+            if signal.getsignal(signal.SIGINT) == self._handleTerminalInterrupt:
+                signal.signal(signal.SIGINT, self._previous_sigint_handler)
+            self._previous_sigint_handler = None
+            self.statusHelper = None
+            if _sharedLogicInstance is self:
+                _sharedLogicInstance = None
 
     def getValidToken(self):
         if not self._cloudTokens:
@@ -263,6 +332,8 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
 
     def login(self, email, password):
         """Authenticates user and saves refresh token."""
+        if self._closed:
+            raise RuntimeError("Cloud Sync logic has been cleaned up.")
         import requests
 
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.apiKey}"
@@ -278,13 +349,13 @@ class OpenLIFUCloudSyncLogic(ScriptedLoadableModuleLogic):
             }
             qt.QSettings().setValue(
                 "OpenLIFU/CloudRefreshToken", data['refreshToken'])
-            qt.QTimer.singleShot(100, self.heartbeat)
+            self.heartbeatRequestTimer.start()
             return True, "Success"
         except Exception as e:
             logger.error(f"Login error: {e}")
             return False, str(e)
 
     def logout(self):
-        self.cleanup()
+        self._stopSyncProcess()
         self._cloudTokens = None
         qt.QSettings().remove("OpenLIFU/CloudRefreshToken")
