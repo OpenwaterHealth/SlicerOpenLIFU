@@ -139,6 +139,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             self.exitPlaceFiducialMode()
             return
 
+        self.exitPlaceFiducialMode()
         selected_text = self.markupsWidget.tableWidget().item(currentRow, 0).text()
         self.currently_placing_node = self._getSelectedNode(selected_text=selected_text)
         if self.currently_placing_node.GetNumberOfControlPoints() == 0:
@@ -201,6 +202,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         if self.page_locked or currentRow == -1:
             return
 
+        self.exitPlaceFiducialMode()
         selected_text = self.markupsWidget.tableWidget().item(self._currentlyUnsettingIndex, 0).text()
         self.currently_placing_node = self._getSelectedNode(selected_text=selected_text)
         self.facial_landmarks_fiducial_node.SetNthControlPointPosition(self._currentlyUnsettingIndex, 0, 0, 0)
@@ -226,10 +228,7 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
         self.facial_landmarks_fiducial_node.SetNthControlPointLabel(self._currentlyPlacingIndex, caller.GetName())
         self.facial_landmarks_fiducial_node.SetLocked(False)
         self.exitPlaceFiducialMode()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # if the observer doesn't exist, then no problem we don't need to see the warning.
-            self.currently_placing_node.RemoveObserver(self._pointModifiedObserverTag)
-            slicer.mrmlScene.RemoveNode(self.currently_placing_node)
+        slicer.mrmlScene.RemoveNode(self.currently_placing_node)
         self.temp_markup_fiducials[self.currently_placing_node.GetName()] = None
         
         if self._checkAllLandmarksDefined():
@@ -284,7 +283,8 @@ class FacialLandmarksMarkupPageBase(qt.QWizardPage):
             self._pointModifiedObserverTag = None
 
         interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+        if interactionNode is not None:
+            interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
     def _checkAllLandmarksDefined(self):
         if self.facial_landmarks_fiducial_node is None:
@@ -1427,6 +1427,9 @@ class TransducerTrackingWizard(qt.QWizard):
                 self.clean_up_observers(node)
         self.node_observations.clear()
         try:
+            for page in (self.photoscanMarkupPage, self.skinSegmentationMarkupPage):
+                if page is not None:
+                    page.exitPlaceFiducialMode()
             if self._view_nodes_configured:
                 self.resetViewNodes()
                 self.transducer_surface.SetAndObserveTransformNodeID(self.transducer.transform_node.GetID())
