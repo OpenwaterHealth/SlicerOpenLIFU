@@ -27,7 +27,7 @@ from OpenLIFULib import (
 )
 from OpenLIFULib.guided_mode_util import GuidedWorkflowMixin
 from OpenLIFULib.user_account_mode_util import UserAccountBanner
-from OpenLIFULib.util import add_slicer_log_handler, display_errors, replace_widget
+from OpenLIFULib.util import add_slicer_log_handler, disconnect_signal_connections, display_errors, replace_widget
 
 
 if TYPE_CHECKING:
@@ -238,6 +238,8 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._cur_device_connected_state : DeviceConnectedState = DeviceConnectedState.NOT_CONNECTED
         self._cur_solution_on_hardware_state : SolutionOnHardwareState = SolutionOnHardwareState.NOT_SENT
         self._cur_solution_id: str | None = None
+        self._bridge_connections = []
+        self._cleaned_up = False
         self._parameterNode = None
         self._parameterNodeGuiTag = None
 
@@ -304,8 +306,12 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.call_on_lifu_device_connected(self.onDeviceConnected)
         self.logic.call_on_lifu_device_disconnected(self.onDeviceDisconnected)
 
-        self.logic.qt_signals.runProgressUpdated.connect(self.updateRunProgressBar)
-        self.logic.qt_signals.finishScanning.connect(self.onRunCompleted)
+        self._bridge_connections = [
+            (self.logic.qt_signals.runProgressUpdated, self.updateRunProgressBar),
+            (self.logic.qt_signals.finishScanning, self.onRunCompleted),
+        ]
+        for signal, callback in self._bridge_connections:
+            signal.connect(callback)
 
         # Initialize UI
         self.updateRunProgressBar()
@@ -334,7 +340,17 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         logging.debug("OpenLIFUSonicationControlWidget.cleanup() called")
-        self.removeObservers()
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        try:
+            self.removeObservers()
+            self.setParameterNode(None)
+        finally:
+            disconnect_signal_connections(self._bridge_connections)
+            if self.logic is not None:
+                self.logic.cleanup()
+                self.logic = None
 
     def enter(self) -> None:
         """Called each time the user opens this module."""
@@ -863,24 +879,33 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
 
     def _pumpMonitoringLoop(self):
-        if self._monitor_loop.is_running():
-            # Harmless tickle: sends a no-op callback into the loop to keep it alive
+        if not self._closed and self._monitor_loop is not None and self._monitor_loop.is_running():
             self._monitor_loop.call_soon_threadsafe(lambda: None)
 
-    def _run_monitor_loop(self):
+    @staticmethod
+    def _run_monitor_loop(loop, interface, stopping):
         """Runs the asyncio event loop to monitor USB device status."""
-        asyncio.set_event_loop(self._monitor_loop)
-        # This runs on a background daemon thread, so a broad except is used here
-        # deliberately: an unhandled exception here would otherwise silently kill
-        # the monitor thread. LIFU-specific errors and asyncio/OS errors are the
-        # expected failure modes; anything else also gets logged.
+        asyncio.set_event_loop(loop)
+
+        async def monitor():
+            if stopping.is_set():
+                return
+            await interface.start_monitoring(interval=1)
+            while not stopping.is_set():
+                await asyncio.sleep(0.1)
+
         try:
-            self._monitor_loop.run_until_complete(
-                self.cur_lifu_interface.start_monitoring(interval=1)
-            )
-            self._monitor_loop.run_forever()
+            loop.run_until_complete(monitor())
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             logging.error("[LIFU] Monitor loop error: %s", e, exc_info=True)
+        finally:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
@@ -923,11 +948,16 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
         # ---- LIFU Interface Connection ----
 
+        self._closed = False
+        self._bridge_connections = []
+        self._ow_connections = []
+        self._shutdown_connections = []
         self._create_lifu_interface_bridge()
         self.cur_lifu_interface = None
         self._lifu_interface_is_simulated = False
         self._monitor_loop = None
         self._monitor_thread = None
+        self._monitor_stop = threading.Event()
         self.monitoring_timer = None
         self.cur_solution_on_hardware: Optional[openlifu.plan.Solution] = None
         """The active Solution object last sent to the ultrasound hardware."""
@@ -938,12 +968,19 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         logging.getLogger("LIFUHVController").setLevel(logging.ERROR)
         logging.getLogger("LIFUTXDevice").setLevel(logging.ERROR)
 
+        self._shutdown_connections.append((slicer.app.aboutToQuit, self.cleanup))
+        slicer.app.aboutToQuit.connect(self.cleanup)
+
     def _create_lifu_interface_bridge(self):
         """Create the bridge QObject and wire its output signals to handlers. Call once from __init__."""
         self.qt_signals = _LIFUBridge()
-        self.qt_signals.signal_connected.connect(self.on_lifu_device_connected)
-        self.qt_signals.signal_disconnected.connect(self.on_lifu_device_disconnected)
-        self.qt_signals.signal_data_received.connect(self.on_lifu_data_received)
+        self._bridge_connections = [
+            (self.qt_signals.signal_connected, self.on_lifu_device_connected),
+            (self.qt_signals.signal_disconnected, self.on_lifu_device_disconnected),
+            (self.qt_signals.signal_data_received, self.on_lifu_data_received),
+        ]
+        for signal, callback in self._bridge_connections:
+            signal.connect(callback)
 
     def _connect_owsignals(self):
         """Wire the current interface's OWSignals into the bridge. Call from __init__ and reinitialize_lifu_interface."""
@@ -952,10 +989,11 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         for device in (self.cur_lifu_interface.hvcontroller, self.cur_lifu_interface.txdevice):
             if device is None:
                 continue
-            device.signal_connected.connect(self.qt_signals.signal_connected.emit)
-            device.signal_disconnected.connect(self.qt_signals.signal_disconnected.emit)
-            device.signal_data_received.connect(self.qt_signals.signal_data_received.emit)
-            device.signal_error.connect(self.qt_signals.signal_error.emit)
+            for name in ("signal_connected", "signal_disconnected", "signal_data_received", "signal_error"):
+                signal = getattr(device, name)
+                callback = getattr(self.qt_signals, name).emit
+                signal.connect(callback)
+                self._ow_connections.append((signal, callback))
 
     @property
     def lifu_interface_is_simulated(self) -> bool:
@@ -970,8 +1008,10 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
 
     def _start_real_hardware_monitoring(self):
         self._monitor_loop = asyncio.new_event_loop()
+        self._monitor_stop = threading.Event()
         self._monitor_thread = threading.Thread(
             target=self._run_monitor_loop,
+            args=(self._monitor_loop, self.cur_lifu_interface, self._monitor_stop),
             daemon=True
         )
         self._monitor_thread.start()
@@ -988,8 +1028,12 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         asyncio.run(self.cur_lifu_interface.start_monitoring(interval=1))
 
     def initialize_lifu_interface(self, test_mode: bool = False) -> None:
+        if self._closed:
+            raise RuntimeError("Sonication Control logic has been cleaned up.")
         if self.cur_lifu_interface is not None:
             return
+        if self._monitor_thread is not None and self._monitor_thread.is_alive():
+            raise RuntimeError("Previous hardware monitoring has not stopped.")
 
         self._lifu_interface_is_simulated = test_mode
         if test_mode:
@@ -1011,53 +1055,84 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         else:
             self._start_real_hardware_monitoring()
 
-    def stop_monitoring(self):
-        if self.cur_lifu_interface:
-            self.cur_lifu_interface.stop_monitoring()
+    def stop_monitoring(self) -> bool:
+        self._monitor_stop.set()
+        if self.monitoring_timer is not None:
+            self.monitoring_timer.stop()
+            disconnect_signal_connections([(self.monitoring_timer.timeout, self._pumpMonitoringLoop)])
+            self.monitoring_timer = None
 
-        if hasattr(self, "_monitor_loop") and self._monitor_loop:
-            if self._monitor_loop.is_running():
-                self._monitor_loop.call_soon_threadsafe(self._monitor_loop.stop)
-
-        if hasattr(self, "_monitor_thread") and self._monitor_thread:
-            if self._monitor_thread.is_alive():
+        try:
+            if self.cur_lifu_interface is not None:
+                self.cur_lifu_interface.stop_monitoring()
+        except Exception:
+            logging.warning("[LIFU] Could not stop interface monitoring", exc_info=True)
+        finally:
+            loop = self._monitor_loop
+            if loop is not None and loop.is_running():
+                def cancel_monitor_tasks():
+                    for task in asyncio.all_tasks(loop):
+                        task.cancel()
+                loop.call_soon_threadsafe(cancel_monitor_tasks)
+            if self._monitor_thread is not None and self._monitor_thread.is_alive():
                 self._monitor_thread.join(timeout=2)
 
-        if hasattr(self, "_monitor_loop") and self._monitor_loop:
-            try:
-                self._monitor_loop.close()
-            except RuntimeError as e:
-                # asyncio raises RuntimeError if the loop is still running when
-                # close() is called; the call_soon_threadsafe(stop) above is
-                # best-effort and may race, so this is the realistic failure.
-                logging.warning("Error closing monitor loop: %s", e)
-
+        if self._monitor_thread is not None and self._monitor_thread.is_alive():
+            logging.warning("[LIFU] Monitoring thread did not stop within two seconds.")
+            return False
+        if self._monitor_loop is not None:
+            self._monitor_loop.close()
         self._monitor_loop = None
         self._monitor_thread = None
-        self.monitoring_timer = None
+        return True
+
+    def _dispose_lifu_interface(self) -> bool:
+        disconnect_signal_connections(self._ow_connections)
+        stopped = False
+        try:
+            stopped = self.stop_monitoring()
+        except Exception:
+            logging.warning("[LIFU] Could not stop monitoring", exc_info=True)
+        try:
+            if self.cur_lifu_interface is not None:
+                self.cur_lifu_interface.close()
+        except Exception:
+            logging.warning("[LIFU] Could not close the interface", exc_info=True)
+        finally:
+            self.cur_lifu_interface = None
+            self._lifu_interface_is_simulated = False
+            self.cur_solution_on_hardware = None
+        return stopped
 
     def reinitialize_lifu_interface(self, test_mode: bool = False):
         """Cleanly shut down and reinitialize the LIFUInterface."""
         logging.debug("reinitialize_lifu_interface() called with test_mode=%s", test_mode)
 
-        LIFUError = _lifu_exceptions().LIFUError
-        try:
-            if self.monitoring_timer is not None:
-                self.monitoring_timer.stop()
-            self.stop_monitoring()
-
-            if self.cur_lifu_interface:
-                self.cur_lifu_interface.close()
-
-        except (LIFUError, RuntimeError, OSError) as e:
-            logging.warning("[LIFU] Error during interface cleanup: %s", e)
-
-        self.cur_lifu_interface = None
-        self._lifu_interface_is_simulated = False
+        if self._closed:
+            raise RuntimeError("Sonication Control logic has been cleaned up.")
+        if not self._dispose_lifu_interface():
+            raise RuntimeError("Previous hardware monitoring has not stopped.")
         self.initialize_lifu_interface(test_mode=test_mode)
 
-    def __del__(self):
-        print("OpenLIFUSonicationControlLogic.__del__ called")
+    def cleanup(self):
+        """Stop owned activity and release Qt callbacks before Python shuts down."""
+        self._closed = True
+        try:
+            self._dispose_lifu_interface()
+        finally:
+            disconnect_signal_connections(self._bridge_connections)
+            disconnect_signal_connections(self._shutdown_connections)
+            self.qt_signals = None
+            for callbacks in (
+                self._on_running_changed_callbacks,
+                self._on_sonication_run_complete_changed_callbacks,
+                self._on_run_progress_updated_callbacks,
+                self._on_run_hardware_status_updated_callbacks,
+                self._on_lifu_device_connected_callbacks,
+                self._on_lifu_device_disconnected_callbacks,
+                self._on_lifu_device_data_received_callbacks,
+            ):
+                callbacks.clear()
 
     def getParameterNode(self):
         return OpenLIFUSonicationControlParameterNode(super().getParameterNode())
@@ -1239,10 +1314,14 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             f(descriptor, message)
 
     def on_lifu_device_connected(self, descriptor, port):
+        if self._closed:
+            return
         logging.info(f"🔌 CONNECTED: {descriptor} on port {port}")
         self._dispatch_device_connected()
 
     def on_lifu_device_disconnected(self, descriptor, port):
+        if self._closed:
+            return
         logging.info(f"❌ DISCONNECTED: {descriptor} from port {port}")
         self._dispatch_device_disconnected()
     
@@ -1250,6 +1329,8 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
         """Called when the LIFUInterface receives data from the hardware.
         This is used to update the run progress and hardware status.
         """
+        if self._closed:
+            return
         logging.info(f"📦 DATA [{descriptor}]: {message}")
 
         if descriptor == "TX":

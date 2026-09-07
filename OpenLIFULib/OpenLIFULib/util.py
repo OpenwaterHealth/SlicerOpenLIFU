@@ -56,6 +56,16 @@ def display_errors(f):
             raise e
     return f_with_forwarded_errors
 
+def disconnect_signal_connections(connections):
+    """Disconnect recorded (signal, callback) pairs and release their references."""
+    while connections:
+        signal, callback = connections.pop()
+        try:
+            signal.disconnect(callback)
+        except (RuntimeError, TypeError, ValueError):
+            # A Qt sender may already have been destroyed during module unload.
+            logging.debug("Signal sender was unavailable during cleanup", exc_info=True)
+
 class SlicerLogHandler(logging.Handler):
     def __init__(self, name_to_print, use_dialogs=True, *args, **kwargs):
         """A python logging handler that sends logs to various Slicer places.
