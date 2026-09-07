@@ -1,5 +1,6 @@
 # Standard library imports
 import os
+import sys
 import tempfile
 import urllib.request
 import zipfile
@@ -9,6 +10,14 @@ from typing import Callable, List, Optional
 SAMPLE_DATABASE_REPOSITORY_URL = "https://github.com/OpenwaterHealth/openlifu-sample-database"
 SAMPLE_DATABASE_TAG = "openlifu-v0.20.0"
 STARTER_DATABASE_TAG = "openlifu-v0.20.0-no-subjects"
+# Maximum relative file-path lengths in the pinned database archives.
+# Recheck against the archive contents when updating to a new release.
+SAMPLE_DATABASE_MAX_RELATIVE_PATH_LENGTH = 151
+STARTER_DATABASE_MAX_RELATIVE_PATH_LENGTH = 62
+
+SAMPLE_DATABASE_WORK_DIR_PREFIX = ".ol-"
+SAMPLE_DATABASE_EXTRACTION_DIR_NAME = "x"
+WINDOWS_MAX_FILE_PATH_LENGTH = 259
 
 
 def archive_url_for_tag(tag: str) -> str:
@@ -122,6 +131,41 @@ def validate_sample_database_destination_can_install(destination: Path) -> None:
             )
 
 
+def _validate_windows_path_length(path: Path, extra_length: int = 0) -> None:
+    if sys.platform != "win32":
+        return
+
+    path = Path(path).resolve()
+    path_length = len(str(path).encode("utf-16-le")) // 2 + extra_length
+    if path_length > WINDOWS_MAX_FILE_PATH_LENGTH:
+        raise RuntimeError(
+            f"Sample database setup requires a Windows path of {path_length} characters "
+            f"(maximum {WINDOWS_MAX_FILE_PATH_LENGTH}) under: {path}\n"
+            "Choose a shorter database folder path."
+        )
+
+
+def validate_sample_database_download_paths(
+    destination: Path,
+    work_dir: Path,
+    archive_url: Optional[str] = None,
+) -> None:
+    """Check staging and installed path lengths for the pinned Windows downloads."""
+    if sys.platform != "win32":
+        return
+
+    archive_url = archive_url or SAMPLE_DATABASE_ARCHIVE_URL
+    for tag, relative_length in (
+        (SAMPLE_DATABASE_TAG, SAMPLE_DATABASE_MAX_RELATIVE_PATH_LENGTH),
+        (STARTER_DATABASE_TAG, STARTER_DATABASE_MAX_RELATIVE_PATH_LENGTH),
+    ):
+        if archive_url == archive_url_for_tag(tag):
+            extraction_root = Path(work_dir) / SAMPLE_DATABASE_EXTRACTION_DIR_NAME / f"openlifu-sample-database-{tag}"
+            _validate_windows_path_length(destination, 1 + relative_length)
+            _validate_windows_path_length(extraction_root, 1 + relative_length)
+            return
+
+
 def validate_sample_database_can_install(source: Path, destination: Path) -> None:
     source = Path(source)
 
@@ -189,7 +233,7 @@ def copy_sample_database_from_archive(
     archive_url = archive_url or SAMPLE_DATABASE_ARCHIVE_URL
 
     if work_dir is None:
-        with tempfile.TemporaryDirectory(prefix=f".{destination.name}-sample-download-", dir=destination.parent) as temp_dir:
+        with tempfile.TemporaryDirectory(prefix=SAMPLE_DATABASE_WORK_DIR_PREFIX, dir=destination.parent) as temp_dir:
             _copy_sample_database_from_archive_in_work_dir(
                 destination,
                 Path(temp_dir),
@@ -216,14 +260,15 @@ def _copy_sample_database_from_archive_in_work_dir(
 ) -> None:
     destination = Path(destination)
     work_dir = Path(work_dir)
+    validate_sample_database_download_paths(destination, work_dir, archive_url)
     work_dir.mkdir(parents=True, exist_ok=True)
 
     raise_if_canceled(cancel_callback)
     if any(work_dir.iterdir()):
         raise RuntimeError(f"Sample database work directory is not empty: {work_dir}")
 
-    archive_path = work_dir / f"openlifu-sample-database-{SAMPLE_DATABASE_TAG}.zip"
-    extraction_dir = work_dir / "extracted"
+    archive_path = work_dir / "db.zip"
+    extraction_dir = work_dir / SAMPLE_DATABASE_EXTRACTION_DIR_NAME
     extraction_dir.mkdir()
 
     download_and_extract_archive_with_progress(
@@ -306,14 +351,17 @@ def download_and_extract_archive_with_progress(
         total_members = len(members)
         report_every = max(1, total_members // 100) if total_members else 1
 
-        for member_index, member in enumerate(members, start=1):
+        for member in members:
             raise_if_canceled(cancel_callback)
             destination_path = (extraction_dir / member.filename).resolve()
             if os.path.commonpath([str(extraction_dir_resolved), str(destination_path)]) != str(extraction_dir_resolved):
                 raise RuntimeError(
                     f"Sample database archive contains an unsafe path: {member.filename}"
                 )
+            _validate_windows_path_length(destination_path)
 
+        for member_index, member in enumerate(members, start=1):
+            raise_if_canceled(cancel_callback)
             archive.extract(member, extraction_dir)
             if member_index == total_members or member_index % report_every == 0:
                 progress_callback(

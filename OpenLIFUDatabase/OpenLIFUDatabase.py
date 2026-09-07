@@ -8,6 +8,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Optional, List, Callable, TYPE_CHECKING
+from unittest.mock import patch
 
 # Third-party imports
 import qt
@@ -598,6 +599,64 @@ class OpenLIFUDatabaseTest(ScriptedLoadableModuleTest):
 
             self.assertEqual([], download_calls)
             self.assertFalse(work_dir.exists())
+
+    def test_copy_sample_database_with_short_staging_paths(self):
+        relative_path = (
+            "subjects/ow_ex001/sessions/neuromod_1x_demo/runs/"
+            "neuromod_1x_demo_20260305_155211_126939/"
+            "neuromod_1x_demo_20260305_155211_126939_protocol_snapshot.json"
+        )
+        archive_root = f"openlifu-sample-database-{sample_data.SAMPLE_DATABASE_TAG}"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir).resolve()
+            parent_padding = 48 - len(str(temp_path).encode("utf-16-le")) // 2
+            if parent_padding < 1:
+                self.skipTest("A shorter temporary directory is needed for the Windows staging-path fixture.")
+            parent = temp_path / ("d" * parent_padding)
+            parent.mkdir()
+            source = temp_path / archive_root
+            self._write_minimal_database_fixture(source)
+            archive_path = temp_path / "sample.zip"
+            self._write_database_archive(source, archive_path)
+            with zipfile.ZipFile(archive_path, "a") as archive:
+                archive.writestr(f"{archive_root}/{relative_path}", "{}")
+            destination = parent / "database_ow"
+            old_path = parent / ".database_ow-sample-download-4jcvp85i" / "extracted" / archive_root / relative_path
+            self.assertGreater(len(str(old_path).encode("utf-16-le")) // 2, 259)
+
+            with patch.object(sample_data, "sys", platform="win32"):
+                sample_data.copy_sample_database_from_archive(destination, archive_url=archive_path.as_uri())
+
+            self.assertEqual("{}", (destination / relative_path).read_text(encoding="utf-8"))
+            self.assertEqual([destination], list(parent.iterdir()))
+
+    def test_sample_database_rejects_long_paths_before_starting(self):
+        controller, state = self._make_sample_database_setup_controller_for_test()
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                parent = Path(temp_dir) / ("d" * 100)
+                destination = parent / "destination"
+                destination.mkdir(parents=True)
+                with (
+                    patch.object(sample_data, "sys", platform="win32"),
+                    patch.object(sample_data.urllib.request, "urlopen") as download,
+                    patch.object(sample_data_gui.shutil, "which", return_value="PythonSlicer"),
+                    patch.object(qt, "QProcess") as process,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "Choose a shorter database folder path"):
+                        sample_data.copy_sample_database_from_archive(destination)
+                    self.assertFalse(controller.start_sample_database_setup(destination))
+                    download.assert_not_called()
+                    process.assert_not_called()
+                self.assertFalse(controller.is_active())
+                self.assertIsNone(state["db"])
+                self.assertEqual([], state["loaded_paths"])
+                self.assertTrue(controller.path_line_edit.enabled)
+                self.assertTrue(all(control.enabled for control in controller.controls))
+                self.assertEqual([destination], list(parent.iterdir()))
+                self.assertEqual([], list(destination.iterdir()))
+        finally:
+            controller.cleanup()
 
     def test_sample_data_cli_installs_local_archive_with_python_slicer(self):
         with tempfile.TemporaryDirectory() as temp_dir:

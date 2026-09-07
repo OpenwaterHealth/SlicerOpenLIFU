@@ -191,17 +191,31 @@ class SampleDatabaseSetupController:
             )
             return False
 
+        work_dir = None
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            work_dir = Path(
+                tempfile.mkdtemp(
+                    prefix=sample_data.SAMPLE_DATABASE_WORK_DIR_PREFIX,
+                    dir=destination.parent,
+                )
+            )
+            sample_data.validate_sample_database_download_paths(destination, work_dir, archive_url)
+        except Exception as exc:
+            if work_dir is not None:
+                shutil.rmtree(work_dir, ignore_errors=True)
+            self.clear_database()
+            self._set_database_path_border("red")
+            self._display_sample_database_setup_error(
+                f"Failed to create {display_name}:\n{exc}"
+            )
+            return False
+
         self.clear_database()
         self._destination = destination
         self._display_name = display_name
         self._readme_url = readme_url
-        self._destination.parent.mkdir(parents=True, exist_ok=True)
-        self._work_dir = Path(
-            tempfile.mkdtemp(
-                prefix=f".{self._destination.name}-sample-download-",
-                dir=self._destination.parent,
-            )
-        )
+        self._work_dir = work_dir
         self._cancel_file = self._work_dir / "cancel-requested"
         self._reset_output_state()
         self._set_database_path_border("yellow")
