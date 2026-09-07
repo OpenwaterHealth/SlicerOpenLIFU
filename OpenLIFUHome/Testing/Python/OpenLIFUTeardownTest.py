@@ -14,11 +14,13 @@ import threading
 import time
 import unittest
 import weakref
+from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import qt
 import slicer
+import vtk
 from slicer.ScriptedLoadableModule import ScriptedLoadableModuleTest
 
 
@@ -325,8 +327,10 @@ def make_wizard_class():
             self._logic = Mock()
             self.photoscan = SimpleNamespace(get_id=lambda: "test")
             self.transducer_surface = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-            self.photoscanMarkupPage = SimpleNamespace(temp_markup_fiducials={}, facial_landmarks_fiducial_node=None)
-            self.skinSegmentationMarkupPage = SimpleNamespace(temp_markup_fiducials={}, facial_landmarks_fiducial_node=None)
+            self.photoscanMarkupPage = SimpleNamespace(
+                temp_markup_fiducials={}, facial_landmarks_fiducial_node=None, exitPlaceFiducialMode=Mock())
+            self.skinSegmentationMarkupPage = SimpleNamespace(
+                temp_markup_fiducials={}, facial_landmarks_fiducial_node=None, exitPlaceFiducialMode=Mock())
             temporary_pv = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
             temporary_tp = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
             self.temporary_ids = (temporary_pv.GetID(), temporary_tp.GetID())
@@ -355,6 +359,105 @@ def make_wizard_class():
 
 
 class WizardTeardownTest(ScriptedLoadableModuleTest):
+    @contextmanager
+    def real_markup_page(self, page_id):
+        import OpenLIFUTransducerLocalization as module
+        widget = slicer.util.getModuleWidget("OpenLIFUTransducerLocalization")
+
+        def model():
+            sphere = vtk.vtkSphereSource()
+            sphere.Update()
+            return slicer.modules.models.logic().AddModel(sphere.GetOutput())
+
+        skin = model()
+        transducer = SimpleNamespace(
+            surface_model_node=model(), body_model_node=model(),
+            transform_node=slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode"),
+            cloned_virtual_fit_model=None, update_color=Mock())
+        photoscan = SimpleNamespace(
+            model_node=model(), facial_landmarks_fiducial_node=None,
+            view_node=module.create_threeD_photoscan_view_node("teardown-test"),
+            get_id=lambda: "teardown-test")
+        photoscan.set_view_nodes = lambda nodes: photoscan.model_node.GetDisplayNode().SetViewNodeIDs(
+            [node.GetID() for node in nodes])
+        with ExitStack() as patches:
+            patches.enter_context(patch.object(module, "get_skin_segmentation", return_value=skin))
+            patches.enter_context(patch.object(widget.logic, "load_openlifu_photoscan", return_value=photoscan))
+            patches.enter_context(patch.object(widget.logic, "get_transducer_tracking_result_node", return_value=None))
+            patches.enter_context(patch.object(widget.logic, "get_volume_facial_landmarks", return_value=None))
+            wizard = module.TransducerTrackingWizard(photoscan, None, transducer, None)
+            try:
+                wizard._needs_initial_maximize = False
+                wizard.setStartId(page_id)
+                wizard.show()
+                process_events()
+                yield wizard, wizard.currentPage()
+            finally:
+                wizard.clean_up()
+                wizard.deleteLater()
+                process_events()
+                for node in (skin, transducer.surface_model_node, transducer.body_model_node,
+                             transducer.transform_node, photoscan.model_node, photoscan.view_node):
+                    slicer.mrmlScene.RemoveNode(node)
+
+    def test_cancel_during_landmark_placement_releases_real_pages(self):
+        for page_id in (0, 1):
+            for action in ("cancel", "close"):
+                with self.subTest(page_id=page_id, action=action):
+                    with self.real_markup_page(page_id) as (wizard, page):
+                        self.assertFalse(page.page_locked)
+                        page.markupTableWidgetSelected(page.markupsWidget.tableWidget().item(0, 0))
+                        node = page.currently_placing_node
+                        tag = page._pointModifiedObserverTag
+                        page_ref = weakref.ref(page)
+                        self.assertIsNotNone(node.GetCommand(tag))
+                        self.assertEqual(0, node.GetNumberOfControlPoints())
+                        try:
+                            if action == "cancel":
+                                wizard.button(qt.QWizard.CancelButton).click()
+                            else:
+                                wizard.close()
+                            self.assertIsNone(node.GetScene())
+                            self.assertIsNone(node.GetCommand(tag))
+                            self.assertIsNone(page._pointModifiedObserverTag)
+                            interaction = slicer.app.applicationLogic().GetInteractionNode()
+                            self.assertEqual(interaction.ViewTransform, interaction.GetCurrentInteractionMode())
+                        finally:
+                            # Release the callback even if a regression makes the assertion fail.
+                            node.RemoveObserver(tag)
+                    del wizard, page, node
+                    gc.collect()
+                    self.assertIsNone(page_ref())
+
+    def test_switching_landmarks_disconnects_previous_placement(self):
+        for page_id in (0, 1):
+            with self.subTest(page_id=page_id):
+                with self.real_markup_page(page_id) as (wizard, page):
+                    observations = []
+                    try:
+                        table = page.markupsWidget.tableWidget()
+                        # Repeat a selection, switch landmarks, then double-click to replace one.
+                        for row, double_click in ((0, False), (0, False), (1, False), (1, True)):
+                            callback = page.unsetControlPoint if double_click else page.markupTableWidgetSelected
+                            callback(table.item(row, 0))
+                            node = page.currently_placing_node
+                            tag = page._pointModifiedObserverTag
+                            self.assertIsNotNone(node.GetCommand(tag))
+                            observations.append((node, tag))
+                            for previous_node, previous_tag in observations[:-1]:
+                                self.assertIsNone(previous_node.GetCommand(previous_tag))
+                        node.AddControlPoint(vtk.vtkVector3d(1, 2, 3))
+                        self.assertIsNone(node.GetScene())
+                        self.assertIsNone(node.GetCommand(tag))
+                        landmarks = page.facial_landmarks_fiducial_node
+                        self.assertEqual(landmarks.PositionDefined, landmarks.GetNthControlPointPositionStatus(1))
+                        position = [0.0, 0.0, 0.0]
+                        landmarks.GetNthControlPointPosition(1, position)
+                        self.assertEqual([1.0, 2.0, 3.0], position)
+                    finally:
+                        for node, tag in observations:
+                            node.RemoveObserver(tag)
+
     def make_wizard(self):
         wizard = make_wizard_class()(None, None, Mock(), None)
         self.addCleanup(wizard.deleteLater)
