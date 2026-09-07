@@ -20,6 +20,8 @@ from OpenLIFULib import (
     ensure_python_requirements_for_module_enter,
 )
 from OpenLIFULib.util import (
+    disconnect_signal_connections,
+    display_errors,
     get_openlifu_login_parameter_node,
 )
 
@@ -80,6 +82,9 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+        self.openLIFUToolBar = None
+        self.syncAction = None
+        self._toolbar_connections = []
 
     def setup(self) -> None:
         """Called when the user opens the module the first time and the widget is initialized."""
@@ -140,19 +145,18 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def setupCloudSyncToolBar(self):
         mw = slicer.util.mainWindow()
-        try:
-            self.openLIFUToolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
-        except:
-            self.openLIFUToolBar = None
+        if mw is None or self.openLIFUToolBar is not None:
+            return
+        self.openLIFUToolBar = mw.findChild(qt.QToolBar, "CloudSyncToolBar")
         if not self.openLIFUToolBar:
-            self.openLIFUToolBar = qt.QToolBar("CloudSync Toolbar")
+            self.openLIFUToolBar = qt.QToolBar("CloudSync Toolbar", mw)
             self.openLIFUToolBar.setObjectName("CloudSyncToolBar")
             mw.addToolBar(self.openLIFUToolBar)
 
         self.syncAction = self.openLIFUToolBar.findChild(qt.QPushButton, "OpenLIFUToolbarSyncButton")
 
         if not self.syncAction:
-            self.syncAction = qt.QPushButton()
+            self.syncAction = qt.QPushButton(self.openLIFUToolBar)
             self.syncAction.setObjectName("OpenLIFUToolbarSyncButton")
             self.syncAction.setToolTip("Sync Cloud")
 
@@ -162,9 +166,11 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             self.openLIFUToolBar.addWidget(self.syncAction)
 
-            self.syncAction.clicked.connect(self.onToolbarSyncTriggered)
+        self._toolbar_connections.append((self.syncAction.clicked, self.onToolbarSyncTriggered))
+        self.syncAction.clicked.connect(self.onToolbarSyncTriggered)
         
-    def onToolbarSyncTriggered(self):
+    @display_errors
+    def onToolbarSyncTriggered(self, checked=False):
         # 1. Save current module for the 'Back' button
         current_mod = slicer.util.moduleSelector().selectedModule
         if current_mod != "OpenLIFUCloudSync":
@@ -185,12 +191,17 @@ class OpenLIFUHomeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
-
-        mw = slicer.util.mainWindow()
-        # Find and remove the entire toolbar
-        toolBar = slicer.util.findChild(mw, "CloudSyncToolBar")
-        if toolBar:
-            mw.removeToolBar(toolBar)
+        disconnect_signal_connections(self._toolbar_connections)
+        toolBar = self.openLIFUToolBar
+        self.syncAction = None
+        self.openLIFUToolBar = None
+        if toolBar is not None:
+            # Do not reuse a toolbar awaiting deferred deletion during module reload.
+            toolBar.setObjectName("")
+            toolBar.hide()
+            mw = slicer.util.mainWindow()
+            if mw is not None:
+                mw.removeToolBar(toolBar)
             toolBar.deleteLater()
 
     def enter(self) -> None:
