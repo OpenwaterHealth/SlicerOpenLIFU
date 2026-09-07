@@ -1,5 +1,5 @@
 
-foreach(scenario automatic-sonication automatic-cloud automatic-all recreate sonication cloud wizard wizard-shutdown)
+foreach(scenario automatic-sonication automatic-cloud automatic-all recreate home sonication cloud wizard wizard-shutdown)
   slicer_add_python_test(
     SCRIPT OpenLIFUTeardownTest.py
     TESTNAME_PREFIX "${scenario}_"

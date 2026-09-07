@@ -32,6 +32,34 @@ def process_events(duration=0):
         time.sleep(0.01)
 
 
+class HomeTeardownTest(ScriptedLoadableModuleTest):
+    def test_toolbar_cleanup_and_recreation(self):
+        widget = slicer.util.getModuleWidget("OpenLIFUHome")
+        self.addCleanup(widget.cleanup)
+        first_toolbar = widget.openLIFUToolBar
+        first_button = widget.syncAction
+        self.assertIsNotNone(first_toolbar)
+        self.assertIs(first_button.parent(), first_toolbar)
+        widget.setupCloudSyncToolBar()
+        self.assertIs(widget.syncAction, first_button)
+        with patch.object(slicer.util, "selectModule") as select_module:
+            first_button.click()
+            select_module.assert_called_once_with("OpenLIFUCloudSync")
+            widget.cleanup()
+            widget.cleanup()
+            first_button.click()
+            select_module.assert_called_once_with("OpenLIFUCloudSync")
+        self.assertIsNone(widget.syncAction)
+        self.assertIsNone(widget.openLIFUToolBar)
+        # Recreate before Qt processes the old toolbar's deferred deletion.
+        widget.setupCloudSyncToolBar()
+        self.assertIsNot(widget.openLIFUToolBar, first_toolbar)
+        process_events()
+        with patch.object(slicer.util, "selectModule") as select_module:
+            widget.syncAction.click()
+            select_module.assert_called_once_with("OpenLIFUCloudSync")
+
+
 class SonicationTeardownTest(ScriptedLoadableModuleTest):
     def make_logic(self):
         from OpenLIFUSonicationControl import OpenLIFUSonicationControlLogic
@@ -416,7 +444,8 @@ def run(scenario):
         widget._running_wizard = True
         widget.wizard.show()
     else:
-        test_class = {"sonication": SonicationTeardownTest, "cloud": CloudTeardownTest, "wizard": WizardTeardownTest}[scenario]
+        test_class = {"home": HomeTeardownTest, "sonication": SonicationTeardownTest,
+                      "cloud": CloudTeardownTest, "wizard": WizardTeardownTest}[scenario]
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(test_class))
         if not result.wasSuccessful():
             return False
