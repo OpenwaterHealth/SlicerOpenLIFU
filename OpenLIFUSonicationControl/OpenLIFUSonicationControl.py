@@ -582,6 +582,7 @@ class OpenLIFUSonicationControlWidget(ScriptedLoadableModuleWidget, VTKObservati
         # possible synchronization
         self.updateDeviceConnectedStateFromDevice()
         self.updateWidgetSolutionOnHardwareState(SolutionOnHardwareState.NOT_SENT)
+        self.updateAllButtons()
         self.updateAllButtonsEnabled()
         self.updateVersionLabels()
 
@@ -1102,6 +1103,9 @@ class OpenLIFUSonicationControlLogic(ScriptedLoadableModuleLogic):
             self.cur_lifu_interface = None
             self._lifu_interface_is_simulated = False
             self.cur_solution_on_hardware = None
+            if not self._closed:
+                # The SDK disconnect callback was detached before stopping the interface.
+                self._dispatch_device_disconnected()
         return stopped
 
     def reinitialize_lifu_interface(self, test_mode: bool = False):
