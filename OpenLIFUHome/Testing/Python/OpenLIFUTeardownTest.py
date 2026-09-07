@@ -79,6 +79,50 @@ class SonicationTeardownTest(ScriptedLoadableModuleTest):
         process_events(1.2)  # Includes the simulator's delayed auto-connect callbacks.
         callback.assert_called_once_with()
 
+    def test_failed_interface_replacement_resets_widget(self):
+        import OpenLIFUSonicationControl as module
+
+        parent = slicer.qMRMLWidget(slicer.util.mainWindow())
+        parent.setLayout(qt.QVBoxLayout())
+        widget = module.OpenLIFUSonicationControlWidget(parent)
+        self.addCleanup(parent.deleteLater)
+        self.addCleanup(widget.cleanup)
+        widget.setup()
+        logic = widget.logic
+        widget.ui.testWithoutHardwareCheckBox.setChecked(True)
+        data = SimpleNamespace(loaded_solution=SimpleNamespace(is_approved=lambda: True))
+        with patch.object(module, "get_openlifu_data_parameter_node", return_value=data), \
+             patch.object(logic, "_get_current_session_transducer", return_value=None):
+            logic.initialize_lifu_interface(test_mode=True)
+            process_events(1.1)
+            logic.cur_solution_on_hardware = SimpleNamespace(id="test-solution")
+            widget.updateWidgetSolutionOnHardwareState(module.SolutionOnHardwareState.SUCCESSFUL_SEND)
+            widget.updateAllButtonsEnabled()
+            widget.updateAllButtons()
+            self.assertEqual(module.DeviceConnectedState.CONNECTED, widget._cur_device_connected_state)
+            for button in (widget.ui.manuallyGetDeviceStatusPushButton,
+                           widget.ui.sendSonicationSolutionToDevicePushButton, widget.ui.runPushButton):
+                self.assertTrue(button.isEnabled())
+
+            with patch("openlifu_sdk.ui.SimulatedLIFUInterface", side_effect=RuntimeError("replacement failed")), \
+                 patch.object(slicer.util, "errorDisplay"), \
+                 self.assertRaisesRegex(RuntimeError, "replacement failed"):
+                widget.onReinitializeLIFUInterfacePushButtonClicked(False)
+
+            self.assertIsNone(logic.cur_lifu_interface)
+            self.assertIsNone(logic.cur_solution_on_hardware)
+            self.assertEqual(module.DeviceConnectedState.NOT_CONNECTED, widget._cur_device_connected_state)
+            self.assertEqual(module.SolutionOnHardwareState.NOT_SENT, widget.cur_solution_on_hardware_state)
+            self.assertIn("not connected", widget.ui.connectedStateLabel.text)
+            self.assertNotEqual("Solution sent to device.", widget.ui.solutionStateLabel.text)
+            self.assertEqual("Initialize LIFUInterface", widget.ui.reinitializeLIFUInterfacePushButton.text)
+            self.assertTrue(widget.ui.reinitializeLIFUInterfacePushButton.isEnabled())
+            for button in (widget.ui.manuallyGetDeviceStatusPushButton,
+                           widget.ui.sendSonicationSolutionToDevicePushButton, widget.ui.runPushButton):
+                self.assertFalse(button.isEnabled())
+            for label in (widget.ui.sdkVersionLabel, widget.ui.consoleVersionLabel, widget.ui.txVersionLabel):
+                self.assertEqual("", label.text)
+
     def test_monitor_shutdown_during_startup(self):
         entered = threading.Event()
 
