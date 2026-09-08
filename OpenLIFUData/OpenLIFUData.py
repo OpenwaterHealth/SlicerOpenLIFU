@@ -1059,6 +1059,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.ui.loadVolumeButton.clicked.connect(self.onLoadVolumePressed)
         self.ui.loadFiducialsButton.clicked.connect(self.onLoadFiducialsPressed)
         self.ui.loadTransducerButton.clicked.connect(self.onLoadTransducerPressed)
+        self.ui.manageTransducersButton.clicked.connect(self.onManageTransducersPressed)
         self.ui.loadPhotoscanButton.clicked.connect(self.onLoadPhotoscanPressed)
 
         # Inject guided mode workflows
@@ -1103,6 +1104,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.updateLoadedObjectsView()
         self.updateSessionStatus()
         self.update_loadSubjectButton_enabled()
+        self.ui.manageTransducersButton.setEnabled(get_cur_db() is not None)
         self.update_volumesCollapsibleButton_checked_and_enabled()
         self.update_sessionCollapsibleButton_checked_and_enabled()
         self.updateWorkflowControls()
@@ -1111,6 +1113,7 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         self.logic.subject = None
         self.logic.clear_session()
         self.update_loadSubjectButton_enabled()
+        self.ui.manageTransducersButton.setEnabled(db is not None)
 
     def on_subject_changed(self, subject: Optional["openlifu.db.Subject"] = None):
         self.logic.clear_session()
@@ -1205,6 +1208,16 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         )
         if filepath:
             self.logic.load_protocol_from_file(filepath)
+
+    @display_errors
+    def onManageTransducersPressed(self, checked: bool) -> None:
+        from OpenLIFUDataLib.transducer_manager import TransducerManagerDialog
+
+        db = get_cur_db()
+        if db is None:
+            raise RuntimeError("Connect to a database before managing transducers.")
+        dialog = TransducerManagerDialog(db, parent=slicer.util.mainWindow())
+        dialog.exec_()
 
     @display_errors
     def onLoadTransducerPressed(self, checked:bool) -> None:
