@@ -17,6 +17,12 @@ Systems](https://www.openwater.health/early-access-systems)
 
 ![Screenshot](screenshots/1.png)
 
+## Supported Versions
+
+![Python library and SlicerOpenLIFU maintenance by release line](docs/support-schedule.svg)
+
+Versions may fall to a lower support tier every six months or so, each time the downstream [desktop application](https://github.com/OpenwaterHealth/openlifu-desktop-application/tree/main) selects a newer version of SlicerOpenLIFU. See the [support schedule](SUPPORT.md) for details.
+
 ## 📦 Included Modules
 
 ### 🏠 OpenLIFUHome
