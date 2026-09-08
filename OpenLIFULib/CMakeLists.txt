@@ -44,3 +44,8 @@ slicerMacroBuildScriptedModule(
   SCRIPTS ${MODULE_PYTHON_SCRIPTS}
   RESOURCES ${MODULE_PYTHON_RESOURCES}
   )
+
+if(BUILD_TESTING)
+  add_test(NAME py_OpenLIFUDependencyUtils
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Testing/Python/test_dependency_utils.py)
+endif()
