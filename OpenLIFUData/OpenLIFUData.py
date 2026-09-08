@@ -1217,7 +1217,10 @@ class OpenLIFUDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Guid
         if db is None:
             raise RuntimeError("Connect to a database before managing transducers.")
         dialog = TransducerManagerDialog(db, parent=slicer.util.mainWindow())
-        dialog.exec_()
+        try:
+            dialog.exec_()
+        finally:
+            dialog.deleteLater()
 
     @display_errors
     def onLoadTransducerPressed(self, checked:bool) -> None:

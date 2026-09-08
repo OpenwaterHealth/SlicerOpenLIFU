@@ -1,16 +1,27 @@
 """Transducer manager dialogs."""
 
+import copy
 import json
 import logging
 from pathlib import Path
+import re
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import numpy as np
 import qt
 import slicer
+import vtk
 from slicer.i18n import tr as _
 
-from OpenLIFULib.util import display_errors
+from OpenLIFULib.user_account_mode_util import get_current_user, get_user_account_mode_state
+from OpenLIFULib.util import display_errors, get_cur_db, get_openlifu_data_parameter_node
+
+from .transducer_store import (
+    delete_transducer,
+    ensure_transducer_not_referenced,
+    save_transducer,
+    validate_transducer_id,
+)
 
 if TYPE_CHECKING:
     import openlifu.db
@@ -21,9 +32,7 @@ if TYPE_CHECKING:
 # Transducer Manager
 # ---------------------------------------------------------------------------
 
-# IDs that ship as part of the openlifu reference database and are required
-# as templates when constructing a TransducerArray from a connected device.
-# Deleting one of these is gated behind a confirmation dialog.
+# Canonical template IDs. Deletion prompts explain their use in device imports.
 PROTECTED_TRANSDUCER_IDS = frozenset({
     "openlifu_1x155",
     "openlifu_1x400",
@@ -65,7 +74,10 @@ def _read_connected_user_configs(iface) -> List[dict]:
                 f"Failed to read user_config from TX module {i}. "
                 f"The module may not have been provisioned."
             )
-        user_configs.append(json.loads(cfg.get_json_str()))
+        data = json.loads(cfg.get_json_str())
+        if not isinstance(data, dict):
+            raise ValueError(f"TX module {i} did not return a configuration object.")
+        user_configs.append(data)
     return user_configs
 
 
@@ -77,67 +89,56 @@ def _module_count_from_template_id(template_id: str) -> Optional[int]:
     """
     if not isinstance(template_id, str):
         return None
-    tail = template_id.rsplit("_", 1)[-1]  # e.g. "2x400"
-    if "x" not in tail:
-        return None
-    head = tail.split("x", 1)[0]
-    try:
-        return int(head)
-    except ValueError:
-        return None
+    match = re.search(r"(?:^|_)(\d+)x\d+(?:_|$)", template_id)
+    return int(match.group(1)) if match else None
 
 
-def _resolve_template_id_for_user_configs(user_configs: List[dict]) -> Tuple[str, Optional[dict]]:
-    """Return ``(template_id, device_block)`` for a list of module user_configs.
+def _connected_frequency_khz(user_configs: List[dict]) -> Optional[float]:
+    """Validate reported frequencies before using a recorded template."""
+    if not user_configs:
+        raise ValueError("No TX module configurations were read.")
+    frequencies = []
+    for index, config in enumerate(user_configs):
+        reported = config.get("freq")
+        module = config.get("module") or {}
+        calibrated = module.get("frequency") if isinstance(module, dict) else None
+        values = []
+        for value, divisor in ((reported, 1.0), (calibrated, 1000.0)):
+            if value is None:
+                continue
+            frequency = float(value) / divisor
+            if not np.isfinite(frequency) or frequency <= 0:
+                raise ValueError(f"TX module {index} reports an invalid frequency.")
+            values.append(frequency)
+        if len(values) == 2 and not np.isclose(values[0], values[1], rtol=1e-6, atol=0):
+            raise ValueError(f"TX module {index} reports inconsistent device and calibration frequencies.")
+        if values:
+            frequencies.append(values[0])
+    if frequencies and not np.allclose(frequencies, frequencies[0], rtol=1e-6, atol=0):
+        raise ValueError(f"Connected TX modules report mismatched frequencies: {frequencies} kHz")
+    return frequencies[0] if frequencies else None
 
-    Prefers ``user_configs[0]["device"]["template"]`` if present **and** its
-    encoded module count agrees with ``len(user_configs)``. Otherwise falls
-    back to ``(n_modules, freq)``. ``device_block`` is the parsed ``device``
-    sub-dict of the lead module or ``None`` if no such block exists.
 
-    The consistency check guards against stale device metadata: e.g. a 2x
-    transducer whose module 0 was once provisioned with a ``openlifu_1x400``
-    template would otherwise be reported as 1x400 even after the second
-    module is connected.
-
-    Raises:
-        RuntimeError: if neither source can resolve a template id (e.g. all
-            modules omit ``freq``).
-    """
+def _resolve_template_id_for_user_configs(user_configs: List[dict]) -> Tuple[Optional[str], Optional[dict]]:
+    """Use a valid recorded template, or infer a canonical template when known."""
+    frequency = _connected_frequency_khz(user_configs)
     device_block = user_configs[0].get("device") or None
-    if device_block:
-        tid = device_block.get("template")
-        if isinstance(tid, str) and tid:
-            recorded_count = _module_count_from_template_id(tid)
-            if recorded_count is None or recorded_count == len(user_configs):
-                return tid, device_block
-            # Stale / mismatched template id on module 0 -- ignore it and
-            # fall through to the (count, freq) inference below.
-            logging.warning(
-                "Ignoring stale device.template=%r on module 0: it claims %d "
-                "module(s) but %d are currently connected. Falling back to "
-                "count+freq inference.",
-                tid, recorded_count, len(user_configs),
+    if device_block is not None and not isinstance(device_block, dict):
+        raise ValueError("The lead module's device configuration must be an object.")
+    if device_block and device_block.get("template") is not None:
+        template_id = device_block["template"]
+        validate_transducer_id(template_id)
+        recorded_count = _module_count_from_template_id(template_id)
+        if recorded_count is not None and recorded_count != len(user_configs):
+            raise ValueError(
+                f"Recorded template '{template_id}' describes {recorded_count} module(s), "
+                f"but {len(user_configs)} are connected. Correct the device configuration first."
             )
-
-    freqs = {c.get("freq") for c in user_configs if c.get("freq") is not None}
-    if len(freqs) > 1:
-        raise RuntimeError(
-            f"Connected TX modules report mismatched frequencies: {sorted(freqs)}"
-        )
-    freq = next(iter(freqs)) if freqs else None
-    if freq is None:
-        raise RuntimeError(
-            "Connected TX modules do not report a frequency; cannot infer "
-            "a default template id."
-        )
-    tid = _TEMPLATE_IDS_BY_COUNT_FREQ.get((len(user_configs), int(freq)))
-    if tid is None:
-        raise RuntimeError(
-            f"No default template is defined for {len(user_configs)} module(s) "
-            f"at {int(freq)} kHz."
-        )
-    return tid, device_block
+        return template_id, device_block
+    template_id = None
+    if frequency is not None and float(frequency).is_integer():
+        template_id = _TEMPLATE_IDS_BY_COUNT_FREQ.get((len(user_configs), int(frequency)))
+    return template_id, device_block
 
 
 class DeviceConfigEditDialog(qt.QDialog):
@@ -192,8 +193,7 @@ class DeviceConfigEditDialog(qt.QDialog):
         templateLabel = qt.QLabel(self.template_id)
         templateLabel.setStyleSheet("color: #888;")
         templateLabel.setToolTip(
-            "Inferred from the number of connected modules and their reported "
-            "frequency. The template provides the mesh files."
+            "Saved array template providing the placement and mesh files for these modules."
         )
         form.addRow(_("Template:"), templateLabel)
 
@@ -221,8 +221,10 @@ class DeviceConfigEditDialog(qt.QDialog):
         self.buttonBox.rejected.connect(self.reject)
 
     def _validate(self) -> None:
-        if not self.idEdit.text.strip():
-            slicer.util.errorDisplay("Transducer ID is required.", parent=self)
+        try:
+            validate_transducer_id(self.idEdit.text.strip())
+        except ValueError as error:
+            slicer.util.errorDisplay(str(error), parent=self)
             return
         if not self.nameEdit.text.strip():
             slicer.util.errorDisplay("Transducer name is required.", parent=self)
@@ -230,8 +232,11 @@ class DeviceConfigEditDialog(qt.QDialog):
         self.accept()
 
     def customexec_(self) -> Tuple[int, str, str]:
-        rc = self.exec_()
-        return rc, self.idEdit.text.strip(), self.nameEdit.text.strip()
+        try:
+            rc = self.exec_()
+            return rc, self.idEdit.text.strip(), self.nameEdit.text.strip()
+        finally:
+            self.deleteLater()
 
 
 # ---- Transducer preview helpers ------------------------------------------
@@ -296,27 +301,33 @@ class TransducerPreviewDialog(qt.QDialog):
         self.transducer = transducer
         self._body_abspath = body_abspath
         self._registration_surface_abspath = registration_surface_abspath
+        self._scene = slicer.mrmlScene
+        self._owned_nodes = []
         self._model_node = None
         self._body_model_node = None
         self._registration_surface_model_node = None
         self._view_node = None
         self._view_owner_node = None
-        self.setWindowTitle(f"Transducer Preview - {getattr(transducer, 'name', getattr(transducer, 'id', ''))}")
+        self._scene_close_tag = None
+        self._closed = False
+        self.setWindowTitle(f"Transducer Preview - {getattr(transducer, 'name', transducer.id)}")
         self.setWindowModality(qt.Qt.WindowModal)
-        self._setup()
-        self._setup_view_node()
-        self._setup_model_node()
-        self._setup_body_model_node()
-        self._setup_registration_surface_node()
-        # Reset the camera to fit the transducer in the preview view
-        try:
-            view_widget_3d = self.viewWidget.threeDView() if hasattr(self.viewWidget, "threeDView") else None
-            if view_widget_3d is not None:
-                view_widget_3d.resetFocalPoint()
-                view_widget_3d.resetCamera()
-        except Exception as e:
-            logging.debug("TransducerPreviewDialog: could not reset camera: %s", e)
         self.finished.connect(self._cleanup)
+        try:
+            self._setup()
+            self._setup_view_node()
+            self._setup_model_node()
+            self._setup_body_model_node()
+            self._setup_registration_surface_node()
+            self.viewWidget.threeDView().resetFocalPoint()
+            self.viewWidget.threeDView().resetCamera()
+            self._scene_close_tag = self._scene.AddObserver(
+                self._scene.StartCloseEvent, self._on_scene_close,
+            )
+        except Exception:
+            self._cleanup()
+            self.deleteLater()
+            raise
 
     def _setup(self) -> None:
         screen = qt.QDesktopWidget().screenGeometry()
@@ -358,7 +369,7 @@ class TransducerPreviewDialog(qt.QDialog):
 
         # Right panel: 3D view widget bound to a private view node
         self.viewWidget = slicer.qMRMLThreeDWidget(splitter)
-        self.viewWidget.setMRMLScene(slicer.mrmlScene)
+        self.viewWidget.setMRMLScene(self._scene)
         self.viewWidget.setMinimumHeight(300)
         self.viewWidget.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
 
@@ -544,164 +555,127 @@ class TransducerPreviewDialog(qt.QDialog):
             # Plain Transducer: populate top-level fields directly.
             add_transducer(None, obj)
 
-    def _setup_view_node(self) -> None:
-        tid = getattr(self.transducer, "id", "transducer")
-        layoutName = f"TransducerPreview-{tid}"
-        # Owner node so the layout manager doesn't manage this view
-        self._view_owner_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
+    def _track_node(self, node):
+        if node is not None and node not in self._owned_nodes:
+            node.SetSaveWithScene(False)
+            self._owned_nodes.append(node)
+        return node
 
-        viewLogic = slicer.vtkMRMLViewLogic()
-        viewLogic.SetMRMLScene(slicer.mrmlScene)
-        viewNode = viewLogic.AddViewNode(layoutName)
-        viewNode.SetLayoutLabel("XDC")
-        viewNode.SetLayoutColor([0.30, 0.55, 0.85])
-        viewNode.SetName(f"view-preview-{tid}")
-        viewNode.SetAndObserveParentLayoutNodeID(self._view_owner_node.GetID())
-        viewNode.SetAttribute("isWizardViewNode", "true")
-        viewNode.SetBackgroundColor(0.20, 0.25, 0.35)
-        viewNode.SetBackgroundColor2(0.10, 0.12, 0.18)
-        viewNode.SetBoxVisible(False)
-        viewNode.SetAxisLabelsVisible(False)
-        self._view_node = viewNode
-        self.viewWidget.setMRMLViewNode(viewNode)
+    def _setup_view_node(self) -> None:
+        tid = self.transducer.id
+        self._view_owner_node = self._track_node(
+            self._scene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
+        )
+        view_node = slicer.vtkMRMLViewNode()
+        view_node.SetLayoutName(f"TransducerPreview-{self._view_owner_node.GetID()}")
+        view_node.SetLayoutLabel("XDC")
+        view_node.SetLayoutColor([0.30, 0.55, 0.85])
+        view_node.SetName(f"view-preview-{tid}")
+        # Set the owner before insertion so the main layout does not create another view.
+        view_node.SetAndObserveParentLayoutNodeID(self._view_owner_node.GetID())
+        self._view_node = self._track_node(self._scene.AddNode(view_node))
+        self._view_node.SetAttribute("isWizardViewNode", "true")
+        self._view_node.SetBackgroundColor(0.20, 0.25, 0.35)
+        self._view_node.SetBackgroundColor2(0.10, 0.12, 0.18)
+        self._view_node.SetBoxVisible(False)
+        self._view_node.SetAxisLabelsVisible(False)
+        self.viewWidget.setMRMLViewNode(self._view_node)
+        self._track_node(self.viewWidget.threeDView().cameraNode())
+
+    def _configure_model(self, model, color, opacity) -> None:
+        model.CreateDefaultDisplayNodes()
+        display = self._track_node(model.GetDisplayNode())
+        display.SetScalarVisibility(False)
+        display.SetColor(*color)
+        display.SetOpacity(opacity)
+        display.SetViewNodeIDs([self._view_node.GetID()])
+        display.SetVisibility(True)
 
     def _setup_model_node(self) -> None:
-        try:
-            # If we were handed a TransducerArray, convert to a flat Transducer
-            # just for the purpose of building the preview polydata.
-            if hasattr(self.transducer, "to_transducer"):
-                mesh_source = self.transducer.to_transducer()
-            else:
-                mesh_source = self.transducer
-            polydata = mesh_source.get_polydata(units="mm", facecolor=[0.0, 0.8, 1.0, 1.0])
-        except Exception as e:
-            logging.warning("TransducerPreviewDialog: failed to build polydata: %s", e)
-            return
-        modelNode = slicer.mrmlScene.AddNewNodeByClass(
-            "vtkMRMLModelNode", f"TransducerPreview-{getattr(self.transducer, 'id', 'transducer')}"
+        self._preview_transducer = (
+            self.transducer.to_transducer() if hasattr(self.transducer, "to_transducer") else self.transducer
         )
-        modelNode.SetAndObservePolyData(polydata)
-        modelNode.CreateDefaultDisplayNodes()
-        displayNode = modelNode.GetDisplayNode()
-        if displayNode is not None:
-            # The polydata carries an unsigned-char color array as point
-            # scalars; disable scalar coloring so VTK doesn't try to compute a
-            # scalar range from it (which logs "Bad table range: [0, -1]").
-            displayNode.SetScalarVisibility(False)
-            displayNode.SetColor(0.0, 0.8, 1.0)
-            displayNode.SetOpacity(1.0)
-            displayNode.SetVisibility(True)
-            # Restrict visibility to our private view node only
-            displayNode.SetViewNodeIDs([self._view_node.GetID()])
-        self._model_node = modelNode
+        polydata = self._preview_transducer.get_polydata(units="mm")
+        self._model_node = self._track_node(self._scene.AddNewNodeByClass(
+            "vtkMRMLModelNode", f"TransducerPreview-{self.transducer.id}",
+        ))
+        self._model_node.SetAndObservePolyData(polydata)
+        self._configure_model(self._model_node, (0.0, 0.8, 1.0), 1.0)
+
+    def _load_preview_mesh(self, path, name, color, opacity):
+        from openlifu.util.units import getunitconversion
+
+        if not Path(path).is_file():
+            raise ValueError(f"Transducer mesh does not exist: {path}")
+        model = self._track_node(self._scene.AddNewNodeByClass("vtkMRMLModelNode", name))
+        storage = self._track_node(self._scene.AddNewNodeByClass("vtkMRMLModelStorageNode"))
+        storage.SetFileName(str(path))
+        model.SetAndObserveStorageNodeID(storage.GetID())
+        if not storage.ReadData(model):
+            raise ValueError(f"Could not read transducer mesh: {path}")
+        scale = getunitconversion(self._preview_transducer.units, "mm")
+        if scale != 1:
+            transform = vtk.vtkTransform()
+            transform.Scale(scale, scale, scale)
+            scaled = vtk.vtkTransformPolyDataFilter()
+            scaled.SetInputData(model.GetPolyData())
+            scaled.SetTransform(transform)
+            scaled.Update()
+            polydata = vtk.vtkPolyData()
+            polydata.DeepCopy(scaled.GetOutput())
+            model.SetAndObservePolyData(polydata)
+        self._configure_model(model, color, opacity)
+        return model
 
     def _setup_body_model_node(self) -> None:
-        """Optionally load the transducer body mesh into the preview view."""
-        if not self._body_abspath:
-            return
-        try:
-            expected_name = getattr(self.transducer, "transducer_body_filename", None)
-            if expected_name and Path(self._body_abspath).name != expected_name:
-                logging.warning(
-                    "TransducerPreviewDialog: body file name mismatch (got %s, expected %s); skipping",
-                    Path(self._body_abspath).name,
-                    expected_name,
-                )
-                return
-            bodyNode = slicer.util.loadModel(self._body_abspath)
-        except Exception as e:
-            logging.warning("TransducerPreviewDialog: could not load body mesh '%s': %s", self._body_abspath, e)
-            return
-        if bodyNode is None:
-            return
-        bodyNode.SetName(f"TransducerPreviewBody-{getattr(self.transducer, 'id', 'transducer')}")
-        displayNode = bodyNode.GetDisplayNode()
-        if displayNode is None:
-            bodyNode.CreateDefaultDisplayNodes()
-            displayNode = bodyNode.GetDisplayNode()
-        if displayNode is not None:
-            displayNode.SetColor(0.85, 0.85, 0.88)
-            displayNode.SetOpacity(0.45)
-            displayNode.SetVisibility(True)
-            if self._view_node is not None:
-                displayNode.SetViewNodeIDs([self._view_node.GetID()])
-        self._body_model_node = bodyNode
+        if self._body_abspath:
+            self._body_model_node = self._load_preview_mesh(
+                self._body_abspath, f"TransducerPreviewBody-{self.transducer.id}", (0.85, 0.85, 0.88), 0.45,
+            )
 
     def _setup_registration_surface_node(self) -> None:
-        """Optionally load the transducer registration surface mesh."""
-        if not self._registration_surface_abspath:
-            return
-        try:
-            expected_name = getattr(self.transducer, "registration_surface_filename", None)
-            if expected_name and Path(self._registration_surface_abspath).name != expected_name:
-                logging.warning(
-                    "TransducerPreviewDialog: registration surface name mismatch (got %s, expected %s); skipping",
-                    Path(self._registration_surface_abspath).name,
-                    expected_name,
-                )
-                return
-            surfNode = slicer.util.loadModel(self._registration_surface_abspath)
-        except Exception as e:
-            logging.warning(
-                "TransducerPreviewDialog: could not load registration surface '%s': %s",
-                self._registration_surface_abspath, e,
+        if self._registration_surface_abspath:
+            self._registration_surface_model_node = self._load_preview_mesh(
+                self._registration_surface_abspath,
+                f"TransducerPreviewSurface-{self.transducer.id}", (0.45, 0.85, 0.55), 0.55,
             )
-            return
-        if surfNode is None:
-            return
-        surfNode.SetName(
-            f"TransducerPreviewSurface-{getattr(self.transducer, 'id', 'transducer')}"
-        )
-        displayNode = surfNode.GetDisplayNode()
-        if displayNode is None:
-            surfNode.CreateDefaultDisplayNodes()
-            displayNode = surfNode.GetDisplayNode()
-        if displayNode is not None:
-            displayNode.SetColor(0.45, 0.85, 0.55)
-            displayNode.SetOpacity(0.55)
-            displayNode.SetVisibility(True)
-            if self._view_node is not None:
-                displayNode.SetViewNodeIDs([self._view_node.GetID()])
-        self._registration_surface_model_node = surfNode
+
+    def _on_scene_close(self, *args) -> None:
+        self._cleanup()
+        self.reject()
 
     def _cleanup(self, *args) -> None:
-        for node_attr in (
-            "_model_node",
-            "_body_model_node",
-            "_registration_surface_model_node",
-            "_view_node",
-            "_view_owner_node",
-        ):
-            node = getattr(self, node_attr, None)
-            if node is not None:
-                try:
-                    slicer.mrmlScene.RemoveNode(node)
-                except Exception as e:
-                    logging.debug("TransducerPreviewDialog: cleanup failed for %s: %s", node_attr, e)
-                setattr(self, node_attr, None)
+        if self._closed:
+            return
+        self._closed = True
+        if self._scene_close_tag is not None:
+            self._scene.RemoveObserver(self._scene_close_tag)
+            self._scene_close_tag = None
+        if self._view_node is not None:
+            layout_name = self._view_node.GetLayoutName()
+            for index in range(self._scene.GetNumberOfNodes()):
+                node = self._scene.GetNthNode(index)
+                if node.IsA("vtkMRMLCameraNode") and node.GetLayoutName() == layout_name:
+                    self._track_node(node)
+        view_widget = getattr(self, "viewWidget", None)
+        if view_widget is not None:
+            view_widget.threeDView().setMRMLViewNode(None)
+            view_widget.setMRMLScene(None)
+        # Remove the view before its camera so camera logic does not recreate it.
+        nodes = [self._view_node, *reversed(self._owned_nodes)]
+        for node in nodes:
+            if node is not None and node.GetScene() == self._scene:
+                self._scene.RemoveNode(node)
+        self._owned_nodes.clear()
+        self._model_node = None
+        self._body_model_node = None
+        self._registration_surface_model_node = None
+        self._view_node = None
+        self._view_owner_node = None
 
 
 class TransducerManagerDialog(qt.QDialog):
-    """Tabular manager for transducer definitions stored in the loaded database.
-
-    Columns: ``[LED, ID, Name, Modules]``. The LED on a row is lit green when
-    the row's ID matches the ``device.id`` reported by the currently
-    connected hardware's lead module. Actions:
-
-    * **Add from File** -- existing ``load_transducer_from_file`` path.
-    * **Add from Device** -- calls
-      :py:meth:`openlifu.xdc.TransducerArray.get_connected` against the
-      OpenLIFUSonicationControl module's ``LIFUInterface``; surfaces the
-      "device config / hardware" validation errors from openlifu-python and
-      prompts the user for ``id`` + ``name`` when the lead module carries no
-      ``device`` block.
-    * **Preview** -- opens a standalone two-panel dialog rendering the
-      transducer geometry alongside its ``_repr_html_`` summary, without
-      loading it into the main Slicer scene.
-    * **Delete** -- removes the selected transducer from the database, with
-      a special confirmation when one of the four built-in templates is
-      targeted.
-    """
+    """Browse, import, preview and delete database transducer definitions."""
 
     def __init__(self, db: "openlifu.db.Database", parent="mainWindow"):
         super().__init__(slicer.util.mainWindow() if parent == "mainWindow" else parent)
@@ -739,7 +713,7 @@ class TransducerManagerDialog(qt.QDialog):
         # Action buttons
         actionRow = qt.QHBoxLayout()
         self.addFileButton = qt.QPushButton("Add from File")
-        self.addFileButton.setToolTip("Load a transducer definition from a JSON file on disk")
+        self.addFileButton.setToolTip("Import a transducer definition and its meshes into the database")
         self.addDeviceButton = qt.QPushButton("Add from Device")
         self.addDeviceButton.setToolTip(
             "Assemble a transducer definition from the connected TX modules' user_configs"
@@ -848,6 +822,7 @@ class TransducerManagerDialog(qt.QDialog):
 
         self.table.resizeRowsToContents()
         self.table.setSortingEnabled(True)
+        self._update_permissions()
 
     def _selected_transducer_id(self) -> Optional[str]:
         items = self.table.selectedItems()
@@ -857,233 +832,228 @@ class TransducerManagerDialog(qt.QDialog):
         idItem = self.table.item(row, 1)
         return idItem.text() if idItem else None
 
-    # ---- Actions ----
+    def _can_mutate(self) -> bool:
+        return get_cur_db() is self.db and (
+            not get_user_account_mode_state() or "admin" in get_current_user().roles
+        )
+
+    def _update_permissions(self) -> None:
+        allowed = self._can_mutate()
+        for button in (self.addFileButton, self.addDeviceButton, self.deleteButton):
+            button.setEnabled(allowed)
+
+    def _mutation_context(self) -> dict:
+        if get_cur_db() is not self.db:
+            raise RuntimeError("The database connection changed. Close and reopen the transducer manager.")
+        if get_user_account_mode_state() and "admin" not in get_current_user().roles:
+            raise PermissionError("An administrator account is required to change transducers.")
+        state = get_openlifu_data_parameter_node()
+        return {
+            "loaded_ids": tuple(state.loaded_transducers),
+            "active_transducer_id": (
+                state.loaded_session.get_transducer_id() if state.loaded_session is not None else None
+            ),
+        }
+
+    def _confirm_overwrite(self, transducer) -> Optional[bool]:
+        context = self._mutation_context()
+        transducer_id = validate_transducer_id(transducer.id)
+        ensure_transducer_not_referenced(self.db, transducer_id, **context)
+        if transducer_id not in self.db.get_transducer_ids():
+            return False
+        confirmed = slicer.util.confirmYesNoDisplay(
+            f"Transducer '{transducer_id}' already exists in the database. Overwrite it?",
+            "Overwrite transducer",
+            parent=self,
+        )
+        return True if confirmed else None
+
+    def _save_definition(self, transducer, source_dir) -> bool:
+        overwrite = self._confirm_overwrite(transducer)
+        if overwrite is None:
+            return False
+        warning = save_transducer(
+            self.db, transducer, source_dir, overwrite=overwrite, **self._mutation_context(),
+        )
+        self.refresh()
+        if warning:
+            slicer.util.warningDisplay(warning, parent=self)
+        return True
+
     @display_errors
     def onAddFromFile(self, checked: bool = False) -> None:
-        qsettings = qt.QSettings()
-        filepath: str = qt.QFileDialog.getOpenFileName(
-            slicer.util.mainWindow(),
-            "Load transducer",
-            qsettings.value("OpenLIFU/databaseDirectory", "."),
+        import openlifu.xdc.util
+
+        self._mutation_context()
+        filepath = qt.QFileDialog.getOpenFileName(
+            self, "Import transducer", qt.QSettings().value("OpenLIFU/databaseDirectory", "."),
             "Transducers (*.json);;All Files (*)",
         )
         if not filepath:
             return
-        # Delegate to the existing module logic so the load is consistent with
-        # the legacy "Manual Object Load > Load Transducer" path. After loading
-        # into the scene, also persist into the database.
-        logic = slicer.util.getModuleLogic("OpenLIFUData")
-        loaded = logic.load_transducer_from_file(filepath)
-        if loaded is None:
-            # load_transducer_from_file currently returns None; fall back to
-            # parsing the file again to get something we can write to the db.
-            try:
-                import openlifu.xdc.util
+        self._mutation_context()
+        transducer = openlifu.xdc.util.load_transducer_from_file(filepath, convert_array=False)
+        self._save_definition(transducer, Path(filepath).parent)
 
-                obj = openlifu.xdc.util.load_transducer_from_file(filepath, convert_array=False)
-            except Exception as e:
-                slicer.util.errorDisplay(f"Failed to read transducer file: {e}", parent=self)
-                return
-        else:
-            obj = loaded
+    def _load_template(self, template_id: str, user_configs: List[dict]):
+        from openlifu.xdc import TransducerArray
+
+        validate_transducer_id(template_id)
+        template = self.db.load_transducer(template_id, convert_array=False)
+        if not isinstance(template, TransducerArray):
+            raise ValueError(f"Template '{template_id}' must be a transducer array.")
+        if len(template.modules) != len(user_configs):
+            raise ValueError(
+                f"Template '{template_id}' has {len(template.modules)} modules, "
+                f"but {len(user_configs)} are connected."
+            )
+        frequency = _connected_frequency_khz(user_configs)
+        if frequency is not None:
+            for module in template.modules:
+                template_frequency = getattr(module, "frequency", None)
+                if template_frequency and not np.isclose(float(template_frequency), frequency * 1000, rtol=1e-6, atol=0):
+                    raise ValueError(f"Template '{template_id}' does not match the connected {frequency:g} kHz modules.")
+        source_dir = Path(self.db.get_transducer_filename(template_id)).parent
+        for obj in (template, *template.modules):
+            for field in ("registration_surface_filename", "transducer_body_filename"):
+                filename = getattr(obj, field, None)
+                if filename is not None and (not filename or not (source_dir / filename).is_file()):
+                    raise ValueError(f"Template '{template_id}' references a missing mesh: {filename}")
+        return template, source_dir
+
+    def _choose_template_id(self, template_ids: List[str], inferred_template_id: Optional[str]) -> Optional[str]:
+        dialog = qt.QDialog(self)
+        dialog.setWindowTitle("Choose Transducer Template")
+        layout = qt.QVBoxLayout(dialog)
+        text = "Choose a saved array template for the connected modules."
+        if inferred_template_id:
+            text = f"Template '{inferred_template_id}' is not in this database. " + text
+        label = qt.QLabel(text)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        combo = qt.QComboBox()
+        for template_id in template_ids:
+            template = self.db.load_transducer(template_id, convert_array=False)
+            combo.addItem(f"{template.name} [{template_id}]")
+        combo.setCurrentIndex(-1)
+        layout.addWidget(combo)
+        buttons = qt.QDialogButtonBox()
+        buttons.setStandardButtons(qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
+        buttons.button(qt.QDialogButtonBox.Ok).setEnabled(False)
+        combo.currentIndexChanged.connect(
+            lambda index: buttons.button(qt.QDialogButtonBox.Ok).setEnabled(index >= 0)
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
         try:
-            self.db.write_transducer(obj, on_conflict="overwrite")
-        except Exception as e:
-            slicer.util.errorDisplay(f"Failed to write transducer to database: {e}", parent=self)
-            return
-        self.refresh()
+            if not dialog.exec_():
+                return None
+            return template_ids[combo.currentIndex] if combo.currentIndex >= 0 else None
+        finally:
+            dialog.deleteLater()
+
+    def _select_template_id(self, user_configs: List[dict], inferred_template_id: Optional[str]) -> Optional[str]:
+        candidates = []
+        for template_id in self.db.get_transducer_ids():
+            try:
+                self._load_template(template_id, user_configs)
+            except Exception as error:
+                logging.debug("Template %s is not suitable: %s", template_id, error)
+                continue
+            candidates.append(template_id)
+        if not candidates:
+            raise ValueError(
+                "No saved array template matches these modules. Import a template with the "
+                "correct module count, frequency and mesh files, then try again."
+            )
+        return self._choose_template_id(sorted(candidates), inferred_template_id)
 
     @display_errors
     def onAddFromDevice(self, checked: bool = False) -> None:
-        try:
-            sc_logic = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
-            iface = getattr(sc_logic, "cur_lifu_interface", None)
-        except (AttributeError, RuntimeError):
-            iface = None
+        from openlifu.xdc import TransducerArray
+
+        self._mutation_context()
+        control = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+        iface = getattr(control, "cur_lifu_interface", None)
         if iface is None:
-            slicer.util.errorDisplay(
-                "The LIFU interface has not been initialized. Open the OpenLIFU "
-                "Sonication Control module to initialize the hardware interface.",
-                parent=self,
-            )
-            return
-        try:
-            tx_conn, _hv = iface.is_device_connected()
-        except Exception as e:
-            slicer.util.errorDisplay(f"Could not query device connection: {e}", parent=self)
-            return
-        if not tx_conn:
-            slicer.util.errorDisplay("No TX device is currently connected.", parent=self)
-            return
-
-        # 1. Pull user_configs.
-        try:
-            user_configs = _read_connected_user_configs(iface)
-        except Exception as e:
-            slicer.util.errorDisplay(
-                f"Could not read user_config from the connected device:\n\n{e}",
-                parent=self,
-            )
-            return
-
-        # 2. Resolve the template id (device.template if present, else count+freq).
-        try:
-            template_id, device_block = _resolve_template_id_for_user_configs(user_configs)
-        except Exception as e:
-            slicer.util.errorDisplay(str(e), parent=self)
-            return
-
-        # 3. Template MUST exist in the database -- the meshless fallback is
-        #    not acceptable in the Slicer UI (the meshes are needed for
-        #    visualization and registration).
-        try:
-            db_ids = list(self.db.get_transducer_ids() or [])
-        except Exception:
-            db_ids = []
-        if template_id not in db_ids:
-            slicer.util.errorDisplay(
-                f"The required template transducer '{template_id}' is not in the loaded "
-                f"database. Add it (e.g. from the openlifu sample database) and try again.",
-                parent=self,
-            )
-            return
-
-        # 4. Always show the edit dialog (prepopulated from any existing
-        #    device block) so the user can confirm / change the id and name
-        #    before we assemble + write.
-        hwids = [str(c.get("hwid")) for c in user_configs]
-        initial_id = ""
-        initial_name = ""
-        if device_block is not None:
-            initial_id = str(device_block.get("id") or "")
-            initial_name = str(device_block.get("name") or "")
-        dlg = DeviceConfigEditDialog(
+            raise RuntimeError("Open Sonication Control to initialize the hardware interface first.")
+        if not iface.is_device_connected()[0]:
+            raise RuntimeError("No TX device is currently connected.")
+        user_configs = _read_connected_user_configs(iface)
+        template_id, device_block = _resolve_template_id_for_user_configs(user_configs)
+        recorded_template = device_block.get("template") if device_block else None
+        if template_id not in self.db.get_transducer_ids():
+            if recorded_template is not None:
+                raise ValueError(f"Recorded template '{template_id}' is not in the loaded database.")
+            template_id = self._select_template_id(user_configs, template_id)
+            if template_id is None:
+                return
+        self._mutation_context()
+        template, source_dir = self._load_template(template_id, user_configs)
+        dialog = DeviceConfigEditDialog(
             template_id=template_id,
-            module_hwids=hwids,
-            initial_id=initial_id,
-            initial_name=initial_name,
+            module_hwids=[str(config.get("hwid")) for config in user_configs],
+            initial_id=str((device_block or {}).get("id") or ""),
+            initial_name=str((device_block or {}).get("name") or ""),
             parent=self,
         )
-        rc, arr_id, arr_name = dlg.customexec_()
-        if not rc:
+        accepted, transducer_id, transducer_name = dialog.customexec_()
+        if not accepted:
             return
-        # Detect changes that warrant pushing the new device block back to the
-        # connected hardware: either there was no device block at all, or the
-        # user edited the id or name.
-        id_changed = device_block is None or arr_id != initial_id
-        name_changed = device_block is None or arr_name != initial_name
-        should_offer_writeback = device_block is None or id_changed or name_changed
-
-        # 5. Assemble. Use ``use_default_template=False`` so any future db
-        #    lookup failure becomes an error rather than a silent meshless
-        #    fallback. Capture the db-mismatch UserWarning emitted by
-        #    openlifu-python so we can surface it.
-        import warnings as _warnings
-        with _warnings.catch_warnings(record=True) as caught:
-            _warnings.simplefilter("always")
-            try:
-                import openlifu.xdc
-
-                arr = openlifu.xdc.TransducerArray.get_connected(
-                    interface=iface,
-                    db=self.db,
-                    arr_id=arr_id,
-                    arr_name=arr_name,
-                    use_default_template=False,
-                )
-            except Exception as e:
-                slicer.util.errorDisplay(
-                    f"Failed to assemble transducer from device:\n\n{e}",
-                    parent=self,
-                )
-                return
-        mismatch_warning = next(
-            (str(w.message) for w in caught if "differs from the version" in str(w.message)),
-            None,
+        self._mutation_context()
+        validate_transducer_id(transducer_id)
+        transducer = TransducerArray.from_module_user_configs(
+            user_configs, template=template, arr_id=transducer_id, arr_name=transducer_name,
         )
-        if mismatch_warning:
-            confirmed = slicer.util.confirmYesNoDisplay(
-                f"{mismatch_warning}\n\nOverwrite the database copy with the version "
-                f"assembled from the connected device?",
-                "Database mismatch",
-                parent=self,
-            )
-            if not confirmed:
-                return
-
-        # 6. Write to db, copying mesh files in from the template's directory.
-        try:
-            paths = self.db.get_transducer_absolute_filepaths(template_id) or {}
-            reg_path = paths.get("registration_surface_abspath") or None
-            body_path = paths.get("transducer_body_abspath") or None
-            self.db.write_transducer(
-                arr,
-                registration_surface_model_filepath=reg_path,
-                transducer_body_model_filepath=body_path,
-                on_conflict="overwrite",
-            )
-        except Exception as e:
-            slicer.util.errorDisplay(
-                f"Failed to write transducer to database:\n\n{e}",
-                parent=self,
-            )
+        if not self._save_definition(transducer, source_dir):
             return
-
         slicer.util.infoDisplay(
-            f"Saved transducer '{arr.id}' to the database.",
-            windowTitle="Add from Device",
-            parent=self,
+            f"Saved transducer '{transducer.id}' to the database.",
+            windowTitle="Add from Device", parent=self,
         )
+        if slicer.util.confirmYesNoDisplay(
+            "Write this transducer's device definition back to module 0? "
+            "This changes the identity reported by the connected device.",
+            "Write device config", parent=self,
+        ):
+            try:
+                self._write_device_block_to_module0(iface, transducer, template_id, user_configs)
+            except Exception as error:
+                raise RuntimeError(
+                    f"The transducer was saved in the database, but device writeback failed: {error}"
+                ) from error
+            finally:
+                self.refresh()
 
-        # 7. If the device block didn't exist (or the user edited id/name),
-        #    offer to push the new device block down to module 0 so the
-        #    physical device starts reporting it on the next read.
-        if should_offer_writeback:
-            confirmed = slicer.util.confirmYesNoDisplay(
-                "Write this transducer's device definition (id, name, modules) "
-                "back to the connected device's module 0?\n\n"
-                "This updates the on-device user_config so the device will "
-                "report itself as this transducer on subsequent connects.",
-                "Write device config",
-                parent=self,
-            )
-            if confirmed:
-                try:
-                    self._write_device_block_to_module0(iface, arr, user_configs[0])
-                except Exception as e:
-                    slicer.util.errorDisplay(
-                        f"Failed to write device config to module 0:\n\n{e}",
-                        parent=self,
-                    )
-
-        self.refresh()
-
-    def _write_device_block_to_module0(self, iface, arr, lead_user_config: dict) -> None:
-        """Overwrite the ``device`` section of module 0's user_config and write it back.
-
-        Reads module 0's current user_config dict (passed in as
-        ``lead_user_config`` to avoid an extra round-trip), splices in the
-        new ``device`` block derived from the just-assembled
-        :class:`TransducerArray`, and calls
-        ``txdevice.write_config_json(json_str, module=0)``.
-        """
+    def _write_device_block_to_module0(self, iface, arr, template_id: str, user_configs: List[dict]) -> None:
+        """Verify the captured hardware, then update only its current device block."""
+        self._mutation_context()
+        control = slicer.util.getModuleLogic("OpenLIFUSonicationControl")
+        if getattr(control, "cur_lifu_interface", None) is not iface or not iface.is_device_connected()[0]:
+            raise RuntimeError("The hardware connection changed. Device configuration was not written.")
+        current = _read_connected_user_configs(iface)
+        identity_fields = ("hwid", "sn", "freq", "module", "device")
+        snapshot = lambda configs: [
+            {field: config.get(field) for field in identity_fields} for config in configs
+        ]
+        if snapshot(current) != snapshot(user_configs):
+            raise RuntimeError("Connected module identity or calibration changed. Device configuration was not written.")
+        if any(not isinstance(config.get("hwid"), str) or not config["hwid"] for config in current):
+            raise RuntimeError("Cannot verify hardware identity because a module has no hardware ID.")
         new_device = arr.to_device_config()
-        # ``to_device_config`` records the assembled template id when present
-        # so future ``get_connected`` calls can prefer it over the (count, freq)
-        # default mapping.
-        try:
-            template_id, _ = _resolve_template_id_for_user_configs([lead_user_config])
-            new_device.setdefault("template", template_id)
-        except Exception:
-            pass
-        updated = dict(lead_user_config)
+        new_device["template"] = template_id
+        updated = copy.deepcopy(current[0])
         updated["device"] = new_device
-        json_str = json.dumps(updated)
-        iface.txdevice.write_config_json(json_str, module=0)
-        logging.info(
-            "Wrote new device block (id=%s) to TX module 0 user_config.",
-            new_device.get("id"),
-        )
+        self._mutation_context()
+        result = iface.txdevice.write_config_json(json.dumps(updated), module=0)
+        if result is None or result is False:
+            raise RuntimeError("The hardware did not confirm the device configuration write.")
+        if hasattr(result, "get_json_str"):
+            returned = json.loads(result.get_json_str())
+            if returned.get("device") != new_device:
+                raise RuntimeError("The hardware returned a different device definition after writing.")
+        logging.info("Updated device definition for transducer %s", arr.id)
 
     @display_errors
     def onPreview(self, *args) -> None:
@@ -1108,58 +1078,26 @@ class TransducerManagerDialog(qt.QDialog):
             registration_surface_abspath=registration_path,
             parent=self,
         )
-        dialog.exec_()
+        try:
+            dialog.exec_()
+        finally:
+            dialog.deleteLater()
 
     @display_errors
     def onDelete(self, *args) -> None:
-        tid = self._selected_transducer_id()
-        if not tid:
-            slicer.util.errorDisplay("Select a transducer first.", parent=self)
+        transducer_id = self._selected_transducer_id()
+        if not transducer_id:
+            raise ValueError("Select a transducer first.")
+        ensure_transducer_not_referenced(self.db, transducer_id, **self._mutation_context())
+        message = f"Delete transducer '{transducer_id}' from the database?"
+        if transducer_id in PROTECTED_TRANSDUCER_IDS:
+            message += " This built-in definition is used as a template when importing connected devices."
+        if not slicer.util.confirmYesNoDisplay(message, "Delete transducer", parent=self):
             return
-        if tid in PROTECTED_TRANSDUCER_IDS:
-            confirmed = slicer.util.confirmYesNoDisplay(
-                "You are about to delete a built-in transducer definition. "
-                "This is used as a template when connecting new transducers of "
-                "this type. Are you sure you want to delete it?",
-                "Delete built-in transducer",
-                parent=self,
-            )
-        else:
-            confirmed = slicer.util.confirmYesNoDisplay(
-                f"Delete transducer '{tid}' from the database?",
-                "Delete transducer",
-                parent=self,
-            )
-        if not confirmed:
-            return
-        try:
-            self._delete_transducer_from_db(tid)
-        except Exception as e:
-            slicer.util.errorDisplay(f"Failed to delete transducer '{tid}': {e}", parent=self)
-            return
+        self._delete_transducer_from_db(transducer_id)
         self.refresh()
 
     def _delete_transducer_from_db(self, transducer_id: str) -> None:
-        """Remove ``transducer_id`` from the database.
-
-        ``openlifu.db.Database`` does not currently expose a ``delete_transducer``
-        method, so we mirror the on-disk layout produced by ``write_transducer``:
-        drop the id from ``transducers.json`` and remove the per-transducer
-        directory.
-        """
-        import shutil
-        ids = list(self.db.get_transducer_ids() or [])
-        if transducer_id not in ids:
-            return
-        ids = [i for i in ids if i != transducer_id]
-        self.db.write_transducer_ids(ids)
-        try:
-            transducer_dir = Path(self.db.get_transducer_filename(transducer_id)).parent
-            if transducer_dir.is_dir():
-                shutil.rmtree(transducer_dir)
-        except Exception as e:
-            logging.warning(
-                "Removed transducer '%s' from index but could not remove its "
-                "directory: %s",
-                transducer_id, e,
-            )
+        warning = delete_transducer(self.db, transducer_id, **self._mutation_context())
+        if warning:
+            slicer.util.warningDisplay(warning, parent=self)
