@@ -465,6 +465,28 @@
     </widget>
    </item>
    <item>
+    <widget class="ctkCollapsibleButton" name="transducersCollapsibleButton">
+     <property name="text">
+      <string>Transducers</string>
+     </property>
+     <layout class="QVBoxLayout" name="transducersLayout">
+      <item>
+       <widget class="QPushButton" name="manageTransducersButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Manage Transducers</string>
+        </property>
+        <property name="toolTip">
+         <string>View, import, and delete transducers in the connected database</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="objectsCollapsibleButton">
      <property name="enabled">
       <bool>true</bool>
