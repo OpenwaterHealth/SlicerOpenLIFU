@@ -515,6 +515,7 @@ class TransducerManagerTest(unittest.TestCase):
         logic = OpenLIFUSonicationControlLogic()
         timer = qt.QTimer()
         timer.setInterval(60000)
+        timer.timeout.connect(logic._pumpMonitoringLoop)
         timer.start()
         logic.monitoring_timer = timer
         events = []
@@ -548,8 +549,7 @@ class TransducerManagerTest(unittest.TestCase):
         logic._connect_owsignals()
 
         def cleanup():
-            logic._shutdown_lifu_interface()
-            slicer.app.aboutToQuit.disconnect(logic._shutdown_lifu_interface)
+            logic.cleanup()
             timer.stop()
             timer.deleteLater()
 
@@ -562,7 +562,7 @@ class TransducerManagerTest(unittest.TestCase):
 
     def test_control_shutdown_disconnects_only_its_callbacks_and_is_idempotent(self):
         logic, timer, interface, events, subscriptions = self._control_shutdown_fixture()
-        logic._shutdown_lifu_interface()
+        logic.cleanup()
         self.assertFalse(timer.isActive())
         self.assertEqual(["stop monitoring", "close"], events)
         self.assertIsNone(logic.cur_lifu_interface)
@@ -571,7 +571,7 @@ class TransducerManagerTest(unittest.TestCase):
             self.assertEqual([subscriber], signal._slots)
             signal.emit("unrelated notification")
             subscriber.assert_called_once_with("unrelated notification")
-        logic._shutdown_lifu_interface()
+        logic.cleanup()
         interface.stop_monitoring.assert_called_once()
         interface.close.assert_called_once()
 
@@ -579,9 +579,9 @@ class TransducerManagerTest(unittest.TestCase):
         logic, timer, interface, events, subscriptions = self._control_shutdown_fixture(
             stop_error=RuntimeError("Monitoring stop failed"),
         )
-        with self.assertLogs(level="ERROR") as logs:
-            logic._shutdown_lifu_interface()
-        self.assertTrue(any("Could not stop LIFU monitoring" in message for message in logs.output))
+        with self.assertLogs(level="WARNING") as logs:
+            logic.cleanup()
+        self.assertTrue(any("Could not stop interface monitoring" in message for message in logs.output))
         self.assertFalse(timer.isActive())
         self.assertEqual(["stop monitoring", "close"], events)
         interface.close.assert_called_once()
