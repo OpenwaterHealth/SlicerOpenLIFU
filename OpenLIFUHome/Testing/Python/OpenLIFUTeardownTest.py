@@ -546,6 +546,29 @@ def run(scenario):
         widget.wizard = make_wizard_class()(None, None, Mock(), None, parent=widget.parent)
         widget._running_wizard = True
         widget.wizard.show()
+    elif scenario == "transducer-preview-shutdown":
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from openlifu.xdc import Transducer
+        from OpenLIFUDataLib.transducer_manager import TransducerPreviewDialog
+
+        widget = slicer.util.getModuleWidget("OpenLIFUData")
+        transducer = Transducer.gen_matrix_array(id="shutdown_preview", nx=2, ny=2, units="mm")
+        with TemporaryDirectory() as directory:
+            mesh_path = str(Path(directory) / "mesh.vtk")
+            writer = vtk.vtkPolyDataWriter()
+            writer.SetInputData(transducer.get_polydata(units="mm"))
+            writer.SetFileName(mesh_path)
+            assert writer.Write()
+            widget.preview = TransducerPreviewDialog(
+                transducer, body_abspath=mesh_path, registration_surface_abspath=mesh_path,
+            )
+            widget.preview.show()
+            process_events()
+            widget.preview.viewWidget.threeDView().forceRender()
+            assert widget.preview._scene != slicer.mrmlScene
+            assert widget.preview._scene.GetNumberOfNodesByClass("vtkMRMLModelNode") == 3
+        # Leave the dialog open so application shutdown must release its scene.
     else:
         test_class = {"home": HomeTeardownTest, "sonication": SonicationTeardownTest,
                       "cloud": CloudTeardownTest, "wizard": WizardTeardownTest}[scenario]
