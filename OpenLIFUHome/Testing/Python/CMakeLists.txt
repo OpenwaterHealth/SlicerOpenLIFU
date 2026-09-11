@@ -1,5 +1,5 @@
 
-foreach(scenario automatic-sonication automatic-cloud automatic-all recreate home sonication cloud wizard wizard-shutdown)
+foreach(scenario automatic-sonication automatic-cloud automatic-all recreate home sonication cloud wizard wizard-shutdown transducer-preview-shutdown)
   slicer_add_python_test(
     SCRIPT OpenLIFUTeardownTest.py
     TESTNAME_PREFIX "${scenario}_"
@@ -11,3 +11,7 @@ foreach(scenario automatic-sonication automatic-cloud automatic-all recreate hom
     FAIL_REGULAR_EXPRESSION "Traceback;Segmentation fault;vtkDebugLeaks has detected LEAKS;TEARDOWN FAILED"
   )
 endforeach()
+
+set_tests_properties(py_transducer-preview-shutdown_OpenLIFUTeardownTest PROPERTIES
+  LABELS "transducer-manager"
+)

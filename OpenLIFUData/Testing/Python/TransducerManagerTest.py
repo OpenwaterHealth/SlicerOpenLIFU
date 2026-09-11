@@ -2,16 +2,19 @@
 
 import copy
 from contextlib import ExitStack
+import gc
 import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
+import weakref
 
 import numpy as np
 import qt
 import slicer
+import vtk
 
 from openlifu.db import Database, Session, Subject
 from openlifu.xdc import Transducer, TransducerArray
@@ -604,6 +607,15 @@ class TransducerManagerTest(unittest.TestCase):
         self.assertIsNotNone(dialog._model_node)
         self.assertIsNotNone(dialog._body_model_node)
         self.assertIsNotNone(dialog._registration_surface_model_node)
+        self.assertNotEqual(slicer.mrmlScene, dialog._scene)
+        view = dialog.viewWidget.threeDView()
+        view.forceRender()
+        model_manager = view.displayableManagerByClassName("vtkMRMLModelDisplayableManager")
+        for model in (dialog._model_node, dialog._body_model_node, dialog._registration_surface_model_node):
+            self.assertEqual(dialog._scene, model.GetScene())
+            actor = model_manager.GetActorByID(model.GetDisplayNode().GetID())
+            self.assertIsNotNone(actor)
+            self.assertTrue(actor.GetVisibility())
         display = dialog._model_node.GetDisplayNode()
         self.assertEqual(1, display.GetNumberOfViewNodeIDs())
         self.assertEqual((dialog._view_node.GetID(),), display.GetViewNodeIDs())
@@ -611,28 +623,146 @@ class TransducerManagerTest(unittest.TestCase):
         self.assertNotEqual("error", dialog.infoTree.topLevelItem(0).text(0))
         return dialog
 
+    def _main_scene_view_state(self):
+        displays = {}
+        for node in slicer.util.getNodesByClass("vtkMRMLDisplayNode"):
+            displays[node.GetID()] = (
+                tuple(node.GetViewNodeIDs()), node.GetVisibility(),
+                node.GetVisibility2D(), node.GetVisibility3D(), node.GetOpacity(),
+                node.GetEditorVisibility() if node.IsA("vtkMRMLTransformDisplayNode") else None,
+            )
+        slices = {
+            node.GetID(): (tuple(node.GetThreeDViewIDs()), node.GetSliceVisible())
+            for node in slicer.util.getNodesByClass("vtkMRMLSliceNode")
+        }
+        camera = slicer.app.layoutManager().threeDWidget(0).threeDView().cameraNode().GetCamera()
+        return displays, slices, (
+            camera.GetPosition(), camera.GetFocalPoint(), camera.GetViewUp(),
+            camera.GetParallelScale(), camera.GetParallelProjection(),
+        )
+
+    def test_preview_isolates_session_objects_without_changing_main_views(self):
+        main_view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+        main_view_id = main_view.mrmlViewNode().GetID()
+        sphere = vtk.vtkSphereSource()
+        sphere.SetCenter(1000, 1000, 1000)
+        sphere.SetRadius(2)
+        sphere.Update()
+        model = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "Session model")
+        model.SetAndObservePolyData(sphere.GetOutput())
+        model.CreateDefaultDisplayNodes()
+        model.GetDisplayNode().SetVisibility(True)
+        extra_display = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
+        extra_display.SetViewNodeIDs([main_view_id])
+        model.AddAndObserveDisplayNodeID(extra_display.GetID())
+
+        markups = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+        markups.AddControlPoint(vtk.vtkVector3d(1000, 1000, 1000))
+        markups.GetDisplayNode().SetPointLabelsVisibility(False)
+        segmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+        segmentation.CreateDefaultDisplayNodes()
+        segmentation.AddSegmentFromClosedSurfaceRepresentation(sphere.GetOutput(), "Session segment", [1, 0, 0])
+
+        volume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
+        voxels = np.zeros((6, 6, 6), dtype=np.uint8)
+        voxels[1:5, 1:5, 1:5] = 100
+        slicer.util.updateVolumeFromArray(volume, voxels)
+        volume.SetOrigin(1000, 1000, 1000)
+        volume.CreateDefaultDisplayNodes()
+        rendering = slicer.modules.volumerendering.logic().CreateDefaultVolumeRenderingNodes(volume)
+        rendering.SetVisibility(True)
+        slicer.util.setSliceViewerLayers(background=volume)
+        for index, node in enumerate(slicer.util.getNodesByClass("vtkMRMLSliceNode")):
+            node.SetSliceVisible(True)
+            if index == 0:
+                node.AddThreeDViewID(main_view_id)
+
+        transform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode")
+        transform.CreateDefaultDisplayNodes()
+        transform.GetDisplayNode().SetEditorVisibility(True)
+        main_view.resetFocalPoint()
+        main_view.resetCamera()
+        slicer.app.processEvents()
+        main_view.forceRender()
+        before_ids = self._scene_ids()
+        before_state = self._main_scene_view_state()
+        path, obj = self._file_definition("isolated_preview", array=True)
+        dialog = self._preview(obj, path.parent)
+        view = dialog.viewWidget.threeDView()
+        renderer = view.renderWindow().GetRenderers().GetFirstRenderer()
+        bounds = renderer.ComputeVisiblePropBounds()
+        self.assertLess(max(bounds), 100)
+        self.assertGreater(min(bounds), -100)
+        for class_name in ("vtkMRMLVolumeNode", "vtkMRMLMarkupsNode", "vtkMRMLSegmentationNode", "vtkMRMLSliceNode"):
+            self.assertEqual(0, dialog._scene.GetNumberOfNodesByClass(class_name))
+        self.assertEqual(before_ids, self._scene_ids())
+        self.assertEqual(before_state, self._main_scene_view_state())
+
+        view.rotateToViewAxis(0)
+        view.cameraNode().GetCamera().Dolly(1.5)
+        view.forceRender()
+        self.assertEqual(before_state, self._main_scene_view_state())
+        dialog.reject()
+        slicer.app.processEvents()
+        self.assertEqual(before_ids, self._scene_ids())
+        self.assertEqual(before_state, self._main_scene_view_state())
+
     def test_repeated_preview_removes_all_temporary_nodes(self):
         for array in (False, True):
             with self.subTest(array=array):
                 path, obj = self._file_definition(f"preview_{int(array)}", array=array)
                 before = self._scene_ids()
-                for _ in range(2):
+                for close_method in ("accept", "reject", "close"):
                     dialog = self._preview(obj, path.parent)
-                    self.assertNotEqual(before, self._scene_ids())
-                    dialog.reject()
+                    self.assertEqual(before, self._scene_ids())
+                    getattr(dialog, close_method)()
                     slicer.app.processEvents()
+                    self.assertEqual(0, dialog._scene.GetNumberOfNodes())
+                    self.assertIsNone(dialog._scene_close_tag)
+                    self.assertIsNone(dialog.viewWidget.mrmlScene())
+                    dialog._cleanup()
                     self.assertEqual(before, self._scene_ids())
         self.assertEqual({}, dict(self.data_logic.getParameterNode().loaded_transducers))
+
+    def test_preview_disposal_releases_private_scene_and_nodes(self):
+        path, obj = self._file_definition("disposed_preview", array=True)
+        dialog = self._preview(obj, path.parent)
+        references = [weakref.ref(dialog), weakref.ref(dialog._scene)]
+        references.extend(weakref.ref(node) for node in dialog._owned_nodes)
+        dialog.reject()
+        dialog.deleteLater()
+        self.dialogs.remove(dialog)
+        del dialog
+        qt.QCoreApplication.sendPostedEvents(None, qt.QEvent.DeferredDelete)
+        slicer.app.processEvents()
+        gc.collect()
+        for reference in references:
+            self.assertIsNone(reference())
 
     def test_failed_preview_creation_removes_temporary_nodes(self):
         path, obj = self._file_definition("missing_preview_mesh")
         (path.parent / obj.transducer_body_filename).unlink()
         before = self._scene_ids()
-        with self.assertRaisesRegex(ValueError, "mesh does not exist"):
-            manager.TransducerPreviewDialog(
-                obj, body_abspath=str(path.parent / obj.transducer_body_filename),
-            )
+        before_state = self._main_scene_view_state()
+        scenes = []
+        original_setup = manager.TransducerPreviewDialog._setup
+
+        def capture_scene(dialog):
+            scenes.append(dialog._scene)
+            original_setup(dialog)
+
+        with patch.object(manager.TransducerPreviewDialog, "_setup", capture_scene):
+            with self.assertRaisesRegex(ValueError, "mesh does not exist"):
+                manager.TransducerPreviewDialog(
+                    obj, body_abspath=str(path.parent / obj.transducer_body_filename),
+                )
         slicer.app.processEvents()
+        self.assertEqual(1, len(scenes))
+        self.assertEqual(0, scenes[0].GetNumberOfNodes())
+        self.assertEqual(before, self._scene_ids())
+        self.assertEqual(before_state, self._main_scene_view_state())
+        (path.parent / obj.transducer_body_filename).write_text(MESH)
+        self._preview(obj, path.parent).reject()
         self.assertEqual(before, self._scene_ids())
 
     def test_preview_converts_body_and_registration_mesh_units_to_mm(self):
@@ -658,7 +788,9 @@ class TransducerManagerTest(unittest.TestCase):
         path, obj = self._file_definition("scene_clear_preview", array=True)
         dialog = self._preview(obj, path.parent)
         slicer.mrmlScene.Clear()
-        dialog.reject()
+        self.assertFalse(dialog.isVisible())
+        self.assertEqual(0, dialog._scene.GetNumberOfNodes())
+        self.assertIsNone(dialog._scene_close_tag)
         slicer.app.processEvents()
         self.data_logic.getParameterNode()
         slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)

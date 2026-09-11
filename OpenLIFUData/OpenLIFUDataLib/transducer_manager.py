@@ -301,7 +301,8 @@ class TransducerPreviewDialog(qt.QDialog):
         self.transducer = transducer
         self._body_abspath = body_abspath
         self._registration_surface_abspath = registration_surface_abspath
-        self._scene = slicer.mrmlScene
+        self._main_scene = slicer.mrmlScene
+        self._scene = slicer.vtkMRMLScene()
         self._owned_nodes = []
         self._model_node = None
         self._body_model_node = None
@@ -314,6 +315,9 @@ class TransducerPreviewDialog(qt.QDialog):
         self.setWindowModality(qt.Qt.WindowModal)
         self.finished.connect(self._cleanup)
         try:
+            # The private scene keeps session objects out of this view.
+            self._scene.AddNewNodeByClass("vtkMRMLSelectionNode")
+            self._scene.AddNewNodeByClass("vtkMRMLInteractionNode")
             self._setup()
             self._setup_view_node()
             self._setup_model_node()
@@ -321,8 +325,8 @@ class TransducerPreviewDialog(qt.QDialog):
             self._setup_registration_surface_node()
             self.viewWidget.threeDView().resetFocalPoint()
             self.viewWidget.threeDView().resetCamera()
-            self._scene_close_tag = self._scene.AddObserver(
-                self._scene.StartCloseEvent, self._on_scene_close,
+            self._scene_close_tag = self._main_scene.AddObserver(
+                self._main_scene.StartCloseEvent, self._on_scene_close,
             )
         except Exception:
             self._cleanup()
@@ -649,7 +653,7 @@ class TransducerPreviewDialog(qt.QDialog):
             return
         self._closed = True
         if self._scene_close_tag is not None:
-            self._scene.RemoveObserver(self._scene_close_tag)
+            self._main_scene.RemoveObserver(self._scene_close_tag)
             self._scene_close_tag = None
         if self._view_node is not None:
             layout_name = self._view_node.GetLayoutName()
@@ -666,6 +670,7 @@ class TransducerPreviewDialog(qt.QDialog):
         for node in nodes:
             if node is not None and node.GetScene() == self._scene:
                 self._scene.RemoveNode(node)
+        self._scene.Clear(1)
         self._owned_nodes.clear()
         self._model_node = None
         self._body_model_node = None
