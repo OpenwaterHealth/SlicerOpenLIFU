@@ -1,4 +1,4 @@
-openlifu[app]==v0.21.1
+openlifu[app] @ git+https://github.com/OpenwaterHealth/openlifu-python.git@b678033365d0419b6349f270a851135eb2cbc26d
 bcrypt
 threadpoolctl
 requests

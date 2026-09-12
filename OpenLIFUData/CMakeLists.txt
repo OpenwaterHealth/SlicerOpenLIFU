@@ -4,6 +4,9 @@ set(MODULE_NAME OpenLIFUData)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
+  OpenLIFUDataLib/__init__.py
+  OpenLIFUDataLib/transducer_manager.py
+  OpenLIFUDataLib/transducer_store.py
   )
 
 set(MODULE_PYTHON_RESOURCES
