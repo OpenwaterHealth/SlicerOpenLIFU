@@ -1,4 +1,4 @@
-openlifu==v0.20.1
+openlifu==0.20.2
 bcrypt
 threadpoolctl
 requests
