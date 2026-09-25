@@ -20,6 +20,9 @@ rare and must be explained in the release notes.
 
 ## Branch Model
 
+`stable` tracks the latest published `vX.Y.Z` release and is advanced automatically
+by GitHub Actions; release candidates and compatibility tags are excluded.
+
 `main` is the development branch. Release branches are stabilization branches:
 
 ```text
