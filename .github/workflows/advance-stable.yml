@@ -1,0 +1,74 @@
+name: Advance stable to the latest release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: advance-stable
+  cancel-in-progress: false
+
+jobs:
+  advance-stable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Advance stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True).strip()
+
+          def version(tag):
+              match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag)
+              return tuple(map(int, match.groups())) if match else None
+
+          # Recompute the latest release because queued events can be replaced or run out of order.
+          pages = json.loads(subprocess.check_output([
+              "gh", "api", "--paginate", "--slurp",
+              f"repos/{os.environ['GITHUB_REPOSITORY']}/releases",
+          ], text=True))
+          releases = {}
+          for page in pages:
+              for release in page:
+                  tag = release["tag_name"]
+                  parsed = version(tag)
+                  if parsed is not None and not release["draft"] and not release["prerelease"]:
+                      releases[tag] = parsed
+          if not releases:
+              print("No published vX.Y.Z releases; leaving stable unchanged.")
+              raise SystemExit(0)
+
+          latest_tag = max(releases, key=releases.get)
+          git("fetch", "--tags", "origin", "+refs/heads/stable:refs/remotes/origin/stable")
+          stable_sha = git("rev-parse", "refs/remotes/origin/stable")
+          stable_versions = [
+              releases[tag] for tag in git("tag", "--points-at", stable_sha).splitlines()
+              if tag in releases
+          ]
+          if not stable_versions:
+              raise SystemExit("stable must point to a published vX.Y.Z release.")
+          if releases[latest_tag] <= max(stable_versions):
+              print(f"stable already includes the latest release ({latest_tag}).")
+              raise SystemExit(0)
+
+          release_sha = git("rev-parse", f"refs/tags/{latest_tag}^{{commit}}")
+          # Release branches can diverge; only replace the stable commit we just fetched.
+          git("push", f"--force-with-lease=refs/heads/stable:{stable_sha}",
+              "origin", f"{release_sha}:refs/heads/stable")
+          print(f"Advanced stable to {latest_tag} ({release_sha}).")
+          PY
