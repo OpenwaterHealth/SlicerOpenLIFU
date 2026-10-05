@@ -340,15 +340,30 @@ class OpenLIFUHomeTest(ScriptedLoadableModuleTest):
         slicer.mrmlScene.Clear()
 
     def _ensure_dvc_gdrive_support(self):
-        
+        import importlib.metadata
         import importlib.util
 
-        # Check if dvc is installed with gdrive support
         dvc_installed = importlib.util.find_spec("dvc") is not None
-        gdrive_installed = importlib.util.find_spec("pydrive2") is not None
+        gdrive_installed = (
+            importlib.util.find_spec("dvc_gdrive") is not None
+            and importlib.util.find_spec("pydrive2") is not None
+        )
 
-        if not dvc_installed or not gdrive_installed:
-            slicer.util.pip_install("dvc[gdrive]")
+        # PyDrive2 needs older pyOpenSSL and cryptography; newer asyncssh conflicts with them.
+        required_versions = {"pyOpenSSL": "24.2.1", "asyncssh": "2.21.1"}
+        try:
+            versions_match = all(
+                importlib.metadata.version(package) == version
+                for package, version in required_versions.items()
+            )
+        except importlib.metadata.PackageNotFoundError:
+            versions_match = False
+
+        if not dvc_installed or not gdrive_installed or not versions_match:
+            slicer.util.pip_install([
+                "dvc[gdrive]",
+                *(f"{package}=={version}" for package, version in required_versions.items()),
+            ])
 
     def get_test_database(self):
         """
