@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 SAMPLE_DATABASE_REPOSITORY_URL = "https://github.com/OpenwaterHealth/openlifu-sample-database"
-SAMPLE_DATABASE_TAG = "openlifu-v0.20.0"
-STARTER_DATABASE_TAG = "openlifu-v0.20.0-no-subjects"
+SAMPLE_DATABASE_TAG = "openlifu-v0.22"
+STARTER_DATABASE_TAG = "openlifu-v0.22"
 # Maximum relative file-path lengths in the pinned database archives.
 # Recheck against the archive contents when updating to a new release.
 SAMPLE_DATABASE_MAX_RELATIVE_PATH_LENGTH = 151
