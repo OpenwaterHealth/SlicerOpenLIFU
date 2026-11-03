@@ -5,7 +5,7 @@
 CAUTION - The system described here has not been evaluated by the FDA and is not designed for the treatment or diagnosis of any disease. It is provided AS-IS, with no warranties. User assumes all liability and responsibility for identifying and mitigating risks associated with using this software.
 
 Low intensity focused ultrasound (LIFU) is a method of neuromodulation. This
-uses ultrasound as a non-destructive treatment as opposed to using it for
+uses ultrasound as a non-destructive sonication as opposed to using it for
 imaging.
 
 Build this extension by following [the usual procedure for Slicer
@@ -36,7 +36,7 @@ The central interface module providing navigation controls for other modules.
 ### 💾 OpenLIFUDatabase
 
 Facilitates communication with a local OpenLIFU database for persistent storage
-and retrieval of user data, protocol configurations, and treatment sessions.
+and retrieval of user data, protocol configurations, and clinical research sessions.
 
 ### 🔐 OpenLIFULogin
 
@@ -45,7 +45,7 @@ Primarily used by the standalone OpenLIFU application.
 
 ### 📊 OpenLIFUData
 
-Coordinates subject and session data during treatment workflows. Tracks active
+Coordinates subject and session data during clinical research workflows. Tracks active
 subjects, sessions, and computed solutions, and makes them available to all
 modules.
 
@@ -73,8 +73,8 @@ planned sonications. Supports real-time monitoring and device control.
 
 ### ⚙️  OpenLIFUProtocolConfig
 
-Manages treatment protocols in the OpenLIFU database, including frequency,
-intensity, and pulse duration settings used in planning and treatment.
+Manages sonication protocols in the OpenLIFU database, including frequency,
+intensity, and pulse duration settings used in planning and research sessions.
 
 ### 📚 OpenLIFULib
 
